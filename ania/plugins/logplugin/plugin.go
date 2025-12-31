@@ -34,6 +34,6 @@ func (p *LogPlugin) OnFriendMsg(bot bot.Bot, msg message.Message) bool {
 	if name == "" {
 		name = msg.Sender.Nickname
 	}
-	log.Printf("收到好友消息[%d %s]: %s", msg.GroupId, name, msg.RawMessage)
+	log.Printf("收到好友消息[%d %s]: %s", msg.Sender.UserId, name, msg.RawMessage)
 	return true
 }
