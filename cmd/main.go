@@ -7,8 +7,10 @@ import (
 )
 
 func main() {
-	adapter := aniaadapter.NewNapcatHttpAdapter()
+	// adapter := aniaadapter.NewNapcatHttpAdapter()
+	adapter := aniaadapter.NewNapcatWebSocketAdapter()
 	bot := aniabot.NewAniaBot(adapter)
 	bot.AddPlugin(logplugin.NewPlugin())
+
 	bot.Run()
 }

@@ -49,7 +49,7 @@ func (n *napcatHttpAdapter) onMsg(data []byte) {
 		switch msg.MessageType {
 		case "group":
 			n.groupMsgFunc(msg)
-		case "friend":
+		case "private":
 			n.friendMsgFunc(msg)
 		}
 	}
