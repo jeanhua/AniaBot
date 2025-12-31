@@ -43,7 +43,7 @@ func (n *napcatHttpAdapter) handler(w http.ResponseWriter, r *http.Request) {
 func (n *napcatHttpAdapter) onMsg(data []byte) {
 	var msg message.Message
 	if err := json.Unmarshal(data, &msg); err != nil {
-		log.Println("解析WebSocket消息失败")
+		log.Println("解析HTTP消息失败")
 	}
 	if msg.PostType == "message" {
 		switch msg.MessageType {
@@ -68,7 +68,10 @@ func (n *napcatHttpAdapter) SendGroupMsg(groupId uint, chain msgchain.Chain) {
 		GroupId: groupId,
 		Message: chain.GetMsg(),
 	}
-	n.httpClient.R().SetBody(data).Post(n.baseUrl + "/send_group_msg")
+
+	if _, err := n.httpClient.R().SetBody(data).Post(n.baseUrl + "/send_group_msg"); err != nil {
+		log.Println("HTTP请求失败: ", err.Error())
+	}
 }
 
 func (n *napcatHttpAdapter) SendFriendMsg(friendId uint, chain msgchain.Chain) {
@@ -76,7 +79,9 @@ func (n *napcatHttpAdapter) SendFriendMsg(friendId uint, chain msgchain.Chain) {
 		Friend:  friendId,
 		Message: chain.GetMsg(),
 	}
-	n.httpClient.R().SetBody(data).Post(n.baseUrl + "/send_private_msg")
+	if _, err := n.httpClient.R().SetBody(data).Post(n.baseUrl + "/send_private_msg"); err != nil {
+		log.Println("HTTP请求失败: ", err.Error())
+	}
 }
 
 type httpFriendPushData struct {
