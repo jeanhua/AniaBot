@@ -43,7 +43,7 @@ func (n *napcatWebSocketAdapter) SetFriendMsgEvent(f func(message.Message)) {
 }
 
 func (n *napcatWebSocketAdapter) SendGroupMsg(groupId uint, chain msgchain.Chain) {
-	raw := pushGroupData{
+	raw := wsPushGroupData{
 		Action: "send_group_msg",
 		Params: struct {
 			GroupId uint                  "json:\"group_id\""
@@ -64,7 +64,7 @@ func (n *napcatWebSocketAdapter) SendGroupMsg(groupId uint, chain msgchain.Chain
 }
 
 func (n *napcatWebSocketAdapter) SendFriendMsg(friendId uint, chain msgchain.Chain) {
-	raw := pushFriendData{
+	raw := wsPushFriendData{
 		Action: "/send_private_msg",
 		Params: struct {
 			Friend  uint                  "json:\"friend_id\""
@@ -99,7 +99,7 @@ func (n *napcatWebSocketAdapter) onMsg(data []byte) {
 	}
 }
 
-type pushGroupData struct {
+type wsPushGroupData struct {
 	Action string `json:"action"`
 	Params struct {
 		GroupId uint                  `json:"group_id"`
@@ -107,7 +107,7 @@ type pushGroupData struct {
 	} `json:"params"`
 }
 
-type pushFriendData struct {
+type wsPushFriendData struct {
 	Action string `json:"action"`
 	Params struct {
 		Friend  uint                  `json:"friend_id"`

@@ -70,10 +70,6 @@ func (ania *AniaBot) Run() {
 	ania.adapter.Serve(cfg)
 }
 
-func (ania *AniaBot) Stop() {
-	// TODO
-}
-
 func (ania *AniaBot) AddPlugin(pluginPointer interface{}) {
 	if meta, ok := pluginPointer.(plugin.Plugin); !ok {
 		log.Fatal("停停停停停! 你的插件没有实现 plugin.Plugin 接口!")
@@ -99,9 +95,9 @@ func (ania *AniaBot) AddPlugin(pluginPointer interface{}) {
 }
 
 func (ania *AniaBot) SendGroupMsg(groupId uint, chain msgchain.Chain) {
-
+	ania.adapter.SendGroupMsg(groupId, chain)
 }
 
 func (ania *AniaBot) SendFriendMsg(friendId uint, chain msgchain.Chain) {
-
+	ania.adapter.SendFriendMsg(friendId, chain)
 }
