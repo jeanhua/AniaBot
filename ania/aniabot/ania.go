@@ -60,6 +60,13 @@ func (ania *AniaBot) Run() {
 		log.Println("使用默认配置: config.yaml")
 	}
 
+	// 初始化事件
+	for _, p := range ania.plugins {
+		if p.InitFunc != nil {
+			p.InitFunc.Init(cfg)
+		}
+	}
+
 	ania.adapter.Serve(cfg)
 }
 
@@ -72,12 +79,21 @@ func (ania *AniaBot) AddPlugin(pluginPointer interface{}) {
 		log.Fatal("停停停停停! 你的插件没有实现 plugin.Plugin 接口!")
 	} else {
 		wraper := plugin.PluginWrapper{
-			Plugin: meta,
-			Event:  nil,
+			Plugin:   meta,
+			Event:    nil,
+			InitFunc: nil,
 		}
+
+		// 基础消息事件
 		if e, ok := pluginPointer.(plugin.BasicEvent); ok {
 			wraper.Event = e
 		}
+
+		// 初始化事件
+		if e, ok := pluginPointer.(plugin.InitialEvent); ok {
+			wraper.InitFunc = e
+		}
+
 		ania.plugins = append(ania.plugins, wraper)
 	}
 }

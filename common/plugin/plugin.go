@@ -3,11 +3,13 @@ package plugin
 import (
 	"github.com/jeanhua/AniaBot/common/bot"
 	"github.com/jeanhua/AniaBot/common/model/message"
+	"github.com/spf13/viper"
 )
 
 type PluginWrapper struct {
-	Plugin Plugin
-	Event  BasicEvent
+	InitFunc InitialEvent
+	Plugin   Plugin
+	Event    BasicEvent
 }
 
 type Plugin interface {
@@ -17,4 +19,8 @@ type Plugin interface {
 type BasicEvent interface {
 	OnGroupMsg(bot.Bot, message.Message) bool
 	OnFriendMsg(bot.Bot, message.Message) bool
+}
+
+type InitialEvent interface {
+	Init(cfg *viper.Viper)
 }
