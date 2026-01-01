@@ -15,4 +15,5 @@ type commonMsgBuilder interface {
 	ImageBase64(bs64code string)
 	ImageLocal(path string)
 	Reply(msgId uint)
+	Build() Chain
 }

@@ -1,8 +1,10 @@
 package aniabot
 
 import (
+	"fmt"
 	"log"
 	"sort"
+	"strings"
 
 	"github.com/jeanhua/AniaBot/common/adapter"
 	"github.com/jeanhua/AniaBot/common/model/message"
@@ -14,6 +16,7 @@ import (
 type AniaBot struct {
 	adapter adapter.Adapter
 	plugins []plugin.PluginWrapper
+	admin   uint
 }
 
 func NewAniaBot(adapter adapter.Adapter) *AniaBot {
@@ -26,32 +29,8 @@ func (ania *AniaBot) Run() {
 	sort.SliceStable(ania.plugins, func(i, j int) bool {
 		return ania.plugins[i].Plugin.GetMeta().Order < ania.plugins[j].Plugin.GetMeta().Order
 	})
-	ania.adapter.SetGroupMsgEvent(func(m message.Message) {
-		if m.Sender.UserId == m.SelfId {
-			return
-		}
-		for _, p := range ania.plugins {
-			if p.Event != nil {
-				next := p.Event.OnGroupMsg(ania, m)
-				if !next {
-					break
-				}
-			}
-		}
-	})
-	ania.adapter.SetFriendMsgEvent(func(m message.Message) {
-		if m.Sender.UserId == m.SelfId {
-			return
-		}
-		for _, p := range ania.plugins {
-			if p.Event != nil {
-				next := p.Event.OnFriendMsg(ania, m)
-				if !next {
-					break
-				}
-			}
-		}
-	})
+	ania.adapter.SetGroupMsgEvent(ania.onGroupEvent)
+	ania.adapter.SetFriendMsgEvent(ania.onFriendEvent)
 	// config
 	cfg := viper.New()
 	cfg.AddConfigPath("./")
@@ -66,6 +45,8 @@ func (ania *AniaBot) Run() {
 		log.Println("使用默认配置: config.yaml")
 	}
 
+	ania.admin = cfg.GetUint("bot.admin_id")
+
 	// 初始化事件
 	for _, p := range ania.plugins {
 		if p.StartFunc != nil {
@@ -74,6 +55,87 @@ func (ania *AniaBot) Run() {
 	}
 
 	ania.adapter.Serve(cfg)
+}
+
+func (ania *AniaBot) onGroupEvent(msg message.Message) {
+	if msg.Sender.UserId == msg.SelfId {
+		return
+	}
+
+	var rawStrMsg strings.Builder
+	for _, m := range msg.Message {
+		if m.Type == "text" {
+			rawStrMsg.WriteString(m.Data["text"].(string))
+		}
+	}
+	if strings.TrimSpace(rawStrMsg.String()) == "/help" {
+		var pluginInfo strings.Builder
+		pluginInfo.WriteString("\n欢迎使用AniaBot，已加载插件:")
+		idx := 1
+		for _, p := range ania.plugins {
+			if p.Plugin.GetMeta().AdminOnly && msg.Sender.UserId != ania.admin {
+				continue
+			}
+			pName := p.Plugin.GetMeta().Name
+			pHelpWords := p.Plugin.GetMeta().HelpWords
+			pluginInfo.WriteString(fmt.Sprintf("\n%d. %s: %s", idx, pName, pHelpWords))
+			idx += 1
+		}
+		c := msgchain.Buider.Group()
+		c.Mention(msg.Sender.UserId)
+		c.Text(pluginInfo.String())
+		ania.SendGroupMsg(msg.GroupId, c.Build())
+		return
+	}
+
+	for _, p := range ania.plugins {
+		if p.Event != nil {
+			next := p.Event.OnGroupMsg(ania, msg)
+			if !next {
+				break
+			}
+		}
+	}
+}
+
+func (ania *AniaBot) onFriendEvent(msg message.Message) {
+	if msg.Sender.UserId == msg.SelfId {
+		return
+	}
+
+	var rawStrMsg strings.Builder
+	for _, m := range msg.Message {
+		if m.Type == "text" {
+			rawStrMsg.WriteString(m.Data["text"].(string))
+		}
+	}
+	if strings.TrimSpace(rawStrMsg.String()) == "/help" {
+		var pluginInfo strings.Builder
+		pluginInfo.WriteString("\n欢迎使用AniaBot，已加载插件:")
+		idx := 1
+		for _, p := range ania.plugins {
+			if p.Plugin.GetMeta().AdminOnly && msg.Sender.UserId != ania.admin {
+				continue
+			}
+			pName := p.Plugin.GetMeta().Name
+			pHelpWords := p.Plugin.GetMeta().HelpWords
+			pluginInfo.WriteString(fmt.Sprintf("\n%d. %s: %s", idx, pName, pHelpWords))
+			idx += 1
+		}
+		c := msgchain.Buider.Friend()
+		c.Text(pluginInfo.String())
+		ania.SendFriendMsg(msg.Sender.UserId, c.Build())
+		return
+	}
+
+	for _, p := range ania.plugins {
+		if p.Event != nil {
+			next := p.Event.OnFriendMsg(ania, msg)
+			if !next {
+				break
+			}
+		}
+	}
 }
 
 func (ania *AniaBot) AddPlugin(pluginPointer interface{}) {
