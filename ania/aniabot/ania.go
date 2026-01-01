@@ -84,7 +84,10 @@ func (ania *AniaBot) onGroupEvent(msg message.Message) {
 		c := msgchain.Buider.Group()
 		c.Mention(msg.Sender.UserId)
 		c.Text(pluginInfo.String())
-		ania.SendGroupMsg(msg.GroupId, c.Build())
+		ok, _ := ania.SendGroupMsg(msg.GroupId, c.Build())
+		if !ok {
+			log.Println("Bot消息发送失败，无法响应 /help")
+		}
 		return
 	}
 
@@ -124,7 +127,10 @@ func (ania *AniaBot) onFriendEvent(msg message.Message) {
 		}
 		c := msgchain.Buider.Friend()
 		c.Text(pluginInfo.String())
-		ania.SendFriendMsg(msg.Sender.UserId, c.Build())
+		ok, _ := ania.SendFriendMsg(msg.Sender.UserId, c.Build())
+		if !ok {
+			log.Println("Bot消息发送失败，无法响应 /help")
+		}
 		return
 	}
 
