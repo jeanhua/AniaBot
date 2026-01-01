@@ -1,4 +1,4 @@
-package logplugin
+package pluginlog
 
 import (
 	"log"

@@ -1,5 +1,7 @@
 package msgchain
 
+import "github.com/jeanhua/AniaBot/common/model/message"
+
 type GroupChainBuilder interface {
 	commonMsgBuilder
 	Mention(userId uint)
@@ -16,4 +18,5 @@ type commonMsgBuilder interface {
 	ImageLocal(path string)
 	Reply(msgId uint)
 	Build() Chain
+	Raw(rawMsg []message.OB11Segment)
 }

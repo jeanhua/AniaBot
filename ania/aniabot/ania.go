@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"log"
 	"sort"
-	"strconv"
 	"strings"
 
+	"github.com/jeanhua/AniaBot/ania/utils"
 	"github.com/jeanhua/AniaBot/common/adapter"
 	"github.com/jeanhua/AniaBot/common/model/message"
 	"github.com/jeanhua/AniaBot/common/msgchain"
@@ -63,16 +63,8 @@ func (ania *AniaBot) onGroupEvent(msg message.Message) {
 		return
 	}
 
-	var rawStrMsg strings.Builder
-	mention := false
-	for _, m := range msg.Message {
-		if m.Type == "text" {
-			rawStrMsg.WriteString(m.Data["text"].(string))
-		} else if m.Type == "at" && m.Data["qq"].(string) == strconv.Itoa(int(msg.SelfId)) {
-			mention = true
-		}
-	}
-	if strings.TrimSpace(rawStrMsg.String()) == "/help" && mention {
+	text, mention := utils.ExtraMessageStr(msg)
+	if text == "/help" && mention {
 		var pluginInfo strings.Builder
 		pluginInfo.WriteString("\n欢迎使用AniaBot，已加载插件:")
 		idx := 1
@@ -173,6 +165,7 @@ func (ania *AniaBot) AddPlugin(pluginPointer interface{}) {
 }
 
 func (ania *AniaBot) SendGroupMsg(groupId uint, chain msgchain.Chain) (success bool, msgId uint) {
+
 	return ania.adapter.SendGroupMsg(groupId, chain)
 }
 

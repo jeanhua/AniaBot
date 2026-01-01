@@ -102,3 +102,7 @@ func (c *chain) Reply(msgId uint) {
 		},
 	})
 }
+
+func (c *chain) Raw(rawMsg []message.OB11Segment) {
+	c.message = append(c.message, rawMsg...)
+}
