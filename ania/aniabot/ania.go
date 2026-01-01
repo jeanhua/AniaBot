@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/jeanhua/AniaBot/common/adapter"
@@ -63,12 +64,15 @@ func (ania *AniaBot) onGroupEvent(msg message.Message) {
 	}
 
 	var rawStrMsg strings.Builder
+	mention := false
 	for _, m := range msg.Message {
 		if m.Type == "text" {
 			rawStrMsg.WriteString(m.Data["text"].(string))
+		} else if m.Type == "at" && m.Data["qq"].(string) == strconv.Itoa(int(msg.SelfId)) {
+			mention = true
 		}
 	}
-	if strings.TrimSpace(rawStrMsg.String()) == "/help" {
+	if strings.TrimSpace(rawStrMsg.String()) == "/help" && mention {
 		var pluginInfo strings.Builder
 		pluginInfo.WriteString("\n欢迎使用AniaBot，已加载插件:")
 		idx := 1
