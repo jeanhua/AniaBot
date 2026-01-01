@@ -31,10 +31,8 @@ type Response struct {
 	Status  string `json:"status"`
 	Retcode int    `json:"retcode"`
 	Data    struct {
-		MessageId int `json:"message_id"`
+		MessageId uint `json:"message_id"`
 	} `json:"data"`
-	Message string `json:"message"`
-	Wording string `json:"wording"`
 }
 
 type MessageDetail struct {

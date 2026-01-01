@@ -63,24 +63,38 @@ func (n *napcatHttpAdapter) SetFriendMsgEvent(f func(message.Message)) {
 	n.friendMsgFunc = f
 }
 
-func (n *napcatHttpAdapter) SendGroupMsg(groupId uint, chain msgchain.Chain) {
+func (n *napcatHttpAdapter) SendGroupMsg(groupId uint, chain msgchain.Chain) (success bool, msgId uint) {
 	data := httpGroupPushData{
 		GroupId: groupId,
 		Message: chain.GetMsg(),
 	}
 
-	if _, err := n.httpClient.R().SetBody(data).Post(n.baseUrl + "/send_group_msg"); err != nil {
+	var resp message.Response
+	if _, err := n.httpClient.R().SetResult(&resp).SetBody(data).Post(n.baseUrl + "/send_group_msg"); err != nil {
 		log.Println("HTTP请求失败: ", err.Error())
+	}
+	if resp.Status == "ok" {
+		return true, resp.Data.MessageId
+	} else {
+		return false, 0
 	}
 }
 
-func (n *napcatHttpAdapter) SendFriendMsg(friendId uint, chain msgchain.Chain) {
+func (n *napcatHttpAdapter) SendFriendMsg(friendId uint, chain msgchain.Chain) (success bool, msgId uint) {
 	data := httpFriendPushData{
 		Friend:  friendId,
 		Message: chain.GetMsg(),
 	}
-	if _, err := n.httpClient.R().SetBody(data).Post(n.baseUrl + "/send_private_msg"); err != nil {
+
+	var resp message.Response
+	if _, err := n.httpClient.R().SetResult(&resp).SetBody(data).Post(n.baseUrl + "/send_private_msg"); err != nil {
 		log.Println("HTTP请求失败: ", err.Error())
+	}
+
+	if resp.Status == "ok" {
+		return true, resp.Data.MessageId
+	} else {
+		return false, 0
 	}
 }
 

@@ -18,6 +18,6 @@ type BasicEventOut interface {
 }
 
 type BasicEventInp interface {
-	SendGroupMsg(groupId uint, chain msgchain.Chain)
-	SendFriendMsg(friend uint, chain msgchain.Chain)
+	SendGroupMsg(groupId uint, chain msgchain.Chain) (success bool, msgId uint)
+	SendFriendMsg(friend uint, chain msgchain.Chain) (success bool, msgId uint)
 }

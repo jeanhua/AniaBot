@@ -100,10 +100,10 @@ func (ania *AniaBot) AddPlugin(pluginPointer interface{}) {
 	}
 }
 
-func (ania *AniaBot) SendGroupMsg(groupId uint, chain msgchain.Chain) {
-	ania.adapter.SendGroupMsg(groupId, chain)
+func (ania *AniaBot) SendGroupMsg(groupId uint, chain msgchain.Chain) (success bool, msgId uint) {
+	return ania.adapter.SendGroupMsg(groupId, chain)
 }
 
-func (ania *AniaBot) SendFriendMsg(friendId uint, chain msgchain.Chain) {
-	ania.adapter.SendFriendMsg(friendId, chain)
+func (ania *AniaBot) SendFriendMsg(friendId uint, chain msgchain.Chain) (success bool, msgId uint) {
+	return ania.adapter.SendFriendMsg(friendId, chain)
 }

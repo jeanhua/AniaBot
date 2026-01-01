@@ -3,6 +3,8 @@ package aniaadapter
 import (
 	"encoding/json"
 	"log"
+	"sync"
+	"time"
 
 	"github.com/gorilla/websocket"
 	"github.com/jeanhua/AniaBot/common/model/message"
@@ -14,9 +16,30 @@ type napcatWebSocketAdapter struct {
 	wsConn        *websocket.Conn
 	groupMsgFunc  func(message.Message)
 	friendMsgFunc func(message.Message)
+	ackMng        *ackManager
+}
+
+type ackManager struct {
+	pendingAcks sync.Map
+	timeout     time.Duration
+}
+
+type pendingAck struct {
+	ch    chan msgData
+	timer *time.Timer
+}
+
+type msgData struct {
+	result bool
+	msgId  uint
 }
 
 func (n *napcatWebSocketAdapter) Serve(v *viper.Viper) {
+	// initAck
+	n.ackMng = &ackManager{
+		timeout: time.Second * 5,
+	}
+
 	url := v.GetString("bot.adapter.ws.address")
 	conn, _, err := websocket.DefaultDialer.Dial(url, nil)
 	if err != nil {
@@ -42,7 +65,8 @@ func (n *napcatWebSocketAdapter) SetFriendMsgEvent(f func(message.Message)) {
 	n.friendMsgFunc = f
 }
 
-func (n *napcatWebSocketAdapter) SendGroupMsg(groupId uint, chain msgchain.Chain) {
+func (n *napcatWebSocketAdapter) SendGroupMsg(groupId uint, chain msgchain.Chain) (success bool, msgId uint) {
+	messageID := generateMessageID()
 	raw := wsPushGroupData{
 		Action: "send_group_msg",
 		Params: struct {
@@ -52,39 +76,87 @@ func (n *napcatWebSocketAdapter) SendGroupMsg(groupId uint, chain msgchain.Chain
 			GroupId: groupId,
 			Message: chain.GetMsg(),
 		},
+		Echo: messageID,
 	}
 	b, err := json.Marshal(&raw)
 	if err != nil {
 		log.Println("消息链序列化失败")
 		return
 	}
+
+	ackChan := make(chan msgData, 1)
+	timer := time.NewTimer(n.ackMng.timeout)
+	n.ackMng.pendingAcks.Store(messageID, &pendingAck{
+		ch:    ackChan,
+		timer: timer,
+	})
+	defer func() {
+		timer.Stop()
+		n.ackMng.pendingAcks.Delete(messageID)
+	}()
 	if err := n.wsConn.WriteMessage(websocket.TextMessage, b); err != nil {
-		log.Fatal("消息发送失败:", err)
+		log.Println("消息发送失败:", err)
+		return
+	}
+	select {
+	case result := <-ackChan:
+		if result.result {
+			return true, result.msgId
+		} else {
+			return false, 0
+		}
+	case <-timer.C:
+		return false, 0
 	}
 }
 
-func (n *napcatWebSocketAdapter) SendFriendMsg(friendId uint, chain msgchain.Chain) {
+func (n *napcatWebSocketAdapter) SendFriendMsg(friendId uint, chain msgchain.Chain) (success bool, msgId uint) {
+	messageID := generateMessageID()
 	raw := wsPushFriendData{
-		Action: "/send_private_msg",
+		Action: "send_private_msg",
 		Params: struct {
-			Friend  uint                  "json:\"friend_id\""
-			Message []message.OB11Segment "json:\"message\""
+			FriendId uint                  "json:\"friend_id\""
+			Message  []message.OB11Segment "json:\"message\""
 		}{
-			Friend:  friendId,
-			Message: chain.GetMsg(),
+			FriendId: friendId,
+			Message:  chain.GetMsg(),
 		},
+		Echo: messageID,
 	}
 	b, err := json.Marshal(&raw)
 	if err != nil {
 		log.Println("消息链序列化失败")
 		return
 	}
+
+	ackChan := make(chan msgData, 1)
+	timer := time.NewTimer(n.ackMng.timeout)
+	n.ackMng.pendingAcks.Store(messageID, &pendingAck{
+		ch:    ackChan,
+		timer: timer,
+	})
+	defer func() {
+		timer.Stop()
+		n.ackMng.pendingAcks.Delete(messageID)
+	}()
 	if err := n.wsConn.WriteMessage(websocket.TextMessage, b); err != nil {
-		log.Fatal("消息发送失败:", err)
+		log.Println("消息发送失败:", err)
+		return
+	}
+	select {
+	case result := <-ackChan:
+		if result.result {
+			return true, result.msgId
+		} else {
+			return false, 0
+		}
+	case <-timer.C:
+		return false, 0
 	}
 }
 
 func (n *napcatWebSocketAdapter) onMsg(data []byte) {
+	// 消息推送处理
 	var msg message.Message
 	if err := json.Unmarshal(data, &msg); err != nil {
 		log.Println("解析WebSocket消息失败")
@@ -92,9 +164,35 @@ func (n *napcatWebSocketAdapter) onMsg(data []byte) {
 	if msg.PostType == "message" {
 		switch msg.MessageType {
 		case "group":
-			go n.groupMsgFunc(msg)
+			if n.groupMsgFunc != nil {
+				go n.groupMsgFunc(msg)
+			} else {
+				log.Println("bot未绑定adapter的群消息事件，无法触发群消息回调")
+			}
 		case "private":
-			go n.friendMsgFunc(msg)
+			if n.friendMsgFunc != nil {
+				go n.friendMsgFunc(msg)
+			} else {
+				log.Println("bot未绑定adapter的私聊消息事件，无法触发私聊消息回调")
+			}
+		}
+		return
+	}
+	// 消息回调处理
+	var callBack msgCallBack
+	if err := json.Unmarshal(data, &msg); err != nil {
+		log.Println("解析WebSocket消息失败")
+	}
+	if callBack.Status == "ok" {
+		if ackInterface, exists := n.ackMng.pendingAcks.Load(callBack.Echo); exists {
+			ack := ackInterface.(*pendingAck)
+			select {
+			case ack.ch <- msgData{
+				result: true,
+				msgId:  callBack.Data.MessageId,
+			}:
+			default:
+			}
 		}
 	}
 }
@@ -105,12 +203,19 @@ type wsPushGroupData struct {
 		GroupId uint                  `json:"group_id"`
 		Message []message.OB11Segment `json:"message"`
 	} `json:"params"`
+	Echo string `json:"echo"`
 }
 
 type wsPushFriendData struct {
 	Action string `json:"action"`
 	Params struct {
-		Friend  uint                  `json:"friend_id"`
-		Message []message.OB11Segment `json:"message"`
+		FriendId uint                  `json:"friend_id"`
+		Message  []message.OB11Segment `json:"message"`
 	} `json:"params"`
+	Echo string `json:"echo"`
+}
+
+type msgCallBack struct {
+	message.Response
+	Echo string `json:"echo"`
 }
