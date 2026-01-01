@@ -24,9 +24,7 @@ func NewPlugin() *LogPlugin {
 func (p *LogPlugin) OnGroupMsg(bot bot.Bot, msg message.Message) bool {
 	var rawStrMsg strings.Builder
 	for _, m := range msg.Message {
-		if m.Type == "text" {
-			rawStrMsg.WriteString(m.Data["text"].(string))
-		}
+		rawStrMsg.WriteString(m.FriendlyText())
 	}
 	name := msg.Sender.Card
 	if name == "" {
@@ -39,9 +37,7 @@ func (p *LogPlugin) OnGroupMsg(bot bot.Bot, msg message.Message) bool {
 func (p *LogPlugin) OnFriendMsg(bot bot.Bot, msg message.Message) bool {
 	var rawStrMsg strings.Builder
 	for _, m := range msg.Message {
-		if m.Type == "text" {
-			rawStrMsg.WriteString(m.Data["text"].(string))
-		}
+		rawStrMsg.WriteString(m.FriendlyText())
 	}
 	name := msg.Sender.Card
 	if name == "" {

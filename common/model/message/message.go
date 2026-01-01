@@ -1,5 +1,9 @@
 package message
 
+import (
+	"fmt"
+)
+
 type Message struct {
 	Time        uint          `json:"time"`
 	PostType    string        `json:"post_type"`
@@ -17,6 +21,33 @@ type Message struct {
 type OB11Segment struct {
 	Type string                 `json:"type"`
 	Data map[string]interface{} `json:"data"`
+}
+
+func (s OB11Segment) FriendlyText() string {
+	switch s.Type {
+	case "text":
+		return s.Data["text"].(string)
+	case "face":
+		return fmt.Sprintf("[QQ表情:%s]", s.Data["id"].(string))
+	case "image":
+		return fmt.Sprintf("[图片:%s]", s.Data["url"].(string))
+	case "record":
+		return fmt.Sprintf("[录音:%s]", s.Data["url"].(string))
+	case "video":
+		return fmt.Sprintf("[视频:%s]", s.Data["url"].(string))
+	case "at":
+		return fmt.Sprintf("[at:%s]", s.Data["qq"].(string))
+	case "music":
+		return fmt.Sprintf("[音乐:%s]", s.Data["title"].(string))
+	case "reply":
+		return fmt.Sprintf("[回复:%s]", s.Data["id"].(string))
+	case "forward":
+		return "[转发消息]"
+	case "file":
+		return fmt.Sprintf("[文件:%s]", s.Data["name"].(string))
+	default:
+		return fmt.Sprintf("[%s]", s.Type)
+	}
 }
 
 type MessageSender struct {
