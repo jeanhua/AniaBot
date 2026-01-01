@@ -76,17 +76,23 @@ func (p *LogPlugin) OnFriendMsg(bot bot.Bot, msg message.Message) bool {
 >插件实现接口后自动触发，有如下接口
 >
 >```go
+>type PluginWrapper struct {
+>	StartFunc StartupEvent
+>	Plugin    Plugin
+>	Event     BasicEvent
+>}
+>
 >type Plugin interface {
->	GetMeta() *Meta // 嵌入结构体后自动实现
+>	GetMeta() *Meta
 >}
 >
 >type BasicEvent interface {
->	OnGroupMsg(bot.Bot, message.Message) bool // 返回真继续执行后续插件，假则停止执行
+>	OnGroupMsg(bot.Bot, message.Message) bool
 >	OnFriendMsg(bot.Bot, message.Message) bool
 >}
 >
->type InitialEvent interface {
->	Init(cfg *viper.Viper) // 初始化事件，在系统开始时触发，适用于需要初始化的插件
+>type StartupEvent interface {
+>	Start(cfg *viper.Viper)
 >}
 >```
 
