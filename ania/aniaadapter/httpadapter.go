@@ -80,9 +80,9 @@ func (n *napcatHttpAdapter) SendGroupMsg(groupId uint, chain msgchain.Chain) (su
 	}
 }
 
-func (n *napcatHttpAdapter) SendFriendMsg(friendId uint, chain msgchain.Chain) (success bool, msgId uint) {
+func (n *napcatHttpAdapter) SendFriendMsg(UserId uint, chain msgchain.Chain) (success bool, msgId uint) {
 	data := httpFriendPushData{
-		Friend:  friendId,
+		UserId:  UserId,
 		Message: chain.GetMsg(),
 	}
 
@@ -99,7 +99,7 @@ func (n *napcatHttpAdapter) SendFriendMsg(friendId uint, chain msgchain.Chain) (
 }
 
 type httpFriendPushData struct {
-	Friend  uint                  `json:"friend_id"`
+	UserId  uint                  `json:"user_id"`
 	Message []message.OB11Segment `json:"message"`
 }
 

@@ -110,16 +110,16 @@ func (n *napcatWebSocketAdapter) SendGroupMsg(groupId uint, chain msgchain.Chain
 	}
 }
 
-func (n *napcatWebSocketAdapter) SendFriendMsg(friendId uint, chain msgchain.Chain) (success bool, msgId uint) {
+func (n *napcatWebSocketAdapter) SendFriendMsg(userId uint, chain msgchain.Chain) (success bool, msgId uint) {
 	messageID := generateMessageID()
 	raw := wsPushFriendData{
 		Action: "send_private_msg",
 		Params: struct {
-			FriendId uint                  "json:\"friend_id\""
-			Message  []message.OB11Segment "json:\"message\""
+			UserId  uint                  "json:\"user_id\""
+			Message []message.OB11Segment "json:\"message\""
 		}{
-			FriendId: friendId,
-			Message:  chain.GetMsg(),
+			UserId:  userId,
+			Message: chain.GetMsg(),
 		},
 		Echo: messageID,
 	}
@@ -156,42 +156,48 @@ func (n *napcatWebSocketAdapter) SendFriendMsg(friendId uint, chain msgchain.Cha
 }
 
 func (n *napcatWebSocketAdapter) onMsg(data []byte) {
-	// 消息推送处理
+	var callBack msgCallBack
+	if err := json.Unmarshal(data, &callBack); err == nil && callBack.Echo != "" {
+		if ackInterface, exists := n.ackMng.pendingAcks.Load(callBack.Echo); exists {
+			ack := ackInterface.(*pendingAck)
+			if callBack.Status == "ok" {
+				select {
+				case ack.ch <- msgData{
+					result: true,
+					msgId:  callBack.Data.MessageId,
+				}:
+				default:
+					log.Println("确认通道已满")
+				}
+			} else {
+				select {
+				case ack.ch <- msgData{
+					result: false,
+					msgId:  0,
+				}:
+				default:
+					log.Println("确认通道已满")
+				}
+			}
+		}
+		return
+	}
+
 	var msg message.Message
 	if err := json.Unmarshal(data, &msg); err != nil {
-		log.Println("解析WebSocket消息失败")
+		log.Println("解析WebSocket消息失败:", err)
+		return
 	}
+
 	if msg.PostType == "message" {
 		switch msg.MessageType {
 		case "group":
 			if n.groupMsgFunc != nil {
 				go n.groupMsgFunc(msg)
-			} else {
-				log.Println("bot未绑定adapter的群消息事件，无法触发群消息回调")
 			}
 		case "private":
 			if n.friendMsgFunc != nil {
 				go n.friendMsgFunc(msg)
-			} else {
-				log.Println("bot未绑定adapter的私聊消息事件，无法触发私聊消息回调")
-			}
-		}
-		return
-	}
-	// 消息回调处理
-	var callBack msgCallBack
-	if err := json.Unmarshal(data, &msg); err != nil {
-		log.Println("解析WebSocket消息失败")
-	}
-	if callBack.Status == "ok" {
-		if ackInterface, exists := n.ackMng.pendingAcks.Load(callBack.Echo); exists {
-			ack := ackInterface.(*pendingAck)
-			select {
-			case ack.ch <- msgData{
-				result: true,
-				msgId:  callBack.Data.MessageId,
-			}:
-			default:
 			}
 		}
 	}
@@ -209,8 +215,8 @@ type wsPushGroupData struct {
 type wsPushFriendData struct {
 	Action string `json:"action"`
 	Params struct {
-		FriendId uint                  `json:"friend_id"`
-		Message  []message.OB11Segment `json:"message"`
+		UserId  uint                  `json:"user_id"`
+		Message []message.OB11Segment `json:"message"`
 	} `json:"params"`
 	Echo string `json:"echo"`
 }

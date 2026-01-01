@@ -114,7 +114,7 @@ func (ania *AniaBot) onFriendEvent(msg message.Message) {
 	}
 	if strings.TrimSpace(rawStrMsg.String()) == "/help" {
 		var pluginInfo strings.Builder
-		pluginInfo.WriteString("\n欢迎使用AniaBot，已加载插件:")
+		pluginInfo.WriteString("欢迎使用AniaBot，已加载插件:")
 		idx := 1
 		for _, p := range ania.plugins {
 			if p.Plugin.GetMeta().AdminOnly && msg.Sender.UserId != ania.admin {
@@ -172,6 +172,6 @@ func (ania *AniaBot) SendGroupMsg(groupId uint, chain msgchain.Chain) (success b
 	return ania.adapter.SendGroupMsg(groupId, chain)
 }
 
-func (ania *AniaBot) SendFriendMsg(friendId uint, chain msgchain.Chain) (success bool, msgId uint) {
-	return ania.adapter.SendFriendMsg(friendId, chain)
+func (ania *AniaBot) SendFriendMsg(userID uint, chain msgchain.Chain) (success bool, msgId uint) {
+	return ania.adapter.SendFriendMsg(userID, chain)
 }
