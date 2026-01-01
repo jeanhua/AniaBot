@@ -92,9 +92,9 @@ func (n *napcatWebSocketAdapter) onMsg(data []byte) {
 	if msg.PostType == "message" {
 		switch msg.MessageType {
 		case "group":
-			n.groupMsgFunc(msg)
+			go n.groupMsgFunc(msg)
 		case "private":
-			n.friendMsgFunc(msg)
+			go n.friendMsgFunc(msg)
 		}
 	}
 }

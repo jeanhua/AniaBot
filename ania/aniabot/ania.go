@@ -27,6 +27,9 @@ func (ania *AniaBot) Run() {
 		return ania.plugins[i].Plugin.GetMeta().Order < ania.plugins[j].Plugin.GetMeta().Order
 	})
 	ania.adapter.SetGroupMsgEvent(func(m message.Message) {
+		if m.Sender.UserId == m.SelfId {
+			return
+		}
 		for _, p := range ania.plugins {
 			if p.Event != nil {
 				next := p.Event.OnGroupMsg(ania, m)
@@ -37,6 +40,9 @@ func (ania *AniaBot) Run() {
 		}
 	})
 	ania.adapter.SetFriendMsgEvent(func(m message.Message) {
+		if m.Sender.UserId == m.SelfId {
+			return
+		}
 		for _, p := range ania.plugins {
 			if p.Event != nil {
 				next := p.Event.OnFriendMsg(ania, m)
@@ -62,8 +68,8 @@ func (ania *AniaBot) Run() {
 
 	// 初始化事件
 	for _, p := range ania.plugins {
-		if p.InitFunc != nil {
-			p.InitFunc.Init(cfg)
+		if p.StartFunc != nil {
+			p.StartFunc.Start(cfg)
 		}
 	}
 
@@ -75,9 +81,9 @@ func (ania *AniaBot) AddPlugin(pluginPointer interface{}) {
 		log.Fatal("停停停停停! 你的插件没有实现 plugin.Plugin 接口!")
 	} else {
 		wraper := plugin.PluginWrapper{
-			Plugin:   meta,
-			Event:    nil,
-			InitFunc: nil,
+			Plugin:    meta,
+			Event:     nil,
+			StartFunc: nil,
 		}
 
 		// 基础消息事件
@@ -86,8 +92,8 @@ func (ania *AniaBot) AddPlugin(pluginPointer interface{}) {
 		}
 
 		// 初始化事件
-		if e, ok := pluginPointer.(plugin.InitialEvent); ok {
-			wraper.InitFunc = e
+		if e, ok := pluginPointer.(plugin.StartupEvent); ok {
+			wraper.StartFunc = e
 		}
 
 		ania.plugins = append(ania.plugins, wraper)
