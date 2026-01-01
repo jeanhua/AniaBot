@@ -7,9 +7,9 @@ import (
 )
 
 type PluginWrapper struct {
-	InitFunc InitialEvent
-	Plugin   Plugin
-	Event    BasicEvent
+	StartFunc StartupEvent
+	Plugin    Plugin
+	Event     BasicEvent
 }
 
 type Plugin interface {
@@ -21,6 +21,6 @@ type BasicEvent interface {
 	OnFriendMsg(bot.Bot, message.Message) bool
 }
 
-type InitialEvent interface {
-	Init(cfg *viper.Viper)
+type StartupEvent interface {
+	Start(cfg *viper.Viper)
 }
