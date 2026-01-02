@@ -8,7 +8,7 @@ import (
 )
 
 func main() {
-	// adapter := aniaadapter.NewNapcatHttpAdapter()
+	// adapter := napcat.NewNapcatHttpAdapter()
 	adapter := napcat.NewNapcatWebSocketAdapter()
 	bot := aniabot.NewAniaBot(adapter)
 	// 插件注册
