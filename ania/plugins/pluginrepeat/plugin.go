@@ -4,8 +4,8 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"github.com/jeanhua/AniaBot/ania/utils"
 	"github.com/jeanhua/AniaBot/common/bot"
+	"github.com/jeanhua/AniaBot/common/model/command"
 	"github.com/jeanhua/AniaBot/common/model/message"
 	"github.com/jeanhua/AniaBot/common/msgchain"
 	"github.com/jeanhua/AniaBot/common/plugin"
@@ -34,21 +34,36 @@ func NewPlugin() *RepeatPlugin {
 	return p
 }
 
-func (p *RepeatPlugin) OnGroupMsg(bot bot.Bot, msg message.Message) bool {
-	text, mention := utils.ExtraMessageStr(msg)
-	if text == "/close repeat" && mention {
-		p.enable.Store(false)
-		builder := msgchain.Buider.Group()
-		builder.Text("已关闭复读机")
-		bot.SendGroupMsg(msg.GroupId, builder.Build())
-		return true
-	} else if text == "/enable repeat" && mention {
-		p.enable.Store(true)
-		builder := msgchain.Buider.Group()
-		builder.Text("已开启复读机")
-		bot.SendGroupMsg(msg.GroupId, builder.Build())
-		return true
+func (p *RepeatPlugin) OnGroupMsg(bot bot.Bot, cmd *command.Command, msg message.Message) bool {
+	if cmd != nil {
+		if cmd.Mention && cmd.Name == "close" && len(cmd.Args) >= 1 && cmd.Args[0] == "repeat" {
+			if msg.Sender.UserId == p.admin {
+				p.enable.Store(false)
+				builder := msgchain.Buider.Group()
+				builder.Text("已关闭复读机")
+				bot.SendGroupMsg(msg.GroupId, builder.Build())
+				return true
+			} else {
+				builder := msgchain.Buider.Group()
+				builder.Text("你没有权限哦")
+				bot.SendGroupMsg(msg.GroupId, builder.Build())
+				return true
+			}
+		} else if cmd.Mention && cmd.Name == "enable" && len(cmd.Args) >= 1 && cmd.Args[0] == "repeat" {
+			if msg.Sender.UserId == p.admin {
+				p.enable.Store(true)
+				builder := msgchain.Buider.Group()
+				builder.Text("已开启复读机")
+				bot.SendGroupMsg(msg.GroupId, builder.Build())
+				return true
+			} else {
+				builder := msgchain.Buider.Group()
+				builder.Text("你没有权限哦")
+				bot.SendGroupMsg(msg.GroupId, builder.Build())
+			}
+		}
 	}
+
 	if p.enable.Load() == false {
 		return true
 	}
@@ -85,7 +100,7 @@ func (p *RepeatPlugin) OnGroupMsg(bot bot.Bot, msg message.Message) bool {
 	return true
 }
 
-func (p *RepeatPlugin) OnFriendMsg(bot bot.Bot, msg message.Message) bool {
+func (p *RepeatPlugin) OnFriendMsg(bot bot.Bot, cmd *command.Command, msg message.Message) bool {
 	return true
 }
 
