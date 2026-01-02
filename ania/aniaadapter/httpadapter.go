@@ -1,11 +1,13 @@
 package aniaadapter
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"log"
 	"net/http"
+	"time"
 
 	"github.com/go-resty/resty/v2"
 	"github.com/jeanhua/AniaBot/common/model/message"
@@ -70,8 +72,11 @@ func (n *napcatHttpAdapter) SendGroupMsg(groupId uint, chain msgchain.Chain) (su
 	}
 
 	var resp message.Response
-	if _, err := n.httpClient.R().SetResult(&resp).SetBody(data).Post(n.baseUrl + "/send_group_msg"); err != nil {
-		log.Println("HTTP请求失败: ", err.Error())
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
+	defer cancel()
+	if _, err := n.httpClient.R().SetContext(ctx).SetResult(&resp).SetBody(data).Post(n.baseUrl + "/send_group_msg"); err != nil {
+		log.Println("HTTP请求失败, 无法发送群聊消息: ", err.Error())
+		return false, 0
 	}
 	if resp.Status == "ok" {
 		return true, resp.Data.MessageId
@@ -87,8 +92,11 @@ func (n *napcatHttpAdapter) SendFriendMsg(UserId uint, chain msgchain.Chain) (su
 	}
 
 	var resp message.Response
-	if _, err := n.httpClient.R().SetResult(&resp).SetBody(data).Post(n.baseUrl + "/send_private_msg"); err != nil {
-		log.Println("HTTP请求失败: ", err.Error())
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
+	defer cancel()
+	if _, err := n.httpClient.R().SetContext(ctx).SetResult(&resp).SetBody(data).Post(n.baseUrl + "/send_private_msg"); err != nil {
+		log.Println("HTTP请求失败, 无法发送私聊消息: ", err.Error())
+		return false, 0
 	}
 
 	if resp.Status == "ok" {
