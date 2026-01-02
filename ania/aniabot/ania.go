@@ -64,7 +64,9 @@ func (ania *AniaBot) onGroupEvent(msg message.Message) {
 	}
 
 	text, mention := utils.ExtraMessageStr(msg)
-	if text == "/help" && mention {
+	cmd, _ := utils.ParseCommand(text)
+	cmd.Mention = mention
+	if cmd != nil && cmd.Name == "help" && mention {
 		var pluginInfo strings.Builder
 		pluginInfo.WriteString("\n欢迎使用AniaBot，已加载插件:")
 		idx := 1
@@ -89,7 +91,7 @@ func (ania *AniaBot) onGroupEvent(msg message.Message) {
 
 	for _, p := range ania.plugins {
 		if p.Event != nil {
-			next := p.Event.OnGroupMsg(ania, msg)
+			next := p.Event.OnGroupMsg(ania, cmd, msg)
 			if !next {
 				break
 			}
@@ -102,13 +104,10 @@ func (ania *AniaBot) onFriendEvent(msg message.Message) {
 		return
 	}
 
-	var rawStrMsg strings.Builder
-	for _, m := range msg.Message {
-		if m.Type == "text" {
-			rawStrMsg.WriteString(m.Data["text"].(string))
-		}
-	}
-	if strings.TrimSpace(rawStrMsg.String()) == "/help" {
+	text, mention := utils.ExtraMessageStr(msg)
+	cmd, _ := utils.ParseCommand(text)
+	cmd.Mention = mention
+	if cmd != nil && cmd.Name == "help" {
 		var pluginInfo strings.Builder
 		pluginInfo.WriteString("欢迎使用AniaBot，已加载插件:")
 		idx := 1
@@ -132,7 +131,7 @@ func (ania *AniaBot) onFriendEvent(msg message.Message) {
 
 	for _, p := range ania.plugins {
 		if p.Event != nil {
-			next := p.Event.OnFriendMsg(ania, msg)
+			next := p.Event.OnFriendMsg(ania, cmd, msg)
 			if !next {
 				break
 			}

@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/jeanhua/AniaBot/common/bot"
+	"github.com/jeanhua/AniaBot/common/model/command"
 	"github.com/jeanhua/AniaBot/common/model/message"
 	"github.com/jeanhua/AniaBot/common/plugin"
 )
@@ -21,7 +22,7 @@ func NewPlugin() *LogPlugin {
 	return p
 }
 
-func (p *LogPlugin) OnGroupMsg(bot bot.Bot, msg message.Message) bool {
+func (p *LogPlugin) OnGroupMsg(bot bot.Bot, cmd *command.Command, msg message.Message) bool {
 	var rawStrMsg strings.Builder
 	for _, m := range msg.Message {
 		rawStrMsg.WriteString(m.FriendlyText())
@@ -34,7 +35,7 @@ func (p *LogPlugin) OnGroupMsg(bot bot.Bot, msg message.Message) bool {
 	return true
 }
 
-func (p *LogPlugin) OnFriendMsg(bot bot.Bot, msg message.Message) bool {
+func (p *LogPlugin) OnFriendMsg(bot bot.Bot, cmd *command.Command, msg message.Message) bool {
 	var rawStrMsg strings.Builder
 	for _, m := range msg.Message {
 		rawStrMsg.WriteString(m.FriendlyText())

@@ -1,11 +1,15 @@
 package pluginexample
 
-import "github.com/jeanhua/AniaBot/common/plugin"
+import (
+	"github.com/jeanhua/AniaBot/common/plugin"
+)
 
+// 插件定义
 type ExamplePlugin struct {
 	plugin.Meta
 }
 
+// 插件插件
 func NewPlugin() *ExamplePlugin {
 	return &ExamplePlugin{
 		Meta: plugin.Meta{
@@ -16,3 +20,19 @@ func NewPlugin() *ExamplePlugin {
 		},
 	}
 }
+
+/* 如果插件需要接受消息事件，需解开此注释
+func (p *ExamplePlugin) OnGroupMsg(bot bot.Bot, cmd *command.Command, msg message.Message) bool {
+	return true
+}
+
+func (p *ExamplePlugin) OnFriendMsg(bot bot.Bot, cmd *command.Command, msg message.Message) bool {
+	return true
+}
+*/
+
+/* 如果插件需要初始化，需解开此注释
+func (p *ExamplePlugin) Start(cfg *viper.Viper) {
+
+}
+*/

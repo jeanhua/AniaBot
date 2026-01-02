@@ -73,9 +73,9 @@ type Meta struct {
 
 插件实现接口后自动触发，有如下接口
 
-- `OnGroupMsg(bot.Bot, message.Message) bool`
+- `OnGroupMsg(bot.Bot, *command.Command, message.Message) bool`
   收到群消息触发，返回值代表是否执行后续插件
-- `OnFriendMsg(bot.Bot, message.Message) bool`
+- `OnFriendMsg(bot.Bot, *command.Command, message.Message) bool`
   收到私聊消息触发，返回值代表是否执行后续插件
 
 ---
@@ -86,16 +86,17 @@ type Meta struct {
 **插件示例**(日志打印插件)
 
 ```go
-package logplugin
+package pluginlog
 
 import (
 	"log"
+	"strings"
 
 	"github.com/jeanhua/AniaBot/common/bot"
+	"github.com/jeanhua/AniaBot/common/model/command"
 	"github.com/jeanhua/AniaBot/common/model/message"
 	"github.com/jeanhua/AniaBot/common/plugin"
 )
-
 
 type LogPlugin struct {
 	plugin.Meta
@@ -109,7 +110,7 @@ func NewPlugin() *LogPlugin {
 	return p
 }
 
-func (p *LogPlugin) OnGroupMsg(bot bot.Bot, msg message.Message) bool {
+func (p *LogPlugin) OnGroupMsg(bot bot.Bot, cmd *command.Command, msg message.Message) bool {
 	var rawStrMsg strings.Builder
 	for _, m := range msg.Message {
 		rawStrMsg.WriteString(m.FriendlyText())
@@ -122,7 +123,7 @@ func (p *LogPlugin) OnGroupMsg(bot bot.Bot, msg message.Message) bool {
 	return true
 }
 
-func (p *LogPlugin) OnFriendMsg(bot bot.Bot, msg message.Message) bool {
+func (p *LogPlugin) OnFriendMsg(bot bot.Bot, cmd *command.Command, msg message.Message) bool {
 	var rawStrMsg strings.Builder
 	for _, m := range msg.Message {
 		rawStrMsg.WriteString(m.FriendlyText())

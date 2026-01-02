@@ -2,6 +2,7 @@ package plugin
 
 import (
 	"github.com/jeanhua/AniaBot/common/bot"
+	"github.com/jeanhua/AniaBot/common/model/command"
 	"github.com/jeanhua/AniaBot/common/model/message"
 	"github.com/spf13/viper"
 )
@@ -17,8 +18,8 @@ type Plugin interface {
 }
 
 type BasicEvent interface {
-	OnGroupMsg(bot.Bot, message.Message) bool
-	OnFriendMsg(bot.Bot, message.Message) bool
+	OnGroupMsg(bot.Bot, *command.Command, message.Message) bool
+	OnFriendMsg(bot.Bot, *command.Command, message.Message) bool
 }
 
 type StartupEvent interface {
