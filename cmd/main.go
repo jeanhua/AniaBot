@@ -1,7 +1,7 @@
 package main
 
 import (
-	"github.com/jeanhua/AniaBot/ania/aniaadapter"
+	"github.com/jeanhua/AniaBot/ania/adapter/napcat"
 	"github.com/jeanhua/AniaBot/ania/aniabot"
 	"github.com/jeanhua/AniaBot/ania/plugins/pluginlog"
 	"github.com/jeanhua/AniaBot/ania/plugins/pluginrepeat"
@@ -9,7 +9,7 @@ import (
 
 func main() {
 	// adapter := aniaadapter.NewNapcatHttpAdapter()
-	adapter := aniaadapter.NewNapcatWebSocketAdapter()
+	adapter := napcat.NewNapcatWebSocketAdapter()
 	bot := aniabot.NewAniaBot(adapter)
 	// 插件注册
 	bot.AddPlugin(pluginlog.NewPlugin())

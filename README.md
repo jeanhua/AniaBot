@@ -48,9 +48,9 @@ func NewPlugin() *ExamplePlugin {
 ```go
 func main() {
 	// adapter := aniaadapter.NewNapcatHttpAdapter()
-	adapter := aniaadapter.NewNapcatWebSocketAdapter()
+	adapter := napcat.NewNapcatWebSocketAdapter()
 	bot := aniabot.NewAniaBot(adapter)
-    // 注册插件，Ania内置日志插件和复读机插件
+	// 插件注册
 	bot.AddPlugin(pluginlog.NewPlugin())
 	bot.AddPlugin(pluginrepeat.NewPlugin())
 

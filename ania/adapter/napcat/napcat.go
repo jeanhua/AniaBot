@@ -1,4 +1,4 @@
-package aniaadapter
+package napcat
 
 import (
 	"github.com/jeanhua/AniaBot/common/adapter"
