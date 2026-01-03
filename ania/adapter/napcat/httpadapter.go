@@ -27,14 +27,15 @@ func (n *napcatHttpAdapter) Serve(v *viper.Viper) {
 	n.baseUrl = v.GetString("bot.adapter.http.target_url")
 	http.HandleFunc("/", n.handler)
 	port := v.GetInt("bot.adapter.http.listen_port")
-	log.Printf("Server starting on http://localhost:%d...\n", port)
+	log.Println("已启用napcat http adapter")
+	log.Printf("本地HTTP服务器已启动 http://localhost:%d...\n", port)
 	log.Fatal(http.ListenAndServe(fmt.Sprintf(":%d", port), nil))
 }
 
 func (n *napcatHttpAdapter) handler(w http.ResponseWriter, r *http.Request) {
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
-		log.Printf("Error reading request body: %v", err)
+		log.Printf("无法读取HTTP请求内容: %v", err)
 		http.Error(w, "Bad Request", http.StatusBadRequest)
 		return
 	}

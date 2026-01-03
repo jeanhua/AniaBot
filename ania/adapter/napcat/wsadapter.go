@@ -40,16 +40,18 @@ func (n *napcatWebSocketAdapter) Serve(v *viper.Viper) {
 		timeout: time.Second * 5,
 	}
 
+	log.Println("已启用napcat websocket adapter")
 	url := v.GetString("bot.adapter.ws.address")
 	conn, _, err := websocket.DefaultDialer.Dial(url, nil)
 	if err != nil {
-		log.Fatal("Failed to connect:", err)
+		log.Fatal("无法连接到napcat websocket服务器:", err)
 	}
 	n.wsConn = conn
 	for {
 		_, msg, err := conn.ReadMessage()
 		if err != nil {
-			log.Println("Failed to receive message:", err)
+			log.Println("读取数据失败:", err)
+			log.Println("正在结束进程")
 			break
 		}
 		n.onMsg(msg)
