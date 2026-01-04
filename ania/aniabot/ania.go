@@ -65,8 +65,8 @@ func (ania *AniaBot) onGroupEvent(msg message.Message) {
 
 	text, mention := utils.ExtraMessageStr(msg)
 	cmd, _ := utils.ParseCommand(text)
-	cmd.Mention = mention
 	if cmd != nil && cmd.Name == "help" && mention {
+		cmd.Mention = mention
 		var pluginInfo strings.Builder
 		pluginInfo.WriteString("\n欢迎使用AniaBot，已加载插件:")
 		idx := 1
@@ -106,8 +106,8 @@ func (ania *AniaBot) onFriendEvent(msg message.Message) {
 
 	text, mention := utils.ExtraMessageStr(msg)
 	cmd, _ := utils.ParseCommand(text)
-	cmd.Mention = mention
 	if cmd != nil && cmd.Name == "help" {
+		cmd.Mention = mention
 		var pluginInfo strings.Builder
 		pluginInfo.WriteString("欢迎使用AniaBot，已加载插件:")
 		idx := 1
