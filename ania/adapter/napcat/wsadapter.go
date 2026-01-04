@@ -56,7 +56,10 @@ func (n *napcatWebSocketAdapter) Serve(v *viper.Viper) {
 		}
 		n.onMsg(msg)
 	}
-	conn.Close()
+	if err := conn.Close(); err != nil {
+		log.Println("关闭连接出现问题: ", err.Error())
+		return
+	}
 }
 
 func (n *napcatWebSocketAdapter) SetGroupMsgEvent(f func(message.Message)) {
