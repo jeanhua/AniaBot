@@ -17,7 +17,7 @@ func (c chainBuilder) Group() GroupChainBuilder {
 	return &chain{}
 }
 
-var Buider = chainBuilder{}
+var Builder = chainBuilder{}
 
 // ---------消息构造入口结束---------
 

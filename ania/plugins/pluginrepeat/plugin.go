@@ -39,12 +39,12 @@ func (p *RepeatPlugin) OnGroupMsg(bot bot.Bot, cmd *command.Command, msg message
 		if cmd.Mention && cmd.Name == "close" && len(cmd.Args) >= 1 && cmd.Args[0] == "repeat" {
 			if msg.Sender.UserId == p.admin {
 				p.enable.Store(false)
-				builder := msgchain.Buider.Group()
+				builder := msgchain.Builder.Group()
 				builder.Text("已关闭复读机")
 				bot.SendGroupMsg(msg.GroupId, builder.Build())
 				return true
 			} else {
-				builder := msgchain.Buider.Group()
+				builder := msgchain.Builder.Group()
 				builder.Text("你没有权限哦")
 				bot.SendGroupMsg(msg.GroupId, builder.Build())
 				return true
@@ -52,12 +52,12 @@ func (p *RepeatPlugin) OnGroupMsg(bot bot.Bot, cmd *command.Command, msg message
 		} else if cmd.Mention && cmd.Name == "enable" && len(cmd.Args) >= 1 && cmd.Args[0] == "repeat" {
 			if msg.Sender.UserId == p.admin {
 				p.enable.Store(true)
-				builder := msgchain.Buider.Group()
+				builder := msgchain.Builder.Group()
 				builder.Text("已开启复读机")
 				bot.SendGroupMsg(msg.GroupId, builder.Build())
 				return true
 			} else {
-				builder := msgchain.Buider.Group()
+				builder := msgchain.Builder.Group()
 				builder.Text("你没有权限哦")
 				bot.SendGroupMsg(msg.GroupId, builder.Build())
 			}
@@ -93,7 +93,7 @@ func (p *RepeatPlugin) OnGroupMsg(bot bot.Bot, cmd *command.Command, msg message
 	}
 	rc.lock.Unlock()
 	if needRepeat {
-		builder := msgchain.Buider.Group()
+		builder := msgchain.Builder.Group()
 		builder.Raw(msg.Message)
 		bot.SendGroupMsg(msg.GroupId, builder.Build())
 	}

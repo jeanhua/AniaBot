@@ -39,7 +39,11 @@ func (n *napcatHttpAdapter) handler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Bad Request", http.StatusBadRequest)
 		return
 	}
-	defer r.Body.Close()
+	defer func() {
+		if err := r.Body.Close(); err != nil {
+			log.Printf("关闭HTTP请求体出错: %v", err.Error())
+		}
+	}()
 	n.onMsg(body)
 }
 

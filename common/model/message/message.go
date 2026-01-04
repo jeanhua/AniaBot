@@ -60,7 +60,7 @@ type MessageSender struct {
 
 type Response struct {
 	Status  string `json:"status"`
-	Retcode int    `json:"retcode"`
+	RetCode int    `json:"retcode"`
 	Data    struct {
 		MessageId uint `json:"message_id"`
 	} `json:"data"`

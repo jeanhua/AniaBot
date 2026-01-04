@@ -20,7 +20,7 @@
 
 ### 一、插件指南
 
-在Aniabot - custom - plugins目录下创建一个文件夹，编写go插件
+在AniaBot - custom - plugins目录下创建一个文件夹，编写go插件
 
 实现插件：
 
