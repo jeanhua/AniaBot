@@ -1,8 +1,9 @@
 <div align="center">
-  <img src="./README/logo.jpg" width="200" alt="AniaBot Logo"/>
+  <img src="./README/logo.png" width="200" alt="AniaBot Logo"/>
   <h1>AniaBot</h1>
   <p>一个 QQ 机器人框架喵~</p>
 </div>
+
 
 > 正在重构 [PinBot](https://github.com/jeanhua/PinBot) 中，有这些优势(对比PinBot)：
 >
