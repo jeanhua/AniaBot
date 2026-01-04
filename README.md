@@ -10,15 +10,54 @@
 > - 性能提升(减少重复反序列化消耗，优化结构)
 > - 结构更加清晰，支持插件动态实现接口自动触发对应事件
 
-## todo
+---
 
-1. RAG支持
-2. 完善内置插件系统
-3. 完善AI交互模板框架
+![framework](./README/framework.png)
 
-## 插件系统
+---
 
-### 一、插件指南
+## 一、消息构造器
+
+1. 构造器
+   ```go
+   // 群聊消息构造器
+   builder := msgchain.Builder.Group()
+   // 私聊消息构造器
+   builder := msgchain.Builder.Friend()
+   ```
+
+2. 消息构造
+   ```go
+   builder.Mention(msg.Sender.UserId) // AT某人
+   builder.Text("你没有权限哦") // 添加文本消息
+   // ......
+   ```
+
+   有如下API
+
+   ```go
+   Text(text string)
+   Face(faceId uint) // 参考 https://bot.q.qq.com/wiki/develop/api-v2/openapi/emoji/model.html#EmojiType
+   ImageUrl(url string)
+   ImageBase64(bs64code string)
+   ImageLocal(path string)
+   Reply(msgId uint)
+   RecordUrl(url string)
+   RecordLocal(path string)
+   Raw(rawMsg []message.OB11Segment)
+   Mention(userId uint) // group only
+   ```
+
+3. 发送消息
+
+   ```go
+   // 发送群聊消息
+   bot.SendGroupMsg(msg.GroupId, builder.Build())
+   // 发送私聊消息
+   bot.SendFriendMsg(msg.Sender.UserId, builder.Build())
+   ```
+
+## 二、插件指南
 
 在AniaBot - custom - plugins目录下创建一个文件夹，编写go插件
 
@@ -58,7 +97,7 @@ func main() {
 }
 ```
 
-### 二、插件定义
+## 三、插件定义
 
 **插件元数据**：
 
@@ -83,7 +122,7 @@ type Meta struct {
 - `Start(cfg *viper.Viper)`
   Bot初始化时触发
 
-**插件示例**(日志打印插件)
+## 四、完整插件示例 (日志打印插件)
 
 ```go
 package pluginlog
