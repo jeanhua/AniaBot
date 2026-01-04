@@ -1,10 +1,7 @@
 package msgchain
 
 import (
-	"encoding/base64"
 	"fmt"
-	"log"
-	"os"
 
 	"github.com/jeanhua/AniaBot/common/model/message"
 )
@@ -58,6 +55,15 @@ func (c *chain) Text(text string) {
 	})
 }
 
+func (c *chain) Face(faceId uint) {
+	c.message = append(c.message, message.OB11Segment{
+		Type: "face",
+		Data: map[string]interface{}{
+			"id": faceId,
+		},
+	})
+}
+
 func (c *chain) ImageUrl(url string) {
 	c.message = append(c.message, message.OB11Segment{
 		Type: "image",
@@ -79,16 +85,10 @@ func (c *chain) ImageBase64(bs64code string) {
 }
 
 func (c *chain) ImageLocal(path string) {
-	file, err := os.ReadFile(path)
-	if err != nil {
-		log.Println("构造消息出错，无法打开本地图片", err)
-		return
-	}
-	bs64code := base64.StdEncoding.EncodeToString(file)
 	c.message = append(c.message, message.OB11Segment{
 		Type: "image",
 		Data: map[string]interface{}{
-			"file":    "base64://" + bs64code,
+			"file":    "file://" + path,
 			"summary": "[图片]",
 		},
 	})
@@ -99,6 +99,24 @@ func (c *chain) Reply(msgId uint) {
 		Type: "reply",
 		Data: map[string]interface{}{
 			"id": msgId,
+		},
+	})
+}
+
+func (c *chain) RecordUrl(url string) {
+	c.message = append(c.message, message.OB11Segment{
+		Type: "record",
+		Data: map[string]interface{}{
+			"file": url,
+		},
+	})
+}
+
+func (c *chain) RecordLocal(path string) {
+	c.message = append(c.message, message.OB11Segment{
+		Type: "record",
+		Data: map[string]interface{}{
+			"file": "file://" + path,
 		},
 	})
 }
