@@ -112,6 +112,49 @@ func (n *napcatWebSocketAdapter) SendGroupMsg(groupId uint, chain msgchain.Chain
 	}
 }
 
+func (n *napcatWebSocketAdapter) SendGroupAIVoiceMsg(groupId uint, character, msg string) (success bool, msgId uint) {
+	messageID := generateMessageID()
+	raw := wsPushGroupAIMsgData{
+		Action: "send_group_ai_record",
+		Params: message.AiVoiceMsg{
+			GroupId:   groupId,
+			Character: character,
+			Text:      msg,
+		},
+		Echo: messageID,
+	}
+	b, err := json.Marshal(&raw)
+	if err != nil {
+		log.Println("消息链序列化失败")
+		return
+	}
+
+	ackChan := make(chan msgData, 1)
+	timer := time.NewTimer(n.ackMng.timeout)
+	n.ackMng.pendingAcks.Store(messageID, &pendingAck{
+		ch:    ackChan,
+		timer: timer,
+	})
+	defer func() {
+		timer.Stop()
+		n.ackMng.pendingAcks.Delete(messageID)
+	}()
+	if err := n.wsConn.WriteMessage(websocket.TextMessage, b); err != nil {
+		log.Println("消息发送失败:", err)
+		return
+	}
+	select {
+	case result := <-ackChan:
+		if result.result {
+			return true, result.msgId
+		} else {
+			return false, 0
+		}
+	case <-timer.C:
+		return false, 0
+	}
+}
+
 func (n *napcatWebSocketAdapter) SendFriendMsg(userId uint, chain msgchain.Chain) (success bool, msgId uint) {
 	messageID := generateMessageID()
 	raw := wsPushFriendData{
@@ -212,6 +255,12 @@ type wsPushGroupData struct {
 		Message []message.OB11Segment `json:"message"`
 	} `json:"params"`
 	Echo string `json:"echo"`
+}
+
+type wsPushGroupAIMsgData struct {
+	Action string             `json:"action"`
+	Params message.AiVoiceMsg `json:"params"`
+	Echo   string             `json:"echo"`
 }
 
 type wsPushFriendData struct {

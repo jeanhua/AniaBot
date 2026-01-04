@@ -127,3 +127,9 @@ type JsonMessage struct {
 	Ver    string `json:"ver"`
 	View   string `json:"view"`
 }
+
+type AiVoiceMsg struct {
+	GroupId   uint   `json:"group_id"`
+	Character string `json:"character"`
+	Text      string `json:"text"`
+}

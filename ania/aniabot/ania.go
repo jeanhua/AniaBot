@@ -164,10 +164,13 @@ func (ania *AniaBot) AddPlugin(pluginPointer interface{}) {
 }
 
 func (ania *AniaBot) SendGroupMsg(groupId uint, chain msgchain.Chain) (success bool, msgId uint) {
-
 	return ania.adapter.SendGroupMsg(groupId, chain)
 }
 
 func (ania *AniaBot) SendFriendMsg(userID uint, chain msgchain.Chain) (success bool, msgId uint) {
 	return ania.adapter.SendFriendMsg(userID, chain)
+}
+
+func (ania *AniaBot) SendGroupAIVoiceMsg(groupId uint, character, msg string) (success bool, msgId uint) {
+	return ania.adapter.SendGroupAIVoiceMsg(msgId, character, msg)
 }
