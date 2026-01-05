@@ -1,29 +1,27 @@
 package utils
 
 import (
-	"fmt"
 	"strings"
 
 	"github.com/jeanhua/AniaBot/common/model/command"
 )
 
-func ParseCommand(input string) (*command.Command, error) {
-	input = strings.TrimSpace(input)
+func ParseCommand(input string) *command.Command {
 	if input == "" {
-		return nil, fmt.Errorf("输入不能为空")
+		return nil
 	}
 	if input[0] != '/' {
-		return nil, fmt.Errorf("命令必须以 / 开头")
+		return nil
 	}
 
 	input = input[1:]
 	if len(input) == 0 {
-		return nil, fmt.Errorf("命令名不能为空")
+		return nil
 	}
 
 	parts := strings.Fields(input)
 	if len(parts) == 0 {
-		return nil, fmt.Errorf("无效的命令格式")
+		return nil
 	}
 
 	cmd := &command.Command{
@@ -35,5 +33,5 @@ func ParseCommand(input string) (*command.Command, error) {
 		cmd.Args = append(cmd.Args, parts[1:]...)
 	}
 
-	return cmd, nil
+	return cmd
 }

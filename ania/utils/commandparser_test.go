@@ -24,11 +24,7 @@ func TestParseCommand(t *testing.T) {
 	fmt.Println("=== 简单版本测试 ===")
 	for _, tc := range testCases {
 		fmt.Printf("\n输入: %q\n", tc)
-		cmd, err := ParseCommand(tc)
-		if err != nil {
-			fmt.Printf("错误: %v\n", err)
-		} else {
-			fmt.Printf("命令: %s, 参数: %v\n", cmd.Name, cmd.Args)
-		}
+		cmd := ParseCommand(tc)
+		fmt.Printf("命令: %s, 参数: %v\n", cmd.Name, cmd.Args)
 	}
 }
