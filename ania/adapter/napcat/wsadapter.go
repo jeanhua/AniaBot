@@ -203,6 +203,23 @@ func (n *napcatWebSocketAdapter) SendFriendMsg(userId uint, chain msgchain.Chain
 	}
 }
 
+func (n *napcatWebSocketAdapter) SendPokeMsg(userId uint, groupId *uint) {
+	data := wsPushData[map[string]uint]{}
+	data.Params["user_id"] = userId
+	if groupId != nil {
+		data.Params["group_id"] = *groupId
+	}
+	b, err := json.Marshal(&data)
+	if err != nil {
+		log.Println("戳一戳消息序列化失败")
+		return
+	}
+	if err := n.wsConn.WriteMessage(websocket.TextMessage, b); err != nil {
+		log.Println("消息发送失败:", err)
+		return
+	}
+}
+
 func (n *napcatWebSocketAdapter) onMsg(data []byte) {
 	var callBack msgCallBack
 	if err := json.Unmarshal(data, &callBack); err == nil && callBack.Echo != "" {
@@ -251,29 +268,23 @@ func (n *napcatWebSocketAdapter) onMsg(data []byte) {
 	}
 }
 
-type wsPushGroupData struct {
+type wsPushData[T any] struct {
 	Action string `json:"action"`
-	Params struct {
-		GroupId uint                  `json:"group_id"`
-		Message []message.OB11Segment `json:"message"`
-	} `json:"params"`
-	Echo string `json:"echo"`
+	Params T      `json:"params"`
+	Echo   string `json:"echo"`
 }
 
-type wsPushGroupAIMsgData struct {
-	Action string             `json:"action"`
-	Params message.AiVoiceMsg `json:"params"`
-	Echo   string             `json:"echo"`
-}
+type wsPushGroupData wsPushData[struct {
+	GroupId uint                  `json:"group_id"`
+	Message []message.OB11Segment `json:"message"`
+}]
 
-type wsPushFriendData struct {
-	Action string `json:"action"`
-	Params struct {
-		UserId  uint                  `json:"user_id"`
-		Message []message.OB11Segment `json:"message"`
-	} `json:"params"`
-	Echo string `json:"echo"`
-}
+type wsPushGroupAIMsgData wsPushData[message.AiVoiceMsg]
+
+type wsPushFriendData wsPushData[struct {
+	UserId  uint                  `json:"user_id"`
+	Message []message.OB11Segment `json:"message"`
+}]
 
 type msgCallBack struct {
 	message.Response

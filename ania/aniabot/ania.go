@@ -174,3 +174,7 @@ func (ania *AniaBot) SendFriendMsg(userID uint, chain msgchain.Chain) (success b
 func (ania *AniaBot) SendGroupAIVoiceMsg(groupId uint, character, msg string) (success bool, msgId uint) {
 	return ania.adapter.SendGroupAIVoiceMsg(groupId, character, msg)
 }
+
+func (ania *AniaBot) SendPokeMsg(userId uint, groupId *uint) {
+	ania.adapter.SendPokeMsg(userId, groupId)
+}
