@@ -11,11 +11,7 @@
 > - 性能提升(减少重复反序列化消耗，优化结构)
 > - 结构更加清晰，支持插件动态实现接口自动触发对应事件
 
----
-
 ![framework](./README/framework.png)
-
----
 
 ## 一、消息构造器
 
@@ -111,14 +107,12 @@ type Meta struct {
 }
 ```
 
-插件实现接口后自动触发，有如下接口
+插件重写如下接口后自动触发，有如下接口
 
 - `OnGroupMsg(bot.Bot, *command.Command, message.Message) bool`
   收到群消息触发，返回值代表是否执行后续插件
 - `OnFriendMsg(bot.Bot, *command.Command, message.Message) bool`
   收到私聊消息触发，返回值代表是否执行后续插件
-
----
 
 - `Start(cfg *viper.Viper)`
   Bot初始化时触发

@@ -16,7 +16,7 @@ import (
 
 type AniaBot struct {
 	adapter adapter.Adapter
-	plugins []plugin.PluginWrapper
+	plugins []plugin.Plugin
 	admin   uint
 }
 
@@ -28,7 +28,7 @@ func NewAniaBot(adapter adapter.Adapter) *AniaBot {
 
 func (ania *AniaBot) Run() {
 	sort.SliceStable(ania.plugins, func(i, j int) bool {
-		return ania.plugins[i].Plugin.GetMeta().Order < ania.plugins[j].Plugin.GetMeta().Order
+		return ania.plugins[i].GetMeta().Order < ania.plugins[j].GetMeta().Order
 	})
 	ania.adapter.SetGroupMsgEvent(ania.onGroupEvent)
 	ania.adapter.SetFriendMsgEvent(ania.onFriendEvent)
@@ -50,9 +50,7 @@ func (ania *AniaBot) Run() {
 
 	// 初始化事件
 	for _, p := range ania.plugins {
-		if p.StartFunc != nil {
-			p.StartFunc.Start(cfg)
-		}
+		p.Start(cfg)
 	}
 
 	ania.adapter.Serve(cfg)
@@ -71,11 +69,11 @@ func (ania *AniaBot) onGroupEvent(msg message.Message) {
 		pluginInfo.WriteString("\n欢迎使用AniaBot，已加载插件:")
 		idx := 1
 		for _, p := range ania.plugins {
-			if p.Plugin.GetMeta().AdminOnly && msg.Sender.UserId != ania.admin {
+			if p.GetMeta().AdminOnly && msg.Sender.UserId != ania.admin {
 				continue
 			}
-			pName := p.Plugin.GetMeta().Name
-			pHelpWords := p.Plugin.GetMeta().HelpWords
+			pName := p.GetMeta().Name
+			pHelpWords := p.GetMeta().HelpWords
 			pluginInfo.WriteString(fmt.Sprintf("\n%d. %s: %s", idx, pName, pHelpWords))
 			idx += 1
 		}
@@ -90,11 +88,9 @@ func (ania *AniaBot) onGroupEvent(msg message.Message) {
 	}
 
 	for _, p := range ania.plugins {
-		if p.Event != nil {
-			next := p.Event.OnGroupMsg(ania, cmd, msg)
-			if !next {
-				break
-			}
+		next := p.OnGroupMsg(ania, cmd, msg)
+		if !next {
+			break
 		}
 	}
 }
@@ -112,11 +108,11 @@ func (ania *AniaBot) onFriendEvent(msg message.Message) {
 		pluginInfo.WriteString("欢迎使用AniaBot，已加载插件:")
 		idx := 1
 		for _, p := range ania.plugins {
-			if p.Plugin.GetMeta().AdminOnly && msg.Sender.UserId != ania.admin {
+			if p.GetMeta().AdminOnly && msg.Sender.UserId != ania.admin {
 				continue
 			}
-			pName := p.Plugin.GetMeta().Name
-			pHelpWords := p.Plugin.GetMeta().HelpWords
+			pName := p.GetMeta().Name
+			pHelpWords := p.GetMeta().HelpWords
 			pluginInfo.WriteString(fmt.Sprintf("\n%d. %s: %s", idx, pName, pHelpWords))
 			idx += 1
 		}
@@ -130,37 +126,15 @@ func (ania *AniaBot) onFriendEvent(msg message.Message) {
 	}
 
 	for _, p := range ania.plugins {
-		if p.Event != nil {
-			next := p.Event.OnFriendMsg(ania, cmd, msg)
-			if !next {
-				break
-			}
+		next := p.OnFriendMsg(ania, cmd, msg)
+		if !next {
+			break
 		}
 	}
 }
 
-func (ania *AniaBot) AddPlugin(pluginPointer interface{}) {
-	if meta, ok := pluginPointer.(plugin.Plugin); !ok {
-		log.Fatal("停停停停停! 你的插件没有实现 plugin.Plugin 接口!")
-	} else {
-		wrapper := plugin.PluginWrapper{
-			Plugin:    meta,
-			Event:     nil,
-			StartFunc: nil,
-		}
-
-		// 基础消息事件
-		if e, ok := pluginPointer.(plugin.BasicEvent); ok {
-			wrapper.Event = e
-		}
-
-		// 初始化事件
-		if e, ok := pluginPointer.(plugin.StartupEvent); ok {
-			wrapper.StartFunc = e
-		}
-
-		ania.plugins = append(ania.plugins, wrapper)
-	}
+func (ania *AniaBot) AddPlugin(p plugin.Plugin) {
+	ania.plugins = append(ania.plugins, p)
 }
 
 func (ania *AniaBot) SendGroupMsg(groupId uint, chain msgchain.Chain) (success bool, msgId uint) {

@@ -7,14 +7,10 @@ import (
 	"github.com/spf13/viper"
 )
 
-type PluginWrapper struct {
-	StartFunc StartupEvent
-	Plugin    Plugin
-	Event     BasicEvent
-}
-
 type Plugin interface {
 	GetMeta() *Meta
+	BasicEvent
+	StartupEvent
 }
 
 type BasicEvent interface {
