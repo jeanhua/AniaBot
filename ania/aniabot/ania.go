@@ -49,7 +49,9 @@ func (ania *AniaBot) Run() {
 	ania.admin = cfg.GetUint("bot.admin_id")
 
 	// 初始化事件
+	log.Println("开始初始化插件...")
 	for _, p := range ania.plugins {
+		log.Println("初始化插件: ", p.GetMeta().Name)
 		p.Start(cfg)
 	}
 
@@ -135,6 +137,7 @@ func (ania *AniaBot) onFriendEvent(msg message.Message) {
 
 func (ania *AniaBot) AddPlugin(p plugin.Plugin) {
 	ania.plugins = append(ania.plugins, p)
+	log.Println("已添加插件: ", p.GetMeta().Name)
 }
 
 func (ania *AniaBot) SendGroupMsg(groupId uint, chain msgchain.Chain) (success bool, msgId uint) {

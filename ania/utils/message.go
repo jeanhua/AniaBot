@@ -23,3 +23,11 @@ func ExtraMessageStr(msg message.Message) (text string, mention bool) {
 	text = strings.TrimSpace(builder.String())
 	return
 }
+
+func ExtraMessage(msg message.Message) string {
+	var s strings.Builder
+	for _, m := range msg.Message {
+		s.WriteString(m.FriendlyText())
+	}
+	return s.String()
+}
