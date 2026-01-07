@@ -63,7 +63,7 @@ func (n *napcatWebSocketAdapter) Serve(v *viper.Viper) {
 			log.Println("正在结束进程")
 			break
 		}
-		n.onMsg(msg)
+		go n.onMsg(msg)
 	}
 	if err := conn.Close(); err != nil {
 		log.Println("关闭连接出现问题: ", err.Error())
@@ -277,14 +277,15 @@ func (n *napcatWebSocketAdapter) onMsg(data []byte) {
 			switch msg.MessageType {
 			case "group":
 				if n.trigger.OnGroupMsg != nil {
-					go n.trigger.OnGroupMsg(msg)
+					n.trigger.OnGroupMsg(msg)
 				}
 			case "private":
 				if n.trigger.OnFriendMsg != nil {
-					go n.trigger.OnFriendMsg(msg)
+					n.trigger.OnFriendMsg(msg)
 				}
 			}
 		}
+		return
 	}
 
 	echo, ok := callBack["echo"].(string)
