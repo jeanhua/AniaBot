@@ -154,7 +154,7 @@ func (n *napcatHttpAdapter) GetMsgDetail(msgId uint) (bool, *message.Message) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
 	defer cancel()
 	if _, err := n.httpClient.R().SetResult(&result).SetContext(ctx).SetBody(data).Post(n.baseUrl + "/get_msg"); err != nil {
-		log.Println("HTTP请求失败, 无法发送戳一戳消息: ", err.Error())
+		log.Println("HTTP请求失败, 无法获取消息详情: ", err.Error())
 		return false, &result.Data
 	}
 	return true, &result.Data
