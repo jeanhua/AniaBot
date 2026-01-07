@@ -7,17 +7,17 @@ import (
 )
 
 type Adapter interface {
-	BasicEventOut
-	BasicEventInp
+	SendMsg
+	SetTrigger(TriggerWrapper)
 	Serve(*viper.Viper)
 }
 
-type BasicEventOut interface {
-	SetGroupMsgEvent(func(message.Message))
-	SetFriendMsgEvent(func(message.Message))
+type TriggerWrapper struct {
+	OnGroupMsg  func(message.Message)
+	OnFriendMsg func(message.Message)
 }
 
-type BasicEventInp interface {
+type SendMsg interface {
 	SendGroupMsg(groupId uint, chain msgchain.Chain) (success bool, msgId uint)
 	SendGroupAIVoiceMsg(groupId uint, character, msg string) (success bool, msgId uint)
 	SendFriendMsg(userId uint, chain msgchain.Chain) (success bool, msgId uint)

@@ -10,16 +10,16 @@ import (
 	"time"
 
 	"github.com/go-resty/resty/v2"
+	"github.com/jeanhua/AniaBot/common/adapter"
 	"github.com/jeanhua/AniaBot/common/model/message"
 	"github.com/jeanhua/AniaBot/common/msgchain"
 	"github.com/spf13/viper"
 )
 
 type napcatHttpAdapter struct {
-	baseUrl       string
-	httpClient    *resty.Client
-	groupMsgFunc  func(message.Message)
-	friendMsgFunc func(message.Message)
+	baseUrl    string
+	httpClient *resty.Client
+	trigger    adapter.TriggerWrapper
 }
 
 func (n *napcatHttpAdapter) Serve(v *viper.Viper) {
@@ -55,19 +55,19 @@ func (n *napcatHttpAdapter) onMsg(data []byte) {
 	if msg.PostType == "message" {
 		switch msg.MessageType {
 		case "group":
-			n.groupMsgFunc(msg)
+			if n.trigger.OnGroupMsg != nil {
+				n.trigger.OnGroupMsg(msg)
+			}
 		case "private":
-			n.friendMsgFunc(msg)
+			if n.trigger.OnFriendMsg != nil {
+				n.trigger.OnFriendMsg(msg)
+			}
 		}
 	}
 }
 
-func (n *napcatHttpAdapter) SetGroupMsgEvent(f func(message.Message)) {
-	n.groupMsgFunc = f
-}
-
-func (n *napcatHttpAdapter) SetFriendMsgEvent(f func(message.Message)) {
-	n.friendMsgFunc = f
+func (n *napcatHttpAdapter) SetTrigger(trigger adapter.TriggerWrapper) {
+	n.trigger = trigger
 }
 
 func (n *napcatHttpAdapter) SendGroupMsg(groupId uint, chain msgchain.Chain) (success bool, msgId uint) {

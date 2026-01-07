@@ -7,16 +7,16 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
+	"github.com/jeanhua/AniaBot/common/adapter"
 	"github.com/jeanhua/AniaBot/common/model/message"
 	"github.com/jeanhua/AniaBot/common/msgchain"
 	"github.com/spf13/viper"
 )
 
 type napcatWebSocketAdapter struct {
-	wsConn        *websocket.Conn
-	groupMsgFunc  func(message.Message)
-	friendMsgFunc func(message.Message)
-	ackMng        *ackManager
+	wsConn  *websocket.Conn
+	trigger adapter.TriggerWrapper
+	ackMng  *ackManager
 }
 
 type ackManager struct {
@@ -62,12 +62,8 @@ func (n *napcatWebSocketAdapter) Serve(v *viper.Viper) {
 	}
 }
 
-func (n *napcatWebSocketAdapter) SetGroupMsgEvent(f func(message.Message)) {
-	n.groupMsgFunc = f
-}
-
-func (n *napcatWebSocketAdapter) SetFriendMsgEvent(f func(message.Message)) {
-	n.friendMsgFunc = f
+func (n *napcatWebSocketAdapter) SetTrigger(trigger adapter.TriggerWrapper) {
+	n.trigger = trigger
 }
 
 func (n *napcatWebSocketAdapter) SendGroupMsg(groupId uint, chain msgchain.Chain) (success bool, msgId uint) {
@@ -257,12 +253,12 @@ func (n *napcatWebSocketAdapter) onMsg(data []byte) {
 	if msg.PostType == "message" {
 		switch msg.MessageType {
 		case "group":
-			if n.groupMsgFunc != nil {
-				go n.groupMsgFunc(msg)
+			if n.trigger.OnGroupMsg != nil {
+				go n.trigger.OnGroupMsg(msg)
 			}
 		case "private":
-			if n.friendMsgFunc != nil {
-				go n.friendMsgFunc(msg)
+			if n.trigger.OnFriendMsg != nil {
+				go n.trigger.OnFriendMsg(msg)
 			}
 		}
 	}

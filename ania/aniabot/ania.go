@@ -30,8 +30,11 @@ func (ania *AniaBot) Run() {
 	sort.SliceStable(ania.plugins, func(i, j int) bool {
 		return ania.plugins[i].GetMeta().Order < ania.plugins[j].GetMeta().Order
 	})
-	ania.adapter.SetGroupMsgEvent(ania.onGroupEvent)
-	ania.adapter.SetFriendMsgEvent(ania.onFriendEvent)
+	trigger := adapter.TriggerWrapper{
+		OnGroupMsg:  ania.onGroupEvent,
+		OnFriendMsg: ania.onFriendEvent,
+	}
+	ania.adapter.SetTrigger(trigger)
 	// config
 	cfg := viper.New()
 	cfg.AddConfigPath("./")
