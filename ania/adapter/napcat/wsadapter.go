@@ -212,6 +212,7 @@ func (n *napcatWebSocketAdapter) SendFriendMsg(userId uint, chain msgchain.Chain
 
 func (n *napcatWebSocketAdapter) SendPokeMsg(userId uint, groupId *uint) {
 	data := wsPushData[map[string]uint]{}
+	data.Action = "send_poke"
 	data.Params["user_id"] = userId
 	if groupId != nil {
 		data.Params["group_id"] = *groupId
@@ -229,7 +230,9 @@ func (n *napcatWebSocketAdapter) SendPokeMsg(userId uint, groupId *uint) {
 
 func (n *napcatWebSocketAdapter) GetMsgDetail(msgId uint) (bool, *message.Message) {
 	messageID := generateMessageID("dt")
-	raw := map[string]uint{
+	raw := wsPushData[map[string]uint]{}
+	raw.Action = "get_msg"
+	raw.Params = map[string]uint{
 		"message_id": msgId,
 	}
 	b, err := json.Marshal(&raw)
