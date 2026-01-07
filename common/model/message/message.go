@@ -59,39 +59,9 @@ type MessageSender struct {
 }
 
 type Response struct {
-	Status  string `json:"status"`
-	RetCode int    `json:"retcode"`
-	Data    struct {
-		MessageId uint `json:"message_id"`
-	} `json:"data"`
-}
-
-type MessageDetail struct {
-	Status  string `json:"status"`
-	RetCode int    `json:"retcode"`
-	Data    struct {
-		SelfID      int64  `json:"self_id"`
-		UserID      int64  `json:"user_id"`
-		Time        int64  `json:"time"`
-		MessageID   int64  `json:"message_id"`
-		MessageSeq  int64  `json:"message_seq"`
-		RealID      int64  `json:"real_id"`
-		RealSeq     string `json:"real_seq"`
-		MessageType string `json:"message_type"`
-		Sender      struct {
-			UserID   int64  `json:"user_id"`
-			Nickname string `json:"nickname"`
-			Card     string `json:"card"`
-			Role     string `json:"role"`
-		} `json:"sender"`
-		RawMessage    string        `json:"raw_message"`
-		Font          int           `json:"font"`
-		SubType       string        `json:"sub_type"`
-		Message       []OB11Segment `json:"message"`
-		MessageFormat string        `json:"message_format"`
-		PostType      string        `json:"post_type"`
-		GroupID       int64         `json:"group_id"`
-	} `json:"data"`
+	Status  string  `json:"status"`
+	RetCode int     `json:"retcode"`
+	Data    Message `json:"data"`
 }
 
 type JsonMessage struct {

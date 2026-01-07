@@ -154,3 +154,7 @@ func (ania *AniaBot) SendGroupAIVoiceMsg(groupId uint, character, msg string) (s
 func (ania *AniaBot) SendPokeMsg(userId uint, groupId *uint) {
 	ania.adapter.SendPokeMsg(userId, groupId)
 }
+
+func (ania *AniaBot) GetMsgDetail(msgId uint) (bool, *message.Message) {
+	return ania.adapter.GetMsgDetail(msgId)
+}

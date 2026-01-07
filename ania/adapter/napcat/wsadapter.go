@@ -3,6 +3,7 @@ package napcat
 import (
 	"encoding/json"
 	"log"
+	"strings"
 	"sync"
 	"time"
 
@@ -25,13 +26,23 @@ type ackManager struct {
 }
 
 type pendingAck struct {
-	ch    chan msgData
+	ch    chan *msgData
 	timer *time.Timer
 }
 
 type msgData struct {
 	result bool
 	msgId  uint
+}
+
+type detailAck struct {
+	ch    chan *detail
+	timer *time.Timer
+}
+
+type detail struct {
+	result bool
+	Data   *message.Message `json:"data"`
 }
 
 func (n *napcatWebSocketAdapter) Serve(v *viper.Viper) {
@@ -67,7 +78,7 @@ func (n *napcatWebSocketAdapter) SetTrigger(trigger adapter.TriggerWrapper) {
 }
 
 func (n *napcatWebSocketAdapter) SendGroupMsg(groupId uint, chain msgchain.Chain) (success bool, msgId uint) {
-	messageID := generateMessageID()
+	messageID := generateMessageID("ack")
 	raw := wsPushGroupData{
 		Action: "send_group_msg",
 		Params: struct {
@@ -82,10 +93,10 @@ func (n *napcatWebSocketAdapter) SendGroupMsg(groupId uint, chain msgchain.Chain
 	b, err := json.Marshal(&raw)
 	if err != nil {
 		log.Println("消息链序列化失败")
-		return
+		return false, 0
 	}
 
-	ackChan := make(chan msgData, 1)
+	ackChan := make(chan *msgData, 1)
 	timer := time.NewTimer(n.ackMng.timeout)
 	n.ackMng.pendingAcks.Store(messageID, &pendingAck{
 		ch:    ackChan,
@@ -97,7 +108,7 @@ func (n *napcatWebSocketAdapter) SendGroupMsg(groupId uint, chain msgchain.Chain
 	}()
 	if err := n.wsConn.WriteMessage(websocket.TextMessage, b); err != nil {
 		log.Println("消息发送失败:", err)
-		return
+		return false, 0
 	}
 	select {
 	case result := <-ackChan:
@@ -112,7 +123,7 @@ func (n *napcatWebSocketAdapter) SendGroupMsg(groupId uint, chain msgchain.Chain
 }
 
 func (n *napcatWebSocketAdapter) SendGroupAIVoiceMsg(groupId uint, character, msg string) (success bool, msgId uint) {
-	messageID := generateMessageID()
+	messageID := generateMessageID("ack")
 	raw := wsPushGroupAIMsgData{
 		Action: "send_group_ai_record",
 		Params: message.AiVoiceMsg{
@@ -125,10 +136,10 @@ func (n *napcatWebSocketAdapter) SendGroupAIVoiceMsg(groupId uint, character, ms
 	b, err := json.Marshal(&raw)
 	if err != nil {
 		log.Println("消息链序列化失败")
-		return
+		return false, 0
 	}
 
-	ackChan := make(chan msgData, 1)
+	ackChan := make(chan *msgData, 1)
 	timer := time.NewTimer(n.ackMng.timeout)
 	n.ackMng.pendingAcks.Store(messageID, &pendingAck{
 		ch:    ackChan,
@@ -140,7 +151,7 @@ func (n *napcatWebSocketAdapter) SendGroupAIVoiceMsg(groupId uint, character, ms
 	}()
 	if err := n.wsConn.WriteMessage(websocket.TextMessage, b); err != nil {
 		log.Println("消息发送失败:", err)
-		return
+		return false, 0
 	}
 	select {
 	case result := <-ackChan:
@@ -155,7 +166,7 @@ func (n *napcatWebSocketAdapter) SendGroupAIVoiceMsg(groupId uint, character, ms
 }
 
 func (n *napcatWebSocketAdapter) SendFriendMsg(userId uint, chain msgchain.Chain) (success bool, msgId uint) {
-	messageID := generateMessageID()
+	messageID := generateMessageID("ack")
 	raw := wsPushFriendData{
 		Action: "send_private_msg",
 		Params: struct {
@@ -170,10 +181,10 @@ func (n *napcatWebSocketAdapter) SendFriendMsg(userId uint, chain msgchain.Chain
 	b, err := json.Marshal(&raw)
 	if err != nil {
 		log.Println("消息链序列化失败")
-		return
+		return false, 0
 	}
 
-	ackChan := make(chan msgData, 1)
+	ackChan := make(chan *msgData, 1)
 	timer := time.NewTimer(n.ackMng.timeout)
 	n.ackMng.pendingAcks.Store(messageID, &pendingAck{
 		ch:    ackChan,
@@ -185,7 +196,7 @@ func (n *napcatWebSocketAdapter) SendFriendMsg(userId uint, chain msgchain.Chain
 	}()
 	if err := n.wsConn.WriteMessage(websocket.TextMessage, b); err != nil {
 		log.Println("消息发送失败:", err)
-		return
+		return false, 0
 	}
 	select {
 	case result := <-ackChan:
@@ -216,49 +227,123 @@ func (n *napcatWebSocketAdapter) SendPokeMsg(userId uint, groupId *uint) {
 	}
 }
 
+func (n *napcatWebSocketAdapter) GetMsgDetail(msgId uint) (bool, *message.Message) {
+	messageID := generateMessageID("dt")
+	raw := map[string]uint{
+		"message_id": msgId,
+	}
+	b, err := json.Marshal(&raw)
+	if err != nil {
+		log.Println("消息链序列化失败")
+		return false, nil
+	}
+
+	ackChan := make(chan *detail, 1)
+	timer := time.NewTimer(n.ackMng.timeout)
+	n.ackMng.pendingAcks.Store(messageID, &detailAck{
+		ch:    ackChan,
+		timer: timer,
+	})
+	defer func() {
+		timer.Stop()
+		n.ackMng.pendingAcks.Delete(messageID)
+	}()
+	if err := n.wsConn.WriteMessage(websocket.TextMessage, b); err != nil {
+		log.Println("消息发送失败:", err)
+		return false, nil
+	}
+	select {
+	case result := <-ackChan:
+		if result.result {
+			return true, result.Data
+		} else {
+			return false, nil
+		}
+	case <-timer.C:
+		return false, nil
+	}
+}
+
 func (n *napcatWebSocketAdapter) onMsg(data []byte) {
-	var callBack msgCallBack
-	if err := json.Unmarshal(data, &callBack); err == nil && callBack.Echo != "" {
-		if ackInterface, exists := n.ackMng.pendingAcks.Load(callBack.Echo); exists {
-			ack := ackInterface.(*pendingAck)
-			if callBack.Status == "ok" {
-				select {
-				case ack.ch <- msgData{
-					result: true,
-					msgId:  callBack.Data.MessageId,
-				}:
-				default:
-					log.Println("确认通道已满")
+	var callBack map[string]any
+	if err := json.Unmarshal(data, &callBack); err != nil {
+		return
+	}
+	if _, exist := callBack["echo"]; !exist {
+		var msg message.Message
+		if err := json.Unmarshal(data, &msg); err != nil {
+			log.Println("解析WebSocket消息失败:", err)
+			return
+		}
+
+		if msg.PostType == "message" {
+			switch msg.MessageType {
+			case "group":
+				if n.trigger.OnGroupMsg != nil {
+					go n.trigger.OnGroupMsg(msg)
 				}
-			} else {
-				select {
-				case ack.ch <- msgData{
-					result: false,
-					msgId:  0,
-				}:
-				default:
-					log.Println("确认通道已满")
+			case "private":
+				if n.trigger.OnFriendMsg != nil {
+					go n.trigger.OnFriendMsg(msg)
 				}
 			}
 		}
-		return
 	}
 
-	var msg message.Message
-	if err := json.Unmarshal(data, &msg); err != nil {
-		log.Println("解析WebSocket消息失败:", err)
+	echo, ok := callBack["echo"].(string)
+	if !ok {
 		return
 	}
-
-	if msg.PostType == "message" {
-		switch msg.MessageType {
-		case "group":
-			if n.trigger.OnGroupMsg != nil {
-				go n.trigger.OnGroupMsg(msg)
+	ackInterface, exists := n.ackMng.pendingAcks.Load(echo)
+	if !exists {
+		return
+	}
+	px := strings.SplitN(echo, ":", 2)
+	var msgCallBack message.Response
+	if err := json.Unmarshal(data, &msgCallBack); err != nil {
+		return
+	}
+	switch px[0] {
+	case "ack":
+		ack := ackInterface.(*pendingAck)
+		if msgCallBack.Status == "ok" {
+			select {
+			case ack.ch <- &msgData{
+				result: true,
+				msgId:  msgCallBack.Data.MessageId,
+			}:
+			default:
+				log.Println("确认通道已满, 无法获取消息发送情况")
 			}
-		case "private":
-			if n.trigger.OnFriendMsg != nil {
-				go n.trigger.OnFriendMsg(msg)
+		} else {
+			select {
+			case ack.ch <- &msgData{
+				result: false,
+				msgId:  0,
+			}:
+			default:
+				log.Println("确认通道已满, 无法获取消息发送情况")
+			}
+		}
+	case "dt":
+		ack := ackInterface.(*detailAck)
+		if msgCallBack.Status == "ok" {
+			select {
+			case ack.ch <- &detail{
+				Data:   &msgCallBack.Data,
+				result: true,
+			}:
+			default:
+				log.Println("确认通道已满, 无法获取消息详情")
+			}
+		} else {
+			select {
+			case ack.ch <- &detail{
+				Data:   nil,
+				result: false,
+			}:
+			default:
+				log.Println("确认通道已满, 无法获取消息详情")
 			}
 		}
 	}
@@ -281,8 +366,3 @@ type wsPushFriendData wsPushData[struct {
 	UserId  uint                  `json:"user_id"`
 	Message []message.OB11Segment `json:"message"`
 }]
-
-type msgCallBack struct {
-	message.Response
-	Echo string `json:"echo"`
-}

@@ -146,6 +146,20 @@ func (n *napcatHttpAdapter) SendPokeMsg(userId uint, groupId *uint) {
 	}
 }
 
+func (n *napcatHttpAdapter) GetMsgDetail(msgId uint) (bool, *message.Message) {
+	data := map[string]uint{
+		"message_id": msgId,
+	}
+	result := httpMsgDetail{}
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
+	defer cancel()
+	if _, err := n.httpClient.R().SetResult(&result).SetContext(ctx).SetBody(data).Post(n.baseUrl + "/get_msg"); err != nil {
+		log.Println("HTTP请求失败, 无法发送戳一戳消息: ", err.Error())
+		return false, &result.Data
+	}
+	return true, &result.Data
+}
+
 type httpFriendPushData struct {
 	UserId  uint                  `json:"user_id"`
 	Message []message.OB11Segment `json:"message"`
@@ -154,4 +168,8 @@ type httpFriendPushData struct {
 type httpGroupPushData struct {
 	GroupId uint                  `json:"group_id"`
 	Message []message.OB11Segment `json:"message"`
+}
+
+type httpMsgDetail struct {
+	Data message.Message `json:"data"`
 }
