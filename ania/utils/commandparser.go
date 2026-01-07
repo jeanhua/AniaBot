@@ -4,9 +4,11 @@ import (
 	"strings"
 
 	"github.com/jeanhua/AniaBot/common/model/command"
+	"github.com/jeanhua/AniaBot/common/model/message"
 )
 
-func ParseCommand(input string) *command.Command {
+func ParseCommand(msg message.Message) *command.Command {
+	input, mention := ExtraMessageStr(msg)
 	if input == "" {
 		return nil
 	}
@@ -25,8 +27,9 @@ func ParseCommand(input string) *command.Command {
 	}
 
 	cmd := &command.Command{
-		Name: parts[0],
-		Args: make([]string, 0),
+		Name:    parts[0],
+		Args:    make([]string, 0),
+		Mention: mention,
 	}
 
 	if len(parts) > 1 {
