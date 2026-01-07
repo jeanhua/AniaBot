@@ -26,8 +26,7 @@ type ackManager struct {
 }
 
 type pendingAck struct {
-	ch    chan *msgData
-	timer *time.Timer
+	ch chan *msgData
 }
 
 type msgData struct {
@@ -36,8 +35,7 @@ type msgData struct {
 }
 
 type detailAck struct {
-	ch    chan *detail
-	timer *time.Timer
+	ch chan *detail
 }
 
 type detail struct {
@@ -99,8 +97,7 @@ func (n *napcatWebSocketAdapter) SendGroupMsg(groupId uint, chain msgchain.Chain
 	ackChan := make(chan *msgData, 1)
 	timer := time.NewTimer(n.ackMng.timeout)
 	n.ackMng.pendingAcks.Store(messageID, &pendingAck{
-		ch:    ackChan,
-		timer: timer,
+		ch: ackChan,
 	})
 	defer func() {
 		timer.Stop()
@@ -142,8 +139,7 @@ func (n *napcatWebSocketAdapter) SendGroupAIVoiceMsg(groupId uint, character, ms
 	ackChan := make(chan *msgData, 1)
 	timer := time.NewTimer(n.ackMng.timeout)
 	n.ackMng.pendingAcks.Store(messageID, &pendingAck{
-		ch:    ackChan,
-		timer: timer,
+		ch: ackChan,
 	})
 	defer func() {
 		timer.Stop()
@@ -187,8 +183,7 @@ func (n *napcatWebSocketAdapter) SendFriendMsg(userId uint, chain msgchain.Chain
 	ackChan := make(chan *msgData, 1)
 	timer := time.NewTimer(n.ackMng.timeout)
 	n.ackMng.pendingAcks.Store(messageID, &pendingAck{
-		ch:    ackChan,
-		timer: timer,
+		ch: ackChan,
 	})
 	defer func() {
 		timer.Stop()
@@ -244,8 +239,7 @@ func (n *napcatWebSocketAdapter) GetMsgDetail(msgId uint) (bool, *message.Messag
 	ackChan := make(chan *detail, 1)
 	timer := time.NewTimer(n.ackMng.timeout)
 	n.ackMng.pendingAcks.Store(messageID, &detailAck{
-		ch:    ackChan,
-		timer: timer,
+		ch: ackChan,
 	})
 	defer func() {
 		timer.Stop()
