@@ -116,8 +116,10 @@ type Meta struct {
 
 - `Start(cfg *viper.Viper)`
   Bot初始化时触发
+  
+- 消息通知接口，[详情查看定义](./common/plugin/metainfo.go)
 
-## 四、完整插件示例 (日志打印插件)
+## 四、插件示例 (日志打印插件)
 
 ```go
 package pluginlog

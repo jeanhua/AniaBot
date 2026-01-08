@@ -267,13 +267,14 @@ func (n *napcatWebSocketAdapter) onMsg(data []byte) {
 		return
 	}
 	if _, exist := callBack["echo"]; !exist {
-		var msg message.Message
-		if err := json.Unmarshal(data, &msg); err != nil {
-			log.Println("解析WebSocket消息失败:", err)
-			return
-		}
-
-		if msg.PostType == "message" {
+		postType := callBack["post_type"].(string)
+		switch postType {
+		case "message", "message_sent":
+			var msg message.Message
+			if err := json.Unmarshal(data, &msg); err != nil {
+				log.Println("解析WebSocket消息失败:", err)
+				return
+			}
 			switch msg.MessageType {
 			case "group":
 				if n.trigger.OnGroupMsg != nil {
@@ -284,6 +285,9 @@ func (n *napcatWebSocketAdapter) onMsg(data []byte) {
 					n.trigger.OnFriendMsg(msg)
 				}
 			}
+		case "notice":
+			noticeType := callBack["notice_type"].(string)
+			wsSpreadNotice(n, noticeType, data)
 		}
 		return
 	}
@@ -344,6 +348,155 @@ func (n *napcatWebSocketAdapter) onMsg(data []byte) {
 				log.Println("确认通道已满, 无法获取消息详情")
 			}
 		}
+	}
+}
+
+// wsSpreadNotice 通知事件分发
+func wsSpreadNotice(n *napcatWebSocketAdapter, noticeType string, data []byte) {
+	switch noticeType {
+	case "group_upload":
+		var notice message.GroupUploadNotice
+		if err := json.Unmarshal(data, &notice); err != nil {
+			log.Println("解析消息通知事件[group_upload]错误: ", err.Error())
+			return
+		}
+		if n.trigger.OnGroupUpload != nil {
+			n.trigger.OnGroupUpload(notice)
+		}
+
+	case "group_admin":
+		var notice message.GroupAdminNotice
+		if err := json.Unmarshal(data, &notice); err != nil {
+			log.Println("解析消息通知事件[group_admin]错误: ", err.Error())
+			return
+		}
+		if n.trigger.OnGroupAdmin != nil {
+			n.trigger.OnGroupAdmin(notice)
+		}
+
+	case "group_decrease":
+		var notice message.GroupDecreaseNotice
+		if err := json.Unmarshal(data, &notice); err != nil {
+			log.Println("解析消息通知事件[group_decrease]错误: ", err.Error())
+			return
+		}
+		if n.trigger.OnGroupDecrease != nil {
+			n.trigger.OnGroupDecrease(notice)
+		}
+
+	case "group_increase":
+		var notice message.GroupIncreaseNotice
+		if err := json.Unmarshal(data, &notice); err != nil {
+			log.Println("解析消息通知事件[group_increase]错误: ", err.Error())
+			return
+		}
+		if n.trigger.OnGroupIncrease != nil {
+			n.trigger.OnGroupIncrease(notice)
+		}
+
+	case "group_ban":
+		var notice message.GroupBanNotice
+		if err := json.Unmarshal(data, &notice); err != nil {
+			log.Println("解析消息通知事件[group_ban]错误: ", err.Error())
+			return
+		}
+		if n.trigger.OnGroupBan != nil {
+			n.trigger.OnGroupBan(notice)
+		}
+
+	case "friend_add":
+		var notice message.FriendAddNotice
+		if err := json.Unmarshal(data, &notice); err != nil {
+			log.Println("解析消息通知事件[friend_add]错误: ", err.Error())
+			return
+		}
+		if n.trigger.OnFriendAdd != nil {
+			n.trigger.OnFriendAdd(notice)
+		}
+
+	case "group_recall":
+		var notice message.GroupRecallNotice
+		if err := json.Unmarshal(data, &notice); err != nil {
+			log.Println("解析消息通知事件[group_recall]错误: ", err.Error())
+			return
+		}
+		if n.trigger.OnGroupRecall != nil {
+			n.trigger.OnGroupRecall(notice)
+		}
+
+	case "friend_recall":
+		var notice message.FriendRecallNotice
+		if err := json.Unmarshal(data, &notice); err != nil {
+			log.Println("解析消息通知事件[friend_recall]错误: ", err.Error())
+			return
+		}
+		if n.trigger.OnFriendRecall != nil {
+			n.trigger.OnFriendRecall(notice)
+		}
+
+	case "poke":
+		var notice message.PokeNotice
+		if err := json.Unmarshal(data, &notice); err != nil {
+			log.Println("解析消息通知事件[poke]错误: ", err.Error())
+			return
+		}
+		if n.trigger.OnPoke != nil {
+			n.trigger.OnPoke(notice)
+		}
+
+	case "lucky_king":
+		var notice message.LuckyKingNotice
+		if err := json.Unmarshal(data, &notice); err != nil {
+			log.Println("解析消息通知事件[lucky_king]错误: ", err.Error())
+			return
+		}
+		if n.trigger.OnLuckyKing != nil {
+			n.trigger.OnLuckyKing(notice)
+		}
+
+	case "honor":
+		var notice message.HonorNotice
+		if err := json.Unmarshal(data, &notice); err != nil {
+			log.Println("解析消息通知事件[honor]错误: ", err.Error())
+			return
+		}
+		if n.trigger.OnHonor != nil {
+			n.trigger.OnHonor(notice)
+		}
+
+	case "group_msg_emoji_like":
+		var notice message.GroupMsgEmojiLikeNotice
+		if err := json.Unmarshal(data, &notice); err != nil {
+			log.Println("解析消息通知事件[group_msg_emoji_like]错误: ", err.Error())
+			return
+		}
+		if n.trigger.OnGroupMsgEmojiLike != nil {
+			n.trigger.OnGroupMsgEmojiLike(notice)
+		}
+
+	case "essence":
+		var notice message.EssenceNotice
+		if err := json.Unmarshal(data, &notice); err != nil {
+			log.Println("解析消息通知事件[essence]错误: ", err.Error())
+			return
+		}
+		if n.trigger.OnEssence != nil {
+			n.trigger.OnEssence(notice)
+		}
+
+	case "group_card":
+		var notice message.GroupCardNotice
+		if err := json.Unmarshal(data, &notice); err != nil {
+			log.Println("解析消息通知事件[group_card]错误: ", err.Error())
+			return
+		}
+		if n.trigger.OnGroupCard != nil {
+			n.trigger.OnGroupCard(notice)
+		}
+
+	default:
+		log.Println("未知的通知类型: ", noticeType)
+		return
 	}
 }
 

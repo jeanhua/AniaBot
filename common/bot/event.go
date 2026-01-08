@@ -6,6 +6,10 @@ import (
 )
 
 type Bot interface {
+	botOuterItf
+}
+
+type botOuterItf interface {
 	SendGroupMsg(groupId uint, chain msgchain.Chain) (success bool, msgId uint)
 	SendGroupAIVoiceMsg(groupId uint, character, msg string) (success bool, msgId uint)
 	SendFriendMsg(userId uint, chain msgchain.Chain) (success bool, msgId uint)

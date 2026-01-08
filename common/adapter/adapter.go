@@ -13,9 +13,40 @@ type Adapter interface {
 	Serve(*viper.Viper)
 }
 
+type MessageHandler func(message.Message)
+type GroupUploadHandler func(message.GroupUploadNotice)
+type GroupAdminHandler func(message.GroupAdminNotice)
+type GroupDecreaseHandler func(message.GroupDecreaseNotice)
+type GroupIncreaseHandler func(message.GroupIncreaseNotice)
+type GroupBanHandler func(message.GroupBanNotice)
+type FriendAddHandler func(message.FriendAddNotice)
+type GroupRecallHandler func(message.GroupRecallNotice)
+type FriendRecallHandler func(message.FriendRecallNotice)
+type PokeHandler func(message.PokeNotice)
+type LuckyKingHandler func(message.LuckyKingNotice)
+type HonorHandler func(message.HonorNotice)
+type GroupMsgEmojiLikeHandler func(message.GroupMsgEmojiLikeNotice)
+type EssenceHandler func(message.EssenceNotice)
+type GroupCardHandler func(message.GroupCardNotice)
+
+// TriggerWrapper 回调函数包装器
 type TriggerWrapper struct {
-	OnGroupMsg  func(message.Message)
-	OnFriendMsg func(message.Message)
+	OnGroupMsg          MessageHandler
+	OnFriendMsg         MessageHandler
+	OnGroupUpload       GroupUploadHandler
+	OnGroupAdmin        GroupAdminHandler
+	OnGroupDecrease     GroupDecreaseHandler
+	OnGroupIncrease     GroupIncreaseHandler
+	OnGroupBan          GroupBanHandler
+	OnFriendAdd         FriendAddHandler
+	OnGroupRecall       GroupRecallHandler
+	OnFriendRecall      FriendRecallHandler
+	OnPoke              PokeHandler
+	OnLuckyKing         LuckyKingHandler
+	OnHonor             HonorHandler
+	OnGroupMsgEmojiLike GroupMsgEmojiLikeHandler
+	OnEssence           EssenceHandler
+	OnGroupCard         GroupCardHandler
 }
 
 type SendMsg interface {

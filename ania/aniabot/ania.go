@@ -31,8 +31,22 @@ func (ania *AniaBot) Run() {
 		return ania.plugins[i].GetMeta().Order < ania.plugins[j].GetMeta().Order
 	})
 	trigger := adapter.TriggerWrapper{
-		OnGroupMsg:  ania.onGroupEvent,
-		OnFriendMsg: ania.onFriendEvent,
+		OnGroupMsg:          ania.onGroupEvent,
+		OnFriendMsg:         ania.onFriendEvent,
+		OnGroupUpload:       ania.onGroupUploadEvent,
+		OnGroupAdmin:        ania.onGroupAdminEvent,
+		OnGroupDecrease:     ania.onGroupDecreaseEvent,
+		OnGroupIncrease:     ania.onGroupIncreaseEvent,
+		OnGroupBan:          ania.onGroupBanEvent,
+		OnFriendAdd:         ania.onFriendAddEvent,
+		OnGroupRecall:       ania.onGroupRecallEvent,
+		OnFriendRecall:      ania.onFriendRecallEvent,
+		OnPoke:              ania.onPokeEvent,
+		OnLuckyKing:         ania.onLuckyKingEvent,
+		OnHonor:             ania.onHonorEvent,
+		OnGroupMsgEmojiLike: ania.onGroupMsgEmojiLikeEvent,
+		OnEssence:           ania.onEssenceEvent,
+		OnGroupCard:         ania.onGroupCardEvent,
 	}
 	ania.adapter.SetTrigger(trigger)
 	// config
