@@ -18,11 +18,19 @@ type AniaBot struct {
 	adapter adapter.Adapter
 	plugins []plugin.Plugin
 	admin   uint
+	cfg     *viper.Viper
 }
 
 func NewAniaBot(adapter adapter.Adapter) *AniaBot {
 	return &AniaBot{
 		adapter: adapter,
+	}
+}
+
+func NewAniaBotWithConfig(adapter adapter.Adapter, config *viper.Viper) *AniaBot {
+	return &AniaBot{
+		adapter: adapter,
+		cfg:     config,
 	}
 }
 
@@ -50,29 +58,32 @@ func (ania *AniaBot) Run() {
 	}
 	ania.adapter.SetTrigger(trigger)
 	// config
-	cfg := viper.New()
-	cfg.AddConfigPath("./")
-	cfg.SetConfigName("config.dev")
-	if err := cfg.ReadInConfig(); err == nil {
-		log.Println("使用开发环境配置: config.dev.yaml")
-	} else {
-		cfg.SetConfigName("config")
-		if err := cfg.ReadInConfig(); err != nil {
-			log.Fatalf("无法读取配置文件: %v", err)
+	if ania.cfg == nil {
+		cfg := viper.New()
+		cfg.AddConfigPath("./")
+		cfg.SetConfigName("config.dev")
+		if err := cfg.ReadInConfig(); err == nil {
+			log.Println("使用开发环境配置: config.dev.yaml")
+		} else {
+			cfg.SetConfigName("config")
+			if err := cfg.ReadInConfig(); err != nil {
+				log.Fatalf("无法读取配置文件: %v", err)
+			}
+			log.Println("使用默认配置: config.yaml")
 		}
-		log.Println("使用默认配置: config.yaml")
+		ania.cfg = cfg
 	}
 
-	ania.admin = cfg.GetUint("bot.admin_id")
+	ania.admin = ania.cfg.GetUint("bot.admin_id")
 
 	// 初始化事件
 	log.Println("开始初始化插件...")
 	for _, p := range ania.plugins {
 		log.Println("初始化插件: ", p.GetMeta().Name)
-		p.Start(cfg)
+		p.Start(ania.cfg)
 	}
 
-	ania.adapter.Serve(cfg)
+	ania.adapter.Serve(ania.cfg)
 }
 
 func (ania *AniaBot) onGroupEvent(msg message.Message) {
