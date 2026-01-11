@@ -9,10 +9,12 @@ import (
 // ---------消息构造入口开始---------
 type chainBuilder struct{}
 
+// Friend 私聊消息构造器
 func (c chainBuilder) Friend() FriendChainBuilder {
 	return &chain{}
 }
 
+// Group 群聊消息构造器
 func (c chainBuilder) Group() GroupChainBuilder {
 	return &chain{}
 }

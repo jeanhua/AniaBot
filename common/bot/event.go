@@ -10,9 +10,18 @@ type Bot interface {
 }
 
 type botOuterItf interface {
+	// SendGroupMsg 发送群聊消息
 	SendGroupMsg(groupId uint, chain msgchain.Chain) (success bool, msgId uint)
+
+	// SendGroupAIVoiceMsg 发送群聊AI语音消息
 	SendGroupAIVoiceMsg(groupId uint, character, msg string) (success bool, msgId uint)
+
+	// SendFriendMsg 发送私聊消息
 	SendFriendMsg(userId uint, chain msgchain.Chain) (success bool, msgId uint)
+
+	// SendPokeMsg 发送戳一戳消息
 	SendPokeMsg(userId uint, groupId *uint)
+
+	// GetMsgDetail 获取消息详情
 	GetMsgDetail(msgId uint) (bool, *message.Message)
 }
