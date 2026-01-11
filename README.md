@@ -1,8 +1,9 @@
 <div align="center">
   <img src="./README/logo.png" width="200" alt="AniaBot Logo"/>
   <h1>AniaBot</h1>
-  <p>一个 QQ 机器人框架喵~</p>
+  <p>一个插件驱动型 QQ 机器人框架</p>
 </div>
+
 
 
 > 正在重构 [PinBot](https://github.com/jeanhua/PinBot) 中，有这些优势(对比PinBot)：
@@ -119,57 +120,62 @@ type Meta struct {
   
 - 消息通知接口，[详情查看定义](./common/plugin/metainfo.go)
 
-## 四、插件示例 (日志打印插件)
+## 四、最小可行方案
 
 ```go
-package pluginlog
+package main
 
 import (
-	"log"
-	"strings"
+	"github.com/jeanhua/AniaBot/ania/adapter/napcat"
+	"github.com/jeanhua/AniaBot/ania/aniabot"
 
 	"github.com/jeanhua/AniaBot/common/bot"
 	"github.com/jeanhua/AniaBot/common/model/command"
 	"github.com/jeanhua/AniaBot/common/model/message"
+	"github.com/jeanhua/AniaBot/common/msgchain"
 	"github.com/jeanhua/AniaBot/common/plugin"
+	// "github.com/jeanhua/AniaBot/ania/plugins/pluginlog"
+	// "github.com/jeanhua/AniaBot/ania/plugins/pluginrepeat"
 )
 
-type LogPlugin struct {
+func main() {
+	// adapter := napcat.NewNapcatHttpAdapter() // HTTP 适配器
+	adapter := napcat.NewNapcatWebSocketAdapter() // Websocket适配器
+	bot := aniabot.NewAniaBot(adapter)
+	// 插件注册
+	// 系统内部插件
+	// bot.AddPlugin(pluginlog.NewPlugin())    // 控制台日志打印插件
+	// bot.AddPlugin(pluginrepeat.NewPlugin()) // 群复读机插件
+
+	// 自定义插件
+	bot.AddPlugin(NewCustomPlugin())
+
+	bot.Run()
+}
+
+type CustomPlugin struct {
 	plugin.Meta
 }
 
-func NewPlugin() *LogPlugin {
-	p := &LogPlugin{}
-	p.Name = "日志打印插件"
-	p.HelpWords = "用于在控制台打印日志信息"
-	p.AdminOnly = true
-	return p
+func NewCustomPlugin() *CustomPlugin {
+	return &CustomPlugin{
+		Meta: plugin.Meta{
+			Name:      "自定义插件",
+			HelpWords: "这是一个自定义插件",
+			AdminOnly: false,
+			Order:     0,
+		},
+	}
 }
 
-func (p *LogPlugin) OnGroupMsg(bot bot.Bot, cmd *command.Command, msg message.Message) bool {
-	var rawStrMsg strings.Builder
-	for _, m := range msg.Message {
-		rawStrMsg.WriteString(m.FriendlyText())
+// 接收群聊消息事件
+func (p *CustomPlugin) OnGroupMsg(bot bot.Bot, cmd *command.Command, msg message.Message) bool {
+	if cmd != nil && cmd.Mention && cmd.Name == "test" { // 判断条件：@[bot] /test 有效
+		builder := msgchain.Builder.Group()            // 群消息构造器
+		builder.Text("测试成功")                           // 构造消息
+		bot.SendGroupMsg(msg.GroupId, builder.Build()) // 发送消息
 	}
-	name := msg.Sender.Card
-	if name == "" {
-		name = msg.Sender.Nickname
-	}
-	log.Printf("收到群聊消息[%d %s]: %s", msg.GroupId, name, rawStrMsg.String())
-	return true
-}
-
-func (p *LogPlugin) OnFriendMsg(bot bot.Bot, cmd *command.Command, msg message.Message) bool {
-	var rawStrMsg strings.Builder
-	for _, m := range msg.Message {
-		rawStrMsg.WriteString(m.FriendlyText())
-	}
-	name := msg.Sender.Card
-	if name == "" {
-		name = msg.Sender.Nickname
-	}
-	log.Printf("收到好友消息[%d %s]: %s", msg.Sender.UserId, name, rawStrMsg.String())
-	return true
+	return true // 表示继续执行下一个插件
 }
 ```
 
