@@ -7,6 +7,7 @@ bot:
   adapter:
     ws:
       address: ws://localhost:4455 # websocket 地址，napcat的ws server地址
+      max_retries: 5 # 连接失败时最大重连次数
     http:
       listen_port: 6679 # 本地监听端口，用于napcat向bot上报事件。注意这里如果是docker的话使用localhost无法连接，建议换成内网ip，即在napcat配置页面的http client设置为ip
       target_url: http://localhost:6680 # napcat开放的url，用于bot向napcat上报事件

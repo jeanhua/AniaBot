@@ -44,30 +44,49 @@ type detail struct {
 }
 
 func (n *napcatWebSocketAdapter) Serve(v *viper.Viper) {
-	// initAck
 	n.ackMng = &ackManager{
 		timeout: time.Second * 5,
 	}
 
-	log.Println("已启用napcat websocket adapter")
 	url := v.GetString("bot.adapter.ws.address")
-	conn, _, err := websocket.DefaultDialer.Dial(url, nil)
-	if err != nil {
-		log.Fatal("无法连接到napcat websocket服务器:", err)
+	maxRetries := v.GetInt("bot.adapter.ws.max_retries")
+	if maxRetries <= 0 {
+		maxRetries = 5
 	}
-	n.wsConn = conn
+	log.Println("已启用 napcat websocket adapter")
+
+	for {
+		var conn *websocket.Conn
+		var err error
+		for i := 0; i < maxRetries; i++ {
+			conn, _, err = websocket.DefaultDialer.Dial(url, nil)
+			if err == nil {
+				break
+			}
+			waitTime := time.Second * time.Duration(1<<i)
+			log.Printf("连接失败 [%d/%d]: %v. %v 后尝试重连...\n", i+1, maxRetries, err, waitTime)
+			time.Sleep(waitTime)
+		}
+		if err != nil {
+			log.Printf("无法连接至服务器，已达到最大重试次数 (%d)。程序将彻底退出。\n", maxRetries)
+			log.Fatal(err)
+		}
+		log.Println("WebSocket 连接成功！")
+		n.wsConn = conn
+		n.readLoop(conn)
+		log.Println("连接已断开，准备重新开始重连序列...")
+	}
+}
+
+func (n *napcatWebSocketAdapter) readLoop(conn *websocket.Conn) {
+	defer conn.Close()
 	for {
 		_, msg, err := conn.ReadMessage()
 		if err != nil {
 			log.Println("读取数据失败:", err)
-			log.Println("正在结束进程")
-			break
+			return
 		}
 		go n.onMsg(msg)
-	}
-	if err := conn.Close(); err != nil {
-		log.Println("关闭连接出现问题: ", err.Error())
-		return
 	}
 }
 
