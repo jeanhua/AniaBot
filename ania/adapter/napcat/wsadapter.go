@@ -223,6 +223,88 @@ func (n *napcatWebSocketAdapter) SendPokeMsg(userId uint, groupId *uint) {
 	}
 }
 
+func (n *napcatWebSocketAdapter) SendGroupForwardMsg(groupId uint, chain msgchain.ForwardChain) (success bool, msgId uint) {
+	messageID := generateMessageID("ack")
+	raw := wsPushData[message.GroupForwardMessage]{
+		Action: "send_forward_msg",
+		Params: message.GroupForwardMessage{
+			GroupId:        groupId,
+			ForwardMessage: chain.GetMsg(),
+		},
+		Echo: messageID,
+	}
+	b, err := json.Marshal(&raw)
+	if err != nil {
+		log.Println("消息链序列化失败")
+		return false, 0
+	}
+
+	ackChan := make(chan *msgData, 1)
+	timer := time.NewTimer(n.ackMng.timeout)
+	n.ackMng.pendingAcks.Store(messageID, &pendingAck{
+		ch: ackChan,
+	})
+	defer func() {
+		timer.Stop()
+		n.ackMng.pendingAcks.Delete(messageID)
+	}()
+	if err := n.wsConn.WriteMessage(websocket.TextMessage, b); err != nil {
+		log.Println("消息发送失败:", err)
+		return false, 0
+	}
+	select {
+	case result := <-ackChan:
+		if result.result {
+			return true, result.msgId
+		} else {
+			return false, 0
+		}
+	case <-timer.C:
+		return false, 0
+	}
+}
+
+func (n *napcatWebSocketAdapter) SendFriendForwardMsg(userId uint, chain msgchain.ForwardChain) (success bool, msgId uint) {
+	messageID := generateMessageID("ack")
+	raw := wsPushData[message.FriendForwardMessage]{
+		Action: "send_forward_msg",
+		Params: message.FriendForwardMessage{
+			UserId:         userId,
+			ForwardMessage: chain.GetMsg(),
+		},
+		Echo: messageID,
+	}
+	b, err := json.Marshal(&raw)
+	if err != nil {
+		log.Println("消息链序列化失败")
+		return false, 0
+	}
+
+	ackChan := make(chan *msgData, 1)
+	timer := time.NewTimer(n.ackMng.timeout)
+	n.ackMng.pendingAcks.Store(messageID, &pendingAck{
+		ch: ackChan,
+	})
+	defer func() {
+		timer.Stop()
+		n.ackMng.pendingAcks.Delete(messageID)
+	}()
+	if err := n.wsConn.WriteMessage(websocket.TextMessage, b); err != nil {
+		log.Println("消息发送失败:", err)
+		return false, 0
+	}
+	select {
+	case result := <-ackChan:
+		if result.result {
+			return true, result.msgId
+		} else {
+			return false, 0
+		}
+	case <-timer.C:
+		return false, 0
+	}
+}
+
 func (n *napcatWebSocketAdapter) GetMsgDetail(msgId uint) (bool, *message.Message) {
 	messageID := generateMessageID("dt")
 	raw := wsPushData[map[string]uint]{}

@@ -4,11 +4,23 @@ import "github.com/jeanhua/AniaBot/common/model/message"
 
 type GroupChainBuilder interface {
 	commonMsgBuilder
+	// Mention 在群里AT某人
 	Mention(userId uint)
 }
 
 type FriendChainBuilder interface {
 	commonMsgBuilder
+}
+type ForwardChainBuilder interface {
+	Message(userId uint, nickname string, c Chain)
+	Build() ForwardChain
+}
+type Chain interface {
+	GetMsg() []message.OB11Segment
+}
+
+type ForwardChain interface {
+	GetMsg() message.ForwardMessage
 }
 
 type commonMsgBuilder interface {

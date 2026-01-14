@@ -18,6 +18,33 @@ type Message struct {
 	SelfId      uint          `json:"self_id"`
 }
 
+type ForwardMessage struct {
+	Messages []NodeMsg                `json:"messages"`
+	News     []map[string]interface{} `json:"news"`
+	Prompt   string                   `json:"prompt"`
+	Summary  string                   `json:"summary"`
+	Source   string                   `json:"source"`
+}
+
+type GroupForwardMessage struct {
+	GroupId uint `json:"group_id"`
+	ForwardMessage
+}
+
+type FriendForwardMessage struct {
+	UserId uint `json:"user_id"`
+	ForwardMessage
+}
+
+type NodeMsg struct {
+	Type string `json:"type"` // node
+	Data struct {
+		UserId   uint          `json:"user_id"`
+		Nickname string        `json:"nickname"`
+		Content  []OB11Segment `json:"content"`
+	} `json:"data"`
+}
+
 type OB11Segment struct {
 	Type string                 `json:"type"`
 	Data map[string]interface{} `json:"data"`

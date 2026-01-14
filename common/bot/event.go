@@ -24,4 +24,10 @@ type botOuterItf interface {
 
 	// GetMsgDetail 获取消息详情
 	GetMsgDetail(msgId uint) (bool, *message.Message)
+
+	// SendGroupForwardMsg 发送群聊合并转发消息
+	SendGroupForwardMsg(groupId uint, chain msgchain.ForwardChain) (success bool, msgId uint)
+
+	// SendFriendForwardMsg 发送私聊合并转发消息
+	SendFriendForwardMsg(userId uint, chain msgchain.ForwardChain) (success bool, msgId uint)
 }

@@ -305,6 +305,44 @@ func (n *napcatHttpAdapter) SendPokeMsg(userId uint, groupId *uint) {
 	}
 }
 
+func (n *napcatHttpAdapter) SendGroupForwardMsg(groupId uint, chain msgchain.ForwardChain) (success bool, msgId uint) {
+	data := message.GroupForwardMessage{}
+	data.GroupId = groupId
+	data.ForwardMessage = chain.GetMsg()
+	var resp message.Response
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
+	defer cancel()
+	if _, err := n.httpClient.R().SetContext(ctx).SetResult(&resp).SetBody(data).Post(n.baseUrl + "/send_forward_msg"); err != nil {
+		log.Println("HTTP请求失败, 无法发送群聊转发消息: ", err.Error())
+		return false, 0
+	}
+
+	if resp.Status == "ok" {
+		return true, resp.Data.MessageId
+	} else {
+		return false, 0
+	}
+}
+
+func (n *napcatHttpAdapter) SendFriendForwardMsg(userId uint, chain msgchain.ForwardChain) (success bool, msgId uint) {
+	data := message.FriendForwardMessage{}
+	data.UserId = userId
+	data.ForwardMessage = chain.GetMsg()
+	var resp message.Response
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
+	defer cancel()
+	if _, err := n.httpClient.R().SetContext(ctx).SetResult(&resp).SetBody(data).Post(n.baseUrl + "/send_forward_msg"); err != nil {
+		log.Println("HTTP请求失败, 无法发送群聊转发消息: ", err.Error())
+		return false, 0
+	}
+
+	if resp.Status == "ok" {
+		return true, resp.Data.MessageId
+	} else {
+		return false, 0
+	}
+}
+
 func (n *napcatHttpAdapter) GetMsgDetail(msgId uint) (bool, *message.Message) {
 	data := map[string]uint{
 		"message_id": msgId,

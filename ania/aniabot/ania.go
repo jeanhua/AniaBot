@@ -183,3 +183,11 @@ func (ania *AniaBot) SendPokeMsg(userId uint, groupId *uint) {
 func (ania *AniaBot) GetMsgDetail(msgId uint) (bool, *message.Message) {
 	return ania.adapter.GetMsgDetail(msgId)
 }
+
+func (ania *AniaBot) SendGroupForwardMsg(groupId uint, chain msgchain.ForwardChain) (success bool, msgId uint) {
+	return ania.adapter.SendGroupForwardMsg(groupId, chain)
+}
+
+func (ania *AniaBot) SendFriendForwardMsg(userId uint, chain msgchain.ForwardChain) (success bool, msgId uint) {
+	return ania.adapter.SendFriendForwardMsg(userId, chain)
+}
