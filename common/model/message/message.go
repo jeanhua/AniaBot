@@ -2,6 +2,7 @@ package message
 
 import (
 	"fmt"
+	"strconv"
 )
 
 type Message struct {
@@ -55,7 +56,17 @@ func (s OB11Segment) FriendlyText() string {
 	case "text":
 		return s.Data["text"].(string)
 	case "face":
-		return fmt.Sprintf("[QQ表情:%s]", s.Data["id"].(string))
+		idStr := s.Data["id"].(string)
+		id, err := strconv.Atoi(idStr)
+		if err != nil {
+			return "[QQ表情]"
+		}
+		dsc, ok := emojiMap[id]
+		if ok {
+			return fmt.Sprintf("[QQ表情:%s]", dsc)
+		} else {
+			return "[QQ表情]"
+		}
 	case "image":
 		return fmt.Sprintf("[图片:%s]", s.Data["url"].(string))
 	case "record":
