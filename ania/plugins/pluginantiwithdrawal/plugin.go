@@ -30,8 +30,8 @@ func (p *AntiWithdrawalPlugin) OnGroupMsg(bot bot.Bot, cmd *command.Command, msg
 	queue := queueI.(*MessageQueue[*message.Message])
 	if cmd != nil && cmd.Mention && cmd.Name == "explore" {
 		n := 50
-		if len(cmd.Args) >= 2 {
-			num, err := strconv.Atoi(cmd.Args[1])
+		if len(cmd.Args) >= 1 {
+			num, err := strconv.Atoi(cmd.Args[0])
 			if err == nil && num > 0 && num <= 100 {
 				n = num
 			}
