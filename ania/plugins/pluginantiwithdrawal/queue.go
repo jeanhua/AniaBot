@@ -76,8 +76,10 @@ func (q *MessageQueue[T]) Get(limit int) []T {
 	}
 
 	result := make([]T, count)
+	startIdx := (q.tail - count + q.size) % q.size
+
 	for i := 0; i < count; i++ {
-		idx := (q.head + i) % q.size
+		idx := (startIdx + i) % q.size
 		result[i] = q.messages[idx]
 	}
 
