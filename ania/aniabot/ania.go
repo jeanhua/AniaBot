@@ -87,6 +87,11 @@ func (ania *AniaBot) Run() {
 }
 
 func (ania *AniaBot) onGroupEvent(msg message.Message) {
+	defer func() {
+		if err := recover(); err != nil {
+			log.Println("群聊消息事件触发错误: ", err)
+		}
+	}()
 	if msg.Sender.UserId == msg.SelfId {
 		return
 	}
@@ -124,6 +129,11 @@ func (ania *AniaBot) onGroupEvent(msg message.Message) {
 }
 
 func (ania *AniaBot) onFriendEvent(msg message.Message) {
+	defer func() {
+		if err := recover(); err != nil {
+			log.Println("私聊消息事件触发错误: ", err)
+		}
+	}()
 	if msg.Sender.UserId == msg.SelfId {
 		return
 	}
