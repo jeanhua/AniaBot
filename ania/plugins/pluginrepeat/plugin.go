@@ -94,7 +94,7 @@ func (p *RepeatPlugin) OnGroupMsg(bot bot.Bot, cmd *command.Command, msg message
 	rc.lock.Unlock()
 	if needRepeat {
 		builder := msgchain.Builder.Group()
-		builder.Raw(msg.Message)
+		builder.Raw(msg.Message...)
 		bot.SendGroupMsg(msg.GroupId, builder.Build())
 	}
 	return true

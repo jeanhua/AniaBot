@@ -43,5 +43,5 @@ type commonMsgBuilder interface {
 	// Build 构造消息
 	Build() Chain
 	// Raw 添加OB11Segment裸消息
-	Raw(rawMsg []message.OB11Segment)
+	Raw(rawMsg ...message.OB11Segment)
 }

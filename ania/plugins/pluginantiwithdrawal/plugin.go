@@ -38,9 +38,15 @@ func (p *AntiWithdrawalPlugin) OnGroupMsg(bot bot.Bot, cmd *command.Command, msg
 		}
 		cachemsg := queue.Get(n)
 		fbuilder := msgchain.Builder.Forward()
-		for _, m := range cachemsg {
+		for i, m := range cachemsg {
 			_builder := msgchain.Builder.Group()
-			_builder.Raw(m.Message)
+			for _, seg := range m.Message {
+				if seg.Type == "forward" {
+					_builder.Text("[转发消息]")
+				} else {
+					_builder.Raw(m.Message[i])
+				}
+			}
 			fbuilder.Message(m.Sender.UserId, m.Sender.Nickname, _builder.Build())
 		}
 		success, _ := bot.SendGroupForwardMsg(msg.GroupId, fbuilder.Build())

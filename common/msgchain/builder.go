@@ -144,7 +144,7 @@ func (c *chainBuilder) RecordLocal(path string) {
 	})
 }
 
-func (c *chainBuilder) Raw(rawMsg []message.OB11Segment) {
+func (c *chainBuilder) Raw(rawMsg ...message.OB11Segment) {
 	c.message = append(c.message, rawMsg...)
 }
 
