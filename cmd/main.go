@@ -3,6 +3,7 @@ package main
 import (
 	"github.com/jeanhua/AniaBot/ania/adapter/napcat"
 	"github.com/jeanhua/AniaBot/ania/aniabot"
+	"github.com/jeanhua/AniaBot/ania/plugins/pluginaichat"
 	"github.com/jeanhua/AniaBot/ania/plugins/pluginantiwithdrawal"
 	"github.com/jeanhua/AniaBot/ania/plugins/pluginlog"
 	"github.com/jeanhua/AniaBot/ania/plugins/pluginrepeat"
@@ -16,6 +17,7 @@ func main() {
 	bot.AddPlugin(pluginlog.NewPlugin())
 	bot.AddPlugin(pluginrepeat.NewPlugin())
 	bot.AddPlugin(pluginantiwithdrawal.NewPlugin())
+	bot.AddPlugin(pluginaichat.NewAIChatPlugin())
 
 	bot.Run()
 }

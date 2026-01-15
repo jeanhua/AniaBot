@@ -1,8 +1,11 @@
 package message
 
 import (
+	"encoding/json"
 	"fmt"
+	"log"
 	"strconv"
+	"strings"
 )
 
 type Message struct {
@@ -51,7 +54,12 @@ type OB11Segment struct {
 	Data map[string]interface{} `json:"data"`
 }
 
-func (s OB11Segment) FriendlyText() string {
+func (s OB11Segment) FriendlyText(getMsgFunc func(msgId uint) (bool, *Message), next bool) (text string) {
+	defer func() {
+		if err := recover(); err != nil {
+			text = "读取消息错误"
+		}
+	}()
 	switch s.Type {
 	case "text":
 		return s.Data["text"].(string)
@@ -78,7 +86,75 @@ func (s OB11Segment) FriendlyText() string {
 	case "music":
 		return fmt.Sprintf("[音乐:%s]", s.Data["title"].(string))
 	case "reply":
-		return fmt.Sprintf("[回复:%s]", s.Data["id"].(string))
+		if !next || getMsgFunc == nil {
+			return ""
+		}
+		idStr := s.Data["id"].(string)
+		id, err := strconv.Atoi(idStr)
+		if err != nil {
+			return "[回复消息]"
+		}
+		ok, msg := getMsgFunc(uint(id))
+		if !ok {
+			return "[回复消息]"
+		}
+		nickname := msg.Sender.Card
+		if nickname == "" {
+			nickname = msg.Sender.Nickname
+		}
+		var back strings.Builder
+		back.WriteString("\n---以下为回复的消息内容---\n")
+		back.WriteString(fmt.Sprintf("[%s %d]: ", nickname, msg.Sender.UserId))
+		for _, m := range msg.Message {
+			back.WriteString(m.FriendlyText(getMsgFunc, false))
+		}
+		back.WriteString("\n---以上为回复的消息内容---\n")
+		return back.String()
+	case "forward":
+		return "[转发消息]"
+	case "file":
+		return fmt.Sprintf("[文件:%s]", s.Data["name"].(string))
+	case "json":
+		jsonMap := JsonMessage{}
+		err := json.Unmarshal([]byte(s.Data["data"].(string)), &jsonMap)
+		if err != nil {
+			log.Println("error when json unmarshal: json message")
+			return "[分享卡片: 无法获取内容]"
+		}
+		return fmt.Sprintf("[分享卡片,标题: %s,描述: %s,链接: (%s)]", jsonMap.Meta.News.Title, jsonMap.Meta.News.Desc, jsonMap.Meta.News.JumpUrl)
+	default:
+		return fmt.Sprintf("[%s]", s.Type)
+	}
+}
+
+func (s OB11Segment) ShortText() string {
+	switch s.Type {
+	case "text":
+		return s.Data["text"].(string)
+	case "face":
+		idStr := s.Data["id"].(string)
+		id, err := strconv.Atoi(idStr)
+		if err != nil {
+			return "[QQ表情]"
+		}
+		dsc, ok := emojiMap[id]
+		if ok {
+			return fmt.Sprintf("[QQ表情:%s]", dsc)
+		} else {
+			return "[QQ表情]"
+		}
+	case "image":
+		return "[图片]"
+	case "record":
+		return "[录音]"
+	case "video":
+		return "[视频]"
+	case "at":
+		return fmt.Sprintf("[at:%s]", s.Data["qq"].(string))
+	case "music":
+		return "[音乐]"
+	case "reply":
+		return "[回复消息]"
 	case "forward":
 		return "[转发消息]"
 	case "file":

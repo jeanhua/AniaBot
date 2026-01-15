@@ -23,7 +23,7 @@ func NewPlugin() *LogPlugin {
 }
 
 func (p *LogPlugin) OnGroupMsg(bot bot.Bot, cmd *command.Command, msg message.Message) bool {
-	str := utils.ExtraMessage(msg)
+	str := utils.ExtraMessage(bot, msg)
 	name := msg.Sender.Card
 	if name == "" {
 		name = msg.Sender.Nickname
@@ -33,7 +33,7 @@ func (p *LogPlugin) OnGroupMsg(bot bot.Bot, cmd *command.Command, msg message.Me
 }
 
 func (p *LogPlugin) OnFriendMsg(bot bot.Bot, cmd *command.Command, msg message.Message) bool {
-	str := utils.ExtraMessage(msg)
+	str := utils.ExtraMessage(bot, msg)
 	name := msg.Sender.Card
 	if name == "" {
 		name = msg.Sender.Nickname

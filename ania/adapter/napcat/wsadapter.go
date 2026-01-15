@@ -328,6 +328,7 @@ func (n *napcatWebSocketAdapter) GetMsgDetail(msgId uint) (bool, *message.Messag
 	messageID := generateMessageID("dt")
 	raw := wsPushData[map[string]uint]{}
 	raw.Action = "get_msg"
+	raw.Echo = messageID
 	raw.Params = map[string]uint{
 		"message_id": msgId,
 	}
