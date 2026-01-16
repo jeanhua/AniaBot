@@ -46,24 +46,24 @@ func (p *AntiWithdrawalPlugin) OnGroupMsg(bot bot.Bot, cmd *command.Command, msg
 				case "text", "face", "at", "reply", "json", "music":
 					_builder.Raw(m.Message[i])
 				case "forward":
-					_builder.Text("[转发消息]")
+					_builder.Text("[转发消息，暂不支持查看]")
 				case "image":
-					if isAfter1Minute(m.Time) {
-						_builder.Text("[图片消息]")
+					if isAfter3Minute(m.Time) {
+						_builder.Text("[图片消息，已经超过3分钟过期时间]")
 					} else {
 						_builder.Raw(m.Message[i])
 					}
 				case "record":
 					_builder.Text("[语音消息]")
 				case "video":
-					if isAfter1Minute(m.Time) {
-						_builder.Text("[视频消息]")
+					if isAfter3Minute(m.Time) {
+						_builder.Text("[视频消息，已经超过3分钟过期时间]")
 					} else {
 						_builder.Raw(m.Message[i])
 					}
 				case "file":
-					if isAfter1Minute(m.Time) {
-						_builder.Text("[文件消息]")
+					if isAfter3Minute(m.Time) {
+						_builder.Text("[文件消息，已经超过3分钟过期时间]")
 					} else {
 						_builder.Raw(m.Message[i])
 					}
@@ -81,7 +81,7 @@ func (p *AntiWithdrawalPlugin) OnGroupMsg(bot bot.Bot, cmd *command.Command, msg
 	return true
 }
 
-func isAfter1Minute(timestamp uint) bool {
+func isAfter3Minute(timestamp uint) bool {
 	now := uint(time.Now().Unix())
 	if now-timestamp > 180 {
 		return true
