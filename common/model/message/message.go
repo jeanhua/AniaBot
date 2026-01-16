@@ -145,12 +145,12 @@ func (s OB11Segment) FriendlyText(optFunc ...MsgOptFunc) (text string) {
 			nickname = msg.Sender.Nickname
 		}
 		var back strings.Builder
-		back.WriteString("\n---以下为回复的消息内容---\n")
+		back.WriteString("\n<reply>\n")
 		back.WriteString(fmt.Sprintf("[%s %d]: ", nickname, msg.Sender.UserId))
 		for _, m := range msg.Message {
 			back.WriteString(m.FriendlyText())
 		}
-		back.WriteString("\n---以上为回复的消息内容---\n")
+		back.WriteString("\n</reply>\n")
 		return back.String()
 	case "forward":
 		return "[转发消息]"
