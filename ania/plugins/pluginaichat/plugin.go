@@ -253,6 +253,10 @@ func extraMsg(ctx context.Context, bot bot.Bot, msg message.Message, ocrLLM *com
 			if url == "" {
 				continue
 			}
+			if ocrLLM == nil {
+				str.WriteString("OCR服务未开启，无法解析图片")
+				continue
+			}
 			resp, err := ocrLLM.ChatWithImage(ctx, "描述图片内容", url, opt...)
 			if err != nil {
 				str.WriteString("无法解析的图片内容")
