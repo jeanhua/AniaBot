@@ -59,5 +59,6 @@ type SendMsg interface {
 }
 
 type GetMsg interface {
-	GetMsgDetail(msgId uint) (bool, *message.Message)
+	GetMsgDetail(msgId uint) (success bool, msg *message.Message)
+	GetGroupUserInfo(groupId, userId uint) (success bool, info *message.GroupUserInfo)
 }

@@ -40,7 +40,16 @@ type detailAck struct {
 
 type detail struct {
 	result bool
-	Data   *message.Message `json:"data"`
+	Data   *message.Message
+}
+
+type groupInfoAck struct {
+	ch chan *groupInfo
+}
+
+type groupInfo struct {
+	result bool
+	Data   *message.GroupUserInfo
 }
 
 func (n *napcatWebSocketAdapter) Serve(v *viper.Viper) {
@@ -363,6 +372,47 @@ func (n *napcatWebSocketAdapter) GetMsgDetail(msgId uint) (bool, *message.Messag
 	}
 }
 
+func (n *napcatWebSocketAdapter) GetGroupUserInfo(groupId, userId uint) (bool, *message.GroupUserInfo) {
+	messageID := generateMessageID("ugif")
+	raw := wsPushData[map[string]any]{}
+	raw.Action = "get_group_member_info"
+	raw.Echo = messageID
+	raw.Params = map[string]any{
+		"group_id": groupId,
+		"user_id":  userId,
+		"no_cache": true,
+	}
+	b, err := json.Marshal(&raw)
+	if err != nil {
+		log.Println("消息链序列化失败")
+		return false, nil
+	}
+
+	ackChan := make(chan *groupInfo, 1)
+	timer := time.NewTimer(n.ackMng.timeout)
+	n.ackMng.pendingAcks.Store(messageID, &groupInfoAck{
+		ch: ackChan,
+	})
+	defer func() {
+		timer.Stop()
+		n.ackMng.pendingAcks.Delete(messageID)
+	}()
+	if err := n.wsConn.WriteMessage(websocket.TextMessage, b); err != nil {
+		log.Println("消息发送失败:", err)
+		return false, nil
+	}
+	select {
+	case result := <-ackChan:
+		if result.result {
+			return true, result.Data
+		} else {
+			return false, nil
+		}
+	case <-timer.C:
+		return false, nil
+	}
+}
+
 func (n *napcatWebSocketAdapter) onMsg(data []byte) {
 	var callBack map[string]any
 	if err := json.Unmarshal(data, &callBack); err != nil {
@@ -403,13 +453,14 @@ func (n *napcatWebSocketAdapter) onMsg(data []byte) {
 		return
 	}
 	px := strings.SplitN(echo, ":", 2)
-	var msgCallBack message.Response
-	if err := json.Unmarshal(data, &msgCallBack); err != nil {
-		return
-	}
 	switch px[0] {
 	case "ack":
 		ack := ackInterface.(*pendingAck)
+		var msgCallBack message.Response[message.Message]
+		if err := json.Unmarshal(data, &msgCallBack); err != nil {
+			log.Println("无法解析ACK")
+			return
+		}
 		if msgCallBack.Status == "ok" {
 			select {
 			case ack.ch <- &msgData{
@@ -431,6 +482,11 @@ func (n *napcatWebSocketAdapter) onMsg(data []byte) {
 		}
 	case "dt":
 		ack := ackInterface.(*detailAck)
+		var msgCallBack message.Response[message.Message]
+		if err := json.Unmarshal(data, &msgCallBack); err != nil {
+			log.Println("无法解析消息详情")
+			return
+		}
 		if msgCallBack.Status == "ok" {
 			select {
 			case ack.ch <- &detail{
@@ -443,6 +499,32 @@ func (n *napcatWebSocketAdapter) onMsg(data []byte) {
 		} else {
 			select {
 			case ack.ch <- &detail{
+				Data:   nil,
+				result: false,
+			}:
+			default:
+				log.Println("确认通道已满, 无法获取消息详情")
+			}
+		}
+	case "ugif":
+		ack := ackInterface.(*groupInfoAck)
+		var msgCallBack message.Response[message.GroupUserInfo]
+		if err := json.Unmarshal(data, &msgCallBack); err != nil {
+			log.Println("无法解析群用户信息")
+			return
+		}
+		if msgCallBack.Status == "ok" {
+			select {
+			case ack.ch <- &groupInfo{
+				Data:   &msgCallBack.Data,
+				result: true,
+			}:
+			default:
+				log.Println("确认通道已满, 无法获取消息详情")
+			}
+		} else {
+			select {
+			case ack.ch <- &groupInfo{
 				Data:   nil,
 				result: false,
 			}:

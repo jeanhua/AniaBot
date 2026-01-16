@@ -235,7 +235,7 @@ func (n *napcatHttpAdapter) SendGroupMsg(groupId uint, chain msgchain.Chain) (su
 		Message: chain.GetMsg(),
 	}
 
-	var resp message.Response
+	var resp message.Response[message.Message]
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
 	defer cancel()
 	if _, err := n.httpClient.R().SetContext(ctx).SetResult(&resp).SetBody(data).Post(n.baseUrl + "/send_group_msg"); err != nil {
@@ -255,7 +255,7 @@ func (n *napcatHttpAdapter) SendFriendMsg(UserId uint, chain msgchain.Chain) (su
 		Message: chain.GetMsg(),
 	}
 
-	var resp message.Response
+	var resp message.Response[message.Message]
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
 	defer cancel()
 	if _, err := n.httpClient.R().SetContext(ctx).SetResult(&resp).SetBody(data).Post(n.baseUrl + "/send_private_msg"); err != nil {
@@ -276,7 +276,7 @@ func (n *napcatHttpAdapter) SendGroupAIVoiceMsg(groupId uint, character, msg str
 		Character: character,
 		Text:      msg,
 	}
-	var resp message.Response
+	var resp message.Response[message.Message]
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
 	defer cancel()
 	if _, err := n.httpClient.R().SetContext(ctx).SetResult(&resp).SetBody(data).Post(n.baseUrl + "/send_group_ai_record"); err != nil {
@@ -309,7 +309,7 @@ func (n *napcatHttpAdapter) SendGroupForwardMsg(groupId uint, chain msgchain.For
 	data := message.GroupForwardMessage{}
 	data.GroupId = groupId
 	data.ForwardMessage = chain.GetMsg()
-	var resp message.Response
+	var resp message.Response[message.Message]
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
 	defer cancel()
 	if _, err := n.httpClient.R().SetContext(ctx).SetResult(&resp).SetBody(data).Post(n.baseUrl + "/send_forward_msg"); err != nil {
@@ -328,7 +328,7 @@ func (n *napcatHttpAdapter) SendFriendForwardMsg(userId uint, chain msgchain.For
 	data := message.FriendForwardMessage{}
 	data.UserId = userId
 	data.ForwardMessage = chain.GetMsg()
-	var resp message.Response
+	var resp message.Response[message.Message]
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
 	defer cancel()
 	if _, err := n.httpClient.R().SetContext(ctx).SetResult(&resp).SetBody(data).Post(n.baseUrl + "/send_forward_msg"); err != nil {
@@ -352,9 +352,25 @@ func (n *napcatHttpAdapter) GetMsgDetail(msgId uint) (bool, *message.Message) {
 	defer cancel()
 	if _, err := n.httpClient.R().SetResult(&result).SetContext(ctx).SetBody(data).Post(n.baseUrl + "/get_msg"); err != nil {
 		log.Println("HTTP请求失败, 无法获取消息详情: ", err.Error())
-		return false, &result.Data
+		return false, nil
 	}
 	return true, &result.Data
+}
+
+func (n *napcatHttpAdapter) GetGroupUserInfo(groupId, userId uint) (bool, *message.GroupUserInfo) {
+	data := map[string]any{}
+	data["group_id"] = groupId
+	data["user_id"] = userId
+	data["no_cache"] = true
+
+	resp := message.Response[message.GroupUserInfo]{}
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
+	defer cancel()
+	if _, err := n.httpClient.R().SetResult(&resp).SetContext(ctx).SetBody(data).Post(n.baseUrl + "/get_group_member_info"); err != nil {
+		log.Println("HTTP请求失败, 无法获取消息详情: ", err.Error())
+		return false, nil
+	}
+	return true, &resp.Data
 }
 
 type httpFriendPushData struct {

@@ -201,3 +201,7 @@ func (ania *AniaBot) SendGroupForwardMsg(groupId uint, chain msgchain.ForwardCha
 func (ania *AniaBot) SendFriendForwardMsg(userId uint, chain msgchain.ForwardChain) (success bool, msgId uint) {
 	return ania.adapter.SendFriendForwardMsg(userId, chain)
 }
+
+func (ania *AniaBot) GetGroupUserInfo(groupId, userId uint) (bool, *message.GroupUserInfo) {
+	return ania.adapter.GetGroupUserInfo(groupId, userId)
+}

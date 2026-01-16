@@ -266,7 +266,7 @@ func extraMsg(ctx context.Context, bot bot.Bot, msg message.Message, ocrLLM *com
 			}
 			str.WriteString("\n</图片消息>\n")
 		} else {
-			str.WriteString(m.FriendlyText(bot.GetMsgDetail, true))
+			str.WriteString(m.FriendlyText(message.WithGetMsgFunc(bot.GetMsgDetail), message.WithGetGroupUserInfo(msg.GroupId, msg.Sender.UserId, bot.GetGroupUserInfo)))
 		}
 	}
 	return str.String()
