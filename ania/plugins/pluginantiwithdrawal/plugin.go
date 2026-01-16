@@ -4,6 +4,7 @@ import (
 	"log"
 	"strconv"
 	"sync"
+	"time"
 
 	"github.com/jeanhua/AniaBot/common/bot"
 	"github.com/jeanhua/AniaBot/common/model/command"
@@ -41,10 +42,31 @@ func (p *AntiWithdrawalPlugin) OnGroupMsg(bot bot.Bot, cmd *command.Command, msg
 		for _, m := range cachemsg {
 			_builder := msgchain.Builder.Group()
 			for i, seg := range m.Message {
-				if seg.Type == "forward" {
-					_builder.Text("[转发消息]")
-				} else {
+				switch seg.Type {
+				case "text", "face", "at", "reply", "json", "music":
 					_builder.Raw(m.Message[i])
+				case "forward":
+					_builder.Text("[转发消息]")
+				case "image":
+					if isAfter1Minute(m.Time) {
+						_builder.Text("[图片消息]")
+					} else {
+						_builder.Raw(m.Message[i])
+					}
+				case "record":
+					_builder.Text("[语音消息]")
+				case "video":
+					if isAfter1Minute(m.Time) {
+						_builder.Text("[视频消息]")
+					} else {
+						_builder.Raw(m.Message[i])
+					}
+				case "file":
+					if isAfter1Minute(m.Time) {
+						_builder.Text("[文件消息]")
+					} else {
+						_builder.Raw(m.Message[i])
+					}
 				}
 			}
 			fbuilder.Message(m.Sender.UserId, m.Sender.Nickname, _builder.Build())
@@ -57,4 +79,12 @@ func (p *AntiWithdrawalPlugin) OnGroupMsg(bot bot.Bot, cmd *command.Command, msg
 	}
 	queue.Add(&msg)
 	return true
+}
+
+func isAfter1Minute(timestamp uint) bool {
+	now := uint(time.Now().Unix())
+	if now-timestamp > 180 {
+		return true
+	}
+	return false
 }
