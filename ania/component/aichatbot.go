@@ -36,7 +36,7 @@ func NewChatBot(baseURL, apiKey, model, prompt string, windowSize int) (*ChatBot
 	}, nil
 }
 
-func (b *ChatBot) Chat(ctx context.Context, userInput string) (string, error) {
+func (b *ChatBot) Chat(ctx context.Context, userInput string, opt ...llms.CallOption) (string, error) {
 	variables, err := b.memory.LoadMemoryVariables(ctx, map[string]any{})
 	if err != nil {
 		return "", err
@@ -54,7 +54,7 @@ func (b *ChatBot) Chat(ctx context.Context, userInput string) (string, error) {
 
 	messages = append(messages, llms.TextParts(llms.ChatMessageTypeHuman, userInput))
 
-	completion, err := b.llm.GenerateContent(ctx, messages)
+	completion, err := b.llm.GenerateContent(ctx, messages, opt...)
 	if err != nil {
 		return "", err
 	}
@@ -70,6 +70,29 @@ func (b *ChatBot) Chat(ctx context.Context, userInput string) (string, error) {
 	}
 
 	return respText, nil
+}
+
+func (b *ChatBot) ChatWithImage(ctx context.Context, userInput string, imageUrl string, opt ...llms.CallOption) (string, error) {
+	parts := []llms.ContentPart{
+		llms.TextPart(userInput),
+		llms.ImageURLPart(imageUrl),
+	}
+	messages := []llms.MessageContent{
+		{
+			Role:  llms.ChatMessageTypeSystem,
+			Parts: []llms.ContentPart{llms.TextPart(b.prompt)},
+		},
+		{
+			Role:  llms.ChatMessageTypeHuman,
+			Parts: parts,
+		},
+	}
+
+	completion, err := b.llm.GenerateContent(ctx, messages, opt...)
+	if err != nil {
+		return "", err
+	}
+	return completion.Choices[0].Content, nil
 }
 
 func (b *ChatBot) ClearHistory(ctx context.Context) error {

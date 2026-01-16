@@ -15,9 +15,31 @@ bot:
 
 # 插件自定义配置
 plugin:
+  # AniaBot系统AI对话插件配置
   ai_chat_bot:
     base_url: "https://api.deepseek.com" # 示例deepseek，支持所有兼容OpenAI规范的厂商
     api_key: "" # 这里填写apikey
     model: "deepseek-chat" # 选择的模型
+    # 模型参数
+    temperature: 1.2
+    top_p: 0.9
+    top_k: 100
+    max_token: 8192
     prompt: |-
       你是一个ai对话机器人，在QQ上和别人聊天，说话不要长篇大论
+
+    # OCR 配置，可选，该llm负责将图片转换为文本供上文使用
+    ocr:
+      enable: false
+      base_url: "https://api.siliconflow.cn/v1" # 示例deepseek，支持所有兼容OpenAI规范的厂商
+      api_key: "" # 这里填写apikey
+      model: "Qwen/Qwen3-VL-8B-Instruct" # 选择的模型
+      # 模型参数
+      temperature: 0.6
+      top_p: 0.95
+      top_k: 20
+      max_token: 600
+      prompt: |-
+        你负责将看到的图片用markdown格式描述出来，不要有无关的其他对话
+
+

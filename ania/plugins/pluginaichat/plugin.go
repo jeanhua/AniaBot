@@ -17,6 +17,7 @@ import (
 	"github.com/jeanhua/AniaBot/common/msgchain"
 	"github.com/jeanhua/AniaBot/common/plugin"
 	"github.com/spf13/viper"
+	"github.com/tmc/langchaingo/llms"
 )
 
 type AIChatPlugin struct {
@@ -28,7 +29,24 @@ type AIChatPlugin struct {
 		baseURL string
 		apiKey  string
 		model   string
-		prompt  string
+	}
+
+	llmParameter struct {
+		maxToken    int
+		temperature float64
+		top_p       float64
+		top_k       int
+		prompt      string
+	}
+
+	ocrEnable    bool
+	ocrModel     *component.ChatBot
+	ocrParameter struct {
+		maxToken    int
+		temperature float64
+		top_p       float64
+		top_k       int
+		prompt      string
 	}
 }
 
@@ -58,7 +76,7 @@ func (p *AIChatPlugin) getChat(id uint) *component.ChatBot {
 			p.botConfig.baseURL,
 			p.botConfig.apiKey,
 			p.botConfig.model,
-			p.botConfig.prompt,
+			p.llmParameter.prompt,
 			30,
 		)
 		if err != nil {
@@ -92,7 +110,12 @@ func (p *AIChatPlugin) OnGroupMsg(bot bot.Bot, cmd *command.Command, msg message
 	builder := msgchain.Builder.Group()
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute*3)
 	defer cancel()
-	resp, err := chat.Chat(ctx, extraMsg(bot, msg))
+	resp, err := chat.Chat(ctx, extraMsg(ctx, bot, msg, p.ocrModel),
+		llms.WithMaxTokens(p.llmParameter.maxToken),
+		llms.WithTemperature(p.llmParameter.temperature),
+		llms.WithTopP(p.llmParameter.top_p),
+		llms.WithTopK(p.llmParameter.top_k),
+	)
 	if err != nil {
 		if errors.Is(err, context.DeadlineExceeded) {
 			builder.Text("请求超时")
@@ -138,7 +161,12 @@ func (p *AIChatPlugin) OnFriendMsg(bot bot.Bot, cmd *command.Command, msg messag
 	builder := msgchain.Builder.Friend()
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute*3)
 	defer cancel()
-	resp, err := chat.Chat(ctx, extraMsg(bot, msg))
+	resp, err := chat.Chat(ctx, extraMsg(ctx, bot, msg, p.ocrModel),
+		llms.WithMaxTokens(p.llmParameter.maxToken),
+		llms.WithTemperature(p.llmParameter.temperature),
+		llms.WithTopP(p.llmParameter.top_p),
+		llms.WithTopK(p.llmParameter.top_k),
+	)
 	if err != nil {
 		if errors.Is(err, context.DeadlineExceeded) {
 			builder.Text("请求超时")
@@ -167,7 +195,7 @@ func (p *AIChatPlugin) Start(cfg *viper.Viper) {
 	p.botConfig.baseURL = cfg.GetString("plugin.ai_chat_bot.base_url")
 	p.botConfig.model = cfg.GetString("plugin.ai_chat_bot.model")
 	p.botConfig.apiKey = cfg.GetString("plugin.ai_chat_bot.api_key")
-	p.botConfig.prompt = cfg.GetString("plugin.ai_chat_bot.prompt")
+	p.llmParameter.prompt = cfg.GetString("plugin.ai_chat_bot.prompt")
 
 	if p.botConfig.baseURL == "" {
 		log.Println("初始化失败：未配置 Base Url")
@@ -178,13 +206,40 @@ func (p *AIChatPlugin) Start(cfg *viper.Viper) {
 	if p.botConfig.apiKey == "" {
 		log.Println("初始化失败：未配置 API KEY")
 	}
-	if p.botConfig.prompt == "" {
+	if p.llmParameter.prompt == "" {
 		log.Println("未配置 Prompt，将使用预设的默认提示词")
-		p.botConfig.prompt = "你是一个ai对话机器人，在QQ上和别人聊天，说话不要长篇大论"
+		p.llmParameter.prompt = "你是一个ai对话机器人，在QQ上和别人聊天，说话不要长篇大论"
+	}
+
+	p.llmParameter.maxToken = cfg.GetInt("plugin.ai_chat_bot.max_token")
+	p.llmParameter.temperature = cfg.GetFloat64("plugin.ai_chat_bot.temperature")
+	p.llmParameter.top_p = cfg.GetFloat64("plugin.ai_chat_bot.top_p")
+	p.llmParameter.top_k = cfg.GetInt("plugin.ai_chat_bot.top_k")
+
+	p.ocrEnable = cfg.GetBool("plugin.ai_chat_bot.ocr.enable")
+	if p.ocrEnable {
+		log.Println("已启用OCR LLM")
+		ocrBaseUrl := cfg.GetString("plugin.ai_chat_bot.ocr.base_url")
+		ocrAPIKey := cfg.GetString("plugin.ai_chat_bot.ocr.api_key")
+		ocrModel := cfg.GetString("plugin.ai_chat_bot.ocr.model")
+
+		ocrPrompt := cfg.GetString("plugin.ai_chat_bot.ocr.prompt")
+		p.ocrParameter.maxToken = cfg.GetInt("plugin.ai_chat_bot.ocr.max_token")
+		p.ocrParameter.temperature = cfg.GetFloat64("plugin.ai_chat_bot.ocr.temperature")
+		p.ocrParameter.top_p = cfg.GetFloat64("plugin.ai_chat_bot.ocr.top_p")
+		p.ocrParameter.top_k = cfg.GetInt("plugin.ai_chat_bot.ocr.top_k")
+
+		ocrllm, err := component.NewChatBot(ocrBaseUrl, ocrAPIKey, ocrModel, ocrPrompt, 10)
+		if err != nil {
+			log.Println("无法初始化OCR LLM", err.Error())
+			p.ocrEnable = false
+		} else {
+			p.ocrModel = ocrllm
+		}
 	}
 }
 
-func extraMsg(bot bot.Bot, msg message.Message) string {
+func extraMsg(ctx context.Context, bot bot.Bot, msg message.Message, ocrLLM *component.ChatBot, opt ...llms.CallOption) string {
 	var str strings.Builder
 	nickname := msg.Sender.Card
 	if nickname == "" {
@@ -192,7 +247,22 @@ func extraMsg(bot bot.Bot, msg message.Message) string {
 	}
 	str.WriteString(fmt.Sprintf("%s [nickname:%s id:%d]:", utils.GetFormattedTime(), nickname, msg.Sender.UserId))
 	for _, m := range msg.Message {
-		str.WriteString(m.FriendlyText(bot.GetMsgDetail, true))
+		if m.Type == "image" {
+			str.WriteString("\n<图片消息>\n")
+			url := m.Data["url"].(string)
+			if url == "" {
+				continue
+			}
+			resp, err := ocrLLM.ChatWithImage(ctx, "描述图片内容", url, opt...)
+			if err != nil {
+				str.WriteString("无法解析的图片内容")
+			} else {
+				str.WriteString(resp)
+			}
+			str.WriteString("\n</图片消息>\n")
+		} else {
+			str.WriteString(m.FriendlyText(bot.GetMsgDetail, true))
+		}
 	}
 	return str.String()
 }
