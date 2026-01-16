@@ -28,7 +28,7 @@ func (p *LogPlugin) OnGroupMsg(bot bot.Bot, cmd *command.Command, msg message.Me
 	if name == "" {
 		name = msg.Sender.Nickname
 	}
-	log.Printf("收到群聊消息[%d %s]: %s", msg.GroupId, name, str)
+	log.Printf("[收<-群:%d 昵称:%s]: %s", msg.GroupId, name, str)
 	return true
 }
 
@@ -38,6 +38,6 @@ func (p *LogPlugin) OnFriendMsg(bot bot.Bot, cmd *command.Command, msg message.M
 	if name == "" {
 		name = msg.Sender.Nickname
 	}
-	log.Printf("收到好友消息[%d %s]: %s", msg.Sender.UserId, name, str)
+	log.Printf("[收<-好友:%d 昵称:%s]: %s", msg.Sender.UserId, name, str)
 	return true
 }

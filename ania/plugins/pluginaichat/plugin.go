@@ -112,7 +112,9 @@ func (p *AIChatPlugin) OnGroupMsg(bot bot.Bot, cmd *command.Command, msg message
 
 	builder.Mention(msg.Sender.UserId)
 	builder.Text(" " + resp)
-	bot.SendGroupMsg(msg.GroupId, builder.Build())
+	if success, _ := bot.SendGroupMsg(msg.GroupId, builder.Build()); success {
+		log.Printf("[发->群:%d]: %s", msg.GroupId, resp)
+	}
 	return true
 }
 
@@ -155,7 +157,9 @@ func (p *AIChatPlugin) OnFriendMsg(bot bot.Bot, cmd *command.Command, msg messag
 	}
 
 	builder.Text(resp)
-	bot.SendFriendMsg(msg.Sender.UserId, builder.Build())
+	if success, _ := bot.SendFriendMsg(msg.Sender.UserId, builder.Build()); success {
+		log.Printf("[发->好友:%d]: %s", msg.Sender.UserId, resp)
+	}
 	return true
 }
 
