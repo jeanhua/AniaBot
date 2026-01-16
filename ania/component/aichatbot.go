@@ -11,10 +11,10 @@ import (
 type ChatBot struct {
 	prompt string
 	llm    llms.Model
-	memory *memory.ConversationBuffer
+	memory *memory.ConversationWindowBuffer
 }
 
-func NewChatBot(baseURL, apiKey, model, prompt string) (*ChatBot, error) {
+func NewChatBot(baseURL, apiKey, model, prompt string, windowSize int) (*ChatBot, error) {
 	llm, err := openai.New(
 		openai.WithToken(apiKey),
 		openai.WithBaseURL(baseURL),
@@ -24,7 +24,10 @@ func NewChatBot(baseURL, apiKey, model, prompt string) (*ChatBot, error) {
 		return nil, err
 	}
 
-	mem := memory.NewConversationBuffer(memory.WithReturnMessages(true))
+	mem := memory.NewConversationWindowBuffer(
+		windowSize,
+		memory.WithReturnMessages(true),
+	)
 
 	return &ChatBot{
 		prompt: prompt,
@@ -44,11 +47,6 @@ func (b *ChatBot) Chat(ctx context.Context, userInput string) (string, error) {
 	messages = append(messages, llms.TextParts(llms.ChatMessageTypeSystem, b.prompt))
 
 	if historyList, ok := variables["history"].([]llms.ChatMessage); ok {
-		const MaxHistoryLen = 50
-		if len(historyList) > MaxHistoryLen {
-			historyList = historyList[len(historyList)-MaxHistoryLen:]
-		}
-
 		for _, msg := range historyList {
 			messages = append(messages, llms.TextParts(msg.GetType(), msg.GetContent()))
 		}
@@ -72,4 +70,8 @@ func (b *ChatBot) Chat(ctx context.Context, userInput string) (string, error) {
 	}
 
 	return respText, nil
+}
+
+func (b *ChatBot) ClearHistory(ctx context.Context) error {
+	return b.memory.Clear(ctx)
 }

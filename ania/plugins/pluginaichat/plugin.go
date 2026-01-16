@@ -59,6 +59,7 @@ func (p *AIChatPlugin) getChat(id uint) *component.ChatBot {
 			p.botConfig.apiKey,
 			p.botConfig.model,
 			p.botConfig.prompt,
+			30,
 		)
 		if err != nil {
 			return nil
