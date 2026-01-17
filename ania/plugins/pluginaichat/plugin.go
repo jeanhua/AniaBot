@@ -247,27 +247,23 @@ func extraMsg(ctx context.Context, bot bot.Bot, msg message.Message, ocrLLM *com
 	}
 	str.WriteString(fmt.Sprintf("%s [nickname:%s id:%d]:", utils.GetFormattedTime(), nickname, msg.Sender.UserId))
 	for _, m := range msg.Message {
-		if m.Type == "image" {
-			str.WriteString("\n<图片消息>\n")
-			url := m.Data["url"].(string)
-			if url == "" {
-				continue
-			}
-			if ocrLLM == nil {
-				str.WriteString("OCR服务未开启，无法解析图片")
-				str.WriteString("\n</图片消息>\n")
-				continue
-			}
-			resp, err := ocrLLM.ChatWithImage(ctx, "描述图片内容", url, opt...)
-			if err != nil {
-				str.WriteString("OCR请求失败，无法解析的图片内容")
-			} else {
-				str.WriteString(resp)
-			}
-			str.WriteString("\n</图片消息>\n")
-		} else {
-			str.WriteString(m.FriendlyText(message.WithGetMsgFunc(bot.GetMsgDetail), message.WithGetGroupUserInfo(msg.GroupId, msg.Sender.UserId, bot.GetGroupUserInfo)))
-		}
+		str.WriteString(
+			m.FriendlyText(
+				message.WithGetMsgFunc(bot.GetMsgDetail),
+				message.WithGetGroupUserInfo(msg.GroupId, bot.GetGroupUserInfo),
+				message.WithGetImageOCRFunc(func(url string) string {
+					if ocrLLM == nil {
+						return "OCR服务未开启，无法解析图片"
+					}
+					resp, err := ocrLLM.ChatWithImage(ctx, "描述图片内容", url, opt...)
+					if err != nil {
+						return "OCR请求失败，无法解析的图片内容"
+					} else {
+						return resp
+					}
+				}),
+			),
+		)
 	}
 	return str.String()
 }
