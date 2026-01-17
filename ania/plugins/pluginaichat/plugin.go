@@ -259,6 +259,7 @@ func extraMsg(ctx context.Context, bot bot.Bot, msg message.Message, ocrLLM *com
 					if err != nil {
 						return "OCR请求失败，无法解析的图片内容"
 					} else {
+						log.Println("OCR解析到内容：", resp)
 						return resp
 					}
 				}),
