@@ -103,7 +103,7 @@ func (n *napcatWebSocketAdapter) SetTrigger(trigger adapter.TriggerWrapper) {
 	n.trigger = trigger
 }
 
-func (n *napcatWebSocketAdapter) SendGroupMsg(groupId uint, chain msgchain.Chain) (success bool, msgId uint) {
+func (n *napcatWebSocketAdapter) SendGroupMsg(groupId uint, chain msgchain.Chain) (msgId uint, success bool) {
 	messageID := generateMessageID("ack")
 	raw := wsPushGroupData{
 		Action: "send_group_msg",
@@ -119,7 +119,7 @@ func (n *napcatWebSocketAdapter) SendGroupMsg(groupId uint, chain msgchain.Chain
 	b, err := json.Marshal(&raw)
 	if err != nil {
 		log.Println("消息链序列化失败")
-		return false, 0
+		return 0, false
 	}
 
 	ackChan := make(chan *msgData, 1)
@@ -133,21 +133,21 @@ func (n *napcatWebSocketAdapter) SendGroupMsg(groupId uint, chain msgchain.Chain
 	}()
 	if err := n.wsConn.WriteMessage(websocket.TextMessage, b); err != nil {
 		log.Println("消息发送失败:", err)
-		return false, 0
+		return 0, false
 	}
 	select {
 	case result := <-ackChan:
 		if result.result {
-			return true, result.msgId
+			return result.msgId, true
 		} else {
-			return false, 0
+			return 0, false
 		}
 	case <-timer.C:
-		return false, 0
+		return 0, false
 	}
 }
 
-func (n *napcatWebSocketAdapter) SendGroupAIVoiceMsg(groupId uint, character, msg string) (success bool, msgId uint) {
+func (n *napcatWebSocketAdapter) SendGroupAIVoiceMsg(groupId uint, character, msg string) (msgId uint, success bool) {
 	messageID := generateMessageID("ack")
 	raw := wsPushGroupAIMsgData{
 		Action: "send_group_ai_record",
@@ -161,7 +161,7 @@ func (n *napcatWebSocketAdapter) SendGroupAIVoiceMsg(groupId uint, character, ms
 	b, err := json.Marshal(&raw)
 	if err != nil {
 		log.Println("消息链序列化失败")
-		return false, 0
+		return 0, false
 	}
 
 	ackChan := make(chan *msgData, 1)
@@ -175,21 +175,21 @@ func (n *napcatWebSocketAdapter) SendGroupAIVoiceMsg(groupId uint, character, ms
 	}()
 	if err := n.wsConn.WriteMessage(websocket.TextMessage, b); err != nil {
 		log.Println("消息发送失败:", err)
-		return false, 0
+		return 0, false
 	}
 	select {
 	case result := <-ackChan:
 		if result.result {
-			return true, result.msgId
+			return result.msgId, true
 		} else {
-			return false, 0
+			return 0, false
 		}
 	case <-timer.C:
-		return false, 0
+		return 0, false
 	}
 }
 
-func (n *napcatWebSocketAdapter) SendFriendMsg(userId uint, chain msgchain.Chain) (success bool, msgId uint) {
+func (n *napcatWebSocketAdapter) SendFriendMsg(userId uint, chain msgchain.Chain) (msgId uint, success bool) {
 	messageID := generateMessageID("ack")
 	raw := wsPushFriendData{
 		Action: "send_private_msg",
@@ -205,7 +205,7 @@ func (n *napcatWebSocketAdapter) SendFriendMsg(userId uint, chain msgchain.Chain
 	b, err := json.Marshal(&raw)
 	if err != nil {
 		log.Println("消息链序列化失败")
-		return false, 0
+		return 0, false
 	}
 
 	ackChan := make(chan *msgData, 1)
@@ -219,17 +219,17 @@ func (n *napcatWebSocketAdapter) SendFriendMsg(userId uint, chain msgchain.Chain
 	}()
 	if err := n.wsConn.WriteMessage(websocket.TextMessage, b); err != nil {
 		log.Println("消息发送失败:", err)
-		return false, 0
+		return 0, false
 	}
 	select {
 	case result := <-ackChan:
 		if result.result {
-			return true, result.msgId
+			return result.msgId, true
 		} else {
-			return false, 0
+			return 0, false
 		}
 	case <-timer.C:
-		return false, 0
+		return 0, false
 	}
 }
 
@@ -251,7 +251,7 @@ func (n *napcatWebSocketAdapter) SendPokeMsg(userId uint, groupId *uint) {
 	}
 }
 
-func (n *napcatWebSocketAdapter) SendGroupForwardMsg(groupId uint, chain msgchain.ForwardChain) (success bool, msgId uint) {
+func (n *napcatWebSocketAdapter) SendGroupForwardMsg(groupId uint, chain msgchain.ForwardChain) (msgId uint, success bool) {
 	messageID := generateMessageID("ack")
 	raw := wsPushData[message.GroupForwardMessage]{
 		Action: "send_forward_msg",
@@ -264,7 +264,7 @@ func (n *napcatWebSocketAdapter) SendGroupForwardMsg(groupId uint, chain msgchai
 	b, err := json.Marshal(&raw)
 	if err != nil {
 		log.Println("消息链序列化失败")
-		return false, 0
+		return 0, false
 	}
 
 	ackChan := make(chan *msgData, 1)
@@ -278,21 +278,21 @@ func (n *napcatWebSocketAdapter) SendGroupForwardMsg(groupId uint, chain msgchai
 	}()
 	if err := n.wsConn.WriteMessage(websocket.TextMessage, b); err != nil {
 		log.Println("消息发送失败:", err)
-		return false, 0
+		return 0, false
 	}
 	select {
 	case result := <-ackChan:
 		if result.result {
-			return true, result.msgId
+			return result.msgId, true
 		} else {
-			return false, 0
+			return 0, false
 		}
 	case <-timer.C:
-		return false, 0
+		return 0, false
 	}
 }
 
-func (n *napcatWebSocketAdapter) SendFriendForwardMsg(userId uint, chain msgchain.ForwardChain) (success bool, msgId uint) {
+func (n *napcatWebSocketAdapter) SendFriendForwardMsg(userId uint, chain msgchain.ForwardChain) (msgId uint, success bool) {
 	messageID := generateMessageID("ack")
 	raw := wsPushData[message.FriendForwardMessage]{
 		Action: "send_forward_msg",
@@ -305,7 +305,7 @@ func (n *napcatWebSocketAdapter) SendFriendForwardMsg(userId uint, chain msgchai
 	b, err := json.Marshal(&raw)
 	if err != nil {
 		log.Println("消息链序列化失败")
-		return false, 0
+		return 0, false
 	}
 
 	ackChan := make(chan *msgData, 1)
@@ -319,21 +319,21 @@ func (n *napcatWebSocketAdapter) SendFriendForwardMsg(userId uint, chain msgchai
 	}()
 	if err := n.wsConn.WriteMessage(websocket.TextMessage, b); err != nil {
 		log.Println("消息发送失败:", err)
-		return false, 0
+		return 0, false
 	}
 	select {
 	case result := <-ackChan:
 		if result.result {
-			return true, result.msgId
+			return result.msgId, true
 		} else {
-			return false, 0
+			return 0, false
 		}
 	case <-timer.C:
-		return false, 0
+		return 0, false
 	}
 }
 
-func (n *napcatWebSocketAdapter) GetMsgDetail(msgId uint) (bool, *message.Message) {
+func (n *napcatWebSocketAdapter) GetMsgDetail(msgId uint) (*message.Message, bool) {
 	messageID := generateMessageID("dt")
 	raw := wsPushData[map[string]uint]{}
 	raw.Action = "get_msg"
@@ -344,7 +344,7 @@ func (n *napcatWebSocketAdapter) GetMsgDetail(msgId uint) (bool, *message.Messag
 	b, err := json.Marshal(&raw)
 	if err != nil {
 		log.Println("消息链序列化失败")
-		return false, nil
+		return nil, false
 	}
 
 	ackChan := make(chan *detail, 1)
@@ -358,21 +358,21 @@ func (n *napcatWebSocketAdapter) GetMsgDetail(msgId uint) (bool, *message.Messag
 	}()
 	if err := n.wsConn.WriteMessage(websocket.TextMessage, b); err != nil {
 		log.Println("消息发送失败:", err)
-		return false, nil
+		return nil, false
 	}
 	select {
 	case result := <-ackChan:
 		if result.result {
-			return true, result.Data
+			return result.Data, true
 		} else {
-			return false, nil
+			return nil, false
 		}
 	case <-timer.C:
-		return false, nil
+		return nil, false
 	}
 }
 
-func (n *napcatWebSocketAdapter) GetGroupUserInfo(groupId, userId uint) (bool, *message.GroupUserInfo) {
+func (n *napcatWebSocketAdapter) GetGroupUserInfo(groupId, userId uint) (*message.GroupUserInfo, bool) {
 	messageID := generateMessageID("ugif")
 	raw := wsPushData[map[string]any]{}
 	raw.Action = "get_group_member_info"
@@ -385,7 +385,7 @@ func (n *napcatWebSocketAdapter) GetGroupUserInfo(groupId, userId uint) (bool, *
 	b, err := json.Marshal(&raw)
 	if err != nil {
 		log.Println("消息链序列化失败")
-		return false, nil
+		return nil, false
 	}
 
 	ackChan := make(chan *groupInfo, 1)
@@ -399,17 +399,17 @@ func (n *napcatWebSocketAdapter) GetGroupUserInfo(groupId, userId uint) (bool, *
 	}()
 	if err := n.wsConn.WriteMessage(websocket.TextMessage, b); err != nil {
 		log.Println("消息发送失败:", err)
-		return false, nil
+		return nil, false
 	}
 	select {
 	case result := <-ackChan:
 		if result.result {
-			return true, result.Data
+			return result.Data, true
 		} else {
-			return false, nil
+			return nil, false
 		}
 	case <-timer.C:
-		return false, nil
+		return nil, false
 	}
 }
 

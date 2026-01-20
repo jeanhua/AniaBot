@@ -113,7 +113,7 @@ func (ania *AniaBot) onGroupEvent(msg message.Message) {
 		c := msgchain.Builder.Group()
 		c.Mention(msg.Sender.UserId)
 		c.Text(pluginInfo.String())
-		ok, _ := ania.SendGroupMsg(msg.GroupId, c.Build())
+		_, ok := ania.SendGroupMsg(msg.GroupId, c.Build())
 		if !ok {
 			log.Println("Bot消息发送失败，无法响应 /help")
 		}
@@ -154,7 +154,7 @@ func (ania *AniaBot) onFriendEvent(msg message.Message) {
 		}
 		c := msgchain.Builder.Friend()
 		c.Text(pluginInfo.String())
-		ok, _ := ania.SendFriendMsg(msg.Sender.UserId, c.Build())
+		_, ok := ania.SendFriendMsg(msg.Sender.UserId, c.Build())
 		if !ok {
 			log.Println("Bot消息发送失败，无法响应 /help")
 		}
@@ -174,15 +174,15 @@ func (ania *AniaBot) AddPlugin(p plugin.Plugin) {
 	log.Println("已添加插件: ", p.GetMeta().Name)
 }
 
-func (ania *AniaBot) SendGroupMsg(groupId uint, chain msgchain.Chain) (success bool, msgId uint) {
+func (ania *AniaBot) SendGroupMsg(groupId uint, chain msgchain.Chain) (msgId uint, success bool) {
 	return ania.adapter.SendGroupMsg(groupId, chain)
 }
 
-func (ania *AniaBot) SendFriendMsg(userID uint, chain msgchain.Chain) (success bool, msgId uint) {
+func (ania *AniaBot) SendFriendMsg(userID uint, chain msgchain.Chain) (msgId uint, success bool) {
 	return ania.adapter.SendFriendMsg(userID, chain)
 }
 
-func (ania *AniaBot) SendGroupAIVoiceMsg(groupId uint, character, msg string) (success bool, msgId uint) {
+func (ania *AniaBot) SendGroupAIVoiceMsg(groupId uint, character, msg string) (msgId uint, success bool) {
 	return ania.adapter.SendGroupAIVoiceMsg(groupId, character, msg)
 }
 
@@ -190,18 +190,18 @@ func (ania *AniaBot) SendPokeMsg(userId uint, groupId *uint) {
 	ania.adapter.SendPokeMsg(userId, groupId)
 }
 
-func (ania *AniaBot) GetMsgDetail(msgId uint) (bool, *message.Message) {
+func (ania *AniaBot) GetMsgDetail(msgId uint) (*message.Message, bool) {
 	return ania.adapter.GetMsgDetail(msgId)
 }
 
-func (ania *AniaBot) SendGroupForwardMsg(groupId uint, chain msgchain.ForwardChain) (success bool, msgId uint) {
+func (ania *AniaBot) SendGroupForwardMsg(groupId uint, chain msgchain.ForwardChain) (msgId uint, success bool) {
 	return ania.adapter.SendGroupForwardMsg(groupId, chain)
 }
 
-func (ania *AniaBot) SendFriendForwardMsg(userId uint, chain msgchain.ForwardChain) (success bool, msgId uint) {
+func (ania *AniaBot) SendFriendForwardMsg(userId uint, chain msgchain.ForwardChain) (msgId uint, success bool) {
 	return ania.adapter.SendFriendForwardMsg(userId, chain)
 }
 
-func (ania *AniaBot) GetGroupUserInfo(groupId, userId uint) (bool, *message.GroupUserInfo) {
+func (ania *AniaBot) GetGroupUserInfo(groupId, userId uint) (*message.GroupUserInfo, bool) {
 	return ania.adapter.GetGroupUserInfo(groupId, userId)
 }

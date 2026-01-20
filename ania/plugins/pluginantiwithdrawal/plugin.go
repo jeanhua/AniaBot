@@ -71,7 +71,7 @@ func (p *AntiWithdrawalPlugin) OnGroupMsg(bot bot.Bot, cmd *command.Command, msg
 			}
 			fbuilder.Message(m.Sender.UserId, m.Sender.Nickname, _builder.Build())
 		}
-		success, _ := bot.SendGroupForwardMsg(msg.GroupId, fbuilder.Build())
+		_, success := bot.SendGroupForwardMsg(msg.GroupId, fbuilder.Build())
 		if !success {
 			log.Println("[群聊防撤回插件]: 无法转发消息")
 		}

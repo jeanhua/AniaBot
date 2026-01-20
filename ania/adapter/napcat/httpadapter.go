@@ -229,7 +229,7 @@ func (n *napcatHttpAdapter) SetTrigger(trigger adapter.TriggerWrapper) {
 	n.trigger = trigger
 }
 
-func (n *napcatHttpAdapter) SendGroupMsg(groupId uint, chain msgchain.Chain) (success bool, msgId uint) {
+func (n *napcatHttpAdapter) SendGroupMsg(groupId uint, chain msgchain.Chain) (msgId uint, success bool) {
 	data := httpGroupPushData{
 		GroupId: groupId,
 		Message: chain.GetMsg(),
@@ -240,16 +240,16 @@ func (n *napcatHttpAdapter) SendGroupMsg(groupId uint, chain msgchain.Chain) (su
 	defer cancel()
 	if _, err := n.httpClient.R().SetContext(ctx).SetResult(&resp).SetBody(data).Post(n.baseUrl + "/send_group_msg"); err != nil {
 		log.Println("HTTP请求失败, 无法发送群聊消息: ", err.Error())
-		return false, 0
+		return 0, false
 	}
 	if resp.Status == "ok" {
-		return true, resp.Data.MessageId
+		return resp.Data.MessageId, true
 	} else {
-		return false, 0
+		return 0, false
 	}
 }
 
-func (n *napcatHttpAdapter) SendFriendMsg(UserId uint, chain msgchain.Chain) (success bool, msgId uint) {
+func (n *napcatHttpAdapter) SendFriendMsg(UserId uint, chain msgchain.Chain) (msgId uint, success bool) {
 	data := httpFriendPushData{
 		UserId:  UserId,
 		Message: chain.GetMsg(),
@@ -260,17 +260,17 @@ func (n *napcatHttpAdapter) SendFriendMsg(UserId uint, chain msgchain.Chain) (su
 	defer cancel()
 	if _, err := n.httpClient.R().SetContext(ctx).SetResult(&resp).SetBody(data).Post(n.baseUrl + "/send_private_msg"); err != nil {
 		log.Println("HTTP请求失败, 无法发送私聊消息: ", err.Error())
-		return false, 0
+		return 0, false
 	}
 
 	if resp.Status == "ok" {
-		return true, resp.Data.MessageId
+		return resp.Data.MessageId, true
 	} else {
-		return false, 0
+		return 0, false
 	}
 }
 
-func (n *napcatHttpAdapter) SendGroupAIVoiceMsg(groupId uint, character, msg string) (success bool, msgId uint) {
+func (n *napcatHttpAdapter) SendGroupAIVoiceMsg(groupId uint, character, msg string) (msgId uint, success bool) {
 	data := message.AiVoiceMsg{
 		GroupId:   groupId,
 		Character: character,
@@ -281,13 +281,13 @@ func (n *napcatHttpAdapter) SendGroupAIVoiceMsg(groupId uint, character, msg str
 	defer cancel()
 	if _, err := n.httpClient.R().SetContext(ctx).SetResult(&resp).SetBody(data).Post(n.baseUrl + "/send_group_ai_record"); err != nil {
 		log.Println("HTTP请求失败, 无法发送私聊消息: ", err.Error())
-		return false, 0
+		return 0, false
 	}
 
 	if resp.Status == "ok" {
-		return true, resp.Data.MessageId
+		return resp.Data.MessageId, true
 	} else {
-		return false, 0
+		return 0, false
 	}
 }
 
@@ -305,7 +305,7 @@ func (n *napcatHttpAdapter) SendPokeMsg(userId uint, groupId *uint) {
 	}
 }
 
-func (n *napcatHttpAdapter) SendGroupForwardMsg(groupId uint, chain msgchain.ForwardChain) (success bool, msgId uint) {
+func (n *napcatHttpAdapter) SendGroupForwardMsg(groupId uint, chain msgchain.ForwardChain) (msgId uint, success bool) {
 	data := message.GroupForwardMessage{}
 	data.GroupId = groupId
 	data.ForwardMessage = chain.GetMsg()
@@ -314,17 +314,17 @@ func (n *napcatHttpAdapter) SendGroupForwardMsg(groupId uint, chain msgchain.For
 	defer cancel()
 	if _, err := n.httpClient.R().SetContext(ctx).SetResult(&resp).SetBody(data).Post(n.baseUrl + "/send_forward_msg"); err != nil {
 		log.Println("HTTP请求失败, 无法发送群聊转发消息: ", err.Error())
-		return false, 0
+		return 0, false
 	}
 
 	if resp.Status == "ok" {
-		return true, resp.Data.MessageId
+		return resp.Data.MessageId, true
 	} else {
-		return false, 0
+		return 0, false
 	}
 }
 
-func (n *napcatHttpAdapter) SendFriendForwardMsg(userId uint, chain msgchain.ForwardChain) (success bool, msgId uint) {
+func (n *napcatHttpAdapter) SendFriendForwardMsg(userId uint, chain msgchain.ForwardChain) (msgId uint, success bool) {
 	data := message.FriendForwardMessage{}
 	data.UserId = userId
 	data.ForwardMessage = chain.GetMsg()
@@ -333,17 +333,17 @@ func (n *napcatHttpAdapter) SendFriendForwardMsg(userId uint, chain msgchain.For
 	defer cancel()
 	if _, err := n.httpClient.R().SetContext(ctx).SetResult(&resp).SetBody(data).Post(n.baseUrl + "/send_forward_msg"); err != nil {
 		log.Println("HTTP请求失败, 无法发送群聊转发消息: ", err.Error())
-		return false, 0
+		return 0, false
 	}
 
 	if resp.Status == "ok" {
-		return true, resp.Data.MessageId
+		return resp.Data.MessageId, true
 	} else {
-		return false, 0
+		return 0, false
 	}
 }
 
-func (n *napcatHttpAdapter) GetMsgDetail(msgId uint) (bool, *message.Message) {
+func (n *napcatHttpAdapter) GetMsgDetail(msgId uint) (*message.Message, bool) {
 	data := map[string]uint{
 		"message_id": msgId,
 	}
@@ -352,12 +352,12 @@ func (n *napcatHttpAdapter) GetMsgDetail(msgId uint) (bool, *message.Message) {
 	defer cancel()
 	if _, err := n.httpClient.R().SetResult(&result).SetContext(ctx).SetBody(data).Post(n.baseUrl + "/get_msg"); err != nil {
 		log.Println("HTTP请求失败, 无法获取消息详情: ", err.Error())
-		return false, nil
+		return nil, false
 	}
-	return true, &result.Data
+	return &result.Data, true
 }
 
-func (n *napcatHttpAdapter) GetGroupUserInfo(groupId, userId uint) (bool, *message.GroupUserInfo) {
+func (n *napcatHttpAdapter) GetGroupUserInfo(groupId, userId uint) (*message.GroupUserInfo, bool) {
 	data := map[string]any{}
 	data["group_id"] = groupId
 	data["user_id"] = userId
@@ -368,9 +368,9 @@ func (n *napcatHttpAdapter) GetGroupUserInfo(groupId, userId uint) (bool, *messa
 	defer cancel()
 	if _, err := n.httpClient.R().SetResult(&resp).SetContext(ctx).SetBody(data).Post(n.baseUrl + "/get_group_member_info"); err != nil {
 		log.Println("HTTP请求失败, 无法获取消息详情: ", err.Error())
-		return false, nil
+		return nil, false
 	}
-	return true, &resp.Data
+	return &resp.Data, true
 }
 
 type httpFriendPushData struct {

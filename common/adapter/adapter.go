@@ -50,15 +50,15 @@ type TriggerWrapper struct {
 }
 
 type SendMsg interface {
-	SendGroupMsg(groupId uint, chain msgchain.Chain) (success bool, msgId uint)
-	SendGroupAIVoiceMsg(groupId uint, character, msg string) (success bool, msgId uint)
-	SendFriendMsg(userId uint, chain msgchain.Chain) (success bool, msgId uint)
+	SendGroupMsg(groupId uint, chain msgchain.Chain) (msgId uint, success bool)
+	SendGroupAIVoiceMsg(groupId uint, character, msg string) (msgId uint, success bool)
+	SendFriendMsg(userId uint, chain msgchain.Chain) (msgId uint, success bool)
 	SendPokeMsg(userId uint, groupId *uint)
-	SendGroupForwardMsg(groupId uint, chain msgchain.ForwardChain) (success bool, msgId uint)
-	SendFriendForwardMsg(userId uint, chain msgchain.ForwardChain) (success bool, msgId uint)
+	SendGroupForwardMsg(groupId uint, chain msgchain.ForwardChain) (msgId uint, success bool)
+	SendFriendForwardMsg(userId uint, chain msgchain.ForwardChain) (msgId uint, success bool)
 }
 
 type GetMsg interface {
-	GetMsgDetail(msgId uint) (success bool, msg *message.Message)
-	GetGroupUserInfo(groupId, userId uint) (success bool, info *message.GroupUserInfo)
+	GetMsgDetail(msgId uint) (msg *message.Message, success bool)
+	GetGroupUserInfo(groupId, userId uint) (info *message.GroupUserInfo, success bool)
 }

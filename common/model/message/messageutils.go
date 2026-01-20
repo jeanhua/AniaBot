@@ -10,20 +10,20 @@ import (
 
 type msgHandleOpt struct {
 	groupId              uint
-	getMsgFunc           func(msgId uint) (bool, *Message)
-	getGroupUserInfoFunc func(groupId, userId uint) (success bool, info *GroupUserInfo)
+	getMsgFunc           func(msgId uint) (*Message, bool)
+	getGroupUserInfoFunc func(groupId, userId uint) (info *GroupUserInfo, success bool)
 	getImageOCRFunc      func(url string) string
 }
 
 type MsgOptFunc func(*msgHandleOpt)
 
-func WithGetMsgFunc(getMsgFunc func(msgId uint) (bool, *Message)) MsgOptFunc {
+func WithGetMsgFunc(getMsgFunc func(msgId uint) (*Message, bool)) MsgOptFunc {
 	return func(o *msgHandleOpt) {
 		o.getMsgFunc = getMsgFunc
 	}
 }
 
-func WithGetGroupUserInfo(groupId uint, getGroupUserInfo func(groupId, userId uint) (success bool, info *GroupUserInfo)) MsgOptFunc {
+func WithGetGroupUserInfo(groupId uint, getGroupUserInfo func(groupId, userId uint) (info *GroupUserInfo, success bool)) MsgOptFunc {
 	return func(o *msgHandleOpt) {
 		o.groupId = groupId
 		o.getGroupUserInfoFunc = getGroupUserInfo
@@ -83,7 +83,7 @@ func (s OB11Segment) FriendlyText(optFunc ...MsgOptFunc) (text string) {
 		if err != nil {
 			return fmt.Sprintf("[at:%s]", s.Data["qq"].(string))
 		}
-		success, info := o.getGroupUserInfoFunc(o.groupId, uint(qq))
+		info, success := o.getGroupUserInfoFunc(o.groupId, uint(qq))
 		if success && info != nil {
 			nickname := info.Card
 			if nickname == "" {
@@ -103,7 +103,7 @@ func (s OB11Segment) FriendlyText(optFunc ...MsgOptFunc) (text string) {
 		if err != nil {
 			return "[回复消息]"
 		}
-		ok, msg := o.getMsgFunc(uint(id))
+		msg, ok := o.getMsgFunc(uint(id))
 		if !ok {
 			return "[回复消息]"
 		}
