@@ -1,161 +1,118 @@
 package aniabot
 
 import (
-	"log"
-
 	"github.com/jeanhua/AniaBot/common/model/message"
+	"github.com/jeanhua/AniaBot/common/plugin"
 )
 
 func (ania *AniaBot) onGroupUploadEvent(notice message.GroupUploadNotice) {
-	defer func() {
-		if err := recover(); err != nil {
-			log.Println("群文件上传消息事件触发错误: ", err)
-		}
-	}()
 	for _, p := range ania.plugins {
-		p.OnGroupUpload(ania, notice)
+		safeExecute("群文件上传事件", p, func(p plugin.Plugin) {
+			p.OnGroupUpload(ania, notice)
+		})
 	}
 }
 
 func (ania *AniaBot) onGroupAdminEvent(notice message.GroupAdminNotice) {
-	defer func() {
-		if err := recover(); err != nil {
-			log.Println("群管理变更消息事件触发错误: ", err)
-		}
-	}()
 	for _, p := range ania.plugins {
-		p.OnGroupAdmin(ania, notice)
+		safeExecute("群管理员变动事件", p, func(p plugin.Plugin) {
+			p.OnGroupAdmin(ania, notice)
+		})
 	}
 }
 
 func (ania *AniaBot) onGroupDecreaseEvent(notice message.GroupDecreaseNotice) {
-	defer func() {
-		if err := recover(); err != nil {
-			log.Println("群成员退群消息事件触发错误: ", err)
-		}
-	}()
 	for _, p := range ania.plugins {
-		p.OnGroupDecrease(ania, notice)
+		safeExecute("群成员减少事件", p, func(p plugin.Plugin) {
+			p.OnGroupDecrease(ania, notice)
+		})
 	}
 }
 
 func (ania *AniaBot) onGroupIncreaseEvent(notice message.GroupIncreaseNotice) {
-	defer func() {
-		if err := recover(); err != nil {
-			log.Println("群成员加入消息事件触发错误: ", err)
-		}
-	}()
 	for _, p := range ania.plugins {
-		p.OnGroupIncrease(ania, notice)
+		safeExecute("群成员增加事件", p, func(p plugin.Plugin) {
+			p.OnGroupIncrease(ania, notice)
+		})
 	}
 }
 
 func (ania *AniaBot) onGroupBanEvent(notice message.GroupBanNotice) {
-	defer func() {
-		if err := recover(); err != nil {
-			log.Println("群禁言消息事件触发错误: ", err)
-		}
-	}()
 	for _, p := range ania.plugins {
-		p.OnGroupBan(ania, notice)
+		safeExecute("群禁言事件", p, func(p plugin.Plugin) {
+			p.OnGroupBan(ania, notice)
+		})
 	}
 }
 
 func (ania *AniaBot) onFriendAddEvent(notice message.FriendAddNotice) {
-	defer func() {
-		if err := recover(); err != nil {
-			log.Println("好友添加消息事件触发错误: ", err)
-		}
-	}()
 	for _, p := range ania.plugins {
-		p.OnFriendAdd(ania, notice)
+		safeExecute("新添加好友事件", p, func(p plugin.Plugin) {
+			p.OnFriendAdd(ania, notice)
+		})
 	}
 }
 
 func (ania *AniaBot) onGroupRecallEvent(notice message.GroupRecallNotice) {
-	defer func() {
-		if err := recover(); err != nil {
-			log.Println("群消息撤回消息事件触发错误: ", err)
-		}
-	}()
 	for _, p := range ania.plugins {
-		p.OnGroupRecall(ania, notice)
+		safeExecute("群消息撤回事件", p, func(p plugin.Plugin) {
+			p.OnGroupRecall(ania, notice)
+		})
 	}
 }
 
 func (ania *AniaBot) onFriendRecallEvent(notice message.FriendRecallNotice) {
-	defer func() {
-		if err := recover(); err != nil {
-			log.Println("好友消息撤回消息事件触发错误: ", err)
-		}
-	}()
 	for _, p := range ania.plugins {
-		p.OnFriendRecall(ania, notice)
+		safeExecute("好友消息撤回事件", p, func(p plugin.Plugin) {
+			p.OnFriendRecall(ania, notice)
+		})
 	}
 }
 
 func (ania *AniaBot) onPokeEvent(notice message.PokeNotice) {
-	defer func() {
-		if err := recover(); err != nil {
-			log.Println("戳一戳消息事件触发错误: ", err)
-		}
-	}()
 	for _, p := range ania.plugins {
-		p.OnPoke(ania, notice)
+		safeExecute("戳一戳事件", p, func(p plugin.Plugin) {
+			p.OnPoke(ania, notice)
+		})
 	}
 }
 
 func (ania *AniaBot) onLuckyKingEvent(notice message.LuckyKingNotice) {
-	defer func() {
-		if err := recover(); err != nil {
-			log.Println("运气王消息事件触发错误: ", err)
-		}
-	}()
 	for _, p := range ania.plugins {
-		p.OnLuckyKing(ania, notice)
+		safeExecute("运气王事件", p, func(p plugin.Plugin) {
+			p.OnLuckyKing(ania, notice)
+		})
 	}
 }
 
 func (ania *AniaBot) onHonorEvent(notice message.HonorNotice) {
-	defer func() {
-		if err := recover(); err != nil {
-			log.Println("荣誉变更消息事件触发错误: ", err)
-		}
-	}()
 	for _, p := range ania.plugins {
-		p.OnHonor(ania, notice)
+		safeExecute("荣誉变更事件", p, func(p plugin.Plugin) {
+			p.OnHonor(ania, notice)
+		})
 	}
 }
 
 func (ania *AniaBot) onGroupMsgEmojiLikeEvent(notice message.GroupMsgEmojiLikeNotice) {
-	defer func() {
-		if err := recover(); err != nil {
-			log.Println("群表情回应消息事件触发错误: ", err)
-		}
-	}()
 	for _, p := range ania.plugins {
-		p.OnGroupMsgEmojiLike(ania, notice)
+		safeExecute("群表情回应事件", p, func(p plugin.Plugin) {
+			p.OnGroupMsgEmojiLike(ania, notice)
+		})
 	}
 }
 
 func (ania *AniaBot) onEssenceEvent(notice message.EssenceNotice) {
-	defer func() {
-		if err := recover(); err != nil {
-			log.Println("群精华消息事件触发错误: ", err)
-		}
-	}()
 	for _, p := range ania.plugins {
-		p.OnEssence(ania, notice)
+		safeExecute("群精华事件", p, func(p plugin.Plugin) {
+			p.OnEssence(ania, notice)
+		})
 	}
 }
 
 func (ania *AniaBot) onGroupCardEvent(notice message.GroupCardNotice) {
-	defer func() {
-		if err := recover(); err != nil {
-			log.Println("群名片变更消息事件触发错误: ", err)
-		}
-	}()
 	for _, p := range ania.plugins {
-		p.OnGroupCard(ania, notice)
+		safeExecute("群名片变更事件", p, func(p plugin.Plugin) {
+			p.OnGroupCard(ania, notice)
+		})
 	}
 }

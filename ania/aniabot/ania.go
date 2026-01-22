@@ -121,7 +121,9 @@ func (ania *AniaBot) onGroupEvent(msg message.Message) {
 	}
 
 	for _, p := range ania.plugins {
-		next := p.OnGroupMsg(ania, cmd, msg)
+		next := safeExecuteWithReturn("群聊消息事件", p, func(p plugin.Plugin) bool {
+			return p.OnGroupMsg(ania, cmd, msg)
+		})
 		if !next {
 			break
 		}
@@ -162,7 +164,9 @@ func (ania *AniaBot) onFriendEvent(msg message.Message) {
 	}
 
 	for _, p := range ania.plugins {
-		next := p.OnFriendMsg(ania, cmd, msg)
+		next := safeExecuteWithReturn("私聊消息事件", p, func(p plugin.Plugin) bool {
+			return p.OnFriendMsg(ania, cmd, msg)
+		})
 		if !next {
 			break
 		}
