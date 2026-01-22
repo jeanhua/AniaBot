@@ -42,6 +42,13 @@ func (p *AntiWithdrawalPlugin) OnGroupMsg(bot bot.Bot, cmd *command.Command, msg
 			}
 		}
 		cachemsg := queue.Get(n)
+		if len(cachemsg) == 0 {
+			builder := msgchain.Builder.Group()
+			builder.Text("暂时没有保存到什么消息哦，请稍后再试")
+			builder.Face(14)
+			bot.SendGroupMsg(msg.GroupId, builder.Build())
+			return false
+		}
 		fbuilder := msgchain.Builder.Forward()
 		ncrkey, existRkey := bot.GetNCrkey()
 		for _, m := range cachemsg {
@@ -101,6 +108,9 @@ func (p *AntiWithdrawalPlugin) OnGroupMsg(bot bot.Bot, cmd *command.Command, msg
 		}
 		_, success := bot.SendGroupForwardMsg(msg.GroupId, fbuilder.Build())
 		if !success {
+			builder := msgchain.Builder.Group()
+			builder.Text("无法获取消息列表")
+			bot.SendGroupMsg(msg.GroupId, builder.Build())
 			log.Println("[群聊防撤回插件]: 无法转发消息")
 		}
 		return false
@@ -152,6 +162,13 @@ func (p *AntiWithdrawalPlugin) OnFriendMsg(bot bot.Bot, cmd *command.Command, ms
 			}
 			queue := queueI.(*MessageQueue[*message.Message])
 			cachemsg := queue.Get(n)
+			if len(cachemsg) == 0 {
+				builder := msgchain.Builder.Friend()
+				builder.Text("暂时没有保存到什么消息哦，请稍后再试")
+				builder.Face(14)
+				bot.SendFriendMsg(msg.Sender.UserId, builder.Build())
+				return false
+			}
 			fbuilder := msgchain.Builder.Forward()
 			ncrkey, existRkey := bot.GetNCrkey()
 			for _, m := range cachemsg {
@@ -211,6 +228,9 @@ func (p *AntiWithdrawalPlugin) OnFriendMsg(bot bot.Bot, cmd *command.Command, ms
 			}
 			_, success := bot.SendFriendForwardMsg(msg.Sender.UserId, fbuilder.Build())
 			if !success {
+				builder := msgchain.Builder.Friend()
+				builder.Text("无法获取消息列表")
+				bot.SendFriendMsg(msg.Sender.UserId, builder.Build())
 				log.Println("[群聊防撤回插件]: 无法转发消息")
 			}
 			return false
