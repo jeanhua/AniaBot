@@ -6,14 +6,14 @@
 
 ## 项目介绍
 
-AniaBot 是一个基于 Go 语言开发的高性能、插件驱动型 QQ 机器人框架。它采用模块化设计，提供了丰富的插件生态和灵活的扩展能力，让开发者能够快速构建功能强大的 QQ 机器人应用。
+**AniaBot** 是一个基于 Go 语言开发的高性能、插件驱动型 QQ 机器人框架。它采用模块化设计，提供了丰富的插件生态和灵活的扩展能力，让开发者能够快速构建功能强大的 QQ 机器人应用。
 
 ### 🚀 框架特色
 
 - **高性能**：基于 Go 语言开发，充分利用并发特性，支持高并发消息处理
 - **插件驱动**：采用插件化架构，功能模块化，易于扩展和维护
-- **协议兼容**：支持多种 QQ 机器人协议适配器（如 napcat）
-- **配置灵活**：基于 Viper 的配置文件管理，支持热重载配置
+- **协议兼容**：支持多种 QQ 机器人协议适配器（如 napcat websocket/http）
+- **配置灵活**：基于 Viper 的配置文件管理
 - **开发友好**：提供完整的插件开发文档和示例代码
 
 ### 💡 核心优势
@@ -26,13 +26,12 @@ AniaBot 是一个基于 Go 语言开发的高性能、插件驱动型 QQ 机器�
 
 ![framework](./README/framework.png)
 
-AniaBot 采用分层架构设计，确保系统的高内聚、低耦合：
+**AniaBot** 采用分层架构设计，确保系统的高内聚、低耦合：
 
 #### 🏗️ 架构层次
 
 **协议适配层 (Adapter Layer)**
 - 负责与 QQ 协议进行通信，支持多种协议适配器
-- 提供统一的接口抽象，便于扩展新的协议支持
 - 处理网络连接、消息收发等底层通信
 
 **核心引擎层 (Core Engine)**
@@ -107,6 +106,8 @@ go run cmd/main.go
 go get -u github.com/jeanhua/AniaBot
 ```
 
+编写`config.yaml`文件，同上
+
 然后创建你的主程序文件：
 
 ```go
@@ -167,7 +168,7 @@ plugins:
 ### 第一部分：基础概念
 
 #### 什么是插件？
-在 AniaBot 中，插件是扩展机器人功能的基本单元。每个插件可以处理特定类型的消息事件，实现自定义的业务逻辑。
+在 **AniaBot** 中，插件是扩展机器人功能的基本单元。每个插件可以处理特定类型的消息事件，实现自定义的业务逻辑。
 
 #### 插件的基本结构
 每个插件需要实现以下基本结构：
@@ -258,7 +259,7 @@ func main() {
 ### 第三部分：消息构造器使用
 
 #### 基础消息构造
-AniaBot 提供了强大的消息构造器，支持多种消息类型：
+**AniaBot** 提供了强大的消息构造器，支持多种消息类型：
 
 ```go
 // 创建群聊消息构造器
@@ -304,7 +305,7 @@ bot.SendFriendMsg(msg.Sender.UserId, builder.Build())
 ### 第四部分：高级插件功能
 
 #### 命令处理
-AniaBot 提供了强大的命令解析功能：
+**AniaBot** 提供了强大的命令解析功能：
 
 ```go
 func (p *YourPlugin) OnGroupMsg(bot bot.Bot, cmd *command.Command, msg message.Message) bool {
@@ -442,7 +443,7 @@ func (p *WeatherPlugin) queryWeather(city string) string {
 
 ## 系统内置插件介绍
 
-AniaBot 内置了多个实用的系统插件，开箱即用，为开发者提供了丰富的功能参考。
+**AniaBot** 内置了多个实用的系统插件，开箱即用，为开发者提供了丰富的功能参考。
 
 ### 1. 日志打印插件 (pluginlog)
 
@@ -594,7 +595,7 @@ bot.AddPlugin(pluginlog.NewPlugin())
 
 ## 贡献指南
 
-欢迎提交 Issue 和 Pull Request 来改进 AniaBot。在提交代码前请确保：
+欢迎提交 Issue 和 Pull Request 来改进 **AniaBot**。在提交代码前请确保：
 
 1. 代码符合 Go 语言规范
 2. 添加适当的测试用例
