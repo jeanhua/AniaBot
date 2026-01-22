@@ -85,24 +85,15 @@ go mod tidy
 编辑 `config.yaml` 文件，配置你的机器人参数：
 
 ```yaml
-# 基础配置
+# bot配置
 bot:
-  name: "AniaBot"
-  admin_qq: 123456789  # 管理员QQ号
-
-# 协议适配器配置
-adapter:
-  type: "napcat"
-  websocket:
-    host: "127.0.0.1"
-    port: 8080
-
-# 插件配置
-plugins:
-  ai_chat_bot:
-    base_url: "https://api.openai.com/v1"
-    api_key: "your-api-key-here"
-    model: "gpt-3.5-turbo"
+  # 管理员信息
+  admin_id: # 管理员qq
+  # napcat网络交换适配器
+  adapter:
+    ws:
+      address: ws://localhost:4455 # websocket 地址，napcat的ws server地址
+      max_retries: 5 # 连接失败时最大重连次数
 ```
 
 4. **运行机器人**
@@ -191,8 +182,8 @@ func NewPlugin() *YourPlugin {
         Meta: plugin.Meta{
             Name:      "插件名称",
             HelpWords: "插件描述",
-            AdminOnly: false,
-            Order:     0,
+            AdminOnly: false, // 当该字段为true时非管理员发送/help不会显示插件信息
+            Order:     0, // 插件执行顺序，从小到大
         },
     }
 }
@@ -460,9 +451,9 @@ AniaBot 内置了多个实用的系统插件，开箱即用，为开发者提供
 **主要特性**：
 - 群聊和私聊消息日志记录
 - 显示发送者昵称和用户ID
-- 管理员专用，避免信息泄露
 
 **使用方式**：
+
 ```go
 import "github.com/jeanhua/AniaBot/ania/plugins/pluginlog"
 
@@ -537,9 +528,16 @@ bot.AddPlugin(pluginaichat.NewAIChatPlugin())
 
 **使用命令**：
 
+在群聊中
+
 - `@机器人 /explore [数量]` - 查看最近的消息（默认50条，最多100条）
 
+在私聊中(仅管理员)
+
+- `@机器人 /explore [群号] [数量]` - 查看某个群最近的消息（默认50条，最多100条）
+
 **使用方式**：
+
 ```go
 import "github.com/jeanhua/AniaBot/ania/plugins/pluginantiwithdrawal"
 
