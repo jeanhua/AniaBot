@@ -373,6 +373,17 @@ func (n *napcatHttpAdapter) GetGroupUserInfo(groupId, userId uint) (*message.Gro
 	return &resp.Data, true
 }
 
+func (n *napcatHttpAdapter) GetNCrkey() ([]message.NCrkey, bool) {
+	resp := message.Response[[]message.NCrkey]{}
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
+	defer cancel()
+	if _, err := n.httpClient.R().SetResult(&resp).SetContext(ctx).Post(n.baseUrl + "/nc_get_rkey"); err != nil {
+		log.Println("HTTP请求失败, 无法获取消息详情: ", err.Error())
+		return nil, false
+	}
+	return resp.Data, true
+}
+
 type httpFriendPushData struct {
 	UserId  uint                  `json:"user_id"`
 	Message []message.OB11Segment `json:"message"`

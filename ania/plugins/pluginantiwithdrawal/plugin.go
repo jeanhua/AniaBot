@@ -3,9 +3,11 @@ package pluginantiwithdrawal
 import (
 	"log"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
+	"github.com/jeanhua/AniaBot/ania/utils"
 	"github.com/jeanhua/AniaBot/common/bot"
 	"github.com/jeanhua/AniaBot/common/model/command"
 	"github.com/jeanhua/AniaBot/common/model/message"
@@ -39,6 +41,7 @@ func (p *AntiWithdrawalPlugin) OnGroupMsg(bot bot.Bot, cmd *command.Command, msg
 		}
 		cachemsg := queue.Get(n)
 		fbuilder := msgchain.Builder.Forward()
+		ncrkey, existRkey := bot.GetNCrkey()
 		for _, m := range cachemsg {
 			_builder := msgchain.Builder.Group()
 			for i, seg := range m.Message {
@@ -48,10 +51,33 @@ func (p *AntiWithdrawalPlugin) OnGroupMsg(bot bot.Bot, cmd *command.Command, msg
 				case "forward":
 					_builder.Text("[转发消息，暂不支持查看]")
 				case "image":
-					if isAfter3Minute(m.Time) {
-						_builder.Text("[图片消息，已经超过3分钟过期时间]")
+					if !existRkey {
+						if isAfter3Minute(m.Time) {
+							_builder.Text("[图片消息，已经超过3分钟过期时间]")
+						} else {
+							_builder.Raw(m.Message[i])
+						}
 					} else {
-						_builder.Raw(m.Message[i])
+						key := ""
+						for _, k := range ncrkey {
+							if k.Type == 20 {
+								key = strings.TrimPrefix(ncrkey[1].Rkey, "&rkey=")
+							}
+						}
+						if key == "" {
+							log.Println("无法解析图片URL")
+							return true
+						}
+						link := m.Message[i].Data["url"].(string)
+						if link != "" {
+							if modifyer, err := utils.NewURLModifier(link); err != nil {
+								log.Println("无法解析图片URL")
+								return true
+							} else {
+								newLink := modifyer.SetQuery("rkey", key).String()
+								_builder.ImageUrl(newLink)
+							}
+						}
 					}
 				case "record":
 					_builder.Text("[语音消息]")

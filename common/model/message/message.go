@@ -58,6 +58,13 @@ type Response[T any] struct {
 	Status  string `json:"status"`
 	RetCode int    `json:"retcode"`
 	Data    T      `json:"data"`
+	Message string `json:"message"`
+	Echo    string `json:"echo"`
+	Wording string `json:"wording"`
+}
+
+func (r *Response[T]) OK() bool {
+	return r.Status == "ok"
 }
 
 type JsonMessage struct {

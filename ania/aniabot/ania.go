@@ -205,3 +205,7 @@ func (ania *AniaBot) SendFriendForwardMsg(userId uint, chain msgchain.ForwardCha
 func (ania *AniaBot) GetGroupUserInfo(groupId, userId uint) (*message.GroupUserInfo, bool) {
 	return ania.adapter.GetGroupUserInfo(groupId, userId)
 }
+
+func (ania *AniaBot) GetNCrkey() ([]message.NCrkey, bool) {
+	return ania.adapter.GetNCrkey()
+}
