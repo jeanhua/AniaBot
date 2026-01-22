@@ -80,7 +80,9 @@ func (ania *AniaBot) Run() {
 	log.Println("开始初始化插件...")
 	for _, p := range ania.plugins {
 		log.Println("初始化插件: ", p.GetMeta().Name)
-		p.Start(ania.cfg)
+		safeExecute("初始化", p, func(p plugin.Plugin) {
+			p.Start(ania.cfg)
+		})
 	}
 
 	ania.adapter.Serve(ania.cfg)
