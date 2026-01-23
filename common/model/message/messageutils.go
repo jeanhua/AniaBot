@@ -125,7 +125,7 @@ func (s OB11Segment) FriendlyText(optFunc ...MsgOptFunc) (text string) {
 	case "forward":
 		return "[转发消息]"
 	case "file":
-		return fmt.Sprintf("[文件:%s]", s.Data["name"].(string))
+		return fmt.Sprintf("[文件:%s]", s.Data["file"].(string))
 	case "json":
 		jsonMap := JsonMessage{}
 		err := json.Unmarshal([]byte(s.Data["data"].(string)), &jsonMap)

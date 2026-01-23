@@ -41,11 +41,11 @@ type commonMsgBuilder interface {
 	// VideoBase64 添加视频消息
 	VideoBase64(bs64code string)
 	// FileUrl 添加文件消息
-	FileUrl(url string)
+	FileUrl(name, url string)
 	// FileLocal 添加文件消息，`path`为对adapter(如napcat)的相对路径
-	FileLocal(path string)
+	FileLocal(name, path string)
 	// FileBase64 添加文件消息
-	FileBase64(bs64code string)
+	FileBase64(name, bs64code string)
 	// Reply 回复消息
 	Reply(msgId uint)
 	// RecordUrl 添加语音消息

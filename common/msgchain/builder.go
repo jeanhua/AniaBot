@@ -121,8 +121,7 @@ func (c *chainBuilder) VideoUrl(url string) {
 	c.message = append(c.message, message.OB11Segment{
 		Type: "video",
 		Data: map[string]interface{}{
-			"file":    url,
-			"summary": "[视频]",
+			"file": url,
 		},
 	})
 }
@@ -131,8 +130,7 @@ func (c *chainBuilder) VideoLocal(path string) {
 	c.message = append(c.message, message.OB11Segment{
 		Type: "video",
 		Data: map[string]interface{}{
-			"file":    "file://" + path,
-			"summary": "[视频]",
+			"file": "file://" + path,
 		},
 	})
 }
@@ -141,38 +139,37 @@ func (c *chainBuilder) VideoBase64(bs64code string) {
 	c.message = append(c.message, message.OB11Segment{
 		Type: "video",
 		Data: map[string]interface{}{
-			"file":    "base64://" + bs64code,
-			"summary": "[视频]",
+			"file": "base64://" + bs64code,
 		},
 	})
 }
 
-func (c *chainBuilder) FileUrl(url string) {
+func (c *chainBuilder) FileUrl(name, url string) {
 	c.message = append(c.message, message.OB11Segment{
 		Type: "file",
 		Data: map[string]interface{}{
-			"file":    url,
-			"summary": "[文件]",
+			"file": url,
+			"name": name,
 		},
 	})
 }
 
-func (c *chainBuilder) FileLocal(path string) {
+func (c *chainBuilder) FileLocal(name, path string) {
 	c.message = append(c.message, message.OB11Segment{
 		Type: "file",
 		Data: map[string]interface{}{
-			"file":    "file://" + path,
-			"summary": "[文件]",
+			"file": "file://" + path,
+			"name": name,
 		},
 	})
 }
 
-func (c *chainBuilder) FileBase64(bs64code string) {
+func (c *chainBuilder) FileBase64(name, bs64code string) {
 	c.message = append(c.message, message.OB11Segment{
 		Type: "file",
 		Data: map[string]interface{}{
-			"file":    "base64://" + bs64code,
-			"summary": "[文件]",
+			"file": "base64://" + bs64code,
+			"name": name,
 		},
 	})
 }
