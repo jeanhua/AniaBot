@@ -193,22 +193,36 @@ func (p *AntiWithdrawalPlugin) OnFriendMsg(bot bot.Bot, cmd *command.Command, ms
 						_builder.Raw(m.Message[i])
 					case "forward":
 						_builder.Text("[转发消息，暂不支持查看]")
-					case "image":
+					case "image", "file":
 						if !existRkey {
 							if isAfter3Minute(m.Time) {
-								_builder.Text("[图片消息，已经超过3分钟过期时间]")
+								switch seg.Type {
+								case "image":
+									_builder.Text("[图片消息，已经超过3分钟过期时间]")
+								case "file":
+									_builder.Text("[文件消息，已经超过3分钟过期时间]")
+								}
 							} else {
 								_builder.Raw(m.Message[i])
 							}
 						} else {
-							key := ""
+							key_20 := ""
+							key_10 := ""
 							for _, k := range ncrkey {
-								if k.Type == 20 {
-									key = strings.TrimPrefix(ncrkey[1].Rkey, "&rkey=")
+								switch k.Type {
+								case 20:
+									key_20 = strings.TrimPrefix(k.Rkey, "&rkey=")
+								case 10:
+									key_10 = strings.TrimPrefix(k.Rkey, "&rkey=")
 								}
 							}
-							if key == "" {
-								log.Println("无法解析图片URL")
+							if key_20 == "" || key_10 == "" {
+								switch seg.Type {
+								case "image":
+									log.Println("无法解析图片URL")
+								case "file":
+									log.Println("无法解析文件URL")
+								}
 								return true
 							}
 							link := m.Message[i].Data["url"].(string)
@@ -217,25 +231,25 @@ func (p *AntiWithdrawalPlugin) OnFriendMsg(bot bot.Bot, cmd *command.Command, ms
 									log.Println("无法解析图片URL")
 									return true
 								} else {
-									newLink := modifyer.SetQuery("rkey", key).String()
-									_builder.ImageUrl(newLink)
+									newLink := modifyer.SetQuery("rkey", key_20).String()
+									switch seg.Type {
+									case "image":
+										_builder.ImageUrl(newLink)
+									case "file":
+										fileName := m.Message[i].Data["file"].(string)
+										_builder.FileUrl(fileName, newLink)
+									}
 								}
 							}
 						}
-					case "record":
-						_builder.Text("[语音消息]")
 					case "video":
 						if isAfter3Minute(m.Time) {
 							_builder.Text("[视频消息，已经超过3分钟过期时间]")
 						} else {
 							_builder.Raw(m.Message[i])
 						}
-					case "file":
-						if isAfter3Minute(m.Time) {
-							_builder.Text("[文件消息，已经超过3分钟过期时间]")
-						} else {
-							_builder.Raw(m.Message[i])
-						}
+					case "record":
+						_builder.Text("[语音消息]")
 					}
 				}
 				fbuilder.Message(m.Sender.UserId, m.Sender.Nickname, _builder.Build())
