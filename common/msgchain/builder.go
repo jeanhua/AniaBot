@@ -117,6 +117,66 @@ func (c *chainBuilder) ImageLocal(path string) {
 	})
 }
 
+func (c *chainBuilder) VideoUrl(url string) {
+	c.message = append(c.message, message.OB11Segment{
+		Type: "video",
+		Data: map[string]interface{}{
+			"file":    url,
+			"summary": "[视频]",
+		},
+	})
+}
+
+func (c *chainBuilder) VideoLocal(path string) {
+	c.message = append(c.message, message.OB11Segment{
+		Type: "video",
+		Data: map[string]interface{}{
+			"file":    "file://" + path,
+			"summary": "[视频]",
+		},
+	})
+}
+
+func (c *chainBuilder) VideoBase64(bs64code string) {
+	c.message = append(c.message, message.OB11Segment{
+		Type: "video",
+		Data: map[string]interface{}{
+			"file":    "base64://" + bs64code,
+			"summary": "[视频]",
+		},
+	})
+}
+
+func (c *chainBuilder) FileUrl(url string) {
+	c.message = append(c.message, message.OB11Segment{
+		Type: "file",
+		Data: map[string]interface{}{
+			"file":    url,
+			"summary": "[文件]",
+		},
+	})
+}
+
+func (c *chainBuilder) FileLocal(path string) {
+	c.message = append(c.message, message.OB11Segment{
+		Type: "file",
+		Data: map[string]interface{}{
+			"file":    "file://" + path,
+			"summary": "[文件]",
+		},
+	})
+}
+
+func (c *chainBuilder) FileBase64(bs64code string) {
+	c.message = append(c.message, message.OB11Segment{
+		Type: "file",
+		Data: map[string]interface{}{
+			"file":    "base64://" + bs64code,
+			"summary": "[文件]",
+		},
+	})
+}
+
 func (c *chainBuilder) Reply(msgId uint) {
 	c.message = append(c.message, message.OB11Segment{
 		Type: "reply",
@@ -140,6 +200,15 @@ func (c *chainBuilder) RecordLocal(path string) {
 		Type: "record",
 		Data: map[string]interface{}{
 			"file": "file://" + path,
+		},
+	})
+}
+
+func (c *chainBuilder) RecordeBase64(bs64code string) {
+	c.message = append(c.message, message.OB11Segment{
+		Type: "record",
+		Data: map[string]interface{}{
+			"file": "base64://" + bs64code,
 		},
 	})
 }

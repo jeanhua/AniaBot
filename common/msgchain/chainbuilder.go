@@ -34,12 +34,26 @@ type commonMsgBuilder interface {
 	ImageBase64(bs64code string)
 	// ImageLocal 添加图片消息，`path`为对adapter(如napcat)的相对路径
 	ImageLocal(path string)
+	// VideoUrl 添加视频消息
+	VideoUrl(url string)
+	// VideoLocal 添加视频消息，`path`为对adapter(如napcat)的相对路径
+	VideoLocal(path string)
+	// VideoBase64 添加视频消息
+	VideoBase64(bs64code string)
+	// FileUrl 添加文件消息
+	FileUrl(url string)
+	// FileLocal 添加文件消息，`path`为对adapter(如napcat)的相对路径
+	FileLocal(path string)
+	// FileBase64 添加文件消息
+	FileBase64(bs64code string)
 	// Reply 回复消息
 	Reply(msgId uint)
 	// RecordUrl 添加语音消息
 	RecordUrl(url string)
 	// RecordLocal 添加语音消息，`path`为对adapter(如napcat)的相对路径
 	RecordLocal(path string)
+	// RecordeBase64 添加语音消息
+	RecordeBase64(bs64code string)
 	// Build 构造消息
 	Build() Chain
 	// Raw 添加OB11Segment裸消息

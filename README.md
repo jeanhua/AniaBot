@@ -287,6 +287,8 @@ builder.Mention(msg.Sender.UserId)
 bot.SendGroupMsg(msg.GroupId, builder.Build())
 // 发送好友消息
 bot.SendFriendMsg(msg.Sender.UserId, builder.Build())
+
+// 文件、视频、语音消息类似...
 ```
 
 #### 消息构造器 API 列表
