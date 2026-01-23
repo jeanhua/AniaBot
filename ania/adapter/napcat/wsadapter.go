@@ -63,7 +63,7 @@ type rkey struct {
 
 func (n *napcatWebSocketAdapter) Serve(v *viper.Viper) {
 	n.ackMng = &ackManager{
-		timeout: time.Second * 5,
+		timeout: time.Second * 10,
 	}
 
 	url := v.GetString("bot.adapter.ws.address")
