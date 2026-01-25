@@ -175,9 +175,11 @@ func (ania *AniaBot) onFriendEvent(msg message.Message) {
 	}
 }
 
-func (ania *AniaBot) AddPlugin(p plugin.Plugin) {
-	ania.plugins = append(ania.plugins, p)
-	log.Println("已添加插件: ", p.GetMeta().Name)
+func (ania *AniaBot) AddPlugin(plugins ...plugin.Plugin) {
+	for _, p := range plugins {
+		ania.plugins = append(ania.plugins, p)
+		log.Println("已添加插件: ", p.GetMeta().Name)
+	}
 }
 
 func (ania *AniaBot) SendGroupMsg(groupId uint, chain msgchain.Chain) (msgId uint, success bool) {
