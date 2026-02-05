@@ -20,20 +20,22 @@ func StructToOpenAITool(name, description string, input interface{}) llms.Tool {
 		t = t.Elem()
 	}
 
-	propty := parseFields(t)
-
 	return llms.Tool{
-		Type: "object",
+		Type: "function",
 		Function: &llms.FunctionDefinition{
 			Name:        name,
 			Description: description,
-			Parameters:  propty,
+			Parameters: map[string]any{
+				"type":       "object",
+				"properties": parseFields(t),
+				"required":   getRequiredFields(t),
+			},
 		},
 	}
 }
 
 func parseFields(t reflect.Type) map[string]Property {
-	res := make(map[string]Property)
+	res := map[string]Property{}
 	for i := 0; i < t.NumField(); i++ {
 		field := t.Field(i)
 		jsonTag := field.Tag.Get("json")
@@ -80,4 +82,16 @@ func goTypeToJSONType(t reflect.Type) string {
 	default:
 		return "string"
 	}
+}
+
+func getRequiredFields(t reflect.Type) []string {
+	var required []string
+	for i := 0; i < t.NumField(); i++ {
+		field := t.Field(i)
+		jsonTag := field.Tag.Get("json")
+		if jsonTag != "" && jsonTag != "-" && !strings.Contains(jsonTag, "omitempty") {
+			required = append(required, strings.Split(jsonTag, ",")[0])
+		}
+	}
+	return required
 }

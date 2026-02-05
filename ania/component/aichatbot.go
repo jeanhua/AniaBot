@@ -2,6 +2,7 @@ package component
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/tmc/langchaingo/llms"
 	"github.com/tmc/langchaingo/llms/openai"
@@ -9,12 +10,13 @@ import (
 )
 
 type ChatBot struct {
-	prompt string
-	llm    llms.Model
-	memory *memory.ConversationWindowBuffer
+	prompt      string
+	llm         llms.Model
+	memory      *memory.ConversationWindowBuffer
+	searchToken string
 }
 
-func NewChatBot(baseURL, apiKey, model, prompt string, windowSize int) (*ChatBot, error) {
+func NewChatBot(baseURL, apiKey, model, prompt string, windowSize int, searchToken string) (*ChatBot, error) {
 	llm, err := openai.New(
 		openai.WithToken(apiKey),
 		openai.WithBaseURL(baseURL),
@@ -30,13 +32,14 @@ func NewChatBot(baseURL, apiKey, model, prompt string, windowSize int) (*ChatBot
 	)
 
 	return &ChatBot{
-		prompt: prompt,
-		llm:    llm,
-		memory: mem,
+		prompt:      prompt,
+		llm:         llm,
+		memory:      mem,
+		searchToken: searchToken,
 	}, nil
 }
 
-func (b *ChatBot) Chat(ctx context.Context, userInput string, opt ...llms.CallOption) (string, error) {
+func (b *ChatBot) Chat(ctx context.Context, userInput string, sendMsgFunc func(string) bool, opt ...llms.CallOption) (string, error) {
 	variables, err := b.memory.LoadMemoryVariables(ctx, map[string]any{})
 	if err != nil {
 		return "", err
@@ -54,22 +57,63 @@ func (b *ChatBot) Chat(ctx context.Context, userInput string, opt ...llms.CallOp
 
 	messages = append(messages, llms.TextParts(llms.ChatMessageTypeHuman, userInput))
 
-	completion, err := b.llm.GenerateContent(ctx, messages, opt...)
-	if err != nil {
-		return "", err
+	callopt := append(opt, llms.WithTools(MakeJinaTool()))
+
+	maxIterations := 5
+	for i := 0; i < maxIterations; i++ {
+		completion, err := b.llm.GenerateContent(ctx, messages, callopt...)
+		if err != nil {
+			return "", err
+		}
+
+		if len(completion.Choices) == 0 {
+			return "", fmt.Errorf("no choices returned from LLM")
+		}
+
+		choice := completion.Choices[0]
+
+		if len(choice.ToolCalls) == 0 {
+			respText := choice.Content
+			err = b.memory.SaveContext(ctx,
+				map[string]any{"prompt": userInput},
+				map[string]any{"response": respText},
+			)
+			return respText, err
+		}
+
+		aiMsg := llms.MessageContent{
+			Role: llms.ChatMessageTypeAI,
+		}
+		if choice.Content != "" {
+			sendMsgFunc(choice.Content)
+			aiMsg.Parts = append(aiMsg.Parts, llms.TextPart(choice.Content))
+		}
+		for _, call := range choice.ToolCalls {
+			aiMsg.Parts = append(aiMsg.Parts, call)
+		}
+		messages = append(messages, aiMsg)
+
+		for _, call := range choice.ToolCalls {
+			callResult, err := TryHanleJina(ctx, b.searchToken, call)
+			if err != nil {
+				callResult = fmt.Sprintf("Error executing tool: %v", err)
+			}
+
+			messages = append(messages, llms.MessageContent{
+				Role: llms.ChatMessageTypeTool,
+				Parts: []llms.ContentPart{
+					llms.ToolCallResponse{
+						ToolCallID: call.ID,
+						Name:       call.FunctionCall.Name,
+						Content:    callResult,
+					},
+				},
+			})
+		}
+		continue
 	}
 
-	respText := completion.Choices[0].Content
-
-	err = b.memory.SaveContext(ctx,
-		map[string]any{"prompt": userInput},
-		map[string]any{"response": respText},
-	)
-	if err != nil {
-		return "", err
-	}
-
-	return respText, nil
+	return "", fmt.Errorf("exceeded maximum tool call iterations")
 }
 
 func (b *ChatBot) ChatWithImage(ctx context.Context, userInput string, imageUrl string, opt ...llms.CallOption) (string, error) {

@@ -37,6 +37,7 @@ type AIChatPlugin struct {
 		top_p       float64
 		top_k       int
 		prompt      string
+		searchToken string
 	}
 
 	ocrEnable    bool
@@ -78,6 +79,7 @@ func (p *AIChatPlugin) getChat(id uint) *component.ChatBot {
 			p.botConfig.model,
 			p.llmParameter.prompt,
 			30,
+			p.llmParameter.searchToken,
 		)
 		if err != nil {
 			return nil
@@ -120,12 +122,20 @@ func (p *AIChatPlugin) OnGroupMsg(bot bot.Bot, cmd *command.Command, msg message
 			log.Println("清理AI对话信息成功")
 		}
 	}
-	resp, err := chat.Chat(ctx, extraText,
+	resp, err := chat.Chat(ctx, extraText, func(s string) bool {
+		builder := msgchain.Builder.Group()
+		builder.Mention(msg.Sender.UserId)
+		builder.Text(s)
+		_, success := bot.SendGroupMsg(msg.GroupId, builder.Build())
+		if success {
+			log.Printf("[发->群:%d]: %s", msg.GroupId, s)
+		}
+		return success
+	},
 		llms.WithMaxTokens(p.llmParameter.maxToken),
 		llms.WithTemperature(p.llmParameter.temperature),
 		llms.WithTopP(p.llmParameter.top_p),
 		llms.WithTopK(p.llmParameter.top_k),
-		llms.WithTools(component.MakeJinaTool()),
 	)
 	if err != nil {
 		if errors.Is(err, context.DeadlineExceeded) {
@@ -183,11 +193,19 @@ func (p *AIChatPlugin) OnFriendMsg(bot bot.Bot, cmd *command.Command, msg messag
 		}
 	}
 	resp, err := chat.Chat(ctx, extraText,
+		func(s string) bool {
+			builder := msgchain.Builder.Friend()
+			builder.Text(s)
+			_, success := bot.SendFriendMsg(msg.Sender.UserId, builder.Build())
+			if success {
+				log.Printf("[发->好友:%d]: %s", msg.Sender.UserId, s)
+			}
+			return success
+		},
 		llms.WithMaxTokens(p.llmParameter.maxToken),
 		llms.WithTemperature(p.llmParameter.temperature),
 		llms.WithTopP(p.llmParameter.top_p),
 		llms.WithTopK(p.llmParameter.top_k),
-		llms.WithTools(component.MakeJinaTool()),
 	)
 	if err != nil {
 		if errors.Is(err, context.DeadlineExceeded) {
@@ -244,14 +262,16 @@ func (p *AIChatPlugin) Start(cfg *viper.Viper) {
 		ocrBaseUrl := cfg.GetString("plugin.ai_chat_bot.ocr.base_url")
 		ocrAPIKey := cfg.GetString("plugin.ai_chat_bot.ocr.api_key")
 		ocrModel := cfg.GetString("plugin.ai_chat_bot.ocr.model")
-
 		ocrPrompt := cfg.GetString("plugin.ai_chat_bot.ocr.prompt")
+		searchToken := cfg.GetString("plugin.ai_chat_bot.search.token")
+
 		p.ocrParameter.maxToken = cfg.GetInt("plugin.ai_chat_bot.ocr.max_token")
 		p.ocrParameter.temperature = cfg.GetFloat64("plugin.ai_chat_bot.ocr.temperature")
 		p.ocrParameter.top_p = cfg.GetFloat64("plugin.ai_chat_bot.ocr.top_p")
 		p.ocrParameter.top_k = cfg.GetInt("plugin.ai_chat_bot.ocr.top_k")
+		p.llmParameter.searchToken = searchToken
 
-		ocrllm, err := component.NewChatBot(ocrBaseUrl, ocrAPIKey, ocrModel, ocrPrompt, 10)
+		ocrllm, err := component.NewChatBot(ocrBaseUrl, ocrAPIKey, ocrModel, ocrPrompt, 10, searchToken)
 		if err != nil {
 			log.Println("无法初始化OCR LLM", err.Error())
 			p.ocrEnable = false
