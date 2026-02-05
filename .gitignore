@@ -37,3 +37,7 @@ build/
 
 # dev config
 config.dev.yaml
+
+# custom plugin
+custom/plugins/*
+!custom/plugins/pluginexample/
