@@ -54,7 +54,7 @@ func NewAIChatPlugin() *AIChatPlugin {
 	return &AIChatPlugin{
 		Meta: plugin.Meta{
 			Name:      "AI对话插件",
-			HelpWords: "@我聊天哦",
+			HelpWords: "@我聊天哦，带上 #新对话 标签可以创建新对话",
 			Order:     1000,
 		},
 	}
@@ -110,7 +110,17 @@ func (p *AIChatPlugin) OnGroupMsg(bot bot.Bot, cmd *command.Command, msg message
 	builder := msgchain.Builder.Group()
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute*3)
 	defer cancel()
-	resp, err := chat.Chat(ctx, extraMsg(ctx, bot, msg, p.ocrModel),
+	extraText := extraMsg(ctx, bot, msg, p.ocrModel)
+	if strings.Contains(extraText, "#新对话") {
+		err := chat.ClearHistory(ctx)
+		if err != nil {
+			log.Println("无法清理AI聊天信息", err.Error())
+			return false
+		} else {
+			log.Println("清理AI对话信息成功")
+		}
+	}
+	resp, err := chat.Chat(ctx, extraText,
 		llms.WithMaxTokens(p.llmParameter.maxToken),
 		llms.WithTemperature(p.llmParameter.temperature),
 		llms.WithTopP(p.llmParameter.top_p),
@@ -161,7 +171,17 @@ func (p *AIChatPlugin) OnFriendMsg(bot bot.Bot, cmd *command.Command, msg messag
 	builder := msgchain.Builder.Friend()
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute*3)
 	defer cancel()
-	resp, err := chat.Chat(ctx, extraMsg(ctx, bot, msg, p.ocrModel),
+	extraText := extraMsg(ctx, bot, msg, p.ocrModel)
+	if strings.Contains(extraText, "#新对话") {
+		err := chat.ClearHistory(ctx)
+		if err != nil {
+			log.Println("无法清理AI聊天信息", err.Error())
+			return false
+		} else {
+			log.Println("清理AI对话信息成功")
+		}
+	}
+	resp, err := chat.Chat(ctx, extraText,
 		llms.WithMaxTokens(p.llmParameter.maxToken),
 		llms.WithTemperature(p.llmParameter.temperature),
 		llms.WithTopP(p.llmParameter.top_p),
