@@ -125,6 +125,7 @@ func (p *AIChatPlugin) OnGroupMsg(bot bot.Bot, cmd *command.Command, msg message
 		llms.WithTemperature(p.llmParameter.temperature),
 		llms.WithTopP(p.llmParameter.top_p),
 		llms.WithTopK(p.llmParameter.top_k),
+		llms.WithTools(component.MakeJinaTool()),
 	)
 	if err != nil {
 		if errors.Is(err, context.DeadlineExceeded) {
@@ -186,6 +187,7 @@ func (p *AIChatPlugin) OnFriendMsg(bot bot.Bot, cmd *command.Command, msg messag
 		llms.WithTemperature(p.llmParameter.temperature),
 		llms.WithTopP(p.llmParameter.top_p),
 		llms.WithTopK(p.llmParameter.top_k),
+		llms.WithTools(component.MakeJinaTool()),
 	)
 	if err != nil {
 		if errors.Is(err, context.DeadlineExceeded) {
