@@ -91,6 +91,7 @@ func explore(ctx context.Context, token string, params webExploreParam) (string,
 		SetHeader("X-User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36").
 		SetHeader("X-Retain-Images", "none").
 		SetHeader("X-Return-Format", "markdown").
+		SetHeader("X-Engine", "browser").
 		Get(link)
 
 	if err != nil {
