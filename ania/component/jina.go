@@ -72,8 +72,8 @@ func search(ctx context.Context, token string, params webSearchParam) (string, e
 		return "", err
 	}
 	text := resp.String()
-	if len(text) > 10000 {
-		return text[:10000], nil
+	if len(text) > 5000 {
+		return text[:5000], nil
 	} else {
 		return text, nil
 	}
@@ -85,15 +85,20 @@ func explore(ctx context.Context, token string, params webExploreParam) (string,
 	resp, err := client.R().
 		SetContext(ctx).
 		SetHeader("Authorization", "Bearer "+token).
+		SetHeader("X-Base", "final").
+		SetHeader("X-Locale", "zh-CN").
+		SetHeader("X-Referer", "https://www.google.com/").
+		SetHeader("X-User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36").
 		SetHeader("X-Retain-Images", "none").
+		SetHeader("X-Return-Format", "markdown").
 		Get(link)
 
 	if err != nil {
 		return "", err
 	}
 	text := resp.String()
-	if len(text) > 10000 {
-		return text[:10000], nil
+	if len(text) > 5000 {
+		return text[:5000], nil
 	} else {
 		return text, nil
 	}
