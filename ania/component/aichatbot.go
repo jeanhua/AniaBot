@@ -2,8 +2,10 @@ package component
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
+	"github.com/jeanhua/AniaBot/ania/component/functool"
 	"github.com/tmc/langchaingo/llms"
 	"github.com/tmc/langchaingo/llms/openai"
 	"github.com/tmc/langchaingo/memory"
@@ -57,7 +59,10 @@ func (b *ChatBot) Chat(ctx context.Context, userInput string, sendMsgFunc func(s
 
 	messages = append(messages, llms.TextParts(llms.ChatMessageTypeHuman, userInput))
 
-	callopt := append(opt, llms.WithTools(MakeJinaTool()))
+	callopt := append(opt,
+		llms.WithTools(functool.MakeJinaTool()),
+		llms.WithTools(functool.MakeTimeTool()),
+	)
 
 	maxIterations := 5
 	for i := 0; i < maxIterations; i++ {
@@ -94,11 +99,19 @@ func (b *ChatBot) Chat(ctx context.Context, userInput string, sendMsgFunc func(s
 		messages = append(messages, aiMsg)
 
 		for _, call := range choice.ToolCalls {
-			callResult, err := TryHanleJina(ctx, b.searchToken, call)
+			var callResult string
+			var err error
+			switch call.FunctionCall.Name {
+			case functool.JINA_TOOL_SEARCH_NAME, functool.JINA_TOOL_EXPLORE_NAME:
+				callResult, err = functool.TryHanleJina(ctx, b.searchToken, call)
+			case functool.TIME_TOOL_NAME:
+				callResult, err = functool.TryHanleTimeCall(call)
+			default:
+				err = errors.New("tool not exist")
+			}
 			if err != nil {
 				callResult = fmt.Sprintf("Error executing tool: %v", err)
 			}
-
 			messages = append(messages, llms.MessageContent{
 				Role: llms.ChatMessageTypeTool,
 				Parts: []llms.ContentPart{

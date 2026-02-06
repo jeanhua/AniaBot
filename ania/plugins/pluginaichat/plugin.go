@@ -287,7 +287,7 @@ func extraMsg(ctx context.Context, bot bot.Bot, msg message.Message, ocrLLM *com
 	if nickname == "" {
 		nickname = msg.Sender.Nickname
 	}
-	str.WriteString(fmt.Sprintf("%s [nickname:%s id:%d]:", utils.GetFormattedTime(), nickname, msg.Sender.UserId))
+	str.WriteString(fmt.Sprintf("[nickname:%s id:%d]:", nickname, msg.Sender.UserId))
 	for _, m := range msg.Message {
 		str.WriteString(
 			m.FriendlyText(

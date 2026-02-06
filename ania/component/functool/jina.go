@@ -1,4 +1,4 @@
-package component
+package functool
 
 import (
 	"context"
@@ -9,6 +9,11 @@ import (
 	"github.com/go-resty/resty/v2"
 	"github.com/jeanhua/AniaBot/ania/utils"
 	"github.com/tmc/langchaingo/llms"
+)
+
+const (
+	JINA_TOOL_SEARCH_NAME  = "webSearch"
+	JINA_TOOL_EXPLORE_NAME = "webExplore"
 )
 
 type webSearchParam struct {
@@ -30,7 +35,7 @@ func MakeJinaTool() []llms.Tool {
 func TryHanleJina(ctx context.Context, token string, call llms.ToolCall) (string, error) {
 	switch call.FunctionCall.Name {
 	case "webSearch":
-		log.Println("执行webSearch...")
+		log.Println("执行webSearch... 参数: ", call.FunctionCall.Arguments)
 		param := webSearchParam{}
 		err := json.Unmarshal([]byte(call.FunctionCall.Arguments), &param)
 		if err != nil {
@@ -40,7 +45,7 @@ func TryHanleJina(ctx context.Context, token string, call llms.ToolCall) (string
 		log.Println("webSearch执行结果", callResult)
 		return callResult, err
 	case "webExplore":
-		log.Println("执行webExplore...")
+		log.Println("执行webExplore... 参数", call.FunctionCall.Arguments)
 		param := webExploreParam{}
 		err := json.Unmarshal([]byte(call.FunctionCall.Arguments), &param)
 		if err != nil {
