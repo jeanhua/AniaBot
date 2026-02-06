@@ -85,7 +85,7 @@ func goTypeToJSONType(t reflect.Type) string {
 }
 
 func getRequiredFields(t reflect.Type) []string {
-	var required []string
+	required := []string{}
 	for i := 0; i < t.NumField(); i++ {
 		field := t.Field(i)
 		jsonTag := field.Tag.Get("json")
