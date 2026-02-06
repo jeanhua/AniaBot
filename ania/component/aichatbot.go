@@ -59,10 +59,12 @@ func (b *ChatBot) Chat(ctx context.Context, userInput string, sendMsgFunc func(s
 
 	messages = append(messages, llms.TextParts(llms.ChatMessageTypeHuman, userInput))
 
-	callopt := append(opt,
-		llms.WithTools(functool.MakeJinaTool()),
-		llms.WithTools(functool.MakeTimeTool()),
-	)
+	// tool register
+	registerTools := []llms.Tool{}
+	registerTools = append(registerTools, functool.MakeJinaTool()...)
+	registerTools = append(registerTools, functool.MakeTimeTool()...)
+
+	callopt := append(opt, llms.WithTools(registerTools))
 
 	maxIterations := 5
 	for i := 0; i < maxIterations; i++ {
