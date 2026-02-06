@@ -125,7 +125,7 @@ func (p *AIChatPlugin) OnGroupMsg(bot bot.Bot, cmd *command.Command, msg message
 	resp, err := chat.Chat(ctx, extraText, func(s string) bool {
 		builder := msgchain.Builder.Group()
 		builder.Mention(msg.Sender.UserId)
-		builder.Text(s)
+		builder.Text(" " + s)
 		_, success := bot.SendGroupMsg(msg.GroupId, builder.Build())
 		if success {
 			log.Printf("[发->群:%d]: %s", msg.GroupId, s)

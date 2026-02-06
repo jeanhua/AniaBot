@@ -110,10 +110,32 @@ func (b *ChatBot) Chat(ctx context.Context, userInput string, sendMsgFunc func(s
 				},
 			})
 		}
-		continue
+
+		if i == maxIterations-1 {
+			messages = append(messages, llms.TextParts(
+				llms.ChatMessageTypeSystem,
+				fmt.Sprintf("You have reached the maximum number of tool calls (%d). Please provide a final response based on the information you have gathered so far. Do not make any more tool calls.", maxIterations),
+			))
+
+			finalCompletion, err := b.llm.GenerateContent(ctx, messages)
+			if err != nil {
+				return "", err
+			}
+
+			if len(finalCompletion.Choices) == 0 {
+				return "", fmt.Errorf("no choices returned from final LLM call")
+			}
+
+			respText := finalCompletion.Choices[0].Content
+			err = b.memory.SaveContext(ctx,
+				map[string]any{"prompt": userInput},
+				map[string]any{"response": respText},
+			)
+			return respText, err
+		}
 	}
 
-	return "", fmt.Errorf("exceeded maximum tool call iterations")
+	return "", fmt.Errorf("unexpected error: exceeded maximum iterations")
 }
 
 func (b *ChatBot) ChatWithImage(ctx context.Context, userInput string, imageUrl string, opt ...llms.CallOption) (string, error) {

@@ -72,8 +72,8 @@ func search(ctx context.Context, token string, params webSearchParam) (string, e
 		return "", err
 	}
 	text := resp.String()
-	if len(text) > 5000 {
-		return text[:5000], nil
+	if len(text) > 8000 {
+		return text[:8000], nil
 	} else {
 		return text, nil
 	}
@@ -98,8 +98,8 @@ func explore(ctx context.Context, token string, params webExploreParam) (string,
 		return "", err
 	}
 	text := resp.String()
-	if len(text) > 5000 {
-		return text[:5000], nil
+	if len(text) > 8000 {
+		return text[:8000], nil
 	} else {
 		return text, nil
 	}
