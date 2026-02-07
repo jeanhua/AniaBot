@@ -16,6 +16,7 @@ type ChatBot struct {
 	llm         llms.Model
 	memory      *memory.ConversationWindowBuffer
 	searchToken string
+	tools       []llms.Tool
 }
 
 func NewChatBot(baseURL, apiKey, model, prompt string, windowSize int, searchToken string) (*ChatBot, error) {
@@ -60,11 +61,12 @@ func (b *ChatBot) Chat(ctx context.Context, userInput string, sendMsgFunc func(s
 	messages = append(messages, llms.TextParts(llms.ChatMessageTypeHuman, userInput))
 
 	// tool register
-	registerTools := []llms.Tool{}
-	registerTools = append(registerTools, functool.MakeJinaTool()...)
-	registerTools = append(registerTools, functool.MakeTimeTool()...)
+	if b.tools == nil {
+		b.tools = append(b.tools, functool.MakeJinaTool()...)
+		b.tools = append(b.tools, functool.MakeTimeTool()...)
+	}
 
-	callopt := append(opt, llms.WithTools(registerTools))
+	callopt := append(opt, llms.WithTools(b.tools))
 
 	maxIterations := 5
 	for i := 0; i < maxIterations; i++ {
