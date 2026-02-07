@@ -1,5 +1,7 @@
 package message
 
+import "encoding/json"
+
 type Message struct {
 	Time        uint          `json:"time"`
 	PostType    string        `json:"post_type"`
@@ -76,29 +78,33 @@ type JsonMessage struct {
 		Token   string `json:"token"`
 		Type    string `json:"type"`
 	} `json:"config"`
-	Extra struct {
-		AppType int   `json:"app_type"`
-		Appid   int64 `json:"appid"`
-		MsgSeq  int64 `json:"msg_seq"`
-		Uin     int64 `json:"uin"`
-	} `json:"extra"`
-	Meta struct {
-		News struct {
-			AppType int    `json:"app_type"`
-			Appid   int64  `json:"appid"`
-			Ctime   int64  `json:"ctime"`
-			Desc    string `json:"desc"`
-			JumpUrl string `json:"jumpUrl"`
-			Preview string `json:"preview"`
-			Tag     string `json:"tag"`
-			TagIcon string `json:"tagIcon"`
-			Title   string `json:"title"`
-			Uin     int64  `json:"uin"`
-		} `json:"news"`
-	} `json:"meta"`
-	Prompt string `json:"prompt"`
-	Ver    string `json:"ver"`
-	View   string `json:"view"`
+	Extra  json.RawMessage `json:"extra"`
+	Meta   json.RawMessage `json:"meta"`
+	Prompt string          `json:"prompt"`
+	Ver    string          `json:"ver"`
+	View   string          `json:"view"`
+}
+
+type JsonNews struct {
+	News struct {
+		AppType int    `json:"app_type"`
+		Appid   int64  `json:"appid"`
+		Ctime   int64  `json:"ctime"`
+		Desc    string `json:"desc"`
+		JumpUrl string `json:"jumpUrl"`
+		Preview string `json:"preview"`
+		Tag     string `json:"tag"`
+		TagIcon string `json:"tagIcon"`
+		Title   string `json:"title"`
+		Uin     int64  `json:"uin"`
+	} `json:"news"`
+}
+
+type JsonDetailMeta struct {
+	Detail struct {
+		Title string `json:"title"`
+		Desc  string `json:"desc"`
+	} `json:"detail_1"`
 }
 
 type AiVoiceMsg struct {

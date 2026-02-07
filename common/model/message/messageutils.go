@@ -130,10 +130,24 @@ func (s OB11Segment) FriendlyText(optFunc ...MsgOptFunc) (text string) {
 		jsonMap := JsonMessage{}
 		err := json.Unmarshal([]byte(s.Data["data"].(string)), &jsonMap)
 		if err != nil {
-			log.Println("error when json unmarshal: json message")
+			log.Println("error when json unmarshal: json message", err)
 			return "[分享卡片: 无法获取内容]"
 		}
-		return fmt.Sprintf("[分享卡片,标题: %s,描述: %s,链接: (%s)]", jsonMap.Meta.News.Title, jsonMap.Meta.News.Desc, jsonMap.Meta.News.JumpUrl)
+		switch jsonMap.View {
+		case "news":
+			news := JsonNews{}
+			if err := json.Unmarshal(jsonMap.Meta, &news); err != nil {
+				return "[分享卡片: 无法获取内容]"
+			}
+			return fmt.Sprintf("[分享卡片,标题: %s,描述: %s,链接: (%s)]", news.News.Title, news.News.Desc, news.News.JumpUrl)
+		default:
+			detail := JsonDetailMeta{}
+			if err := json.Unmarshal(jsonMap.Meta, &detail); err != nil {
+				return "[分享卡片: 无法获取内容]"
+			}
+			return fmt.Sprintf("[分享卡片,标题: %s,描述: %s]", detail.Detail.Title, detail.Detail.Desc)
+		}
+
 	default:
 		return fmt.Sprintf("[%s]", s.Type)
 	}
