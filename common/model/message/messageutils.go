@@ -78,6 +78,8 @@ func (s OB11Segment) FriendlyText(optFunc ...MsgOptFunc) (text string) {
 			str.WriteString(msgFuncs.getImageOCRFunc(url))
 			str.WriteString("\n</图片消息>\n")
 			return str.String()
+		} else {
+			log.Printf("Processing image, OCR func is nil")
 		}
 		return fmt.Sprintf("[图片:%s]", url)
 	case "record":
@@ -141,15 +143,15 @@ func (s OB11Segment) FriendlyText(optFunc ...MsgOptFunc) (text string) {
 					if nickname == "" {
 						nickname = msg.Sender.Nickname
 					}
-					var s strings.Builder
+					var str strings.Builder
 					for _, m := range msg.Message {
-						s.WriteString(m.FriendlyText(
+						str.WriteString(m.FriendlyText(
 							WithGetImageOCRFunc(msgFuncs.getImageOCRFunc),
 							// napcat有问题，不能解析嵌套的合并转发消息，https://github.com/NapNeko/NapCatQQ/issues/1278
 							// WithGetForwardMsgFunc(msgFuncs.getForwardMsgFunc),
 						))
 					}
-					builder.WriteString(fmt.Sprintf("\n[nickname: %s id: %d]: %s\n", nickname, msg.Sender.UserId, s.String()))
+					builder.WriteString(fmt.Sprintf("\n[nickname: %s id: %d]: %s\n", nickname, msg.Sender.UserId, str.String()))
 				}
 				builder.WriteString("</合并转发消息>\n")
 				return builder.String()

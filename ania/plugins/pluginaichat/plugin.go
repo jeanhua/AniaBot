@@ -293,6 +293,7 @@ func extraMsg(ctx context.Context, bot bot.Bot, msg message.Message, ocrLLM *com
 			m.FriendlyText(
 				message.WithGetMsgFunc(bot.GetMsgDetail),
 				message.WithGetGroupUserInfo(msg.GroupId, bot.GetGroupUserInfo),
+				message.WithGetForwardMsgFunc(bot.GetForwardMsg),
 				message.WithGetImageOCRFunc(func(url string) string {
 					if ocrLLM == nil {
 						return "OCR服务未开启，无法解析图片"
