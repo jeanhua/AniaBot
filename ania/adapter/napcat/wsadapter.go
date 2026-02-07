@@ -43,6 +43,15 @@ type detail struct {
 	Data   *message.Message
 }
 
+type forwardAck struct {
+	ch chan *forward
+}
+
+type forward struct {
+	result bool
+	Data   *[]message.Message
+}
+
 type groupInfoAck struct {
 	ch chan *groupInfo
 }
@@ -381,6 +390,45 @@ func (n *napcatWebSocketAdapter) GetMsgDetail(msgId uint) (*message.Message, boo
 	}
 }
 
+func (n *napcatWebSocketAdapter) GetForwardMsg(msgId uint) (msgs *[]message.Message, success bool) {
+	messageID := generateMessageID("fw")
+	raw := wsPushData[map[string]uint]{}
+	raw.Action = "get_forward_msg"
+	raw.Echo = messageID
+	raw.Params = map[string]uint{
+		"message_id": msgId,
+	}
+	b, err := json.Marshal(&raw)
+	if err != nil {
+		log.Println("消息链序列化失败")
+		return nil, false
+	}
+
+	ackChan := make(chan *forward, 1)
+	timer := time.NewTimer(n.ackMng.timeout)
+	n.ackMng.pendingAcks.Store(messageID, &forwardAck{
+		ch: ackChan,
+	})
+	defer func() {
+		timer.Stop()
+		n.ackMng.pendingAcks.Delete(messageID)
+	}()
+	if err := n.wsConn.WriteMessage(websocket.TextMessage, b); err != nil {
+		log.Println("消息发送失败:", err)
+		return nil, false
+	}
+	select {
+	case result := <-ackChan:
+		if result.result {
+			return result.Data, true
+		} else {
+			return nil, false
+		}
+	case <-timer.C:
+		return nil, false
+	}
+}
+
 func (n *napcatWebSocketAdapter) GetGroupUserInfo(groupId, userId uint) (*message.GroupUserInfo, bool) {
 	messageID := generateMessageID("ugif")
 	raw := wsPushData[map[string]any]{}
@@ -544,6 +592,34 @@ func (n *napcatWebSocketAdapter) onMsg(data []byte) {
 		} else {
 			select {
 			case ack.ch <- &detail{
+				Data:   nil,
+				result: false,
+			}:
+			default:
+				log.Println("确认通道已满, 无法获取消息详情")
+			}
+		}
+	case "fw":
+		ack := ackInterface.(*forwardAck)
+		var msgCallBack message.Response[struct {
+			Messages []message.Message `json:"messages"`
+		}]
+		if err := json.Unmarshal(data, &msgCallBack); err != nil {
+			log.Println("无法解析消息详情", string(data))
+			return
+		}
+		if msgCallBack.Status == "ok" {
+			select {
+			case ack.ch <- &forward{
+				Data:   &msgCallBack.Data.Messages,
+				result: true,
+			}:
+			default:
+				log.Println("确认通道已满, 无法获取消息详情")
+			}
+		} else {
+			select {
+			case ack.ch <- &forward{
 				Data:   nil,
 				result: false,
 			}:

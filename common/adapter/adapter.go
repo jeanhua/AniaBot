@@ -61,5 +61,6 @@ type SendMsg interface {
 type GetMsg interface {
 	GetMsgDetail(msgId uint) (msg *message.Message, success bool)
 	GetGroupUserInfo(groupId, userId uint) (info *message.GroupUserInfo, success bool)
+	GetForwardMsg(msgId uint) (msgs *[]message.Message, success bool)
 	GetNCrkey() ([]message.NCrkey, bool)
 }

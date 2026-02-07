@@ -31,6 +31,9 @@ type botOuterItf interface {
 	// SendFriendForwardMsg 发送私聊合并转发消息
 	SendFriendForwardMsg(userId uint, chain msgchain.ForwardChain) (msgId uint, success bool)
 
+	// GetForwardMsg 获取合并转发消息
+	GetForwardMsg(msgId uint) (msgs *[]message.Message, success bool)
+
 	// GetGroupUserInfo 获取群聊中某成员信息
 	GetGroupUserInfo(groupId, userId uint) (info *message.GroupUserInfo, success bool)
 

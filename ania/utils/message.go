@@ -39,7 +39,11 @@ func HasMention(msg message.Message) bool {
 func ExtraMessage(bot bot.Bot, msg message.Message) string {
 	var s strings.Builder
 	for _, m := range msg.Message {
-		s.WriteString(m.FriendlyText(message.WithGetMsgFunc(bot.GetMsgDetail), message.WithGetGroupUserInfo(msg.GroupId, bot.GetGroupUserInfo)))
+		s.WriteString(m.FriendlyText(
+			message.WithGetMsgFunc(bot.GetMsgDetail),
+			message.WithGetGroupUserInfo(msg.GroupId, bot.GetGroupUserInfo),
+			message.WithGetForwardMsgFunc(bot.GetForwardMsg),
+		))
 	}
 	return s.String()
 }

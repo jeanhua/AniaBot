@@ -7,6 +7,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/go-resty/resty/v2"
@@ -24,7 +25,7 @@ type napcatHttpAdapter struct {
 
 func (n *napcatHttpAdapter) Serve(v *viper.Viper) {
 	n.httpClient = resty.New()
-	n.baseUrl = v.GetString("bot.adapter.http.target_url")
+	n.baseUrl = strings.TrimRight(v.GetString("bot.adapter.http.target_url"), "/")
 	http.HandleFunc("/", n.handler)
 	port := v.GetInt("bot.adapter.http.listen_port")
 	log.Println("已启用napcat http adapter")
@@ -357,6 +358,20 @@ func (n *napcatHttpAdapter) GetMsgDetail(msgId uint) (*message.Message, bool) {
 	return &result.Data, true
 }
 
+func (n *napcatHttpAdapter) GetForwardMsg(msgId uint) (msgs *[]message.Message, success bool) {
+	data := map[string]uint{
+		"message_id": msgId,
+	}
+	result := httpForwardMsgDetail{}
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
+	defer cancel()
+	if _, err := n.httpClient.R().SetResult(&result).SetContext(ctx).SetBody(data).Post(n.baseUrl + "/get_forward_msg"); err != nil {
+		log.Println("HTTP请求失败, 无法获取消息详情: ", err.Error())
+		return nil, false
+	}
+	return &result.Data, true
+}
+
 func (n *napcatHttpAdapter) GetGroupUserInfo(groupId, userId uint) (*message.GroupUserInfo, bool) {
 	data := map[string]any{}
 	data["group_id"] = groupId
@@ -396,4 +411,8 @@ type httpGroupPushData struct {
 
 type httpMsgDetail struct {
 	Data message.Message `json:"data"`
+}
+
+type httpForwardMsgDetail struct {
+	Data []message.Message `json:"data"`
 }

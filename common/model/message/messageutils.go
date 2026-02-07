@@ -13,6 +13,7 @@ type msgHandleOpt struct {
 	getMsgFunc           func(msgId uint) (*Message, bool)
 	getGroupUserInfoFunc func(groupId, userId uint) (info *GroupUserInfo, success bool)
 	getImageOCRFunc      func(url string) string
+	getForwardMsgFunc    func(msgId uint) (*[]Message, bool)
 }
 
 type MsgOptFunc func(*msgHandleOpt)
@@ -20,6 +21,12 @@ type MsgOptFunc func(*msgHandleOpt)
 func WithGetMsgFunc(getMsgFunc func(msgId uint) (*Message, bool)) MsgOptFunc {
 	return func(o *msgHandleOpt) {
 		o.getMsgFunc = getMsgFunc
+	}
+}
+
+func WithGetForwardMsgFunc(getForwardMsgFunc func(msgId uint) (*[]Message, bool)) MsgOptFunc {
+	return func(o *msgHandleOpt) {
+		o.getForwardMsgFunc = getForwardMsgFunc
 	}
 }
 
@@ -43,9 +50,9 @@ func (s OB11Segment) FriendlyText(optFunc ...MsgOptFunc) (text string) {
 		}
 	}()
 
-	o := msgHandleOpt{}
+	msgFuncs := msgHandleOpt{}
 	for _, f := range optFunc {
-		f(&o)
+		f(&msgFuncs)
 	}
 
 	switch s.Type {
@@ -65,10 +72,10 @@ func (s OB11Segment) FriendlyText(optFunc ...MsgOptFunc) (text string) {
 		}
 	case "image":
 		url := s.Data["url"].(string)
-		if o.getImageOCRFunc != nil {
+		if msgFuncs.getImageOCRFunc != nil {
 			var str strings.Builder
 			str.WriteString("\n<图片消息>\n")
-			str.WriteString(o.getImageOCRFunc(url))
+			str.WriteString(msgFuncs.getImageOCRFunc(url))
 			str.WriteString("\n</图片消息>\n")
 			return str.String()
 		}
@@ -83,7 +90,7 @@ func (s OB11Segment) FriendlyText(optFunc ...MsgOptFunc) (text string) {
 		if err != nil {
 			return fmt.Sprintf("[at:%s]", s.Data["qq"].(string))
 		}
-		info, success := o.getGroupUserInfoFunc(o.groupId, uint(qq))
+		info, success := msgFuncs.getGroupUserInfoFunc(msgFuncs.groupId, uint(qq))
 		if success && info != nil {
 			nickname := info.Card
 			if nickname == "" {
@@ -95,7 +102,7 @@ func (s OB11Segment) FriendlyText(optFunc ...MsgOptFunc) (text string) {
 	case "music":
 		return fmt.Sprintf("[音乐:%s]", s.Data["title"].(string))
 	case "reply":
-		if o.getMsgFunc == nil {
+		if msgFuncs.getMsgFunc == nil {
 			return "[回复消息]"
 		}
 		idStr := s.Data["id"].(string)
@@ -103,7 +110,7 @@ func (s OB11Segment) FriendlyText(optFunc ...MsgOptFunc) (text string) {
 		if err != nil {
 			return "[回复消息]"
 		}
-		msg, ok := o.getMsgFunc(uint(id))
+		msg, ok := msgFuncs.getMsgFunc(uint(id))
 		if !ok {
 			return "[回复消息]"
 		}
@@ -116,14 +123,44 @@ func (s OB11Segment) FriendlyText(optFunc ...MsgOptFunc) (text string) {
 		back.WriteString(fmt.Sprintf("[%s %d]: ", nickname, msg.Sender.UserId))
 		for _, m := range msg.Message {
 			back.WriteString(m.FriendlyText(
-				WithGetGroupUserInfo(o.groupId, o.getGroupUserInfoFunc),
-				WithGetImageOCRFunc(o.getImageOCRFunc),
+				WithGetGroupUserInfo(msgFuncs.groupId, msgFuncs.getGroupUserInfoFunc),
+				WithGetImageOCRFunc(msgFuncs.getImageOCRFunc),
 			))
 		}
 		back.WriteString("\n</reply>\n")
 		return back.String()
 	case "forward":
-		return "[转发消息]"
+		if msgFuncs.getForwardMsgFunc != nil {
+			id, err := strconv.Atoi(s.Data["id"].(string))
+			if err != nil {
+				log.Println("无法从获取转发消息详情ID", err)
+				return "[转发消息, 无法获取详情]"
+			}
+			detail, ok := msgFuncs.getForwardMsgFunc(uint(id))
+			if ok {
+				builder := strings.Builder{}
+				builder.WriteString("\n<合并转发消息>\n")
+				for _, msg := range *detail {
+					nickname := msg.Sender.Card
+					if nickname == "" {
+						nickname = msg.Sender.Nickname
+					}
+					var s strings.Builder
+					for _, m := range msg.Message {
+						s.WriteString(m.FriendlyText(
+							WithGetImageOCRFunc(msgFuncs.getImageOCRFunc),
+						))
+					}
+					builder.WriteString(fmt.Sprintf("[nickname: %s id: %d]: %s", nickname, msg.Sender.UserId, s.String()))
+				}
+				builder.WriteString("\n</合并转发消息>\n")
+				return builder.String()
+			} else {
+				return "[转发消息, 无法获取详情]"
+			}
+		} else {
+			return "[转发消息]"
+		}
 	case "file":
 		return fmt.Sprintf("[文件:%s]", s.Data["file"].(string))
 	case "json":
@@ -153,39 +190,39 @@ func (s OB11Segment) FriendlyText(optFunc ...MsgOptFunc) (text string) {
 	}
 }
 
-func (s OB11Segment) ShortText() string {
-	switch s.Type {
-	case "text":
-		return s.Data["text"].(string)
-	case "face":
-		idStr := s.Data["id"].(string)
-		id, err := strconv.Atoi(idStr)
-		if err != nil {
-			return "[QQ表情]"
-		}
-		dsc, ok := emojiMap[id]
-		if ok {
-			return fmt.Sprintf("[QQ表情:%s]", dsc)
-		} else {
-			return "[QQ表情]"
-		}
-	case "image":
-		return "[图片]"
-	case "record":
-		return "[录音]"
-	case "video":
-		return "[视频]"
-	case "at":
-		return fmt.Sprintf("[at:%s]", s.Data["qq"].(string))
-	case "music":
-		return "[音乐]"
-	case "reply":
-		return "[回复消息]"
-	case "forward":
-		return "[转发消息]"
-	case "file":
-		return fmt.Sprintf("[文件:%s]", s.Data["name"].(string))
-	default:
-		return fmt.Sprintf("[%s]", s.Type)
-	}
-}
+// func (s OB11Segment) ShortText() string {
+// 	switch s.Type {
+// 	case "text":
+// 		return s.Data["text"].(string)
+// 	case "face":
+// 		idStr := s.Data["id"].(string)
+// 		id, err := strconv.Atoi(idStr)
+// 		if err != nil {
+// 			return "[QQ表情]"
+// 		}
+// 		dsc, ok := emojiMap[id]
+// 		if ok {
+// 			return fmt.Sprintf("[QQ表情:%s]", dsc)
+// 		} else {
+// 			return "[QQ表情]"
+// 		}
+// 	case "image":
+// 		return "[图片]"
+// 	case "record":
+// 		return "[录音]"
+// 	case "video":
+// 		return "[视频]"
+// 	case "at":
+// 		return fmt.Sprintf("[at:%s]", s.Data["qq"].(string))
+// 	case "music":
+// 		return "[音乐]"
+// 	case "reply":
+// 		return "[回复消息]"
+// 	case "forward":
+// 		return "[转发消息]"
+// 	case "file":
+// 		return fmt.Sprintf("[文件:%s]", s.Data["name"].(string))
+// 	default:
+// 		return fmt.Sprintf("[%s]", s.Type)
+// 	}
+// }
