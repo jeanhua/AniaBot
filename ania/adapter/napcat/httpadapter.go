@@ -358,8 +358,8 @@ func (n *napcatHttpAdapter) GetMsgDetail(msgId uint) (*message.Message, bool) {
 	return &result.Data, true
 }
 
-func (n *napcatHttpAdapter) GetForwardMsg(msgId uint) (msgs *[]message.Message, success bool) {
-	data := map[string]uint{
+func (n *napcatHttpAdapter) GetForwardMsg(msgId string) (msgs *[]message.Message, success bool) {
+	data := map[string]string{
 		"message_id": msgId,
 	}
 	result := httpForwardMsgDetail{}

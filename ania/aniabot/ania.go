@@ -210,7 +210,7 @@ func (ania *AniaBot) SendFriendForwardMsg(userId uint, chain msgchain.ForwardCha
 	return ania.adapter.SendFriendForwardMsg(userId, chain)
 }
 
-func (ania *AniaBot) GetForwardMsg(msgId uint) (msgs *[]message.Message, success bool) {
+func (ania *AniaBot) GetForwardMsg(msgId string) (msgs *[]message.Message, success bool) {
 	return ania.adapter.GetForwardMsg(msgId)
 }
 

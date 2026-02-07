@@ -13,7 +13,7 @@ type msgHandleOpt struct {
 	getMsgFunc           func(msgId uint) (*Message, bool)
 	getGroupUserInfoFunc func(groupId, userId uint) (info *GroupUserInfo, success bool)
 	getImageOCRFunc      func(url string) string
-	getForwardMsgFunc    func(msgId uint) (*[]Message, bool)
+	getForwardMsgFunc    func(msgId string) (*[]Message, bool)
 }
 
 type MsgOptFunc func(*msgHandleOpt)
@@ -24,7 +24,7 @@ func WithGetMsgFunc(getMsgFunc func(msgId uint) (*Message, bool)) MsgOptFunc {
 	}
 }
 
-func WithGetForwardMsgFunc(getForwardMsgFunc func(msgId uint) (*[]Message, bool)) MsgOptFunc {
+func WithGetForwardMsgFunc(getForwardMsgFunc func(msgId string) (*[]Message, bool)) MsgOptFunc {
 	return func(o *msgHandleOpt) {
 		o.getForwardMsgFunc = getForwardMsgFunc
 	}
@@ -131,15 +131,11 @@ func (s OB11Segment) FriendlyText(optFunc ...MsgOptFunc) (text string) {
 		return back.String()
 	case "forward":
 		if msgFuncs.getForwardMsgFunc != nil {
-			id, err := strconv.Atoi(s.Data["id"].(string))
-			if err != nil {
-				log.Println("无法从获取转发消息详情ID", err)
-				return "[转发消息, 无法获取详情]"
-			}
-			detail, ok := msgFuncs.getForwardMsgFunc(uint(id))
+			id := s.Data["id"].(string)
+			detail, ok := msgFuncs.getForwardMsgFunc(id)
 			if ok {
 				builder := strings.Builder{}
-				builder.WriteString("\n<合并转发消息>\n")
+				builder.WriteString("\n<合并转发消息>")
 				for _, msg := range *detail {
 					nickname := msg.Sender.Card
 					if nickname == "" {
@@ -149,11 +145,13 @@ func (s OB11Segment) FriendlyText(optFunc ...MsgOptFunc) (text string) {
 					for _, m := range msg.Message {
 						s.WriteString(m.FriendlyText(
 							WithGetImageOCRFunc(msgFuncs.getImageOCRFunc),
+							// napcat有问题，不能解析嵌套的合并转发消息，https://github.com/NapNeko/NapCatQQ/issues/1278
+							// WithGetForwardMsgFunc(msgFuncs.getForwardMsgFunc),
 						))
 					}
-					builder.WriteString(fmt.Sprintf("[nickname: %s id: %d]: %s", nickname, msg.Sender.UserId, s.String()))
+					builder.WriteString(fmt.Sprintf("\n[nickname: %s id: %d]: %s\n", nickname, msg.Sender.UserId, s.String()))
 				}
-				builder.WriteString("\n</合并转发消息>\n")
+				builder.WriteString("</合并转发消息>\n")
 				return builder.String()
 			} else {
 				return "[转发消息, 无法获取详情]"

@@ -390,12 +390,12 @@ func (n *napcatWebSocketAdapter) GetMsgDetail(msgId uint) (*message.Message, boo
 	}
 }
 
-func (n *napcatWebSocketAdapter) GetForwardMsg(msgId uint) (msgs *[]message.Message, success bool) {
+func (n *napcatWebSocketAdapter) GetForwardMsg(msgId string) (msgs *[]message.Message, success bool) {
 	messageID := generateMessageID("fw")
-	raw := wsPushData[map[string]uint]{}
+	raw := wsPushData[map[string]string]{}
 	raw.Action = "get_forward_msg"
 	raw.Echo = messageID
-	raw.Params = map[string]uint{
+	raw.Params = map[string]string{
 		"message_id": msgId,
 	}
 	b, err := json.Marshal(&raw)
