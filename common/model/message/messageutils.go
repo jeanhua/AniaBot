@@ -78,8 +78,6 @@ func (s OB11Segment) FriendlyText(optFunc ...MsgOptFunc) (text string) {
 			str.WriteString(msgFuncs.getImageOCRFunc(url))
 			str.WriteString("\n</图片消息>\n")
 			return str.String()
-		} else {
-			log.Printf("Processing image, OCR func is nil")
 		}
 		return fmt.Sprintf("[图片:%s]", url)
 	case "record":
