@@ -127,6 +127,7 @@ func (s OB11Segment) FriendlyText(optFunc ...MsgOptFunc) (text string) {
 			back.WriteString(m.FriendlyText(
 				WithGetGroupUserInfo(msgFuncs.groupId, msgFuncs.getGroupUserInfoFunc),
 				WithGetImageOCRFunc(msgFuncs.getImageOCRFunc),
+				WithGetForwardMsgFunc(msgFuncs.getForwardMsgFunc),
 			))
 		}
 		back.WriteString("\n</reply>\n")
