@@ -4,6 +4,8 @@ import (
 	"log"
 
 	"github.com/jeanhua/AniaBot/common/bot"
+	"github.com/jeanhua/AniaBot/common/model/command"
+	"github.com/jeanhua/AniaBot/common/model/message"
 	"github.com/jeanhua/AniaBot/common/msgchain"
 	"github.com/jeanhua/AniaBot/common/plugin"
 	"github.com/spf13/viper"
@@ -20,7 +22,7 @@ func NewNewsPlugin() *NewsPlugin {
 	return &NewsPlugin{
 		Meta: plugin.Meta{
 			Name:      "每日新闻插件",
-			HelpWords: "每日准点在指定群里新闻播报",
+			HelpWords: "每日准点在指定群里新闻播报，发送 /news 立即获取",
 		},
 	}
 }
@@ -54,4 +56,19 @@ func (p *NewsPlugin) StartCron(bot bot.Bot, c plugin.CronManager) {
 			}
 		}
 	})
+}
+
+func (p *NewsPlugin) OnGroupMsg(bot bot.Bot, cmd *command.Command, msg message.Message) bool {
+	if cmd != nil && cmd.Mention && cmd.Name == "news" {
+		builder := msgchain.Builder.Group()
+		builder.ImageUrl(p.api)
+		_, ok := bot.SendGroupMsg(msg.GroupId, builder.Build())
+		if ok {
+			log.Printf("[发->群%d]: [每日新闻]", msg.GroupId)
+		} else {
+			log.Printf("[发->群%d]: [每日新闻] 发送失败...", msg.GroupId)
+		}
+		return false
+	}
+	return true
 }
