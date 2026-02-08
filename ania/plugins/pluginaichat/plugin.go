@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/jeanhua/AniaBot/ania/component"
+	"github.com/jeanhua/AniaBot/ania/component/functool"
 	"github.com/jeanhua/AniaBot/ania/utils"
 	"github.com/jeanhua/AniaBot/common/bot"
 	"github.com/jeanhua/AniaBot/common/model/command"
@@ -122,16 +123,30 @@ func (p *AIChatPlugin) OnGroupMsg(bot bot.Bot, cmd *command.Command, msg message
 			log.Println("清理AI对话信息成功")
 		}
 	}
-	resp, err := chat.Chat(ctx, extraText, func(s string) bool {
-		builder := msgchain.Builder.Group()
-		builder.Mention(msg.Sender.UserId)
-		builder.Text(" " + s)
-		_, success := bot.SendGroupMsg(msg.GroupId, builder.Build())
-		if success {
-			log.Printf("[发->群:%d]: %s", msg.GroupId, s)
-		}
-		return success
-	},
+
+	msgFuncs := functool.OptionFuncs{
+		SendText: func(s string) bool {
+			builder := msgchain.Builder.Group()
+			builder.Mention(msg.Sender.UserId)
+			builder.Text(" " + s)
+			_, success := bot.SendGroupMsg(msg.GroupId, builder.Build())
+			if success {
+				log.Printf("[发->群:%d]: %s", msg.GroupId, s)
+			}
+			return success
+		},
+		SendImage: func(url string) bool {
+			builder := msgchain.Builder.Group()
+			builder.ImageUrl(url)
+			_, success := bot.SendGroupMsg(msg.GroupId, builder.Build())
+			if success {
+				log.Printf("[发->群:%d]: [图片:%s]", msg.GroupId, url)
+			}
+			return success
+		},
+	}
+
+	resp, err := chat.Chat(ctx, extraText, msgFuncs,
 		llms.WithMaxTokens(p.llmParameter.maxToken),
 		llms.WithTemperature(p.llmParameter.temperature),
 		llms.WithTopP(p.llmParameter.top_p),
@@ -192,8 +207,9 @@ func (p *AIChatPlugin) OnFriendMsg(bot bot.Bot, cmd *command.Command, msg messag
 			log.Println("清理AI对话信息成功")
 		}
 	}
-	resp, err := chat.Chat(ctx, extraText,
-		func(s string) bool {
+
+	msgFuncs := functool.OptionFuncs{
+		SendText: func(s string) bool {
 			builder := msgchain.Builder.Friend()
 			builder.Text(s)
 			_, success := bot.SendFriendMsg(msg.Sender.UserId, builder.Build())
@@ -202,6 +218,19 @@ func (p *AIChatPlugin) OnFriendMsg(bot bot.Bot, cmd *command.Command, msg messag
 			}
 			return success
 		},
+		SendImage: func(url string) bool {
+			builder := msgchain.Builder.Friend()
+			builder.ImageUrl(url)
+			_, success := bot.SendFriendMsg(msg.Sender.UserId, builder.Build())
+			if success {
+				log.Printf("[发->好友:%d]: [图片:%s]", msg.GroupId, url)
+			}
+			return success
+		},
+	}
+
+	resp, err := chat.Chat(ctx, extraText,
+		msgFuncs,
 		llms.WithMaxTokens(p.llmParameter.maxToken),
 		llms.WithTemperature(p.llmParameter.temperature),
 		llms.WithTopP(p.llmParameter.top_p),

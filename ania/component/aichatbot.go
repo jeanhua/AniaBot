@@ -42,7 +42,7 @@ func NewChatBot(baseURL, apiKey, model, prompt string, windowSize int, searchTok
 	}, nil
 }
 
-func (b *ChatBot) Chat(ctx context.Context, userInput string, sendMsgFunc func(string) bool, opt ...llms.CallOption) (string, error) {
+func (b *ChatBot) Chat(ctx context.Context, userInput string, msgFunc functool.OptionFuncs, opt ...llms.CallOption) (string, error) {
 	variables, err := b.memory.LoadMemoryVariables(ctx, map[string]any{})
 	if err != nil {
 		return "", err
@@ -64,6 +64,7 @@ func (b *ChatBot) Chat(ctx context.Context, userInput string, sendMsgFunc func(s
 	if b.tools == nil {
 		b.tools = append(b.tools, functool.MakeJinaTool()...)
 		b.tools = append(b.tools, functool.MakeTimeTool()...)
+		b.tools = append(b.tools, functool.MakeMemeTool()...)
 	}
 
 	callopt := append(opt, llms.WithTools(b.tools))
@@ -94,7 +95,7 @@ func (b *ChatBot) Chat(ctx context.Context, userInput string, sendMsgFunc func(s
 			Role: llms.ChatMessageTypeAI,
 		}
 		if choice.Content != "" {
-			sendMsgFunc(choice.Content)
+			msgFunc.SendText(choice.Content)
 			aiMsg.Parts = append(aiMsg.Parts, llms.TextPart(choice.Content))
 		}
 		for _, call := range choice.ToolCalls {
@@ -110,6 +111,8 @@ func (b *ChatBot) Chat(ctx context.Context, userInput string, sendMsgFunc func(s
 				callResult, err = functool.TryHanleJina(ctx, b.searchToken, call)
 			case functool.TIME_TOOL_NAME:
 				callResult, err = functool.TryHanleTimeCall(call)
+			case functool.MEME_TOOL_NAME:
+				callResult, err = functool.TryHandleMemeFunc(call, msgFunc)
 			default:
 				err = errors.New("tool not exist")
 			}
