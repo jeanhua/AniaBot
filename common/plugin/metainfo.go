@@ -72,3 +72,6 @@ func (p *Meta) OnEssence(b bot.Bot, notice message.EssenceNotice) {}
 
 // OnGroupCard 处理群名片变更
 func (p *Meta) OnGroupCard(b bot.Bot, notice message.GroupCardNotice) {}
+
+// StartCron 初始化cron事件
+func (p *Meta) StartCron(bot bot.Bot, c CronManager) {}

@@ -4,6 +4,7 @@ import (
 	"github.com/jeanhua/AniaBot/common/bot"
 	"github.com/jeanhua/AniaBot/common/model/command"
 	"github.com/jeanhua/AniaBot/common/model/message"
+	"github.com/robfig/cron/v3"
 	"github.com/spf13/viper"
 )
 
@@ -21,9 +22,15 @@ type BasicEvent interface {
 	OnFriendMsg(bot.Bot, *command.Command, message.Message) bool
 }
 
+type CronManager interface {
+	AddFunc(spec string, cmd func()) (cron.EntryID, error)
+}
+
 type StartupEvent interface {
 	// Start 插件初始化事件
 	Start(cfg *viper.Viper)
+	// StartCron 初始化cron事件
+	StartCron(bot bot.Bot, c CronManager)
 }
 
 type NoticeEvent interface {

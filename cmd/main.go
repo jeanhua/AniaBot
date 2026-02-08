@@ -6,6 +6,7 @@ import (
 	"github.com/jeanhua/AniaBot/ania/plugins/pluginaichat"
 	"github.com/jeanhua/AniaBot/ania/plugins/pluginantiwithdrawal"
 	"github.com/jeanhua/AniaBot/ania/plugins/pluginlog"
+	"github.com/jeanhua/AniaBot/ania/plugins/pluginnews"
 	"github.com/jeanhua/AniaBot/ania/plugins/pluginrepeat"
 )
 
@@ -18,6 +19,7 @@ func main() {
 	bot.AddPlugin(pluginrepeat.NewPlugin())
 	bot.AddPlugin(pluginantiwithdrawal.NewPlugin())
 	bot.AddPlugin(pluginaichat.NewAIChatPlugin())
+	bot.AddPlugin(pluginnews.NewNewsPlugin())
 
 	bot.Run()
 }

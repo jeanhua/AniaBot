@@ -11,6 +11,7 @@ import (
 	"github.com/jeanhua/AniaBot/common/model/message"
 	"github.com/jeanhua/AniaBot/common/msgchain"
 	"github.com/jeanhua/AniaBot/common/plugin"
+	"github.com/robfig/cron/v3"
 	"github.com/spf13/viper"
 )
 
@@ -84,6 +85,18 @@ func (ania *AniaBot) Run() {
 			p.Start(ania.cfg)
 		})
 	}
+
+	// 初始化cron
+	c := cron.New()
+	log.Println("开始初始化cron...")
+	for _, p := range ania.plugins {
+		safeExecute("初始化cron", p, func(p plugin.Plugin) {
+			p.StartCron(ania, c)
+		})
+	}
+	log.Println("初始化cron完成")
+	c.Start()
+	defer c.Stop()
 
 	ania.adapter.Serve(ania.cfg)
 }
