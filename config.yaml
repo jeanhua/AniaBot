@@ -48,7 +48,7 @@ plugin:
   # 每日新闻插件
   dailyNews:
     api: "https://uapis.cn/api/v1/daily/news-image" # api端点
-    cron: "0 0 12 * * ?" # cron表达式, 每天12点触发
+    cron: "0 12 * * *" # cron表达式, 每天12点触发
     groups: # 指定需要定时播报的群聊
       - 123456
       - 7891011
