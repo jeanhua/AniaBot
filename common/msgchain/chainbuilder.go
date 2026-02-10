@@ -6,23 +6,37 @@ type GroupChainBuilder interface {
 	commonMsgBuilder
 	// Mention 在群里AT某人
 	Mention(userId uint)
+	Build() GroupChain
 }
 
 type FriendChainBuilder interface {
 	commonMsgBuilder
-}
-type ForwardChainBuilder interface {
-	Message(userId uint, nickname string, c Chain)
-	Build() ForwardChain
-}
-type Chain interface {
-	GetMsg() []message.OB11Segment
+	Build() FriendChain
 }
 
-type ForwardChain interface {
-	GetMsg() message.ForwardMessage
+type GroupForwardChainBuilder interface {
+	Message(userId uint, nickname string, c GroupChain)
+	Build() GroupForwardChain
+}
+type FriendForwardChainBuilder interface {
+	Message(userId uint, nickname string, c FriendChain)
+	Build() FriendForwardChain
+}
+type FriendChain interface {
+	GetFriendMsg() []message.OB11Segment
 }
 
+type GroupChain interface {
+	GetGroupMsg() []message.OB11Segment
+}
+
+type GroupForwardChain interface {
+	GetGroupForwardMsg() message.ForwardMessage
+}
+
+type FriendForwardChain interface {
+	GetFriendForwardMsg() message.ForwardMessage
+}
 type commonMsgBuilder interface {
 	// Text 添加文本消息
 	Text(text string)
@@ -54,8 +68,6 @@ type commonMsgBuilder interface {
 	RecordLocal(path string)
 	// RecordeBase64 添加语音消息
 	RecordeBase64(bs64code string)
-	// Build 构造消息
-	Build() Chain
 	// Raw 添加OB11Segment裸消息
 	Raw(rawMsg ...message.OB11Segment)
 }

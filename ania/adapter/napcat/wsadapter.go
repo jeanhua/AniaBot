@@ -121,7 +121,7 @@ func (n *napcatWebSocketAdapter) SetTrigger(trigger adapter.TriggerWrapper) {
 	n.trigger = trigger
 }
 
-func (n *napcatWebSocketAdapter) SendGroupMsg(groupId uint, chain msgchain.Chain) (msgId uint, success bool) {
+func (n *napcatWebSocketAdapter) SendGroupMsg(groupId uint, chain msgchain.GroupChain) (msgId uint, success bool) {
 	messageID := generateMessageID("ack")
 	raw := wsPushGroupData{
 		Action: "send_group_msg",
@@ -130,7 +130,7 @@ func (n *napcatWebSocketAdapter) SendGroupMsg(groupId uint, chain msgchain.Chain
 			Message []message.OB11Segment "json:\"message\""
 		}{
 			GroupId: groupId,
-			Message: chain.GetMsg(),
+			Message: chain.GetGroupMsg(),
 		},
 		Echo: messageID,
 	}
@@ -207,7 +207,7 @@ func (n *napcatWebSocketAdapter) SendGroupAIVoiceMsg(groupId uint, character, ms
 	}
 }
 
-func (n *napcatWebSocketAdapter) SendFriendMsg(userId uint, chain msgchain.Chain) (msgId uint, success bool) {
+func (n *napcatWebSocketAdapter) SendFriendMsg(userId uint, chain msgchain.FriendChain) (msgId uint, success bool) {
 	messageID := generateMessageID("ack")
 	raw := wsPushFriendData{
 		Action: "send_private_msg",
@@ -216,7 +216,7 @@ func (n *napcatWebSocketAdapter) SendFriendMsg(userId uint, chain msgchain.Chain
 			Message []message.OB11Segment "json:\"message\""
 		}{
 			UserId:  userId,
-			Message: chain.GetMsg(),
+			Message: chain.GetFriendMsg(),
 		},
 		Echo: messageID,
 	}
@@ -269,13 +269,13 @@ func (n *napcatWebSocketAdapter) SendPokeMsg(userId uint, groupId *uint) {
 	}
 }
 
-func (n *napcatWebSocketAdapter) SendGroupForwardMsg(groupId uint, chain msgchain.ForwardChain) (msgId uint, success bool) {
+func (n *napcatWebSocketAdapter) SendGroupForwardMsg(groupId uint, chain msgchain.GroupForwardChain) (msgId uint, success bool) {
 	messageID := generateMessageID("ack")
 	raw := wsPushData[message.GroupForwardMessage]{
 		Action: "send_forward_msg",
 		Params: message.GroupForwardMessage{
 			GroupId:        groupId,
-			ForwardMessage: chain.GetMsg(),
+			ForwardMessage: chain.GetGroupForwardMsg(),
 		},
 		Echo: messageID,
 	}
@@ -310,13 +310,13 @@ func (n *napcatWebSocketAdapter) SendGroupForwardMsg(groupId uint, chain msgchai
 	}
 }
 
-func (n *napcatWebSocketAdapter) SendFriendForwardMsg(userId uint, chain msgchain.ForwardChain) (msgId uint, success bool) {
+func (n *napcatWebSocketAdapter) SendFriendForwardMsg(userId uint, chain msgchain.FriendForwardChain) (msgId uint, success bool) {
 	messageID := generateMessageID("ack")
 	raw := wsPushData[message.FriendForwardMessage]{
 		Action: "send_forward_msg",
 		Params: message.FriendForwardMessage{
 			UserId:         userId,
-			ForwardMessage: chain.GetMsg(),
+			ForwardMessage: chain.GetFriendForwardMsg(),
 		},
 		Echo: messageID,
 	}

@@ -303,6 +303,7 @@ bot.SendFriendMsg(msg.Sender.UserId, builder.Build())
 - `RecordLocal(path string)` - 添加本地语音
 - `Mention(userId uint)` - AT群成员（仅群聊）
 - `Raw(rawMsg []message.OB11Segment)` - 添加原始消息段
+- 更多请查阅 [定义](./common/msgchain/chainbuilder.go)
 
 ### 第四部分：高级插件功能
 

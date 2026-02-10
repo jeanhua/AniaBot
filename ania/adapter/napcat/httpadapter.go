@@ -230,10 +230,10 @@ func (n *napcatHttpAdapter) SetTrigger(trigger adapter.TriggerWrapper) {
 	n.trigger = trigger
 }
 
-func (n *napcatHttpAdapter) SendGroupMsg(groupId uint, chain msgchain.Chain) (msgId uint, success bool) {
+func (n *napcatHttpAdapter) SendGroupMsg(groupId uint, chain msgchain.GroupChain) (msgId uint, success bool) {
 	data := httpGroupPushData{
 		GroupId: groupId,
-		Message: chain.GetMsg(),
+		Message: chain.GetGroupMsg(),
 	}
 
 	var resp message.Response[message.Message]
@@ -250,10 +250,10 @@ func (n *napcatHttpAdapter) SendGroupMsg(groupId uint, chain msgchain.Chain) (ms
 	}
 }
 
-func (n *napcatHttpAdapter) SendFriendMsg(UserId uint, chain msgchain.Chain) (msgId uint, success bool) {
+func (n *napcatHttpAdapter) SendFriendMsg(UserId uint, chain msgchain.FriendChain) (msgId uint, success bool) {
 	data := httpFriendPushData{
 		UserId:  UserId,
-		Message: chain.GetMsg(),
+		Message: chain.GetFriendMsg(),
 	}
 
 	var resp message.Response[message.Message]
@@ -306,10 +306,10 @@ func (n *napcatHttpAdapter) SendPokeMsg(userId uint, groupId *uint) {
 	}
 }
 
-func (n *napcatHttpAdapter) SendGroupForwardMsg(groupId uint, chain msgchain.ForwardChain) (msgId uint, success bool) {
+func (n *napcatHttpAdapter) SendGroupForwardMsg(groupId uint, chain msgchain.GroupForwardChain) (msgId uint, success bool) {
 	data := message.GroupForwardMessage{}
 	data.GroupId = groupId
-	data.ForwardMessage = chain.GetMsg()
+	data.ForwardMessage = chain.GetGroupForwardMsg()
 	var resp message.Response[message.Message]
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
 	defer cancel()
@@ -325,10 +325,10 @@ func (n *napcatHttpAdapter) SendGroupForwardMsg(groupId uint, chain msgchain.For
 	}
 }
 
-func (n *napcatHttpAdapter) SendFriendForwardMsg(userId uint, chain msgchain.ForwardChain) (msgId uint, success bool) {
+func (n *napcatHttpAdapter) SendFriendForwardMsg(userId uint, chain msgchain.FriendForwardChain) (msgId uint, success bool) {
 	data := message.FriendForwardMessage{}
 	data.UserId = userId
-	data.ForwardMessage = chain.GetMsg()
+	data.ForwardMessage = chain.GetFriendForwardMsg()
 	var resp message.Response[message.Message]
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
 	defer cancel()
