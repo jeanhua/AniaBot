@@ -8,6 +8,7 @@ import (
 	"github.com/jeanhua/AniaBot/ania/plugins/pluginlog"
 	"github.com/jeanhua/AniaBot/ania/plugins/pluginnews"
 	"github.com/jeanhua/AniaBot/ania/plugins/pluginrepeat"
+	"github.com/jeanhua/AniaBot/custom/plugins/douyinparser"
 )
 
 func main() {
@@ -20,6 +21,9 @@ func main() {
 	bot.AddPlugin(pluginantiwithdrawal.NewPlugin())
 	bot.AddPlugin(pluginaichat.NewAIChatPlugin())
 	bot.AddPlugin(pluginnews.NewNewsPlugin())
+
+	// 自定义插件
+	bot.AddPlugin(douyinparser.Newplugin())
 
 	bot.Run()
 }
