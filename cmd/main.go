@@ -8,6 +8,7 @@ import (
 	"github.com/jeanhua/AniaBot/ania/plugins/pluginlog"
 	"github.com/jeanhua/AniaBot/ania/plugins/pluginnews"
 	"github.com/jeanhua/AniaBot/ania/plugins/pluginrepeat"
+	"github.com/jeanhua/AniaBot/custom/plugins/acgwallpaper"
 	"github.com/jeanhua/AniaBot/custom/plugins/douyinparser"
 )
 
@@ -24,6 +25,7 @@ func main() {
 
 	// 自定义插件
 	bot.AddPlugin(douyinparser.Newplugin())
+	bot.AddPlugin(acgwallpaper.NewAcgWallpaperPlugin(5))
 
 	bot.Run()
 }
