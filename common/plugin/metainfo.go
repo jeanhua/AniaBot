@@ -19,12 +19,12 @@ func (p *Meta) GetMeta() *Meta {
 }
 
 // OnGroupMsg 收到群聊消息触发事件
-func (p *Meta) OnGroupMsg(bot.Bot, *command.Command, message.Message) bool {
+func (p *Meta) OnGroupMsg(bot bot.Bot, cmd *command.Command, msg message.Message) bool {
 	return true
 }
 
 // OnFriendMsg 收到私聊消息触发事件
-func (p *Meta) OnFriendMsg(bot.Bot, *command.Command, message.Message) bool {
+func (p *Meta) OnFriendMsg(bot bot.Bot, cmd *command.Command, msg message.Message) bool {
 	return true
 }
 
