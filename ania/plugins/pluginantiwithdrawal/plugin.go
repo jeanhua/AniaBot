@@ -49,7 +49,7 @@ func (p *AntiWithdrawalPlugin) OnGroupMsg(bot bot.Bot, cmd *command.Command, msg
 			bot.SendGroupMsg(msg.GroupId, builder.Build())
 			return false
 		}
-		fbuilder := msgchain.Builder.Forward()
+		fbuilder := msgchain.Builder.GroupForward()
 		ncrkey, existRkey := bot.GetNCrkey()
 		for _, m := range cachemsg {
 			_builder := msgchain.Builder.Group()
@@ -183,10 +183,10 @@ func (p *AntiWithdrawalPlugin) OnFriendMsg(bot bot.Bot, cmd *command.Command, ms
 				bot.SendFriendMsg(msg.Sender.UserId, builder.Build())
 				return false
 			}
-			fbuilder := msgchain.Builder.Forward()
+			fbuilder := msgchain.Builder.FriendForward()
 			ncrkey, existRkey := bot.GetNCrkey()
 			for _, m := range cachemsg {
-				_builder := msgchain.Builder.Group()
+				_builder := msgchain.Builder.Friend()
 				for i, seg := range m.Message {
 					switch seg.Type {
 					case "text", "face", "at", "reply", "json", "music":

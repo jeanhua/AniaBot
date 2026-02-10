@@ -11,13 +11,13 @@ type Bot interface {
 
 type botOuterItf interface {
 	// SendGroupMsg 发送群聊消息
-	SendGroupMsg(groupId uint, chain msgchain.Chain) (msgId uint, success bool)
+	SendGroupMsg(groupId uint, chain msgchain.GroupChain) (msgId uint, success bool)
 
 	// SendGroupAIVoiceMsg 发送群聊AI语音消息
 	SendGroupAIVoiceMsg(groupId uint, character, msg string) (msgId uint, success bool)
 
 	// SendFriendMsg 发送私聊消息
-	SendFriendMsg(userId uint, chain msgchain.Chain) (msgId uint, success bool)
+	SendFriendMsg(userId uint, chain msgchain.FriendChain) (msgId uint, success bool)
 
 	// SendPokeMsg 发送戳一戳消息
 	SendPokeMsg(userId uint, groupId *uint)
@@ -26,10 +26,10 @@ type botOuterItf interface {
 	GetMsgDetail(msgId uint) (msg *message.Message, success bool)
 
 	// SendGroupForwardMsg 发送群聊合并转发消息
-	SendGroupForwardMsg(groupId uint, chain msgchain.ForwardChain) (msgId uint, success bool)
+	SendGroupForwardMsg(groupId uint, chain msgchain.GroupForwardChain) (msgId uint, success bool)
 
 	// SendFriendForwardMsg 发送私聊合并转发消息
-	SendFriendForwardMsg(userId uint, chain msgchain.ForwardChain) (msgId uint, success bool)
+	SendFriendForwardMsg(userId uint, chain msgchain.FriendForwardChain) (msgId uint, success bool)
 
 	// GetForwardMsg 获取合并转发消息详情
 	GetForwardMsg(msgId string) (msgs *[]message.Message, success bool)
