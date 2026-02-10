@@ -145,9 +145,11 @@ func (s OB11Segment) FriendlyText(optFunc ...MsgOptFunc) (text string) {
 					var str strings.Builder
 					for _, m := range msg.Message {
 						str.WriteString(m.FriendlyText(
-							WithGetImageOCRFunc(msgFuncs.getImageOCRFunc),
-							// napcat有问题，不能解析嵌套的合并转发消息，https://github.com/NapNeko/NapCatQQ/issues/1278
-							// WithGetForwardMsgFunc(msgFuncs.getForwardMsgFunc),
+						// 图片太多容易超时，不解析了
+						// WithGetImageOCRFunc(msgFuncs.getImageOCRFunc),
+
+						// napcat有问题，不能解析嵌套的合并转发消息，https://github.com/NapNeko/NapCatQQ/issues/1278
+						// WithGetForwardMsgFunc(msgFuncs.getForwardMsgFunc),
 						))
 					}
 					builder.WriteString(fmt.Sprintf("\n[nickname: %s id: %d]: %s\n", nickname, msg.Sender.UserId, str.String()))
