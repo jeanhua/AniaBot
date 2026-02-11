@@ -227,7 +227,7 @@ func NewPlugin() *HelloPlugin {
 // 处理群聊消息
 func (p *HelloPlugin) OnGroupMsg(bot bot.Bot, cmd *command.Command, msg message.Message) bool {
     if cmd != nil && cmd.Name == "hello" {
-        builder := msgchain.Builder.Group()
+        builder := msgchain.Builder().Group()
         builder.Text("你好！我是 AniaBot，很高兴为你服务！")
         bot.SendGroupMsg(msg.GroupId, builder.Build())
         return false // 阻止后续插件执行
@@ -263,9 +263,9 @@ func main() {
 
 ```go
 // 创建群聊消息构造器
-builder := msgchain.Builder.Group()
+builder := msgchain.Builder().Group()
 // 创建好友消息构造器
-builder := msgchain.Builder.Friend()
+builder := msgchain.Builder().Friend()
 
 // 添加文本消息
 builder.Text("这是一条文本消息")
@@ -407,7 +407,7 @@ func (p *WeatherPlugin) Start(cfg *viper.Viper) {
 func (p *WeatherPlugin) OnGroupMsg(bot bot.Bot, cmd *command.Command, msg message.Message) bool {
     if cmd != nil && cmd.Name == "weather" {
         if len(cmd.Args) == 0 {
-            builder := msgchain.Builder.Group()
+            builder := msgchain.Builder().Group()
             builder.Text("请指定城市名称，例如：/weather 北京")
             bot.SendGroupMsg(msg.GroupId, builder.Build())
             return false
@@ -416,7 +416,7 @@ func (p *WeatherPlugin) OnGroupMsg(bot bot.Bot, cmd *command.Command, msg messag
         city := cmd.Args[0]
         weatherInfo := p.queryWeather(city)
         
-        builder := msgchain.Builder.Group()
+        builder := msgchain.Builder().Group()
         builder.Text(fmt.Sprintf("%s的天气：%s", city, weatherInfo))
         bot.SendGroupMsg(msg.GroupId, builder.Build())
         
