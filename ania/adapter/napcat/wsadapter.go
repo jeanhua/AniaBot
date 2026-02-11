@@ -275,7 +275,7 @@ func (n *napcatWebSocketAdapter) SendGroupForwardMsg(groupId uint, chain msgchai
 		Action: "send_forward_msg",
 		Params: message.GroupForwardMessage{
 			GroupId:        groupId,
-			ForwardMessage: chain.GetGroupForwardMsg(),
+			ForwardMessage: chain.GetForwardMsg(),
 		},
 		Echo: messageID,
 	}
@@ -316,7 +316,7 @@ func (n *napcatWebSocketAdapter) SendFriendForwardMsg(userId uint, chain msgchai
 		Action: "send_forward_msg",
 		Params: message.FriendForwardMessage{
 			UserId:         userId,
-			ForwardMessage: chain.GetFriendForwardMsg(),
+			ForwardMessage: chain.GetForwardMsg(),
 		},
 		Echo: messageID,
 	}
