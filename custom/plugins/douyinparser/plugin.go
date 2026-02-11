@@ -38,7 +38,7 @@ func (p *DouyinParser) OnGroupMsg(bot bot.Bot, cmd *command.Command, msg message
 		text, _ := utils.ExtraMessageStr(msg)
 		link, err := p.extractDouyinLink(text)
 		if err != nil {
-			builder := msgchain.Builder.Group()
+			builder := msgchain.Builder().Group()
 			builder.Mention(msg.Sender.UserId)
 			builder.Text(" 无法从分享的内容提取出抖音链接，请重新检查试试哦")
 			bot.SendGroupMsg(msg.GroupId, builder.Build())
@@ -47,14 +47,14 @@ func (p *DouyinParser) OnGroupMsg(bot bot.Bot, cmd *command.Command, msg message
 
 		result, err := getResourse(link)
 		if err != nil {
-			builder := msgchain.Builder.Group()
+			builder := msgchain.Builder().Group()
 			builder.Mention(msg.Sender.UserId)
 			builder.Text(" 无法解析，请稍后再试")
 			bot.SendGroupMsg(msg.GroupId, builder.Build())
 			return false
 		}
 
-		builder := msgchain.Builder.Group()
+		builder := msgchain.Builder().Group()
 		builder.Mention(msg.Sender.UserId)
 		builder.Text(fmt.Sprintf(" 解析成功\n博主: %s\n描述: %s\n视频直链: %s",
 			result.Data.Nickname,
@@ -73,7 +73,7 @@ func (p *DouyinParser) OnFriendMsg(bot bot.Bot, cmd *command.Command, msg messag
 		text, _ := utils.ExtraMessageStr(msg)
 		link, err := p.extractDouyinLink(text)
 		if err != nil {
-			builder := msgchain.Builder.Friend()
+			builder := msgchain.Builder().Friend()
 			builder.Text(" 无法从分享的内容提取出抖音链接，请重新检查试试哦")
 			bot.SendFriendMsg(msg.Sender.UserId, builder.Build())
 			return false
@@ -81,13 +81,13 @@ func (p *DouyinParser) OnFriendMsg(bot bot.Bot, cmd *command.Command, msg messag
 
 		result, err := getResourse(link)
 		if err != nil {
-			builder := msgchain.Builder.Friend()
+			builder := msgchain.Builder().Friend()
 			builder.Text(" 无法解析，请稍后再试")
 			bot.SendFriendMsg(msg.Sender.UserId, builder.Build())
 			return false
 		}
 
-		builder := msgchain.Builder.Friend()
+		builder := msgchain.Builder().Friend()
 		builder.Text(fmt.Sprintf("解析成功\n博主: %s\n描述: %s\n视频直链: %s",
 			result.Data.Nickname,
 			result.Data.Desc,

@@ -35,7 +35,7 @@ func (p *AcgWallpaperPlugin) OnGroupMsg(bot bot.Bot, cmd *command.Command, msg m
 		select {
 		case p.pendding <- work{target: TargetGroup, userId: msg.Sender.UserId, groupId: msg.GroupId}:
 		default:
-			builder := msgchain.Builder.Group()
+			builder := msgchain.Builder().Group()
 			builder.Reply(msg.MessageId)
 			builder.Mention(msg.Sender.UserId)
 			builder.Text(" 任务队列满出来了，等待会再来问我要壁纸哦")
@@ -51,7 +51,7 @@ func (p *AcgWallpaperPlugin) OnFriendMsg(bot bot.Bot, cmd *command.Command, msg 
 		select {
 		case p.pendding <- work{target: TargetFriend, userId: msg.Sender.UserId, groupId: 0}:
 		default:
-			builder := msgchain.Builder.Friend()
+			builder := msgchain.Builder().Friend()
 			builder.Text("任务队列满出来了，等待会再来问我要壁纸哦")
 			bot.SendFriendMsg(msg.Sender.UserId, builder.Build())
 		}
@@ -65,7 +65,7 @@ func (p *AcgWallpaperPlugin) workFunc(bot bot.Bot) {
 		w := <-p.pendding
 		switch w.target {
 		case TargetFriend:
-			builder := msgchain.Builder.Friend()
+			builder := msgchain.Builder().Friend()
 			builder.ImageUrl("https://api.yppp.net/api.php")
 			if _, ok := bot.SendFriendMsg(w.userId, builder.Build()); ok {
 				log.Printf("[发->好友:%d]:[二次元壁纸]\n", w.userId)
@@ -73,7 +73,7 @@ func (p *AcgWallpaperPlugin) workFunc(bot bot.Bot) {
 				log.Printf("[发->好友:%d]:[二次元壁纸] 发送失败!!!\n", w.userId)
 			}
 		case TargetGroup:
-			builder := msgchain.Builder.Group()
+			builder := msgchain.Builder().Group()
 			builder.Mention(w.userId)
 			builder.ImageUrl("https://api.yppp.net/api.php")
 			if _, ok := bot.SendGroupMsg(w.groupId, builder.Build()); ok {
