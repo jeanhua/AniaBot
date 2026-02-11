@@ -31,11 +31,11 @@ type GroupChain interface {
 }
 
 type GroupForwardChain interface {
-	GetGroupForwardMsg() message.ForwardMessage
+	GetForwardMsg() message.ForwardMessage
 }
 
 type FriendForwardChain interface {
-	GetFriendForwardMsg() message.ForwardMessage
+	GetForwardMsg() message.ForwardMessage
 }
 type commonMsgBuilder interface {
 	// Text 添加文本消息

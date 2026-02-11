@@ -96,11 +96,11 @@ func (fc *groupForwardChainBuilder) Build() GroupForwardChain {
 	return fc
 }
 
-func (fc *friendForwardChainBuilder) GetFriendForwardMsg() message.ForwardMessage {
+func (fc *friendForwardChainBuilder) GetForwardMsg() message.ForwardMessage {
 	return fc.message
 }
 
-func (fc *groupForwardChainBuilder) GetGroupForwardMsg() message.ForwardMessage {
+func (fc *groupForwardChainBuilder) GetForwardMsg() message.ForwardMessage {
 	return fc.message
 }
 
