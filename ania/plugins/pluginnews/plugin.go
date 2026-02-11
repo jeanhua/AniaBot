@@ -46,7 +46,7 @@ func (p *NewsPlugin) Start(cfg *viper.Viper) {
 func (p *NewsPlugin) StartCron(bot bot.Bot, c plugin.CronManager) {
 	c.AddFunc(p.cronExpress, func() {
 		for _, group := range p.groups {
-			builder := msgchain.Builder.Group()
+			builder := msgchain.Builder().Group()
 			builder.ImageUrl(p.api)
 			_, ok := bot.SendGroupMsg(group, builder.Build())
 			if ok {
@@ -60,7 +60,7 @@ func (p *NewsPlugin) StartCron(bot bot.Bot, c plugin.CronManager) {
 
 func (p *NewsPlugin) OnGroupMsg(bot bot.Bot, cmd *command.Command, msg message.Message) bool {
 	if cmd != nil && cmd.Mention && cmd.Name == "news" {
-		builder := msgchain.Builder.Group()
+		builder := msgchain.Builder().Group()
 		builder.ImageUrl(p.api)
 		_, ok := bot.SendGroupMsg(msg.GroupId, builder.Build())
 		if ok {

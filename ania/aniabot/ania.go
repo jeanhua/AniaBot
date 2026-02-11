@@ -125,7 +125,7 @@ func (ania *AniaBot) onGroupEvent(msg message.Message) {
 			pluginInfo.WriteString(fmt.Sprintf("\n%d. %s: %s", idx, pName, pHelpWords))
 			idx += 1
 		}
-		c := msgchain.Builder.Group()
+		c := msgchain.Builder().Group()
 		c.Mention(msg.Sender.UserId)
 		c.Text(pluginInfo.String())
 		_, ok := ania.SendGroupMsg(msg.GroupId, c.Build())
@@ -169,7 +169,7 @@ func (ania *AniaBot) onFriendEvent(msg message.Message) {
 			pluginInfo.WriteString(fmt.Sprintf("\n%d. %s: %s", idx, pName, pHelpWords))
 			idx += 1
 		}
-		c := msgchain.Builder.Friend()
+		c := msgchain.Builder().Friend()
 		c.Text(pluginInfo.String())
 		_, ok := ania.SendFriendMsg(msg.Sender.UserId, c.Build())
 		if !ok {

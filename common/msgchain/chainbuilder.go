@@ -3,14 +3,45 @@ package msgchain
 import "github.com/jeanhua/AniaBot/common/model/message"
 
 type GroupChainBuilder interface {
-	commonMsgBuilder
-	// Mention 在群里AT某人
-	Mention(userId uint)
+	Text(text string) GroupChainBuilder
+	Face(faceId uint) GroupChainBuilder
+	ImageUrl(url string) GroupChainBuilder
+	ImageBase64(bs64code string) GroupChainBuilder
+	ImageLocal(path string) GroupChainBuilder
+	VideoUrl(url string) GroupChainBuilder
+	VideoLocal(path string) GroupChainBuilder
+	VideoBase64(bs64code string) GroupChainBuilder
+	FileUrl(name, url string) GroupChainBuilder
+	FileLocal(name, path string) GroupChainBuilder
+	FileBase64(name, bs64code string) GroupChainBuilder
+	Reply(msgId uint) GroupChainBuilder
+	RecordUrl(url string) GroupChainBuilder
+	RecordLocal(path string) GroupChainBuilder
+	RecordBase64(bs64code string) GroupChainBuilder
+	Raw(rawMsg ...message.OB11Segment) GroupChainBuilder
+
+	Mention(userId uint) GroupChainBuilder
 	Build() GroupChain
 }
 
 type FriendChainBuilder interface {
-	commonMsgBuilder
+	Text(text string) FriendChainBuilder
+	Face(faceId uint) FriendChainBuilder
+	ImageUrl(url string) FriendChainBuilder
+	ImageBase64(bs64code string) FriendChainBuilder
+	ImageLocal(path string) FriendChainBuilder
+	VideoUrl(url string) FriendChainBuilder
+	VideoLocal(path string) FriendChainBuilder
+	VideoBase64(bs64code string) FriendChainBuilder
+	FileUrl(name, url string) FriendChainBuilder
+	FileLocal(name, path string) FriendChainBuilder
+	FileBase64(name, bs64code string) FriendChainBuilder
+	Reply(msgId uint) FriendChainBuilder
+	RecordUrl(url string) FriendChainBuilder
+	RecordLocal(path string) FriendChainBuilder
+	RecordBase64(bs64code string) FriendChainBuilder
+	Raw(rawMsg ...message.OB11Segment) FriendChainBuilder
+
 	Build() FriendChain
 }
 
@@ -36,38 +67,4 @@ type GroupForwardChain interface {
 
 type FriendForwardChain interface {
 	GetForwardMsg() message.ForwardMessage
-}
-type commonMsgBuilder interface {
-	// Text 添加文本消息
-	Text(text string)
-	// Face 添加QQ表情，参考 https://bot.q.qq.com/wiki/develop/api-v2/openapi/emoji/model.html#EmojiType
-	Face(faceId uint)
-	// ImageUrl 添加图片消息
-	ImageUrl(url string)
-	// ImageBase64 添加图片消息
-	ImageBase64(bs64code string)
-	// ImageLocal 添加图片消息，`path`为对adapter(如napcat)的相对路径
-	ImageLocal(path string)
-	// VideoUrl 添加视频消息
-	VideoUrl(url string)
-	// VideoLocal 添加视频消息，`path`为对adapter(如napcat)的相对路径
-	VideoLocal(path string)
-	// VideoBase64 添加视频消息
-	VideoBase64(bs64code string)
-	// FileUrl 添加文件消息
-	FileUrl(name, url string)
-	// FileLocal 添加文件消息，`path`为对adapter(如napcat)的相对路径
-	FileLocal(name, path string)
-	// FileBase64 添加文件消息
-	FileBase64(name, bs64code string)
-	// Reply 回复消息
-	Reply(msgId uint)
-	// RecordUrl 添加语音消息
-	RecordUrl(url string)
-	// RecordLocal 添加语音消息，`path`为对adapter(如napcat)的相对路径
-	RecordLocal(path string)
-	// RecordeBase64 添加语音消息
-	RecordeBase64(bs64code string)
-	// Raw 添加OB11Segment裸消息
-	Raw(rawMsg ...message.OB11Segment)
 }

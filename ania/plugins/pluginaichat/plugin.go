@@ -96,7 +96,7 @@ func (p *AIChatPlugin) OnGroupMsg(bot bot.Bot, cmd *command.Command, msg message
 		return true
 	}
 	if !p.lock(msg.GroupId) {
-		builder := msgchain.Builder.Group()
+		builder := msgchain.Builder().Group()
 		builder.Text("正在等待响应中，不要着急哦~")
 		bot.SendGroupMsg(msg.GroupId, builder.Build())
 		return true
@@ -104,13 +104,13 @@ func (p *AIChatPlugin) OnGroupMsg(bot bot.Bot, cmd *command.Command, msg message
 	defer p.unLock(msg.GroupId)
 	chat := p.getChat(msg.GroupId)
 	if chat == nil {
-		builder := msgchain.Builder.Group()
+		builder := msgchain.Builder().Group()
 		builder.Text("无法创建对话，请检查日志信息哦")
 		bot.SendGroupMsg(msg.GroupId, builder.Build())
 		return true
 	}
 
-	builder := msgchain.Builder.Group()
+	builder := msgchain.Builder().Group()
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute*3)
 	defer cancel()
 	extraText := extraMsg(ctx, bot, msg, p.ocrModel)
@@ -126,7 +126,7 @@ func (p *AIChatPlugin) OnGroupMsg(bot bot.Bot, cmd *command.Command, msg message
 
 	msgFuncs := functool.OptionFuncs{
 		SendText: func(s string) bool {
-			builder := msgchain.Builder.Group()
+			builder := msgchain.Builder().Group()
 			builder.Mention(msg.Sender.UserId)
 			builder.Text(" " + s)
 			_, success := bot.SendGroupMsg(msg.GroupId, builder.Build())
@@ -136,7 +136,7 @@ func (p *AIChatPlugin) OnGroupMsg(bot bot.Bot, cmd *command.Command, msg message
 			return success
 		},
 		SendImage: func(url string) bool {
-			builder := msgchain.Builder.Group()
+			builder := msgchain.Builder().Group()
 			builder.ImageUrl(url)
 			_, success := bot.SendGroupMsg(msg.GroupId, builder.Build())
 			if success {
@@ -179,7 +179,7 @@ func (p *AIChatPlugin) OnGroupMsg(bot bot.Bot, cmd *command.Command, msg message
 
 func (p *AIChatPlugin) OnFriendMsg(bot bot.Bot, cmd *command.Command, msg message.Message) bool {
 	if !p.lock(msg.Sender.UserId) {
-		builder := msgchain.Builder.Friend()
+		builder := msgchain.Builder().Friend()
 		builder.Text("正在等待响应中，不要着急哦~")
 		bot.SendFriendMsg(msg.Sender.UserId, builder.Build())
 		return true
@@ -188,13 +188,13 @@ func (p *AIChatPlugin) OnFriendMsg(bot bot.Bot, cmd *command.Command, msg messag
 
 	chat := p.getChat(msg.Sender.UserId)
 	if chat == nil {
-		builder := msgchain.Builder.Friend()
+		builder := msgchain.Builder().Friend()
 		builder.Text("无法创建对话，请检查日志信息哦")
 		bot.SendFriendMsg(msg.Sender.UserId, builder.Build())
 		return true
 	}
 
-	builder := msgchain.Builder.Friend()
+	builder := msgchain.Builder().Friend()
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute*3)
 	defer cancel()
 	extraText := extraMsg(ctx, bot, msg, p.ocrModel)
@@ -210,7 +210,7 @@ func (p *AIChatPlugin) OnFriendMsg(bot bot.Bot, cmd *command.Command, msg messag
 
 	msgFuncs := functool.OptionFuncs{
 		SendText: func(s string) bool {
-			builder := msgchain.Builder.Friend()
+			builder := msgchain.Builder().Friend()
 			builder.Text(s)
 			_, success := bot.SendFriendMsg(msg.Sender.UserId, builder.Build())
 			if success {
@@ -219,7 +219,7 @@ func (p *AIChatPlugin) OnFriendMsg(bot bot.Bot, cmd *command.Command, msg messag
 			return success
 		},
 		SendImage: func(url string) bool {
-			builder := msgchain.Builder.Friend()
+			builder := msgchain.Builder().Friend()
 			builder.ImageUrl(url)
 			_, success := bot.SendFriendMsg(msg.Sender.UserId, builder.Build())
 			if success {

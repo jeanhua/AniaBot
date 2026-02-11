@@ -43,16 +43,16 @@ func (p *AntiWithdrawalPlugin) OnGroupMsg(bot bot.Bot, cmd *command.Command, msg
 		}
 		cachemsg := queue.Get(n)
 		if len(cachemsg) == 0 {
-			builder := msgchain.Builder.Group()
+			builder := msgchain.Builder().Group()
 			builder.Text("暂时没有保存到什么消息哦，请稍后再试")
 			builder.Face(14)
 			bot.SendGroupMsg(msg.GroupId, builder.Build())
 			return false
 		}
-		fbuilder := msgchain.Builder.GroupForward()
+		fbuilder := msgchain.Builder().GroupForward()
 		ncrkey, existRkey := bot.GetNCrkey()
 		for _, m := range cachemsg {
-			_builder := msgchain.Builder.Group()
+			_builder := msgchain.Builder().Group()
 			for i, seg := range m.Message {
 				switch seg.Type {
 				case "text", "face", "at", "reply", "json", "music":
@@ -122,7 +122,7 @@ func (p *AntiWithdrawalPlugin) OnGroupMsg(bot bot.Bot, cmd *command.Command, msg
 		}
 		_, success := bot.SendGroupForwardMsg(msg.GroupId, fbuilder.Build())
 		if !success {
-			builder := msgchain.Builder.Group()
+			builder := msgchain.Builder().Group()
 			builder.Text("无法获取消息列表")
 			bot.SendGroupMsg(msg.GroupId, builder.Build())
 			log.Println("[群聊防撤回插件]: 无法转发消息")
@@ -148,7 +148,7 @@ func (p *AntiWithdrawalPlugin) Start(cfg *viper.Viper) {
 func (p *AntiWithdrawalPlugin) OnFriendMsg(bot bot.Bot, cmd *command.Command, msg message.Message) bool {
 	if cmd != nil && cmd.Name == "explore" && msg.Sender.UserId == p.adminId {
 		if len(cmd.Args) == 0 {
-			builder := msgchain.Builder.Friend()
+			builder := msgchain.Builder().Friend()
 			builder.Text("请输入完整参数 /explore [Group ID] [count]")
 			bot.SendFriendMsg(msg.Sender.UserId, builder.Build())
 			return false
@@ -156,7 +156,7 @@ func (p *AntiWithdrawalPlugin) OnFriendMsg(bot bot.Bot, cmd *command.Command, ms
 			n := 50
 			Gid, err := strconv.Atoi(cmd.Args[0])
 			if err != nil {
-				builder := msgchain.Builder.Friend()
+				builder := msgchain.Builder().Friend()
 				builder.Text("请输入正确参数:Group ID, 语法: /explore [Group ID] [count](option)")
 				bot.SendFriendMsg(msg.Sender.UserId, builder.Build())
 				return false
@@ -169,7 +169,7 @@ func (p *AntiWithdrawalPlugin) OnFriendMsg(bot bot.Bot, cmd *command.Command, ms
 			}
 			queueI, ok := p.msg.Load(uint(Gid))
 			if !ok {
-				builder := msgchain.Builder.Friend()
+				builder := msgchain.Builder().Friend()
 				builder.Text("请输入正确参数:Group ID Error, 语法: /explore [Group ID] [count](option)")
 				bot.SendFriendMsg(msg.Sender.UserId, builder.Build())
 				return false
@@ -177,16 +177,16 @@ func (p *AntiWithdrawalPlugin) OnFriendMsg(bot bot.Bot, cmd *command.Command, ms
 			queue := queueI.(*MessageQueue[*message.Message])
 			cachemsg := queue.Get(n)
 			if len(cachemsg) == 0 {
-				builder := msgchain.Builder.Friend()
+				builder := msgchain.Builder().Friend()
 				builder.Text("暂时没有保存到什么消息哦，请稍后再试")
 				builder.Face(14)
 				bot.SendFriendMsg(msg.Sender.UserId, builder.Build())
 				return false
 			}
-			fbuilder := msgchain.Builder.FriendForward()
+			fbuilder := msgchain.Builder().FriendForward()
 			ncrkey, existRkey := bot.GetNCrkey()
 			for _, m := range cachemsg {
-				_builder := msgchain.Builder.Friend()
+				_builder := msgchain.Builder().Friend()
 				for i, seg := range m.Message {
 					switch seg.Type {
 					case "text", "face", "at", "reply", "json", "music":
@@ -256,7 +256,7 @@ func (p *AntiWithdrawalPlugin) OnFriendMsg(bot bot.Bot, cmd *command.Command, ms
 			}
 			_, success := bot.SendFriendForwardMsg(msg.Sender.UserId, fbuilder.Build())
 			if !success {
-				builder := msgchain.Builder.Friend()
+				builder := msgchain.Builder().Friend()
 				builder.Text("无法获取消息列表")
 				bot.SendFriendMsg(msg.Sender.UserId, builder.Build())
 				log.Println("[群聊防撤回插件]: 无法转发消息")
