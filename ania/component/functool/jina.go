@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log"
 
 	"github.com/go-resty/resty/v2"
@@ -65,6 +66,9 @@ func search(ctx context.Context, token string, params webSearchParam) (string, e
 	}
 	modifier.SetQuery("q", params.Query)
 	modifier.SetQuery("gl", "CN")
+	if params.Page != nil {
+		modifier.SetQuery("page", fmt.Sprintf("%d", *params.Page))
+	}
 
 	client := resty.New()
 	resp, err := client.R().
