@@ -33,8 +33,8 @@ func (p *DouyinParser) Start(cfg *viper.Viper) {
 	p.re = regexp.MustCompile(`https://v\.douyin\.com/[a-zA-Z0-9\-_]+(?:/|\b)`)
 }
 
-func (p *DouyinParser) OnGroupMsg(bot bot.Bot, cmd *command.Command, msg message.Message) bool {
-	if cmd != nil && cmd.Mention && cmd.Name == "douyin" {
+func (p *DouyinParser) OnGroupMsg(bot bot.Bot, cmd command.Command, msg message.Message) bool {
+	if cmd.Mention && cmd.Name == "douyin" {
 		text, _ := utils.ExtraMessageStr(msg)
 		link, err := p.extractDouyinLink(text)
 		if err != nil {
@@ -68,8 +68,8 @@ func (p *DouyinParser) OnGroupMsg(bot bot.Bot, cmd *command.Command, msg message
 	return true
 }
 
-func (p *DouyinParser) OnFriendMsg(bot bot.Bot, cmd *command.Command, msg message.Message) bool {
-	if cmd != nil && cmd.Name == "douyin" {
+func (p *DouyinParser) OnFriendMsg(bot bot.Bot, cmd command.Command, msg message.Message) bool {
+	if cmd.Name == "douyin" {
 		text, _ := utils.ExtraMessageStr(msg)
 		link, err := p.extractDouyinLink(text)
 		if err != nil {

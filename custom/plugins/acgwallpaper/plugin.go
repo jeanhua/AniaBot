@@ -30,8 +30,8 @@ func (p *AcgWallpaperPlugin) StartCron(bot bot.Bot, c plugin.CronManager) {
 	go p.workFunc(bot)
 }
 
-func (p *AcgWallpaperPlugin) OnGroupMsg(bot bot.Bot, cmd *command.Command, msg message.Message) bool {
-	if cmd != nil && cmd.Mention && cmd.Name == "acg" {
+func (p *AcgWallpaperPlugin) OnGroupMsg(bot bot.Bot, cmd command.Command, msg message.Message) bool {
+	if cmd.Mention && cmd.Name == "acg" {
 		select {
 		case p.pendding <- work{target: TargetGroup, userId: msg.Sender.UserId, groupId: msg.GroupId}:
 		default:
@@ -46,8 +46,8 @@ func (p *AcgWallpaperPlugin) OnGroupMsg(bot bot.Bot, cmd *command.Command, msg m
 	return true
 }
 
-func (p *AcgWallpaperPlugin) OnFriendMsg(bot bot.Bot, cmd *command.Command, msg message.Message) bool {
-	if cmd != nil && cmd.Name == "acg" {
+func (p *AcgWallpaperPlugin) OnFriendMsg(bot bot.Bot, cmd command.Command, msg message.Message) bool {
+	if cmd.Name == "acg" {
 		select {
 		case p.pendding <- work{target: TargetFriend, userId: msg.Sender.UserId, groupId: 0}:
 		default:
