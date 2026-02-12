@@ -17,12 +17,13 @@ type Plugin interface {
 
 type BasicEvent interface {
 	// OnGroupMsg 收到群聊消息触发事件
-	OnGroupMsg(bot.Bot, *command.Command, message.Message) bool
+	OnGroupMsg(bot.Bot, command.Command, message.Message) bool
 	// OnFriendMsg 收到私聊消息触发事件
-	OnFriendMsg(bot.Bot, *command.Command, message.Message) bool
+	OnFriendMsg(bot.Bot, command.Command, message.Message) bool
 }
 
 type CronManager interface {
+	// AddFunc 添加定时任务
 	AddFunc(spec string, cmd func()) (cron.EntryID, error)
 }
 

@@ -11,7 +11,6 @@ import (
 
 	"github.com/jeanhua/AniaBot/ania/component"
 	"github.com/jeanhua/AniaBot/ania/component/functool"
-	"github.com/jeanhua/AniaBot/ania/utils"
 	"github.com/jeanhua/AniaBot/common/bot"
 	"github.com/jeanhua/AniaBot/common/model/command"
 	"github.com/jeanhua/AniaBot/common/model/message"
@@ -91,8 +90,8 @@ func (p *AIChatPlugin) getChat(id uint) *component.ChatBot {
 	return chat.(*component.ChatBot)
 }
 
-func (p *AIChatPlugin) OnGroupMsg(bot bot.Bot, cmd *command.Command, msg message.Message) bool {
-	if !utils.HasMention(msg) {
+func (p *AIChatPlugin) OnGroupMsg(bot bot.Bot, cmd command.Command, msg message.Message) bool {
+	if !cmd.Mention {
 		return true
 	}
 	if !p.lock(msg.GroupId) {
@@ -177,7 +176,7 @@ func (p *AIChatPlugin) OnGroupMsg(bot bot.Bot, cmd *command.Command, msg message
 	return true
 }
 
-func (p *AIChatPlugin) OnFriendMsg(bot bot.Bot, cmd *command.Command, msg message.Message) bool {
+func (p *AIChatPlugin) OnFriendMsg(bot bot.Bot, cmd command.Command, msg message.Message) bool {
 	if !p.lock(msg.Sender.UserId) {
 		builder := msgchain.Builder().Friend()
 		builder.Text("正在等待响应中，不要着急哦~")

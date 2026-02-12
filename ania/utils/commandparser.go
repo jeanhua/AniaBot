@@ -7,26 +7,26 @@ import (
 	"github.com/jeanhua/AniaBot/common/model/message"
 )
 
-func ParseCommand(msg message.Message) *command.Command {
+func ParseCommand(msg message.Message) command.Command {
 	input, mention := ExtraMessageStr(msg)
 	if input == "" {
-		return nil
+		return command.Command{}
 	}
 	if input[0] != '/' {
-		return nil
+		return command.Command{}
 	}
 
 	input = input[1:]
 	if len(input) == 0 {
-		return nil
+		return command.Command{}
 	}
 
 	parts := strings.Fields(input)
 	if len(parts) == 0 {
-		return nil
+		return command.Command{}
 	}
 
-	cmd := &command.Command{
+	cmd := command.Command{
 		Name:    parts[0],
 		Args:    make([]string, 0),
 		Mention: mention,
