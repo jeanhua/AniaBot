@@ -56,10 +56,10 @@ func (p *DouyinParser) OnGroupMsg(bot bot.Bot, cmd command.Command, msg message.
 
 		builder := msgchain.Builder().Group()
 		builder.Mention(msg.Sender.UserId)
-		builder.Text(fmt.Sprintf(" 解析成功\n博主: %s\n描述: %s\n视频直链: %s",
-			result.Data.Nickname,
-			result.Data.Desc,
-			result.Data.VideoUrl,
+		builder.Text(" ").Face(24).Text(fmt.Sprintf("解析成功\n博主: %s\n标题: %s\n视频直链: %s",
+			result.Data.Author,
+			result.Data.Title,
+			result.Data.URL,
 		))
 		bot.SendGroupMsg(msg.GroupId, builder.Build())
 		return false
@@ -88,10 +88,10 @@ func (p *DouyinParser) OnFriendMsg(bot bot.Bot, cmd command.Command, msg message
 		}
 
 		builder := msgchain.Builder().Friend()
-		builder.Text(fmt.Sprintf("解析成功\n博主: %s\n描述: %s\n视频直链: %s",
-			result.Data.Nickname,
-			result.Data.Desc,
-			result.Data.VideoUrl,
+		builder.Face(24).Text(fmt.Sprintf("解析成功\n博主: %s\n标题: %s\n视频直链: %s",
+			result.Data.Author,
+			result.Data.Title,
+			result.Data.URL,
 		))
 		bot.SendFriendMsg(msg.Sender.UserId, builder.Build())
 		return false
@@ -112,7 +112,7 @@ func (p *DouyinParser) extractDouyinLink(text string) (string, error) {
 func getResourse(link string) (*responseTy, error) {
 	client := resty.New()
 	result := responseTy{}
-	modifier, _ := utils.NewURLModifier("https://api.mmp.cc/api/Jiexi")
+	modifier, _ := utils.NewURLModifier("https://api.xhus.cn/api/douyin")
 	modifier.SetQuery("url", link)
 	_, err := client.R().SetResult(&result).Get(modifier.String())
 	if err != nil {
@@ -122,10 +122,23 @@ func getResourse(link string) (*responseTy, error) {
 }
 
 type responseTy struct {
+	Code int    `json:"code"`
+	Msg  string `json:"msg"`
 	Data struct {
-		Type     string `json:"type"`
-		VideoUrl string `json:"video_url"`
-		Nickname string `json:"nickname"`
-		Desc     string `json:"desc"`
+		Author string `json:"author"`
+		UID    int64  `json:"uid"`
+		Avatar string `json:"avatar"`
+		Like   int    `json:"like"`
+		Time   int64  `json:"time"`
+		Title  string `json:"title"`
+		Cover  string `json:"cover"`
+		Images string `json:"images"`
+		URL    string `json:"url"`
+		Music  struct {
+			Title  string `json:"title"`
+			Author string `json:"author"`
+			Avatar string `json:"avatar"`
+			URL    string `json:"url"`
+		} `json:"music"`
 	} `json:"data"`
 }
