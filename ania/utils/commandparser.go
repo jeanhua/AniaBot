@@ -10,20 +10,28 @@ import (
 func ParseCommand(msg message.Message) command.Command {
 	input, mention := ExtraMessageStr(msg)
 	if input == "" {
-		return command.Command{}
+		return command.Command{
+			Mention: mention,
+		}
 	}
 	if input[0] != '/' {
-		return command.Command{}
+		return command.Command{
+			Mention: mention,
+		}
 	}
 
 	input = input[1:]
 	if len(input) == 0 {
-		return command.Command{}
+		return command.Command{
+			Mention: mention,
+		}
 	}
 
 	parts := strings.Fields(input)
 	if len(parts) == 0 {
-		return command.Command{}
+		return command.Command{
+			Mention: mention,
+		}
 	}
 
 	cmd := command.Command{
