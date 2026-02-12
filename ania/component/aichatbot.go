@@ -134,7 +134,7 @@ func (b *ChatBot) Chat(ctx context.Context, userInput string, msgFunc functool.O
 		if i == maxIterations-1 {
 			messages = append(messages, llms.TextParts(
 				llms.ChatMessageTypeSystem,
-				fmt.Sprintf("You have reached the maximum number of tool calls (%d). Please provide a final response based on the information you have gathered so far. Do not make any more tool calls.", maxIterations),
+				"你的Tool Call连续调用已经达到限制，请先基于当前获取结果回答用户问题，如果需要更多Tool Call，请先向用户发送请求，得到用户允许后重新刷新限额",
 			))
 
 			finalCompletion, err := b.llm.GenerateContent(ctx, messages)
