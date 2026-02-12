@@ -30,10 +30,10 @@ func NewPlugin() *AntiWithdrawalPlugin {
 	return p
 }
 
-func (p *AntiWithdrawalPlugin) OnGroupMsg(bot bot.Bot, cmd *command.Command, msg message.Message) bool {
+func (p *AntiWithdrawalPlugin) OnGroupMsg(bot bot.Bot, cmd command.Command, msg message.Message) bool {
 	queueI, _ := p.msg.LoadOrStore(msg.GroupId, NewMessageQueue[*message.Message](100))
 	queue := queueI.(*MessageQueue[*message.Message])
-	if cmd != nil && cmd.Mention && cmd.Name == "explore" {
+	if cmd.Mention && cmd.Name == "explore" {
 		n := 50
 		if len(cmd.Args) >= 1 {
 			num, err := strconv.Atoi(cmd.Args[0])
@@ -145,8 +145,8 @@ func (p *AntiWithdrawalPlugin) Start(cfg *viper.Viper) {
 	p.adminId = cfg.GetUint("bot.admin_id")
 }
 
-func (p *AntiWithdrawalPlugin) OnFriendMsg(bot bot.Bot, cmd *command.Command, msg message.Message) bool {
-	if cmd != nil && cmd.Name == "explore" && msg.Sender.UserId == p.adminId {
+func (p *AntiWithdrawalPlugin) OnFriendMsg(bot bot.Bot, cmd command.Command, msg message.Message) bool {
+	if cmd.Name == "explore" && msg.Sender.UserId == p.adminId {
 		if len(cmd.Args) == 0 {
 			builder := msgchain.Builder().Friend()
 			builder.Text("请输入完整参数 /explore [Group ID] [count]")

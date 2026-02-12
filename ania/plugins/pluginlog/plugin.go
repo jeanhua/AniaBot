@@ -22,7 +22,7 @@ func NewPlugin() *LogPlugin {
 	return p
 }
 
-func (p *LogPlugin) OnGroupMsg(bot bot.Bot, cmd *command.Command, msg message.Message) bool {
+func (p *LogPlugin) OnGroupMsg(bot bot.Bot, cmd command.Command, msg message.Message) bool {
 	str := utils.ExtraMessage(bot, msg)
 	name := msg.Sender.Card
 	if name == "" {
@@ -32,7 +32,7 @@ func (p *LogPlugin) OnGroupMsg(bot bot.Bot, cmd *command.Command, msg message.Me
 	return true
 }
 
-func (p *LogPlugin) OnFriendMsg(bot bot.Bot, cmd *command.Command, msg message.Message) bool {
+func (p *LogPlugin) OnFriendMsg(bot bot.Bot, cmd command.Command, msg message.Message) bool {
 	str := utils.ExtraMessage(bot, msg)
 	name := msg.Sender.Card
 	if name == "" {

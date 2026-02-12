@@ -58,8 +58,8 @@ func (p *NewsPlugin) StartCron(bot bot.Bot, c plugin.CronManager) {
 	})
 }
 
-func (p *NewsPlugin) OnGroupMsg(bot bot.Bot, cmd *command.Command, msg message.Message) bool {
-	if cmd != nil && cmd.Mention && cmd.Name == "news" {
+func (p *NewsPlugin) OnGroupMsg(bot bot.Bot, cmd command.Command, msg message.Message) bool {
+	if cmd.Mention && cmd.Name == "news" {
 		builder := msgchain.Builder().Group()
 		builder.ImageUrl(p.api)
 		_, ok := bot.SendGroupMsg(msg.GroupId, builder.Build())

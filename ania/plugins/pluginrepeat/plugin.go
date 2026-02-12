@@ -34,34 +34,35 @@ func NewPlugin() *RepeatPlugin {
 	return p
 }
 
-func (p *RepeatPlugin) OnGroupMsg(bot bot.Bot, cmd *command.Command, msg message.Message) bool {
-	if cmd != nil {
-		if cmd.Mention && cmd.Name == "close" && len(cmd.Args) >= 1 && cmd.Args[0] == "repeat" {
-			if msg.Sender.UserId == p.admin {
-				p.enable.Store(false)
-				builder := msgchain.Builder().Group()
-				builder.Text("已关闭复读机")
-				bot.SendGroupMsg(msg.GroupId, builder.Build())
-				return false
-			} else {
-				builder := msgchain.Builder().Group()
-				builder.Text("你没有权限哦")
-				bot.SendGroupMsg(msg.GroupId, builder.Build())
-				return false
-			}
-		} else if cmd.Mention && cmd.Name == "enable" && len(cmd.Args) >= 1 && cmd.Args[0] == "repeat" {
-			if msg.Sender.UserId == p.admin {
-				p.enable.Store(true)
-				builder := msgchain.Builder().Group()
-				builder.Text("已开启复读机")
-				bot.SendGroupMsg(msg.GroupId, builder.Build())
-				return false
-			} else {
-				builder := msgchain.Builder().Group()
-				builder.Text("你没有权限哦")
-				bot.SendGroupMsg(msg.GroupId, builder.Build())
-				return false
-			}
+func (p *RepeatPlugin) OnGroupMsg(bot bot.Bot, cmd command.Command, msg message.Message) bool {
+	if !cmd.Mention {
+		return true
+	}
+	if cmd.Name == "close" && len(cmd.Args) >= 1 && cmd.Args[0] == "repeat" {
+		if msg.Sender.UserId == p.admin {
+			p.enable.Store(false)
+			builder := msgchain.Builder().Group()
+			builder.Text("已关闭复读机")
+			bot.SendGroupMsg(msg.GroupId, builder.Build())
+			return false
+		} else {
+			builder := msgchain.Builder().Group()
+			builder.Text("你没有权限哦")
+			bot.SendGroupMsg(msg.GroupId, builder.Build())
+			return false
+		}
+	} else if cmd.Name == "enable" && len(cmd.Args) >= 1 && cmd.Args[0] == "repeat" {
+		if msg.Sender.UserId == p.admin {
+			p.enable.Store(true)
+			builder := msgchain.Builder().Group()
+			builder.Text("已开启复读机")
+			bot.SendGroupMsg(msg.GroupId, builder.Build())
+			return false
+		} else {
+			builder := msgchain.Builder().Group()
+			builder.Text("你没有权限哦")
+			bot.SendGroupMsg(msg.GroupId, builder.Build())
+			return false
 		}
 	}
 
@@ -98,10 +99,6 @@ func (p *RepeatPlugin) OnGroupMsg(bot bot.Bot, cmd *command.Command, msg message
 		builder.Raw(msg.Message...)
 		bot.SendGroupMsg(msg.GroupId, builder.Build())
 	}
-	return true
-}
-
-func (p *RepeatPlugin) OnFriendMsg(bot bot.Bot, cmd *command.Command, msg message.Message) bool {
 	return true
 }
 
