@@ -225,8 +225,8 @@ func NewPlugin() *HelloPlugin {
 }
 
 // 处理群聊消息
-func (p *HelloPlugin) OnGroupMsg(bot bot.Bot, cmd *command.Command, msg message.Message) bool {
-    if cmd != nil && cmd.Name == "hello" {
+func (p *HelloPlugin) OnGroupMsg(bot bot.Bot, cmd command.Command, msg message.Message) bool {
+    if cmd.Name == "hello" {
         builder := msgchain.Builder().Group()
         builder.Text("你好！我是 AniaBot，很高兴为你服务！")
         bot.SendGroupMsg(msg.GroupId, builder.Build())
@@ -311,8 +311,8 @@ bot.SendFriendMsg(msg.Sender.UserId, builder.Build())
 **AniaBot** 提供了强大的命令解析功能：
 
 ```go
-func (p *YourPlugin) OnGroupMsg(bot bot.Bot, cmd *command.Command, msg message.Message) bool {
-    if cmd != nil && cmd.Mention{ // 当机器人被At时
+func (p *YourPlugin) OnGroupMsg(bot bot.Bot, cmd command.Command, msg message.Message) bool {
+    if cmd.Mention{ // 当机器人被At时
         switch cmd.Name {
         case "weather":
             // 处理天气查询
@@ -404,8 +404,8 @@ func (p *WeatherPlugin) Start(cfg *viper.Viper) {
     p.apiKey = cfg.GetString("plugins.weather.api_key")
 }
 
-func (p *WeatherPlugin) OnGroupMsg(bot bot.Bot, cmd *command.Command, msg message.Message) bool {
-    if cmd != nil && cmd.Name == "weather" {
+func (p *WeatherPlugin) OnGroupMsg(bot bot.Bot, cmd command.Command, msg message.Message) bool {
+    if cmd.Name == "weather" {
         if len(cmd.Args) == 0 {
             builder := msgchain.Builder().Group()
             builder.Text("请指定城市名称，例如：/weather 北京")
@@ -436,8 +436,8 @@ func (p *WeatherPlugin) queryWeather(city string) string {
 
 ### 主要事件接口
 
-- `OnGroupMsg(bot.Bot, *command.Command, message.Message) bool` - 群聊消息处理
-- `OnFriendMsg(bot.Bot, *command.Command, message.Message) bool` - 私聊消息处理
+- `OnGroupMsg(bot.Bot, command.Command, message.Message) bool` - 群聊消息处理
+- `OnFriendMsg(bot.Bot, command.Command, message.Message) bool` - 私聊消息处理
 - `Start(cfg *viper.Viper)` - 插件初始化
 
 ### 消息通知接口
