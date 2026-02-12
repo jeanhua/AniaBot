@@ -43,7 +43,6 @@ func TryHanleJina(ctx context.Context, token string, call llms.ToolCall) (string
 			return "", err
 		}
 		callResult, err := search(ctx, token, param)
-		log.Println("webSearch执行结果", callResult)
 		return callResult, err
 	case "webExplore":
 		log.Println("执行webExplore... 参数", call.FunctionCall.Arguments)
@@ -53,7 +52,6 @@ func TryHanleJina(ctx context.Context, token string, call llms.ToolCall) (string
 			return "", err
 		}
 		callResult, err := explore(ctx, token, param)
-		log.Println("webExplore执行结果", callResult)
 		return callResult, err
 	}
 	return "", errors.New("没有匹配的函数调用")
