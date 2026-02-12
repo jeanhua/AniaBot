@@ -11,7 +11,7 @@ import (
 )
 
 type memeParam struct {
-	Text string `json:"text" desc:"表情包的文本描述"`
+	Text string `json:"text" desc:"表情包的文本描述,比如开心、生气、为什么、你真是的...等等短句"`
 }
 
 const (
