@@ -74,7 +74,6 @@ func (p *AcgWallpaperPlugin) workFunc(bot bot.Bot) {
 			}
 		case TargetGroup:
 			builder := msgchain.Builder().Group()
-			builder.Mention(w.userId)
 			builder.ImageUrl("https://api.yppp.net/api.php")
 			if _, ok := bot.SendGroupMsg(w.groupId, builder.Build()); ok {
 				log.Printf("[发->群聊:%d]:[二次元壁纸]\n", w.groupId)
