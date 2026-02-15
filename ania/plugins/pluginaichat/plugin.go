@@ -222,7 +222,7 @@ func (p *AIChatPlugin) OnFriendMsg(bot bot.Bot, cmd command.Command, msg message
 			builder.ImageUrl(url)
 			_, success := bot.SendFriendMsg(msg.Sender.UserId, builder.Build())
 			if success {
-				log.Printf("[发->好友:%d]: [图片:%s]", msg.GroupId, url)
+				log.Printf("[发->好友:%d]: [图片:%s]", msg.Sender.UserId, url)
 			}
 			return success
 		},
@@ -328,6 +328,7 @@ func extraMsg(ctx context.Context, bot bot.Bot, msg message.Message, ocrLLM *com
 					}
 					resp, err := ocrLLM.ChatWithImage(ctx, "描述图片内容", url, opt...)
 					if err != nil {
+						log.Println("OCR请求失败:", err.Error())
 						return "OCR请求失败，无法解析的图片内容"
 					} else {
 						return resp
