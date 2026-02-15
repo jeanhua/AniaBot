@@ -57,7 +57,7 @@ func (p *DouyinParser) OnGroupMsg(bot bot.Bot, cmd command.Command, msg message.
 		builder := msgchain.Builder().Group()
 		builder.Mention(msg.Sender.UserId)
 		builder.Text(" ").Face(24).Text(fmt.Sprintf("解析成功\n博主: %s\n标题: %s\n视频直链: %s",
-			result.Data.Author,
+			result.Data.Author.Name,
 			result.Data.Title,
 			result.Data.URL,
 		))
@@ -89,7 +89,7 @@ func (p *DouyinParser) OnFriendMsg(bot bot.Bot, cmd command.Command, msg message
 
 		builder := msgchain.Builder().Friend()
 		builder.Face(24).Text(fmt.Sprintf("解析成功\n博主: %s\n标题: %s\n视频直链: %s",
-			result.Data.Author,
+			result.Data.Author.Name,
 			result.Data.Title,
 			result.Data.URL,
 		))
@@ -112,11 +112,14 @@ func (p *DouyinParser) extractDouyinLink(text string) (string, error) {
 func getResourse(link string) (*responseTy, error) {
 	client := resty.New()
 	result := responseTy{}
-	modifier, _ := utils.NewURLModifier("https://api.xhus.cn/api/douyin")
+	modifier, _ := utils.NewURLModifier("https://api.xhus.cn/api/autopars")
 	modifier.SetQuery("url", link)
 	_, err := client.R().SetResult(&result).Get(modifier.String())
 	if err != nil {
 		return nil, err
+	}
+	if result.Code != 200 {
+		return nil, fmt.Errorf("解析失败")
 	}
 	return &result, nil
 }
@@ -125,20 +128,16 @@ type responseTy struct {
 	Code int    `json:"code"`
 	Msg  string `json:"msg"`
 	Data struct {
-		Author string `json:"author"`
-		UID    int64  `json:"uid"`
-		Avatar string `json:"avatar"`
-		Like   int    `json:"like"`
-		Time   int64  `json:"time"`
 		Title  string `json:"title"`
-		Cover  string `json:"cover"`
-		Images string `json:"images"`
-		URL    string `json:"url"`
-		Music  struct {
-			Title  string `json:"title"`
-			Author string `json:"author"`
+		Type   string `json:"type"`
+		Author struct {
+			Name   string `json:"name"`
+			ID     int64  `json:"id"`
 			Avatar string `json:"avatar"`
-			URL    string `json:"url"`
-		} `json:"music"`
+		} `json:"author"`
+		Avatar string   `json:"avatar"`
+		Cover  string   `json:"cover"`
+		Images []string `json:"images"`
+		URL    string   `json:"url"`
 	} `json:"data"`
 }
