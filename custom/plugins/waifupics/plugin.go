@@ -16,15 +16,18 @@ type WaifuPlugin struct {
 }
 
 const categoryHelps = `
+---- 人像 ----
 waifu[默认] 老婆/女神角色
 neko 猫娘
 shinobu 忍（角色名）
 megumin 惠惠（《为美好的世界献上祝福》角色）
+
+---- 表情包 ----
 bully 欺负
 cuddle 拥抱/依偎
 cry 哭泣
 hug 拥抱
-awoo 嗷呜（拟声词，常指狼娘或兴奋反应）
+awoo 狼娘
 kiss 亲吻
 lick 舔
 pat 摸头/轻拍
@@ -34,7 +37,7 @@ yeet 扔/丢
 blush 脸红
 smile 微笑
 wave 挥手
-highfive	击掌
+highfive 击掌
 handhold 牵手
 nom 大口吃/嗷呜吃
 bite 咬
