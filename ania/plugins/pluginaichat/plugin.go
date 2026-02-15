@@ -222,7 +222,7 @@ func (p *AIChatPlugin) OnFriendMsg(bot bot.Bot, cmd command.Command, msg message
 			builder.ImageUrl(url)
 			_, success := bot.SendFriendMsg(msg.Sender.UserId, builder.Build())
 			if success {
-				log.Printf("[发->好友:%d]: [图片:%s]", msg.GroupId, url)
+				log.Printf("[发->好友:%d]: [图片:%s]", msg.Sender.UserId, url)
 			}
 			return success
 		},
