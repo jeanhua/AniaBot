@@ -30,7 +30,7 @@ func NewAniaRedisStorage(ctx context.Context, addr, passwd string, db int) *Ania
 
 func (store *AniaRedisStorage) Clone(prefix string) storage.Storage {
 	return &AniaRedisStorage{
-		prefix: prefix + ":",
+		prefix: store.prefix + prefix + ":",
 		rdb:    store.rdb,
 	}
 }
