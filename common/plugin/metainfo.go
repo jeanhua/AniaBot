@@ -4,6 +4,7 @@ import (
 	"github.com/jeanhua/AniaBot/common/bot"
 	"github.com/jeanhua/AniaBot/common/model/command"
 	"github.com/jeanhua/AniaBot/common/model/message"
+	"github.com/jeanhua/AniaBot/common/storage"
 	"github.com/spf13/viper"
 )
 
@@ -12,10 +13,16 @@ type Meta struct {
 	HelpWords string // 插件帮助字段，发送 /help 指令显示
 	AdminOnly bool   // 插件是否为管理员触发(对其他人隐藏)
 	Order     int    // 插件执行顺序，从小到大
+
+	Storage storage.Storage
 }
 
 func (p *Meta) GetMeta() *Meta {
 	return p
+}
+
+func (p *Meta) SetStorage(s storage.Storage) {
+	p.Storage = s
 }
 
 // OnGroupMsg 收到群聊消息触发事件

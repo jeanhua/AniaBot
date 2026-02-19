@@ -1,6 +1,7 @@
 package pluginlog
 
 import (
+	"context"
 	"log"
 
 	"github.com/jeanhua/AniaBot/ania/utils"
@@ -8,6 +9,7 @@ import (
 	"github.com/jeanhua/AniaBot/common/model/command"
 	"github.com/jeanhua/AniaBot/common/model/message"
 	"github.com/jeanhua/AniaBot/common/plugin"
+	"github.com/spf13/viper"
 )
 
 type LogPlugin struct {
@@ -20,6 +22,15 @@ func NewPlugin() *LogPlugin {
 	p.HelpWords = "用于在控制台打印日志信息"
 	p.AdminOnly = true
 	return p
+}
+
+func (p *LogPlugin) Start(cfg *viper.Viper) {
+	lastStartTime, ok := p.Storage.GetString(context.Background(), "last_start_time")
+	if !ok {
+		lastStartTime = "未保存"
+	}
+	p.Storage.Set(context.Background(), "last_start_time", utils.GetFormattedTime())
+	log.Println("日志打印插件初始化完成, 上次重启时间: ", lastStartTime)
 }
 
 func (p *LogPlugin) OnGroupMsg(bot bot.Bot, cmd command.Command, msg message.Message) bool {

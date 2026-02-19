@@ -1,6 +1,8 @@
 package aniabot
 
 import (
+	"context"
+	"encoding/base64"
 	"fmt"
 	"log"
 	"sort"
@@ -11,6 +13,7 @@ import (
 	"github.com/jeanhua/AniaBot/common/model/message"
 	"github.com/jeanhua/AniaBot/common/msgchain"
 	"github.com/jeanhua/AniaBot/common/plugin"
+	"github.com/jeanhua/AniaBot/common/storage"
 	"github.com/robfig/cron/v3"
 	"github.com/spf13/viper"
 )
@@ -20,19 +23,37 @@ type AniaBot struct {
 	plugins []plugin.Plugin
 	admin   uint
 	cfg     *viper.Viper
+
+	storage storage.Storage
 }
 
-func NewAniaBot(adapter adapter.Adapter) *AniaBot {
-	return &AniaBot{
-		adapter: adapter,
+type Option func(*AniaBot)
+
+func WithStorage(storage storage.Storage) Option {
+	return func(ania *AniaBot) {
+		ania.storage = storage
 	}
 }
 
-func NewAniaBotWithConfig(adapter adapter.Adapter, config *viper.Viper) *AniaBot {
-	return &AniaBot{
+func NewAniaBot(adapter adapter.Adapter, option ...Option) *AniaBot {
+	ania := &AniaBot{
+		adapter: adapter,
+	}
+	for _, op := range option {
+		op(ania)
+	}
+	return ania
+}
+
+func NewAniaBotWithConfig(adapter adapter.Adapter, config *viper.Viper, option ...Option) *AniaBot {
+	ania := &AniaBot{
 		adapter: adapter,
 		cfg:     config,
 	}
+	for _, op := range option {
+		op(ania)
+	}
+	return ania
 }
 
 func (ania *AniaBot) Run() {
@@ -75,6 +96,14 @@ func (ania *AniaBot) Run() {
 		ania.cfg = cfg
 	}
 
+	// storage
+	if ania.storage == nil {
+		ania.storage = NewAniaRedisStorage(context.Background(),
+			ania.cfg.GetString("bot.store.redis"),
+			ania.cfg.GetString("bot.store.password"),
+			ania.cfg.GetInt("bot.store.db"))
+	}
+
 	ania.admin = ania.cfg.GetUint("bot.admin_id")
 
 	// 初始化事件
@@ -82,6 +111,8 @@ func (ania *AniaBot) Run() {
 	for _, p := range ania.plugins {
 		log.Println("初始化插件: ", p.GetMeta().Name)
 		safeExecute("初始化", p, func(p plugin.Plugin) {
+			encodeName := base64.StdEncoding.EncodeToString([]byte(p.GetMeta().Name))
+			p.SetStorage(ania.storage.Clone(encodeName))
 			p.Start(ania.cfg)
 		})
 	}

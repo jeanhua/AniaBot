@@ -4,12 +4,14 @@ import (
 	"github.com/jeanhua/AniaBot/common/bot"
 	"github.com/jeanhua/AniaBot/common/model/command"
 	"github.com/jeanhua/AniaBot/common/model/message"
+	"github.com/jeanhua/AniaBot/common/storage"
 	"github.com/robfig/cron/v3"
 	"github.com/spf13/viper"
 )
 
 type Plugin interface {
 	GetMeta() *Meta
+	SetStorage(s storage.Storage)
 	BasicEvent
 	StartupEvent
 	NoticeEvent
