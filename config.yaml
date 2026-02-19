@@ -12,6 +12,13 @@ bot:
       listen_port: 6679 # 本地监听端口，用于napcat向bot上报事件。注意这里如果是docker的话使用localhost无法连接，建议换成内网ip，即在napcat配置页面的http client设置为ip
       target_url: http://localhost:6680 # napcat开放的url，用于bot向napcat上报事件
 
+  # 插件存储适配器
+  store:
+    # 默认redis适配器
+    redis:
+      address: "localhost:6379"
+      password: ""
+      db: 0
 
 # 插件自定义配置
 plugin:
