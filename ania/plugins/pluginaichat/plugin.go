@@ -319,6 +319,7 @@ func extraMsg(ctx context.Context, bot bot.Bot, msg message.Message, ocrLLM *com
 	for _, m := range msg.Message {
 		str.WriteString(
 			m.FriendlyText(
+				message.WithIgnoreMentionId(msg.SelfId),
 				message.WithGetMsgFunc(bot.GetMsgDetail),
 				message.WithGetGroupUserInfo(msg.GroupId, bot.GetGroupUserInfo),
 				message.WithGetForwardMsgFunc(bot.GetForwardMsg),

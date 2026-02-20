@@ -10,6 +10,7 @@ import (
 
 type msgHandleOpt struct {
 	groupId              uint
+	ignoreMentionId      uint
 	getMsgFunc           func(msgId uint) (*Message, bool)
 	getGroupUserInfoFunc func(groupId, userId uint) (info *GroupUserInfo, success bool)
 	getImageOCRFunc      func(url string) string
@@ -17,6 +18,12 @@ type msgHandleOpt struct {
 }
 
 type MsgOptFunc func(*msgHandleOpt)
+
+func WithIgnoreMentionId(userId uint) MsgOptFunc {
+	return func(o *msgHandleOpt) {
+		o.ignoreMentionId = userId
+	}
+}
 
 func WithGetMsgFunc(getMsgFunc func(msgId uint) (*Message, bool)) MsgOptFunc {
 	return func(o *msgHandleOpt) {
@@ -57,79 +64,109 @@ func (s OB11Segment) FriendlyText(optFunc ...MsgOptFunc) (text string) {
 
 	switch s.Type {
 	case "text":
-		return s.Data["text"].(string)
+		var msg TextMessage
+		if ok := TransferTo(s, &msg); ok {
+			return msg.Text
+		}
+		return "[无法解析的文本消息]"
 	case "face":
-		idStr := s.Data["id"].(string)
-		id, err := strconv.Atoi(idStr)
-		if err != nil {
-			return "[QQ表情]"
-		}
-		dsc, ok := emojiMap[id]
-		if ok {
-			return fmt.Sprintf("[QQ表情:%s]", dsc)
-		} else {
-			return "[QQ表情]"
-		}
-	case "image":
-		url := s.Data["url"].(string)
-		if msgFuncs.getImageOCRFunc != nil {
-			var str strings.Builder
-			str.WriteString("\n<图片消息>\n")
-			str.WriteString(msgFuncs.getImageOCRFunc(url))
-			str.WriteString("\n</图片消息>\n")
-			return str.String()
-		}
-		return fmt.Sprintf("[图片:%s]", url)
-	case "record":
-		return fmt.Sprintf("[录音:%s]", s.Data["url"].(string))
-	case "video":
-		return fmt.Sprintf("[视频:%s]", s.Data["url"].(string))
-	case "at":
-		qqStr := s.Data["qq"].(string)
-		qq, err := strconv.Atoi(qqStr)
-		if err != nil {
-			return fmt.Sprintf("[at:%s]", s.Data["qq"].(string))
-		}
-		info, success := msgFuncs.getGroupUserInfoFunc(msgFuncs.groupId, uint(qq))
-		if success && info != nil {
-			nickname := info.Card
-			if nickname == "" {
-				nickname = info.Nickname
+		var msg FaceMessage
+		if ok := TransferTo(s, &msg); ok {
+			id64, isN := msg.Id.Int64()
+			if isN != nil {
+				return "[at]"
 			}
-			return fmt.Sprintf("[at:%s id:%s]", nickname, qqStr)
+			id := int(id64)
+			if dsc, ok2 := emojiMap[id]; ok2 {
+				return fmt.Sprintf("[QQ表情:%s]", dsc)
+			}
 		}
-		return fmt.Sprintf("[at:%s]", s.Data["qq"].(string))
+		return "[QQ表情]"
+	case "image":
+		var msg ImageMessage
+		if ok := TransferTo(s, &msg); ok {
+			if msgFuncs.getImageOCRFunc != nil {
+				var str strings.Builder
+				str.WriteString("\n<图片消息>\n")
+				str.WriteString(msgFuncs.getImageOCRFunc(msg.Url))
+				str.WriteString("\n</图片消息>\n")
+				return str.String()
+			}
+		}
+		return "[图片消息]"
+	case "record":
+		var msg RecordMessage
+		if ok := TransferTo(s, &msg); ok {
+			return fmt.Sprintf("[录音:%s]", msg.URL)
+		}
+		return "[录音消息]"
+	case "video":
+		var msg VideoMessage
+		if ok := TransferTo(s, &msg); ok {
+			return fmt.Sprintf("[视频:%s]", msg.URL)
+		}
+		return "[视频消息]"
+	case "at":
+		var msg MentionMessage
+		if ok := TransferTo(s, &msg); ok {
+			if msg.QQ == "all" {
+				return "[at:全体成员]"
+			}
+			qqInt, err := strconv.Atoi(msg.QQ)
+			if err != nil {
+				return "[at]"
+			}
+			qq := uint(qqInt)
+			if msgFuncs.ignoreMentionId == qq {
+				return ""
+			}
+			if msgFuncs.getGroupUserInfoFunc != nil {
+				if info, success := msgFuncs.getGroupUserInfoFunc(msgFuncs.groupId, qq); success {
+					nickname := info.Card
+					if nickname == "" {
+						nickname = info.Nickname
+					}
+					return fmt.Sprintf("[at:%s id:%s]", nickname, msg.QQ)
+				}
+			}
+		}
+		return "[at]"
 	case "music":
-		return fmt.Sprintf("[音乐:%s]", s.Data["title"].(string))
+		var msg MusicMessage
+		if ok := TransferTo(s, &msg); ok {
+			return fmt.Sprintf("[音乐:%s]", msg.Title)
+		}
+		return "[音乐消息]"
 	case "reply":
-		if msgFuncs.getMsgFunc == nil {
-			return "[回复消息]"
+		var msg ReplyMessage
+		if ok := TransferTo(s, &msg); ok {
+			if msgFuncs.getMsgFunc != nil {
+				id64, err := msg.Id.Int64()
+				if err != nil {
+					return "[回复消息]"
+				}
+				id := uint(id64)
+				if dtMsg, ok2 := msgFuncs.getMsgFunc(id); ok2 {
+					nickname := dtMsg.Sender.Card
+					if nickname == "" {
+						nickname = dtMsg.Sender.Nickname
+					}
+					var back strings.Builder
+					back.WriteString("\n<reply>\n")
+					back.WriteString(fmt.Sprintf("[%s %d]: ", nickname, dtMsg.Sender.UserId))
+					for _, m := range dtMsg.Message {
+						back.WriteString(m.FriendlyText(
+							WithGetGroupUserInfo(msgFuncs.groupId, msgFuncs.getGroupUserInfoFunc),
+							WithGetImageOCRFunc(msgFuncs.getImageOCRFunc),
+							WithGetForwardMsgFunc(msgFuncs.getForwardMsgFunc),
+						))
+					}
+					back.WriteString("\n</reply>\n")
+					return back.String()
+				}
+			}
 		}
-		idStr := s.Data["id"].(string)
-		id, err := strconv.Atoi(idStr)
-		if err != nil {
-			return "[回复消息]"
-		}
-		msg, ok := msgFuncs.getMsgFunc(uint(id))
-		if !ok {
-			return "[回复消息]"
-		}
-		nickname := msg.Sender.Card
-		if nickname == "" {
-			nickname = msg.Sender.Nickname
-		}
-		var back strings.Builder
-		back.WriteString("\n<reply>\n")
-		back.WriteString(fmt.Sprintf("[%s %d]: ", nickname, msg.Sender.UserId))
-		for _, m := range msg.Message {
-			back.WriteString(m.FriendlyText(
-				WithGetGroupUserInfo(msgFuncs.groupId, msgFuncs.getGroupUserInfoFunc),
-				WithGetImageOCRFunc(msgFuncs.getImageOCRFunc),
-				WithGetForwardMsgFunc(msgFuncs.getForwardMsgFunc),
-			))
-		}
-		back.WriteString("\n</reply>\n")
-		return back.String()
+		return "[回复消息]"
 	case "forward":
 		if msgFuncs.getForwardMsgFunc != nil {
 			id := s.Data["id"].(string)
@@ -163,7 +200,11 @@ func (s OB11Segment) FriendlyText(optFunc ...MsgOptFunc) (text string) {
 			return "[转发消息]"
 		}
 	case "file":
-		return fmt.Sprintf("[文件:%s]", s.Data["file"].(string))
+		var msg FileMessage
+		if ok := TransferTo(s, &msg); ok {
+			return fmt.Sprintf("[文件:%s]", msg.File)
+		}
+		return "[文件消息]"
 	case "json":
 		jsonMap := JsonMessage{}
 		err := json.Unmarshal([]byte(s.Data["data"].(string)), &jsonMap)

@@ -25,6 +25,8 @@ type AniaBot struct {
 	cfg     *viper.Viper
 
 	storage storage.Storage
+
+	pluginSet map[string]struct{}
 }
 
 type Option func(*AniaBot)
@@ -35,20 +37,17 @@ func WithStorage(storage storage.Storage) Option {
 	}
 }
 
-func NewAniaBot(adapter adapter.Adapter, option ...Option) *AniaBot {
-	ania := &AniaBot{
-		adapter: adapter,
+func WithConfig(config *viper.Viper) Option {
+	return func(ania *AniaBot) {
+		ania.cfg = config
 	}
-	for _, op := range option {
-		op(ania)
-	}
-	return ania
 }
 
-func NewAniaBotWithConfig(adapter adapter.Adapter, config *viper.Viper, option ...Option) *AniaBot {
+func NewAniaBot(adapter adapter.Adapter, option ...Option) *AniaBot {
 	ania := &AniaBot{
-		adapter: adapter,
-		cfg:     config,
+		adapter:   adapter,
+		pluginSet: map[string]struct{}{},
+		plugins:   make([]plugin.Plugin, 0),
 	}
 	for _, op := range option {
 		op(ania)
@@ -221,6 +220,11 @@ func (ania *AniaBot) onFriendEvent(msg message.Message) {
 
 func (ania *AniaBot) AddPlugin(plugins ...plugin.Plugin) {
 	for _, p := range plugins {
+		meta := p.GetMeta()
+		if _, ok := ania.pluginSet[meta.Name]; ok {
+			panic("插件名称相同，请检查插件是否重复加载")
+		}
+		ania.pluginSet[meta.Name] = struct{}{}
 		ania.plugins = append(ania.plugins, p)
 		log.Println("已添加插件: ", p.GetMeta().Name)
 	}
