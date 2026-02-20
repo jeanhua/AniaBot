@@ -45,7 +45,9 @@ func WithConfig(config *viper.Viper) Option {
 
 func NewAniaBot(adapter adapter.Adapter, option ...Option) *AniaBot {
 	ania := &AniaBot{
-		adapter: adapter,
+		adapter:   adapter,
+		pluginSet: map[string]struct{}{},
+		plugins:   make([]plugin.Plugin, 0),
 	}
 	for _, op := range option {
 		op(ania)
