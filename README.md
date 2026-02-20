@@ -368,6 +368,23 @@ Meta: plugin.Meta{
 }
 ```
 
+#### 插件数据存储
+
+**AniaBot**使用Redis作为存储数据库，请先配置完成Redis，并填写Bot的`config.yaml`配置文件
+
+如何使用：
+
+```go
+func (p *YourPlugin) ForExampleSomeEvent {
+    data, ok := p.Storage.GetString(context.Background(), "key")
+    // ...其他读写数据方法
+}
+```
+
+其他方法参考 [定义](./common/storage/storage.go)
+
+> 注意：**AniaBot**通过key前缀为每个插件创建独立的存储空间，不同插件数据读写互不干扰，空间分配依据插件名称的base64编码，所以修改插件名称后，插件原数据内容将无法访问，请在修改前清空或转移数据
+
 ### 第五部分：完整示例
 
 #### 天气查询插件
