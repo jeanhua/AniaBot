@@ -10,6 +10,7 @@ import (
 
 type msgHandleOpt struct {
 	groupId              uint
+	ignoreMentionId      uint
 	getMsgFunc           func(msgId uint) (*Message, bool)
 	getGroupUserInfoFunc func(groupId, userId uint) (info *GroupUserInfo, success bool)
 	getImageOCRFunc      func(url string) string
@@ -17,6 +18,12 @@ type msgHandleOpt struct {
 }
 
 type MsgOptFunc func(*msgHandleOpt)
+
+func WithIgnoreMentionId(userId uint) MsgOptFunc {
+	return func(o *msgHandleOpt) {
+		o.ignoreMentionId = userId
+	}
+}
 
 func WithGetMsgFunc(getMsgFunc func(msgId uint) (*Message, bool)) MsgOptFunc {
 	return func(o *msgHandleOpt) {
@@ -88,7 +95,10 @@ func (s OB11Segment) FriendlyText(optFunc ...MsgOptFunc) (text string) {
 		qqStr := s.Data["qq"].(string)
 		qq, err := strconv.Atoi(qqStr)
 		if err != nil {
-			return fmt.Sprintf("[at:%s]", s.Data["qq"].(string))
+			return fmt.Sprintf("[at:%s]", qqStr)
+		}
+		if msgFuncs.ignoreMentionId == uint(qq) {
+			return ""
 		}
 		info, success := msgFuncs.getGroupUserInfoFunc(msgFuncs.groupId, uint(qq))
 		if success && info != nil {
