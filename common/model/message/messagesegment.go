@@ -1,40 +1,43 @@
 package message
 
-import "encoding/json"
-
 type TextMessage struct {
-	Text string `json:"text"`
+	Text string
 }
 
 type FaceMessage struct {
-	Id json.Number `json:"id"`
+	Id int
 }
 
 type ImageMessage struct {
-	File string `json:"file"`
-	Url  string `json:"url"`
+	File string
+	Url  string
 }
 
 type MusicMessage struct {
-	Title string `json:"title"`
+	Title string
 }
 
 type MentionMessage struct {
-	QQ string `json:"qq"`
+	QQ    uint
+	IsAll bool
 }
 
 type ReplyMessage struct {
-	Id json.Number `json:"id"`
+	Id uint
 }
 
 type FileMessage struct {
-	File string `json:"file"`
+	File string
 }
 
 type dataMessage struct {
-	URL string `json:"url"`
+	URL string
 }
 
 type VideoMessage dataMessage
 
 type RecordMessage dataMessage
+
+type ForwardMessage struct {
+	Id string
+}

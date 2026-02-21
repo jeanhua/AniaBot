@@ -309,7 +309,7 @@ func (n *napcatHttpAdapter) SendPokeMsg(userId uint, groupId *uint) {
 func (n *napcatHttpAdapter) SendGroupForwardMsg(groupId uint, chain msgchain.GroupForwardChain) (msgId uint, success bool) {
 	data := message.GroupForwardMessage{}
 	data.GroupId = groupId
-	data.ForwardMessage = chain.GetForwardMsg()
+	data.ForwardMessageSegment = chain.GetForwardMsg()
 	var resp message.Response[message.Message]
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
 	defer cancel()
@@ -328,7 +328,7 @@ func (n *napcatHttpAdapter) SendGroupForwardMsg(groupId uint, chain msgchain.Gro
 func (n *napcatHttpAdapter) SendFriendForwardMsg(userId uint, chain msgchain.FriendForwardChain) (msgId uint, success bool) {
 	data := message.FriendForwardMessage{}
 	data.UserId = userId
-	data.ForwardMessage = chain.GetForwardMsg()
+	data.ForwardMessageSegment = chain.GetForwardMsg()
 	var resp message.Response[message.Message]
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
 	defer cancel()

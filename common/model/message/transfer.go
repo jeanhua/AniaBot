@@ -2,45 +2,110 @@ package message
 
 import (
 	"encoding/json"
-	"reflect"
-	"strings"
+	"log"
+	"strconv"
 )
 
-func TransferTo[T any](s OB11Segment, target *T) bool {
-	if !validateType[T](s.Type) {
-		return false
-	}
-	dataBytes, err := json.Marshal(s.Data)
-	if err != nil {
-		return false
-	}
-
-	err = json.Unmarshal(dataBytes, target)
-	return err == nil
+type transerable interface {
+	TextMessage | FaceMessage | ImageMessage | MentionMessage |
+		ReplyMessage | VideoMessage | RecordMessage | JsonMessage |
+		MusicMessage | FileMessage | ForwardMessage
 }
 
-var typeMapping = map[string]string{
-	"text":   "TextMessage",
-	"face":   "FaceMessage",
-	"image":  "ImageMessage",
-	"at":     "MentionMessage",
-	"reply":  "ReplyMessage",
-	"video":  "VideoMessage",
-	"record": "RecordMessage",
-	"json":   "JsonMessage",
-	"music":  "MusicMessage",
+func TransferTo[T transerable](s OB11Segment, target *T) bool {
+	return transfer(s, target)
 }
 
-func validateType[T any](segType string) bool {
-	var t T
-	tType := reflect.TypeOf(t)
-	if tType.Kind() == reflect.Ptr {
-		tType = tType.Elem()
+func transfer(s OB11Segment, target interface{}) (success bool) {
+	defer func() {
+		if r := recover(); r != nil {
+			success = false
+		}
+	}()
+	switch t := target.(type) {
+	case *TextMessage:
+		if s.Type == "text" {
+			t.Text = s.Data["text"].(string)
+			return t.Text != ""
+		}
+		return false
+	case *FaceMessage:
+		if s.Type == "face" {
+			if id, err := strconv.Atoi(s.Data["id"].(string)); err != nil {
+				return false
+			} else {
+				t.Id = id
+			}
+			return true
+		}
+		return false
+	case *ImageMessage:
+		if s.Type == "image" {
+			t.File, _ = s.Data["file"].(string)
+			t.Url, _ = s.Data["url"].(string)
+			return t.Url != ""
+		}
+		return false
+	case *MentionMessage:
+		if s.Type == "at" {
+			qq, _ := s.Data["qq"].(string)
+			if qq == "all" {
+				t.IsAll = true
+				return true
+			}
+			qqInt, _ := strconv.Atoi(qq)
+			t.QQ = uint(qqInt)
+			return qq != ""
+		}
+		return false
+	case *ReplyMessage:
+		if s.Type == "reply" {
+			id, _ := s.Data["id"].(string)
+			idInt, _ := strconv.Atoi(id)
+			t.Id = uint(idInt)
+			return id != ""
+		}
+		return false
+	case *VideoMessage:
+		if s.Type == "video" {
+			t.URL, _ = s.Data["url"].(string)
+			return t.URL != ""
+		}
+		return false
+	case *RecordMessage:
+		if s.Type == "record" {
+			t.URL, _ = s.Data["url"].(string)
+			return t.URL != ""
+		}
+		return false
+	case *JsonMessage:
+		if s.Type == "json" {
+			if err := json.Unmarshal([]byte(s.Data["data"].(string)), t); err != nil {
+				log.Println("error when json unmarshal: json message", err)
+				return false
+			}
+			return true
+		}
+		return false
+	case *MusicMessage:
+		if s.Type == "music" {
+			t.Title, _ = s.Data["title"].(string)
+			return t.Title != ""
+		}
+		return false
+	case *FileMessage:
+		if s.Type == "file" {
+			t.File, _ = s.Data["file"].(string)
+			return t.File != ""
+		}
+		return false
+	case *ForwardMessage:
+		if s.Type == "forward" {
+			t.Id = s.Data["id"].(string)
+			return t.Id != ""
+		}
+		return false
+	default:
+		return false
 	}
-	structName := tType.Name()
-	expectedStruct, ok := typeMapping[segType]
-	if !ok {
-		return true
-	}
-	return strings.HasSuffix(structName, expectedStruct)
 }

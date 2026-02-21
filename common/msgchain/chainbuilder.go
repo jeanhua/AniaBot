@@ -62,9 +62,9 @@ type GroupChain interface {
 }
 
 type GroupForwardChain interface {
-	GetForwardMsg() message.ForwardMessage
+	GetForwardMsg() message.ForwardMessageSegment
 }
 
 type FriendForwardChain interface {
-	GetForwardMsg() message.ForwardMessage
+	GetForwardMsg() message.ForwardMessageSegment
 }

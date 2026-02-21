@@ -21,7 +21,7 @@ type groupChainBuilder struct {
 }
 
 type forwardChainBuilder struct {
-	message message.ForwardMessage
+	message message.ForwardMessageSegment
 }
 
 type groupForwardChainBuilder struct {
@@ -54,7 +54,7 @@ func (c chainBuilder) Group() GroupChainBuilder {
 func (c chainBuilder) FriendForward() FriendForwardChainBuilder {
 	return &friendForwardChainBuilder{
 		forwardChainBuilder: forwardChainBuilder{
-			message: message.ForwardMessage{
+			message: message.ForwardMessageSegment{
 				Prompt:  "[聊天记录]",
 				Summary: "[聊天记录]",
 				Source:  "[聊天记录]",
@@ -67,7 +67,7 @@ func (c chainBuilder) FriendForward() FriendForwardChainBuilder {
 func (c chainBuilder) GroupForward() GroupForwardChainBuilder {
 	return &groupForwardChainBuilder{
 		forwardChainBuilder: forwardChainBuilder{
-			message: message.ForwardMessage{
+			message: message.ForwardMessageSegment{
 				Prompt:  "[聊天记录]",
 				Summary: "[聊天记录]",
 				Source:  "[聊天记录]",
@@ -98,11 +98,11 @@ func (fc *groupForwardChainBuilder) Build() GroupForwardChain {
 	return fc
 }
 
-func (fc *friendForwardChainBuilder) GetForwardMsg() message.ForwardMessage {
+func (fc *friendForwardChainBuilder) GetForwardMsg() message.ForwardMessageSegment {
 	return fc.message
 }
 
-func (fc *groupForwardChainBuilder) GetForwardMsg() message.ForwardMessage {
+func (fc *groupForwardChainBuilder) GetForwardMsg() message.ForwardMessageSegment {
 	return fc.message
 }
 

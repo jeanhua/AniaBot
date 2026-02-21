@@ -3,8 +3,6 @@ package message
 import (
 	"encoding/json"
 	"fmt"
-	"log"
-	"strconv"
 	"strings"
 )
 
@@ -72,12 +70,7 @@ func (s OB11Segment) FriendlyText(optFunc ...MsgOptFunc) (text string) {
 	case "face":
 		var msg FaceMessage
 		if ok := TransferTo(s, &msg); ok {
-			id64, isN := msg.Id.Int64()
-			if isN != nil {
-				return "[at]"
-			}
-			id := int(id64)
-			if dsc, ok2 := emojiMap[id]; ok2 {
+			if dsc, ok2 := emojiMap[msg.Id]; ok2 {
 				return fmt.Sprintf("[QQ表情:%s]", dsc)
 			}
 		}
@@ -109,24 +102,19 @@ func (s OB11Segment) FriendlyText(optFunc ...MsgOptFunc) (text string) {
 	case "at":
 		var msg MentionMessage
 		if ok := TransferTo(s, &msg); ok {
-			if msg.QQ == "all" {
+			if msg.IsAll {
 				return "[at:全体成员]"
 			}
-			qqInt, err := strconv.Atoi(msg.QQ)
-			if err != nil {
-				return "[at]"
-			}
-			qq := uint(qqInt)
-			if msgFuncs.ignoreMentionId == qq {
+			if msgFuncs.ignoreMentionId == msg.QQ {
 				return ""
 			}
 			if msgFuncs.getGroupUserInfoFunc != nil {
-				if info, success := msgFuncs.getGroupUserInfoFunc(msgFuncs.groupId, qq); success {
+				if info, success := msgFuncs.getGroupUserInfoFunc(msgFuncs.groupId, msg.QQ); success {
 					nickname := info.Card
 					if nickname == "" {
 						nickname = info.Nickname
 					}
-					return fmt.Sprintf("[at:%s id:%s]", nickname, msg.QQ)
+					return fmt.Sprintf("[at:%s id:%d]", nickname, msg.QQ)
 				}
 			}
 		}
@@ -141,12 +129,7 @@ func (s OB11Segment) FriendlyText(optFunc ...MsgOptFunc) (text string) {
 		var msg ReplyMessage
 		if ok := TransferTo(s, &msg); ok {
 			if msgFuncs.getMsgFunc != nil {
-				id64, err := msg.Id.Int64()
-				if err != nil {
-					return "[回复消息]"
-				}
-				id := uint(id64)
-				if dtMsg, ok2 := msgFuncs.getMsgFunc(id); ok2 {
+				if dtMsg, ok2 := msgFuncs.getMsgFunc(msg.Id); ok2 {
 					nickname := dtMsg.Sender.Card
 					if nickname == "" {
 						nickname = dtMsg.Sender.Nickname
@@ -169,36 +152,36 @@ func (s OB11Segment) FriendlyText(optFunc ...MsgOptFunc) (text string) {
 		return "[回复消息]"
 	case "forward":
 		if msgFuncs.getForwardMsgFunc != nil {
-			id := s.Data["id"].(string)
-			detail, ok := msgFuncs.getForwardMsgFunc(id)
-			if ok {
-				builder := strings.Builder{}
-				builder.WriteString("\n<合并转发消息>")
-				for _, msg := range *detail {
-					nickname := msg.Sender.Card
-					if nickname == "" {
-						nickname = msg.Sender.Nickname
-					}
-					var str strings.Builder
-					for _, m := range msg.Message {
-						str.WriteString(m.FriendlyText(
-						// 图片太多容易超时，不解析了
-						// WithGetImageOCRFunc(msgFuncs.getImageOCRFunc),
+			var msg ForwardMessage
+			if ok := TransferTo(s, &msg); ok {
+				if detail, ok := msgFuncs.getForwardMsgFunc(msg.Id); ok {
+					builder := strings.Builder{}
+					builder.WriteString("\n<合并转发消息>")
+					for _, msg := range *detail {
+						nickname := msg.Sender.Card
+						if nickname == "" {
+							nickname = msg.Sender.Nickname
+						}
+						var str strings.Builder
+						for _, m := range msg.Message {
+							str.WriteString(m.FriendlyText(
+							// 图片太多容易超时，不解析了
+							// WithGetImageOCRFunc(msgFuncs.getImageOCRFunc),
 
-						// napcat有问题，不能解析嵌套的合并转发消息，https://github.com/NapNeko/NapCatQQ/issues/1278
-						// WithGetForwardMsgFunc(msgFuncs.getForwardMsgFunc),
-						))
+							// napcat有问题，不能解析嵌套的合并转发消息，https://github.com/NapNeko/NapCatQQ/issues/1278
+							// WithGetForwardMsgFunc(msgFuncs.getForwardMsgFunc),
+							))
+						}
+						builder.WriteString(fmt.Sprintf("\n[nickname: %s id: %d]: %s\n", nickname, msg.Sender.UserId, str.String()))
 					}
-					builder.WriteString(fmt.Sprintf("\n[nickname: %s id: %d]: %s\n", nickname, msg.Sender.UserId, str.String()))
+					builder.WriteString("</合并转发消息>\n")
+					return builder.String()
+				} else {
+					return "[转发消息, 无法获取详情]"
 				}
-				builder.WriteString("</合并转发消息>\n")
-				return builder.String()
-			} else {
-				return "[转发消息, 无法获取详情]"
 			}
-		} else {
-			return "[转发消息]"
 		}
+		return "[转发消息]"
 	case "file":
 		var msg FileMessage
 		if ok := TransferTo(s, &msg); ok {
@@ -206,27 +189,25 @@ func (s OB11Segment) FriendlyText(optFunc ...MsgOptFunc) (text string) {
 		}
 		return "[文件消息]"
 	case "json":
-		jsonMap := JsonMessage{}
-		err := json.Unmarshal([]byte(s.Data["data"].(string)), &jsonMap)
-		if err != nil {
-			log.Println("error when json unmarshal: json message", err)
+		var jsonMap JsonMessage
+		if ok := TransferTo(s, &jsonMap); ok {
+			switch jsonMap.View {
+			case "news":
+				news := JsonNews{}
+				if err := json.Unmarshal(jsonMap.Meta, &news); err != nil {
+					return "[分享卡片: 无法获取内容]"
+				}
+				return fmt.Sprintf("[分享卡片,标题: %s,描述: %s,链接: (%s)]", news.News.Title, news.News.Desc, news.News.JumpUrl)
+			default:
+				detail := JsonDetailMeta{}
+				if err := json.Unmarshal(jsonMap.Meta, &detail); err != nil {
+					return "[分享卡片: 无法获取内容]"
+				}
+				return fmt.Sprintf("[分享卡片,标题: %s,描述: %s]", detail.Detail.Title, detail.Detail.Desc)
+			}
+		} else {
 			return "[分享卡片: 无法获取内容]"
 		}
-		switch jsonMap.View {
-		case "news":
-			news := JsonNews{}
-			if err := json.Unmarshal(jsonMap.Meta, &news); err != nil {
-				return "[分享卡片: 无法获取内容]"
-			}
-			return fmt.Sprintf("[分享卡片,标题: %s,描述: %s,链接: (%s)]", news.News.Title, news.News.Desc, news.News.JumpUrl)
-		default:
-			detail := JsonDetailMeta{}
-			if err := json.Unmarshal(jsonMap.Meta, &detail); err != nil {
-				return "[分享卡片: 无法获取内容]"
-			}
-			return fmt.Sprintf("[分享卡片,标题: %s,描述: %s]", detail.Detail.Title, detail.Detail.Desc)
-		}
-
 	default:
 		return fmt.Sprintf("[%s]", s.Type)
 	}
