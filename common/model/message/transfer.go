@@ -6,13 +6,13 @@ import (
 	"strconv"
 )
 
-type transerable interface {
+type transferable interface {
 	TextMessage | FaceMessage | ImageMessage | MentionMessage |
 		ReplyMessage | VideoMessage | RecordMessage | JsonMessage |
 		MusicMessage | FileMessage | ForwardMessage
 }
 
-func TransferTo[T transerable](s OB11Segment, target *T) bool {
+func TransferTo[T transferable](s OB11Segment, target *T) bool {
 	return transfer(s, target)
 }
 
