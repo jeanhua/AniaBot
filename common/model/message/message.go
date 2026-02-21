@@ -16,7 +16,7 @@ type Message struct {
 	SelfId      uint          `json:"self_id"`
 }
 
-type ForwardMessage struct {
+type ForwardMessageSegment struct {
 	Messages []NodeMsg                `json:"messages"`
 	News     []map[string]interface{} `json:"news"`
 	Prompt   string                   `json:"prompt"`
@@ -26,12 +26,12 @@ type ForwardMessage struct {
 
 type GroupForwardMessage struct {
 	GroupId uint `json:"group_id"`
-	ForwardMessage
+	ForwardMessageSegment
 }
 
 type FriendForwardMessage struct {
 	UserId uint `json:"user_id"`
-	ForwardMessage
+	ForwardMessageSegment
 }
 
 type NodeMsg struct {

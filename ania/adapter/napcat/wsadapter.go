@@ -107,7 +107,7 @@ func (n *napcatWebSocketAdapter) SendFriendMsg(userId uint, chain msgchain.Frien
 }
 
 func (n *napcatWebSocketAdapter) SendGroupForwardMsg(groupId uint, chain msgchain.GroupForwardChain) (uint, bool) {
-	params := message.GroupForwardMessage{GroupId: groupId, ForwardMessage: chain.GetForwardMsg()}
+	params := message.GroupForwardMessage{GroupId: groupId, ForwardMessageSegment: chain.GetForwardMsg()}
 	res, ok := request[message.Message](n, "send_forward_msg", params, "ack")
 	if !ok || res == nil {
 		return 0, false
@@ -116,7 +116,7 @@ func (n *napcatWebSocketAdapter) SendGroupForwardMsg(groupId uint, chain msgchai
 }
 
 func (n *napcatWebSocketAdapter) SendFriendForwardMsg(userId uint, chain msgchain.FriendForwardChain) (uint, bool) {
-	params := message.FriendForwardMessage{UserId: userId, ForwardMessage: chain.GetForwardMsg()}
+	params := message.FriendForwardMessage{UserId: userId, ForwardMessageSegment: chain.GetForwardMsg()}
 	res, ok := request[message.Message](n, "send_forward_msg", params, "ack")
 	if !ok || res == nil {
 		return 0, false
