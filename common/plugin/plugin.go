@@ -34,6 +34,8 @@ type StartupEvent interface {
 	Start(cfg *viper.Viper)
 	// StartCron 初始化cron事件
 	StartCron(bot bot.Bot, c CronManager)
+	// Awake Bot启动完成事件
+	Awake(bot bot.Bot)
 }
 
 type NoticeEvent interface {

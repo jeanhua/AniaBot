@@ -30,7 +30,8 @@ func (n *napcatHttpAdapter) Serve(v *viper.Viper) {
 	port := v.GetInt("bot.adapter.http.listen_port")
 	log.Println("已启用napcat http adapter")
 	log.Printf("本地HTTP服务器已启动 http://localhost:%d...\n", port)
-	log.Fatal(http.ListenAndServe(fmt.Sprintf(":%d", port), nil))
+	http.ListenAndServe(fmt.Sprintf(":%d", port), nil)
+	log.Println("HTTP服务器已停止，正在退出")
 }
 
 func (n *napcatHttpAdapter) handler(w http.ResponseWriter, r *http.Request) {
