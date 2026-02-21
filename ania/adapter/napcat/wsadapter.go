@@ -190,13 +190,16 @@ func (n *napcatWebSocketAdapter) Serve(v *viper.Viper) {
 			time.Sleep(waitTime)
 		}
 		if err != nil {
-			log.Fatal("无法连接至服务器，程序退出")
+			log.Println("无法连接至服务器，程序退出")
+			break
 		}
 		log.Println("WebSocket 连接成功！")
 		n.wsConn = conn
 		n.readLoop(conn)
 		log.Println("连接断开，准备重连...")
 	}
+
+	log.Println("Websocket正在退出")
 }
 
 func (n *napcatWebSocketAdapter) readLoop(conn *websocket.Conn) {

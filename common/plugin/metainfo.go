@@ -38,6 +38,12 @@ func (p *Meta) OnFriendMsg(bot.Bot, command.Command, message.Message) bool {
 // Start 插件初始化事件
 func (p *Meta) Start(cfg *viper.Viper) {}
 
+// StartCron 初始化cron事件
+func (p *Meta) StartCron(bot bot.Bot, c CronManager) {}
+
+// Awake Bot启动完成事件
+func (p *Meta) Awake(bot bot.Bot) {}
+
 // OnGroupUpload 处理群文件上传
 func (p *Meta) OnGroupUpload(b bot.Bot, notice message.GroupUploadNotice) {}
 
@@ -79,6 +85,3 @@ func (p *Meta) OnEssence(b bot.Bot, notice message.EssenceNotice) {}
 
 // OnGroupCard 处理群名片变更
 func (p *Meta) OnGroupCard(b bot.Bot, notice message.GroupCardNotice) {}
-
-// StartCron 初始化cron事件
-func (p *Meta) StartCron(bot bot.Bot, c CronManager) {}

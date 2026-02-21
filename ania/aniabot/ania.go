@@ -7,6 +7,7 @@ import (
 	"log"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/jeanhua/AniaBot/ania/utils"
 	"github.com/jeanhua/AniaBot/common/adapter"
@@ -128,6 +129,15 @@ func (ania *AniaBot) Run() {
 	c.Start()
 	defer c.Stop()
 
+	awakeTimer := time.AfterFunc(time.Second, func() {
+		log.Println("Awake...")
+		for _, p := range ania.plugins {
+			safeExecute("Awake", p, func(p plugin.Plugin) {
+				p.Awake(ania)
+			})
+		}
+	})
+	defer awakeTimer.Stop()
 	ania.adapter.Serve(ania.cfg)
 }
 
