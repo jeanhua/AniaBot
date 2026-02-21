@@ -1,5 +1,19 @@
 package message
 
+const (
+	SegmentText    = "text"
+	SegmentFace    = "face"
+	SegmentImage   = "image"
+	SegmentMention = "at"
+	SegmentReply   = "reply"
+	SegmentVideo   = "video"
+	SegmentRecord  = "record"
+	SegmentJson    = "json"
+	SegmentMusic   = "music"
+	SegmentFile    = "file"
+	SegmentForward = "forward"
+)
+
 type TextMessage struct {
 	Text string
 }

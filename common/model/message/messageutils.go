@@ -61,23 +61,23 @@ func (s OB11Segment) FriendlyText(optFunc ...MsgOptFunc) (text string) {
 	}
 
 	switch s.Type {
-	case "text":
+	case SegmentText:
 		var msg TextMessage
-		if ok := TransferTo(s, &msg); ok {
+		if ok := ParseText(s, &msg); ok {
 			return msg.Text
 		}
 		return "[无法解析的文本消息]"
-	case "face":
+	case SegmentFace:
 		var msg FaceMessage
-		if ok := TransferTo(s, &msg); ok {
+		if ok := ParseFace(s, &msg); ok {
 			if dsc, ok2 := emojiMap[msg.Id]; ok2 {
 				return fmt.Sprintf("[QQ表情:%s]", dsc)
 			}
 		}
 		return "[QQ表情]"
-	case "image":
+	case SegmentImage:
 		var msg ImageMessage
-		if ok := TransferTo(s, &msg); ok {
+		if ok := ParseImage(s, &msg); ok {
 			if msgFuncs.getImageOCRFunc != nil {
 				var str strings.Builder
 				str.WriteString("\n<图片消息>\n")
@@ -87,21 +87,21 @@ func (s OB11Segment) FriendlyText(optFunc ...MsgOptFunc) (text string) {
 			}
 		}
 		return "[图片消息]"
-	case "record":
+	case SegmentRecord:
 		var msg RecordMessage
-		if ok := TransferTo(s, &msg); ok {
+		if ok := ParseRecord(s, &msg); ok {
 			return fmt.Sprintf("[录音:%s]", msg.URL)
 		}
 		return "[录音消息]"
-	case "video":
+	case SegmentVideo:
 		var msg VideoMessage
-		if ok := TransferTo(s, &msg); ok {
+		if ok := ParseVideo(s, &msg); ok {
 			return fmt.Sprintf("[视频:%s]", msg.URL)
 		}
 		return "[视频消息]"
-	case "at":
+	case SegmentMention:
 		var msg MentionMessage
-		if ok := TransferTo(s, &msg); ok {
+		if ok := ParseMention(s, &msg); ok {
 			if msg.IsAll {
 				return "[at:全体成员]"
 			}
@@ -119,15 +119,15 @@ func (s OB11Segment) FriendlyText(optFunc ...MsgOptFunc) (text string) {
 			}
 		}
 		return "[at]"
-	case "music":
+	case SegmentMusic:
 		var msg MusicMessage
-		if ok := TransferTo(s, &msg); ok {
+		if ok := ParseMusic(s, &msg); ok {
 			return fmt.Sprintf("[音乐:%s]", msg.Title)
 		}
 		return "[音乐消息]"
-	case "reply":
+	case SegmentReply:
 		var msg ReplyMessage
-		if ok := TransferTo(s, &msg); ok {
+		if ok := ParseReply(s, &msg); ok {
 			if msgFuncs.getMsgFunc != nil {
 				if dtMsg, ok2 := msgFuncs.getMsgFunc(msg.Id); ok2 {
 					nickname := dtMsg.Sender.Card
@@ -150,10 +150,10 @@ func (s OB11Segment) FriendlyText(optFunc ...MsgOptFunc) (text string) {
 			}
 		}
 		return "[回复消息]"
-	case "forward":
+	case SegmentForward:
 		if msgFuncs.getForwardMsgFunc != nil {
 			var msg ForwardMessage
-			if ok := TransferTo(s, &msg); ok {
+			if ok := ParseForward(s, &msg); ok {
 				if detail, ok := msgFuncs.getForwardMsgFunc(msg.Id); ok {
 					builder := strings.Builder{}
 					builder.WriteString("\n<合并转发消息>")
@@ -182,15 +182,15 @@ func (s OB11Segment) FriendlyText(optFunc ...MsgOptFunc) (text string) {
 			}
 		}
 		return "[转发消息]"
-	case "file":
+	case SegmentFile:
 		var msg FileMessage
-		if ok := TransferTo(s, &msg); ok {
+		if ok := ParseFile(s, &msg); ok {
 			return fmt.Sprintf("[文件:%s]", msg.File)
 		}
 		return "[文件消息]"
-	case "json":
+	case SegmentJson:
 		var jsonMap JsonMessage
-		if ok := TransferTo(s, &jsonMap); ok {
+		if ok := ParseJson(s, &jsonMap); ok {
 			switch jsonMap.View {
 			case "news":
 				news := JsonNews{}
