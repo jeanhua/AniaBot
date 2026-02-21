@@ -26,7 +26,7 @@ func NewAcgWallpaperPlugin(maxWork int) *AcgWallpaperPlugin {
 	}
 }
 
-func (p *AcgWallpaperPlugin) StartCron(bot bot.Bot, c plugin.CronManager) {
+func (p *AcgWallpaperPlugin) Awake(bot bot.Bot) {
 	go p.workFunc(bot)
 }
 

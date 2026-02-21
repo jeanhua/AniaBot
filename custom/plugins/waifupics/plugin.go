@@ -156,7 +156,7 @@ func (p *WaifuPlugin) OnFriendMsg(bot bot.Bot, cmd command.Command, msg message.
 	return false
 }
 
-func (p *WaifuPlugin) StartCron(bot bot.Bot, c plugin.CronManager) {
+func (p *WaifuPlugin) Awake(bot bot.Bot) {
 	go p.workFunc(bot)
 }
 
