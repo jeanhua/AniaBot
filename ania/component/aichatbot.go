@@ -110,7 +110,7 @@ func (b *ChatBot) Chat(ctx context.Context, userInput string, msgFunc functool.O
 			case functool.JINA_TOOL_SEARCH_NAME, functool.JINA_TOOL_EXPLORE_NAME:
 				callResult, err = functool.TryHanleJina(ctx, b.searchToken, call)
 			case functool.TIME_TOOL_NAME:
-				callResult, err = functool.TryHanleTimeCall(call)
+				callResult, err = functool.TryHandleTimeCall(call)
 			case functool.MEME_TOOL_NAME:
 				callResult, err = functool.TryHandleMemeFunc(call, msgFunc)
 			default:

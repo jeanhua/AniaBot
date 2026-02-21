@@ -19,7 +19,7 @@ func MakeTimeTool() []llms.Tool {
 	}
 }
 
-func TryHanleTimeCall(call llms.ToolCall) (string, error) {
+func TryHandleTimeCall(call llms.ToolCall) (string, error) {
 	log.Println("执行time...")
 	return utils.GetFormattedTime(), nil
 }
