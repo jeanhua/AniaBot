@@ -102,6 +102,30 @@ import "github.com/jeanhua/AniaBot/ania/plugins/pluginantiwithdrawal"
 bot.AddPlugin(pluginantiwithdrawal.NewPlugin())
 ```
 
+### 5. 新闻推送插件 (pluginnews)
+
+**功能描述**：定期抓取并推送来自配置来源的新闻、头条相关资讯到群聊，支持订阅/退订和关键词过滤。
+
+**配置示例**（在 `config.yaml` 中）：
+
+```yaml
+plugin:
+  # 每日新闻插件
+  dailyNews:
+    api: "https://uapis.cn/api/v1/daily/news-image" # api端点
+    cron: "0 12 * * *" # cron表达式, 每天12点触发
+    groups: # 指定需要定时播报的群聊
+      - 123456
+      - 7891011
+```
+
+**使用方式**：
+```go
+import "github.com/jeanhua/AniaBot/ania/plugins/pluginnews"
+
+bot.AddPlugin(pluginnews.NewPlugin())
+```
+
 ### 系统插件注册示例
 
 在 `cmd/main.go` 中注册所有系统插件：
@@ -123,6 +147,7 @@ func main() {
     bot.AddPlugin(pluginrepeat.NewPlugin())        // 复读机插件
     bot.AddPlugin(pluginaichat.NewAIChatPlugin())  // AI对话插件
     bot.AddPlugin(pluginantiwithdrawal.NewPlugin()) // 防撤回插件
+    bot.AddPlugin(pluginnews.NewPlugin())			// 每日新闻插件
     
     bot.Run()
 }
