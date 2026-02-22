@@ -54,7 +54,7 @@ func (n *napcatHttpAdapter) onMsg(data []byte) {
 	if err := json.Unmarshal(data, &callBack); err != nil {
 		return
 	}
-	postType := callBack["post_type"].(string)
+	postType, _ := callBack["post_type"].(string)
 	switch postType {
 	case "message", "message_sent":
 		var msg message.Message
