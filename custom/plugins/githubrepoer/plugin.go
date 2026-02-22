@@ -32,12 +32,20 @@ type GithubRepoer struct {
 	}
 }
 
+var helpWords = `
+指令示例 /gr [github项目链接] [...参数选项] , 参数如下:
+1. --include=[pattern] 只包含此pattern的文件 e.g. --include=**/*.go,**/*.md
+2. --exclude=[pattern] 排除此pattern的文件 e.g. --exclude=**/*_test.go
+3. --compress 去除所有函数实现，只保留签名
+4. --del-comment 去除所有的注释
+5. --del-emptyline 去除所有空行`
+
 func NewGithubRepoer(maxPendding int) *GithubRepoer {
 	pd := make(chan work, maxPendding)
 	return &GithubRepoer{
 		Meta: plugin.Meta{
 			Name:      "GithubRepoer插件",
-			HelpWords: "发送 /gr [github项目链接] 即可获取项目分析报告, 可选参数--compress=true",
+			HelpWords: "发送 /gr [github项目链接] 即可获取项目分析报告, 发送 /gr help 获取参数详情",
 		},
 		pendding: pd,
 	}
@@ -77,6 +85,13 @@ func (p *GithubRepoer) OnGroupMsg(bot bot.Bot, cmd command.Command, msg message.
 			return false
 		}
 
+		if cmd.Args[0] == "help" {
+			builder := msgchain.Builder().Group()
+			builder.Mention(msg.Sender.UserId).Text(helpWords)
+			bot.SendGroupMsg(msg.GroupId, builder.Build())
+			return false
+		}
+
 		targetUrl := cmd.Args[0]
 		if _, err := url.Parse(targetUrl); err != nil {
 			builder := msgchain.Builder().Group()
@@ -85,22 +100,15 @@ func (p *GithubRepoer) OnGroupMsg(bot bot.Bot, cmd command.Command, msg message.
 			return false
 		}
 
-		compress := false
-		for _, arg := range cmd.Args {
-			if arg == "--compress=true" {
-				compress = true
-			}
-		}
+		w := parseCmd(cmd.Args)
+		w.target = TargetGroup
+		w.userId = msg.Sender.UserId
+		w.groupId = msg.GroupId
+		w.msgId = msg.MessageId
+		w.repoURL = targetUrl
 
 		select {
-		case p.pendding <- work{
-			target:   TargetGroup,
-			userId:   msg.Sender.UserId,
-			groupId:  msg.GroupId,
-			msgId:    msg.MessageId,
-			compress: compress,
-			repoURL:  targetUrl,
-		}:
+		case p.pendding <- w:
 			builder := msgchain.Builder().Group()
 			builder.Reply(msg.MessageId).Mention(msg.Sender.UserId).Text(" 正在生成中，请稍后").Face(178)
 			bot.SendGroupMsg(msg.GroupId, builder.Build())
@@ -124,6 +132,13 @@ func (p *GithubRepoer) OnFriendMsg(bot bot.Bot, cmd command.Command, msg message
 			return false
 		}
 
+		if cmd.Args[0] == "help" {
+			builder := msgchain.Builder().Friend()
+			builder.Text(helpWords)
+			bot.SendFriendMsg(msg.Sender.UserId, builder.Build())
+			return false
+		}
+
 		targetUrl := cmd.Args[0]
 		if _, err := url.Parse(targetUrl); err != nil {
 			builder := msgchain.Builder().Friend()
@@ -132,21 +147,15 @@ func (p *GithubRepoer) OnFriendMsg(bot bot.Bot, cmd command.Command, msg message
 			return false
 		}
 
-		compress := false
-		for _, arg := range cmd.Args {
-			if arg == "--compress=true" {
-				compress = true
-			}
-		}
+		w := parseCmd(cmd.Args)
+		w.target = TargetFriend
+		w.userId = msg.Sender.UserId
+		w.groupId = msg.GroupId
+		w.msgId = msg.MessageId
+		w.repoURL = targetUrl
 
 		select {
-		case p.pendding <- work{
-			target:   TargetFriend,
-			userId:   msg.Sender.UserId,
-			msgId:    msg.MessageId,
-			compress: compress,
-			repoURL:  targetUrl,
-		}:
+		case p.pendding <- w:
 			builder := msgchain.Builder().Friend()
 			builder.Text("正在生成中，请稍后").Face(178)
 			bot.SendFriendMsg(msg.Sender.UserId, builder.Build())
@@ -164,7 +173,7 @@ func (p *GithubRepoer) workFunc(bot bot.Bot) {
 	for {
 		w := <-p.pendding
 		log.Println("正在生产github报告:", w.repoURL)
-		info, err := getRepoInfo(w.repoURL, w.compress, p.maxToken)
+		info, err := getRepoInfo(w.repoURL, w.compress, w.delComment, w.delEmptyLine, p.maxToken, w.include, w.exclude)
 		if err != nil {
 			onErr(bot, w, err)
 			continue
@@ -202,7 +211,7 @@ func (p *GithubRepoer) workFunc(bot bot.Bot) {
 func onErr(bot bot.Bot, w work, err error) {
 	noticeText := "请求失败，请稍后再试"
 	if errors.Is(err, OutOfContextError) {
-		noticeText = "项目过大，请使用 --compress=true 选项"
+		noticeText = "项目过大，请使用参数选项减少无关代码，参考 /gr help"
 	}
 	if w.target == TargetGroup {
 		builder := msgchain.Builder().Group()

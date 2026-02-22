@@ -2,21 +2,30 @@ package githubrepoer
 
 import (
 	"encoding/json"
+	"fmt"
+	"strings"
 
 	"github.com/go-resty/resty/v2"
 )
 
-func getRepoInfo(url string, compress bool, maxToken int) (string, error) {
+func getRepoInfo(url string, compress, delComment, delEmptyLine bool, maxToken int, include, exclude string) (string, error) {
 	client := resty.New()
-	optionstr, _ := json.Marshal(map[string]bool{
-		"removeComments":     false,
-		"removeEmptyLines":   false,
+	opt := map[string]any{
+		"removeComments":     delComment,
+		"removeEmptyLines":   delEmptyLine,
 		"showLineNumbers":    false,
 		"fileSummary":        true,
 		"directoryStructure": true,
 		"outputParsable":     false,
 		"compress":           compress,
-	})
+	}
+	if include != "" {
+		opt["includePatterns"] = include
+	}
+	if exclude != "" {
+		opt["ignorePatterns"] = exclude
+	}
+	optionstr, _ := json.Marshal(opt)
 	formData := map[string]string{
 		"url":     url,
 		"format":  "plain",
@@ -28,6 +37,9 @@ func getRepoInfo(url string, compress bool, maxToken int) (string, error) {
 	}
 	if repoData.Metadata.Summary.TotalTokens > maxToken {
 		return "", OutOfContextError
+	}
+	if repoData.Content == "" {
+		return "", fmt.Errorf("empty result")
 	}
 	return repoData.Content, nil
 }
@@ -44,4 +56,26 @@ type RepoData struct {
 			TotalTokens     int `json:"totalTokens"`
 		} `json:"summary"`
 	} `json:"metadata"`
+}
+
+func parseCmd(args []string) work {
+	w := work{}
+	for _, arg := range args {
+		switch arg {
+		case "--compress":
+			w.compress = true
+		case "--del-comment":
+			w.delComment = true
+		case "--del-emptyline":
+			w.delEmptyLine = true
+		}
+
+		if strings.HasPrefix(arg, "--include=") {
+			w.include = strings.TrimPrefix(arg, "--include=")
+		} else if strings.HasPrefix(arg, "--exclude=") {
+			w.include = strings.TrimPrefix(arg, "--exclude=")
+		}
+	}
+
+	return w
 }

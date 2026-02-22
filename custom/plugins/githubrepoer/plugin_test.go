@@ -5,7 +5,7 @@ import (
 )
 
 func TestGetRepoInfo(t *testing.T) {
-	result, err := getRepoInfo("https://github.com/jeanhua/AniaBot", false, 100000)
+	result, err := getRepoInfo("https://github.com/jeanhua/AniaBot", false, false, false, 100000, "", "")
 	if err != nil {
 		panic(err)
 	}
