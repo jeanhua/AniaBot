@@ -48,13 +48,7 @@ func WithGetImageOCRFunc(f func(url string) string) MsgOptFunc {
 	}
 }
 
-func (s OB11Segment) FriendlyText(optFunc ...MsgOptFunc) (text string) {
-	defer func() {
-		if err := recover(); err != nil {
-			text = "读取消息错误"
-		}
-	}()
-
+func (s OB11Segment) FriendlyText(optFunc ...MsgOptFunc) string {
 	msgFuncs := msgHandleOpt{}
 	for _, f := range optFunc {
 		f(&msgFuncs)
