@@ -70,6 +70,7 @@ func request[T any](n *napcatWebSocketAdapter, action string, params any, prefix
 			return nil, false
 		}
 		if resp.Status != "ok" {
+			log.Println("消息发送失败", string(data))
 			return nil, false
 		}
 		return &resp.Data, true
