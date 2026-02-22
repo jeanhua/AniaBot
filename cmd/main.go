@@ -10,6 +10,7 @@ import (
 	"github.com/jeanhua/AniaBot/ania/plugins/pluginrepeat"
 	"github.com/jeanhua/AniaBot/custom/plugins/acgwallpaper"
 	"github.com/jeanhua/AniaBot/custom/plugins/douyinparser"
+	"github.com/jeanhua/AniaBot/custom/plugins/githubrepoer"
 	"github.com/jeanhua/AniaBot/custom/plugins/waifupics"
 )
 
@@ -28,6 +29,7 @@ func main() {
 	bot.AddPlugin(douyinparser.Newplugin())
 	bot.AddPlugin(acgwallpaper.NewAcgWallpaperPlugin(5))
 	bot.AddPlugin(waifupics.NewWaifuPlugin(5))
+	bot.AddPlugin(githubrepoer.NewGithubRepoer(5))
 
 	bot.Run()
 }

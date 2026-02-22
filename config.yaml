@@ -60,4 +60,12 @@ plugin:
       - 123456
       - 7891011
 
-
+  # GithubRepoer插件
+  github_repoer:
+    model:
+      base_url: "https://api.deepseek.com"
+      api_key: ""
+      model: "deepseek-chat"
+      prompt: |-
+        你是Github项目专业分析师，负责分析用户提供的代码项目质量，并给出报告和打分
+        你最终的输出结果应该只包含报告，不要有其他无关解释和讨论
