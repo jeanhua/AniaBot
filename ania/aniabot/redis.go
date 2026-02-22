@@ -43,8 +43,12 @@ func (store *AniaRedisStorage) GetString(ctx context.Context, key string) (strin
 	return resu, true
 }
 
-func (store *AniaRedisStorage) SetString(ctx context.Context, key, val string) bool {
-	if _, err := store.rdb.Set(ctx, store.prefix+key, val, 0).Result(); err != nil {
+func (store *AniaRedisStorage) SetString(ctx context.Context, key, val string, option ...storage.Option) bool {
+	cfg := storage.StorageConfig{}
+	for _, f := range option {
+		f(&cfg)
+	}
+	if _, err := store.rdb.Set(ctx, store.prefix+key, val, cfg.TTL).Result(); err != nil {
 		return false
 	} else {
 		return true
@@ -62,11 +66,15 @@ func (store *AniaRedisStorage) Get(ctx context.Context, key string, out any) boo
 	return true
 }
 
-func (store *AniaRedisStorage) Set(ctx context.Context, key string, val any) bool {
+func (store *AniaRedisStorage) Set(ctx context.Context, key string, val any, option ...storage.Option) bool {
+	cfg := storage.StorageConfig{}
+	for _, f := range option {
+		f(&cfg)
+	}
 	if b, err := json.Marshal(val); err != nil {
 		return false
 	} else {
-		if _, err := store.rdb.Set(ctx, store.prefix+key, b, 0).Result(); err != nil {
+		if _, err := store.rdb.Set(ctx, store.prefix+key, b, cfg.TTL).Result(); err != nil {
 			return false
 		} else {
 			return true
