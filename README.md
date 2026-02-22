@@ -7,6 +7,7 @@
 1. 抖音分享解析插件：分享抖音内容可解析视频直链
 2. 二次元壁纸图片：可获取随机二次元壁纸
 3. waifu.pics插件：获取分类随机二次元图和表情包
+4. GithubRepoer插件：给github项目进行质量分析并给出报告
 
 ![help](./README/help.png)
 
@@ -24,4 +25,8 @@
 
 ![douyin](./README/douyin.png)
 
+每日新闻插件
+
 ![news](./README/news.png)
+
+![news](./README/gr.png)
