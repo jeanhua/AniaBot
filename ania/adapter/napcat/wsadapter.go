@@ -241,9 +241,13 @@ func (n *napcatWebSocketAdapter) onMsg(data []byte) {
 		var msg message.Message
 		if err := json.Unmarshal(data, &msg); err == nil {
 			if msg.MessageType == "group" && n.trigger.OnGroupMsg != nil {
-				n.trigger.OnGroupMsg(msg)
-			} else if msg.MessageType == "private" && n.trigger.OnFriendMsg != nil {
-				n.trigger.OnFriendMsg(msg)
+				if msg.RawMessage != "" {
+					n.trigger.OnGroupMsg(msg)
+				}
+			} else if msg.MessageType == "private" && msg.SubType == "friend" && n.trigger.OnFriendMsg != nil {
+				if msg.RawMessage != "" {
+					n.trigger.OnFriendMsg(msg)
+				}
 			}
 		}
 	case "notice":
