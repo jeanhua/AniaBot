@@ -6,7 +6,7 @@ import (
 	"github.com/go-resty/resty/v2"
 )
 
-func getRepoInfo(url string, compress bool) (string, error) {
+func getRepoInfo(url string, compress bool, maxToken int) (string, error) {
 	client := resty.New()
 	optionstr, _ := json.Marshal(map[string]bool{
 		"removeComments":     false,
@@ -25,6 +25,9 @@ func getRepoInfo(url string, compress bool) (string, error) {
 	repoData := RepoData{}
 	if _, err := client.R().SetFormData(formData).SetResult(&repoData).Post("https://api.repomix.com/api/pack"); err != nil {
 		return "", err
+	}
+	if repoData.Metadata.Summary.TotalTokens > maxToken {
+		return "", OutOfContextError
 	}
 	return repoData.Content, nil
 }

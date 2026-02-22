@@ -62,6 +62,7 @@ plugin:
 
   # GithubRepoer插件
   github_repoer:
+    max_token: 100000 # 上下文限制
     model:
       base_url: "https://api.deepseek.com"
       api_key: ""

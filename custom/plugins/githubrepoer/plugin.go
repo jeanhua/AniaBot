@@ -3,6 +3,7 @@ package githubrepoer
 import (
 	"context"
 	"encoding/base64"
+	"errors"
 	"log"
 	"net/url"
 	"time"
@@ -22,6 +23,7 @@ type GithubRepoer struct {
 	plugin.Meta
 	pendding  chan work
 	llm       *openai.LLM
+	maxToken  int
 	llmConfig struct {
 		baseUrl string
 		apiKey  string
@@ -47,6 +49,7 @@ func (p *GithubRepoer) Start(cfg *viper.Viper) {
 	p.llmConfig.apiKey = cfg.GetString("plugin.github_repoer.model.api_key")
 	p.llmConfig.model = cfg.GetString("plugin.github_repoer.model.model")
 	p.llmConfig.prompt = cfg.GetString("plugin.github_repoer.model.prompt")
+	p.maxToken = cfg.GetInt("plugin.github_repoer.max_token")
 
 	llm, err := openai.New(
 		openai.WithBaseURL(p.llmConfig.baseUrl),
@@ -98,6 +101,9 @@ func (p *GithubRepoer) OnGroupMsg(bot bot.Bot, cmd command.Command, msg message.
 			compress: compress,
 			repoURL:  targetUrl,
 		}:
+			builder := msgchain.Builder().Group()
+			builder.Reply(msg.MessageId).Mention(msg.Sender.UserId).Text(" 正在生成中，请稍后").Face(178)
+			bot.SendGroupMsg(msg.GroupId, builder.Build())
 		default:
 			builder := msgchain.Builder().Group()
 			builder.Mention(msg.Sender.UserId).Text(" 请求队列已满，请稍后再试哦").Face(14)
@@ -141,6 +147,9 @@ func (p *GithubRepoer) OnFriendMsg(bot bot.Bot, cmd command.Command, msg message
 			compress: compress,
 			repoURL:  targetUrl,
 		}:
+			builder := msgchain.Builder().Friend()
+			builder.Text("正在生成中，请稍后").Face(178)
+			bot.SendFriendMsg(msg.Sender.UserId, builder.Build())
 		default:
 			builder := msgchain.Builder().Friend()
 			builder.Text("请求队列已满，请稍后再试哦").Face(14)
@@ -155,16 +164,16 @@ func (p *GithubRepoer) workFunc(bot bot.Bot) {
 	for {
 		w := <-p.pendding
 		log.Println("正在生产github报告:", w.repoURL)
-		info, err := getRepoInfo(w.repoURL, w.compress)
+		info, err := getRepoInfo(w.repoURL, w.compress, p.maxToken)
 		if err != nil {
-			onErr(bot, w)
+			onErr(bot, w, err)
 			continue
 		}
 		ctx, cancel := context.WithTimeout(context.Background(), time.Minute*3)
 		result, err := p.generateAI(ctx, info)
 		cancel()
 		if err != nil {
-			onErr(bot, w)
+			onErr(bot, w, err)
 			continue
 		}
 
@@ -190,14 +199,18 @@ func (p *GithubRepoer) workFunc(bot bot.Bot) {
 	}
 }
 
-func onErr(bot bot.Bot, w work) {
+func onErr(bot bot.Bot, w work, err error) {
+	noticeText := "请求失败，请稍后再试"
+	if errors.Is(err, OutOfContextError) {
+		noticeText = "项目过大，请使用 --compress=true 选项"
+	}
 	if w.target == TargetGroup {
 		builder := msgchain.Builder().Group()
-		builder.Reply(w.msgId).Mention(w.userId).Text(" 请求失败，请稍后再试").Face(6)
+		builder.Reply(w.msgId).Mention(w.userId).Text(" " + noticeText).Face(6)
 		bot.SendGroupMsg(w.groupId, builder.Build())
 	} else {
 		builder := msgchain.Builder().Friend()
-		builder.Reply(w.msgId).Text("请求失败，请稍后再试").Face(6)
+		builder.Reply(w.msgId).Text(noticeText).Face(6)
 		bot.SendFriendMsg(w.userId, builder.Build())
 	}
 }
@@ -209,6 +222,9 @@ func (p *GithubRepoer) generateAI(ctx context.Context, info string) (string, err
 			llms.TextParts(llms.ChatMessageTypeSystem, p.llmConfig.prompt),
 			llms.TextParts(llms.ChatMessageTypeHuman, info),
 		},
+		llms.WithTemperature(1.2),
+		llms.WithTopP(0.9),
+		llms.WithTopK(100),
 	)
 	if err != nil {
 		return "", err
