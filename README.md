@@ -372,7 +372,7 @@ func (p *YourPlugin) ForExampleSomeEvent {
 }
 ```
 
-其他方法参考 [定义](./common/storage/storage.go)
+其他方法参考 [存储接口文档](./README/docs/storage.md)
 
 > 注意：**AniaBot**通过key前缀为每个插件创建独立的存储空间，不同插件数据读写互不干扰，空间分配依据插件名称的base64编码，所以修改插件名称后，插件原数据内容将无法访问，请在修改前清空或转移数据
 
@@ -448,16 +448,17 @@ func (p *WeatherPlugin) queryWeather(city string) string {
 - `OnFriendMsg(bot.Bot, command.Command, message.Message) bool` - 私聊消息处理
 - `Start(cfg *viper.Viper)` - 插件初始化
 - `StartCron(bot bot.Bot, c plugin.CronManager)` - Cron初始化，用于定时任务
+- `Awake(bot bot.Bot)` - 服务器启动完成后事件
 
 ### 消息通知接口
 
-更多事件接口请参考 [插件定义文件](./common/plugin/metainfo.go)
+更多事件接口请参考 [事件接口文档](./README/docs/events.md)
 
 ## 系统内置插件介绍
 
 **AniaBot** 内置了多个实用的系统插件，开箱即用，为开发者提供了丰富的功能参考。
 
-详情请参阅 [内置插件](./README/docs/default_plugin.md)
+详情请参阅 [内置插件文档](./README/docs/default_plugin.md)
 
 ## 最佳实践
 
