@@ -1,8 +1,10 @@
 package pluginnews
 
 import (
+	"context"
 	"log"
 
+	"github.com/jeanhua/AniaBot/common/aniaerror"
 	"github.com/jeanhua/AniaBot/common/bot"
 	"github.com/jeanhua/AniaBot/common/model/command"
 	"github.com/jeanhua/AniaBot/common/model/message"
@@ -27,23 +29,26 @@ func NewNewsPlugin() *NewsPlugin {
 	}
 }
 
-func (p *NewsPlugin) Start(cfg *viper.Viper) {
+func (p *NewsPlugin) Start(ctx context.Context, cfg *viper.Viper) error {
 	p.cronExpress = cfg.GetString("plugin.dailyNews.cron")
 	if p.cronExpress == "" {
 		log.Println("读取daily news cron表达式错误")
+		return aniaerror.ParameterInitializationError
 	}
 	p.api = cfg.GetString("plugin.dailyNews.api")
 	if p.api == "" {
 		log.Println("读取daily news api错误")
+		return aniaerror.ParameterInitializationError
 	}
 	groups := cfg.GetIntSlice("plugin.dailyNews.groups")
 	for _, g := range groups {
 		log.Printf("播报群聊注册:%d", g)
 		p.groups = append(p.groups, uint(g))
 	}
+	return nil
 }
 
-func (p *NewsPlugin) StartCron(bot bot.Bot, c plugin.CronManager) {
+func (p *NewsPlugin) StartCron(ctx context.Context, bot bot.Bot, c plugin.CronManager) error {
 	c.AddFunc(p.cronExpress, func() {
 		for _, group := range p.groups {
 			builder := msgchain.Builder().Group()
@@ -56,9 +61,10 @@ func (p *NewsPlugin) StartCron(bot bot.Bot, c plugin.CronManager) {
 			}
 		}
 	})
+	return nil
 }
 
-func (p *NewsPlugin) OnGroupMsg(bot bot.Bot, cmd command.Command, msg message.Message) bool {
+func (p *NewsPlugin) OnGroupMsg(ctx context.Context, bot bot.Bot, cmd command.Command, msg message.Message) (bool, error) {
 	if cmd.Mention && cmd.Name == "news" {
 		builder := msgchain.Builder().Group()
 		builder.ImageUrl(p.api)
@@ -68,7 +74,7 @@ func (p *NewsPlugin) OnGroupMsg(bot bot.Bot, cmd command.Command, msg message.Me
 		} else {
 			log.Printf("[发->群%d]: [每日新闻] 发送失败...", msg.GroupId)
 		}
-		return false
+		return false, nil
 	}
-	return true
+	return true, nil
 }

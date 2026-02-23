@@ -228,14 +228,14 @@ func NewPlugin() *HelloPlugin {
 }
 
 // 处理群聊消息
-func (p *HelloPlugin) OnGroupMsg(bot bot.Bot, cmd command.Command, msg message.Message) bool {
+func (p *HelloPlugin) OnGroupMsg(ctx context.Context, bot bot.Bot, cmd command.Command, msg message.Message) (bool, error) {
     if cmd.Name == "hello" {
         builder := msgchain.Builder().Group()
         builder.Text("你好！我是 AniaBot，很高兴为你服务！")
         bot.SendGroupMsg(msg.GroupId, builder.Build())
-        return false // 阻止后续插件执行
+        return false, nil // 阻止后续插件执行
     }
-    return true // 继续执行后续插件
+    return true, nil // 继续执行后续插件
 }
 ```
 
@@ -302,7 +302,7 @@ bot.SendFriendMsg(msg.Sender.UserId, builder.Build())
 **AniaBot** 提供了强大的命令解析功能：
 
 ```go
-func (p *YourPlugin) OnGroupMsg(bot bot.Bot, cmd command.Command, msg message.Message) bool {
+func (p *YourPlugin) OnGroupMsg(ctx context.Context, bot bot.Bot, cmd command.Command, msg message.Message) (bool, error) {
     if cmd.Mention{ // 当机器人被At时
         switch cmd.Name {
         case "weather":
@@ -317,7 +317,7 @@ func (p *YourPlugin) OnGroupMsg(bot bot.Bot, cmd command.Command, msg message.Me
             // 显示细节信息
         }
     }
-    return true
+    return true, nil
 }
 ```
 
@@ -325,13 +325,14 @@ func (p *YourPlugin) OnGroupMsg(bot bot.Bot, cmd command.Command, msg message.Me
 插件支持配置文件读取：
 
 ```go
-func (p *YourPlugin) Start(cfg *viper.Viper) {
+func (p *YourPlugin) Start(ctx context.Context, cfg *viper.Viper) error {
     // 读取插件配置
     apiKey := cfg.GetString("plugins.yourplugin.api_key")
     timeout := cfg.GetInt("plugins.yourplugin.timeout")
     
     // 初始化插件资源
     p.InitializeResources(apiKey, timeout)
+    return nil
 }
 ```
 
@@ -367,7 +368,7 @@ Meta: plugin.Meta{
 
 ```go
 func (p *YourPlugin) ForExampleSomeEvent {
-    data, ok := p.Storage.GetString(context.Background(), "key")
+    data, ok := p.Storage.GetString(ctx, "key")
     // ...其他读写数据方法
 }
 ```
@@ -412,7 +413,7 @@ func (p *WeatherPlugin) Start(cfg *viper.Viper) {
     p.apiKey = cfg.GetString("plugins.weather.api_key")
 }
 
-func (p *WeatherPlugin) OnGroupMsg(bot bot.Bot, cmd command.Command, msg message.Message) bool {
+func (p *WeatherPlugin) OnGroupMsg(ctx context.Context, bot bot.Bot, cmd command.Command, msg message.Message) (bool, error) {
     if cmd.Name == "weather" {
         if len(cmd.Args) == 0 {
             builder := msgchain.Builder().Group()
@@ -444,11 +445,11 @@ func (p *WeatherPlugin) queryWeather(city string) string {
 
 ### 主要事件接口
 
-- `OnGroupMsg(bot.Bot, command.Command, message.Message) bool` - 群聊消息处理
-- `OnFriendMsg(bot.Bot, command.Command, message.Message) bool` - 私聊消息处理
-- `Start(cfg *viper.Viper)` - 插件初始化
-- `StartCron(bot bot.Bot, c plugin.CronManager)` - Cron初始化，用于定时任务
-- `Awake(bot bot.Bot)` - 服务器启动完成后事件
+- `OnGroupMsg(context.Context, bot.Bot, command.Command, message.Message) (bool, error)` - 群聊消息处理
+- `OnFriendMsg(context.Context, bot.Bot, command.Command, message.Message) (bool, error)` - 私聊消息处理
+- `Start(ctx context.Context, cfg *viper.Viper) error` - 插件初始化
+- `StartCron(ctx context.Context, bot bot.Bot, c CronManager) error` - Cron初始化，用于定时任务
+- `Awake(ctx context.Context, bot bot.Bot) error` - 服务器启动完成后事件
 
 ### 消息通知接口
 

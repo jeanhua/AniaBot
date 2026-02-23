@@ -1,6 +1,7 @@
 package pluginrepeat
 
 import (
+	"context"
 	"sync"
 	"sync/atomic"
 
@@ -34,7 +35,7 @@ func NewPlugin() *RepeatPlugin {
 	return p
 }
 
-func (p *RepeatPlugin) OnGroupMsg(bot bot.Bot, cmd command.Command, msg message.Message) bool {
+func (p *RepeatPlugin) OnGroupMsg(ctx context.Context, bot bot.Bot, cmd command.Command, msg message.Message) (bool, error) {
 
 	if cmd.Mention {
 		if cmd.Name == "close" && len(cmd.Args) >= 1 && cmd.Args[0] == "repeat" {
@@ -43,12 +44,12 @@ func (p *RepeatPlugin) OnGroupMsg(bot bot.Bot, cmd command.Command, msg message.
 				builder := msgchain.Builder().Group()
 				builder.Text("已关闭复读机")
 				bot.SendGroupMsg(msg.GroupId, builder.Build())
-				return false
+				return false, nil
 			} else {
 				builder := msgchain.Builder().Group()
 				builder.Text("你没有权限哦")
 				bot.SendGroupMsg(msg.GroupId, builder.Build())
-				return false
+				return false, nil
 			}
 		} else if cmd.Name == "enable" && len(cmd.Args) >= 1 && cmd.Args[0] == "repeat" {
 			if msg.Sender.UserId == p.admin {
@@ -56,18 +57,18 @@ func (p *RepeatPlugin) OnGroupMsg(bot bot.Bot, cmd command.Command, msg message.
 				builder := msgchain.Builder().Group()
 				builder.Text("已开启复读机")
 				bot.SendGroupMsg(msg.GroupId, builder.Build())
-				return false
+				return false, nil
 			} else {
 				builder := msgchain.Builder().Group()
 				builder.Text("你没有权限哦")
 				bot.SendGroupMsg(msg.GroupId, builder.Build())
-				return false
+				return false, nil
 			}
 		}
 	}
 
 	if p.enable.Load() == false {
-		return true
+		return true, nil
 	}
 	val, ok := p.repeatGMap.Load(msg.GroupId)
 	if !ok {
@@ -75,7 +76,7 @@ func (p *RepeatPlugin) OnGroupMsg(bot bot.Bot, cmd command.Command, msg message.
 			msg:   msg.RawMessage,
 			count: 1,
 		})
-		return true
+		return true, nil
 	}
 
 	rc := val.(*repeatCount)
@@ -99,10 +100,11 @@ func (p *RepeatPlugin) OnGroupMsg(bot bot.Bot, cmd command.Command, msg message.
 		builder.Raw(msg.Message...)
 		bot.SendGroupMsg(msg.GroupId, builder.Build())
 	}
-	return true
+	return true, nil
 }
 
-func (p *RepeatPlugin) Start(cfg *viper.Viper) {
+func (p *RepeatPlugin) Start(ctx context.Context, cfg *viper.Viper) error {
 	p.admin = cfg.GetUint("bot.admin_id")
 	p.enable.Store(true)
+	return nil
 }
