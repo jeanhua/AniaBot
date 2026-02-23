@@ -1,6 +1,8 @@
 package plugin
 
 import (
+	"context"
+
 	"github.com/jeanhua/AniaBot/common/bot"
 	"github.com/jeanhua/AniaBot/common/model/command"
 	"github.com/jeanhua/AniaBot/common/model/message"
@@ -26,62 +28,96 @@ func (p *Meta) SetStorage(s storage.Storage) {
 }
 
 // OnGroupMsg 收到群聊消息触发事件
-func (p *Meta) OnGroupMsg(bot.Bot, command.Command, message.Message) bool {
-	return true
+func (p *Meta) OnGroupMsg(ctx context.Context, bot bot.Bot, cmd command.Command, msg message.Message) (bool, error) {
+	return true, nil
 }
 
 // OnFriendMsg 收到私聊消息触发事件
-func (p *Meta) OnFriendMsg(bot.Bot, command.Command, message.Message) bool {
-	return true
+func (p *Meta) OnFriendMsg(ctx context.Context, bot bot.Bot, cmd command.Command, msg message.Message) (bool, error) {
+	return true, nil
 }
 
 // Start 插件初始化事件
-func (p *Meta) Start(cfg *viper.Viper) {}
+func (p *Meta) Start(ctx context.Context, cfg *viper.Viper) error {
+	return nil
+}
 
 // StartCron 初始化cron事件
-func (p *Meta) StartCron(bot bot.Bot, c CronManager) {}
+func (p *Meta) StartCron(ctx context.Context, bot bot.Bot, c CronManager) error {
+	return nil
+}
 
 // Awake Bot启动完成事件
-func (p *Meta) Awake(bot bot.Bot) {}
+func (p *Meta) Awake(ctx context.Context, bot bot.Bot) error {
+	return nil
+}
 
 // OnGroupUpload 处理群文件上传
-func (p *Meta) OnGroupUpload(b bot.Bot, notice message.GroupUploadNotice) {}
+func (p *Meta) OnGroupUpload(ctx context.Context, bot bot.Bot, notice message.GroupUploadNotice) error {
+	return nil
+}
 
 // OnGroupAdmin 处理群管理员变动
-func (p *Meta) OnGroupAdmin(b bot.Bot, notice message.GroupAdminNotice) {}
+func (p *Meta) OnGroupAdmin(ctx context.Context, bot bot.Bot, notice message.GroupAdminNotice) error {
+	return nil
+}
 
 // OnGroupDecrease 处理群成员减少
-func (p *Meta) OnGroupDecrease(b bot.Bot, notice message.GroupDecreaseNotice) {}
+func (p *Meta) OnGroupDecrease(ctx context.Context, bot bot.Bot, notice message.GroupDecreaseNotice) error {
+	return nil
+}
 
 // OnGroupIncrease 处理群成员增加
-func (p *Meta) OnGroupIncrease(b bot.Bot, notice message.GroupIncreaseNotice) {}
+func (p *Meta) OnGroupIncrease(ctx context.Context, bot bot.Bot, notice message.GroupIncreaseNotice) error {
+	return nil
+}
 
 // OnGroupBan 处理群禁言
-func (p *Meta) OnGroupBan(b bot.Bot, notice message.GroupBanNotice) {}
+func (p *Meta) OnGroupBan(ctx context.Context, bot bot.Bot, notice message.GroupBanNotice) error {
+	return nil
+}
 
 // OnFriendAdd 处理好友添加
-func (p *Meta) OnFriendAdd(b bot.Bot, notice message.FriendAddNotice) {}
+func (p *Meta) OnFriendAdd(ctx context.Context, bot bot.Bot, notice message.FriendAddNotice) error {
+	return nil
+}
 
 // OnGroupRecall 处理群消息撤回
-func (p *Meta) OnGroupRecall(b bot.Bot, notice message.GroupRecallNotice) {}
+func (p *Meta) OnGroupRecall(ctx context.Context, bot bot.Bot, notice message.GroupRecallNotice) error {
+	return nil
+}
 
 // OnFriendRecall 处理好友消息撤回
-func (p *Meta) OnFriendRecall(b bot.Bot, notice message.FriendRecallNotice) {}
+func (p *Meta) OnFriendRecall(ctx context.Context, bot bot.Bot, notice message.FriendRecallNotice) error {
+	return nil
+}
 
 // OnPoke 处理戳一戳
-func (p *Meta) OnPoke(b bot.Bot, notice message.PokeNotice) {}
+func (p *Meta) OnPoke(ctx context.Context, bot bot.Bot, notice message.PokeNotice) error {
+	return nil
+}
 
 // OnLuckyKing 处理运气王
-func (p *Meta) OnLuckyKing(b bot.Bot, notice message.LuckyKingNotice) {}
+func (p *Meta) OnLuckyKing(ctx context.Context, bot bot.Bot, notice message.LuckyKingNotice) error {
+	return nil
+}
 
 // OnHonor 处理群荣誉变更
-func (p *Meta) OnHonor(b bot.Bot, notice message.HonorNotice) {}
+func (p *Meta) OnHonor(ctx context.Context, bot bot.Bot, notice message.HonorNotice) error {
+	return nil
+}
 
 // OnGroupMsgEmojiLike 处理群消息表情回应
-func (p *Meta) OnGroupMsgEmojiLike(b bot.Bot, notice message.GroupMsgEmojiLikeNotice) {}
+func (p *Meta) OnGroupMsgEmojiLike(ctx context.Context, bot bot.Bot, notice message.GroupMsgEmojiLikeNotice) error {
+	return nil
+}
 
 // OnEssence 处理群精华消息变更
-func (p *Meta) OnEssence(b bot.Bot, notice message.EssenceNotice) {}
+func (p *Meta) OnEssence(ctx context.Context, bot bot.Bot, notice message.EssenceNotice) error {
+	return nil
+}
 
 // OnGroupCard 处理群名片变更
-func (p *Meta) OnGroupCard(b bot.Bot, notice message.GroupCardNotice) {}
+func (p *Meta) OnGroupCard(ctx context.Context, bot bot.Bot, notice message.GroupCardNotice) error {
+	return nil
+}

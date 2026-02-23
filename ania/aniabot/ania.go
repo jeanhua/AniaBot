@@ -30,6 +30,15 @@ type AniaBot struct {
 	pluginSet map[string]struct{}
 }
 
+const (
+	StartEventTimeout     = time.Minute
+	StartCronEventTimeout = time.Minute
+	AwakeEventTimeout     = time.Minute
+
+	MsgEventTimeout    = time.Minute * 5
+	NoticeEventTimeout = time.Minute * 5
+)
+
 type Option func(*AniaBot)
 
 func WithStorage(storage storage.Storage) Option {
@@ -106,6 +115,8 @@ func (ania *AniaBot) Run() {
 
 	ania.admin = ania.cfg.GetUint("bot.admin_id")
 
+	ctx := context.Background()
+
 	// 初始化事件
 	log.Println("开始初始化插件...")
 	for _, p := range ania.plugins {
@@ -113,7 +124,9 @@ func (ania *AniaBot) Run() {
 		safeExecute("初始化", p, func(p plugin.Plugin) {
 			encodeName := base64.StdEncoding.EncodeToString([]byte(p.GetMeta().Name))
 			p.SetStorage(ania.storage.Clone(encodeName))
-			p.Start(ania.cfg)
+			startCtx, cancel := context.WithTimeout(ctx, StartEventTimeout)
+			p.Start(startCtx, ania.cfg)
+			cancel()
 		})
 	}
 
@@ -122,7 +135,9 @@ func (ania *AniaBot) Run() {
 	log.Println("开始初始化cron...")
 	for _, p := range ania.plugins {
 		safeExecute("初始化cron", p, func(p plugin.Plugin) {
-			p.StartCron(ania, c)
+			startCtx, cancel := context.WithTimeout(ctx, StartCronEventTimeout)
+			p.StartCron(startCtx, ania, c)
+			cancel()
 		})
 	}
 	log.Println("初始化cron完成")
@@ -133,7 +148,9 @@ func (ania *AniaBot) Run() {
 		log.Println("Awake...")
 		for _, p := range ania.plugins {
 			safeExecute("Awake", p, func(p plugin.Plugin) {
-				p.Awake(ania)
+				awakeCtx, cancel := context.WithTimeout(ctx, AwakeEventTimeout)
+				p.Awake(awakeCtx, ania)
+				cancel()
 			})
 		}
 	})
@@ -175,9 +192,15 @@ func (ania *AniaBot) onGroupEvent(msg message.Message) {
 		return
 	}
 
+	ctx := context.Background()
+
 	for _, p := range ania.plugins {
 		next := safeExecuteWithReturn("群聊消息事件", p, func(p plugin.Plugin) bool {
-			return p.OnGroupMsg(ania, cmd, msg)
+			msgCtx, cancel := context.WithTimeout(ctx, MsgEventTimeout)
+			next, err := p.OnGroupMsg(msgCtx, ania, cmd, msg)
+			logError(err, p, "群聊消息事件")
+			cancel()
+			return next
 		})
 		if !next {
 			break
@@ -218,9 +241,15 @@ func (ania *AniaBot) onFriendEvent(msg message.Message) {
 		return
 	}
 
+	ctx := context.Background()
+
 	for _, p := range ania.plugins {
 		next := safeExecuteWithReturn("私聊消息事件", p, func(p plugin.Plugin) bool {
-			return p.OnFriendMsg(ania, cmd, msg)
+			msgCtx, cancel := context.WithTimeout(ctx, MsgEventTimeout)
+			next, err := p.OnFriendMsg(msgCtx, ania, cmd, msg)
+			logError(err, p, "私聊消息事件")
+			cancel()
+			return next
 		})
 		if !next {
 			break

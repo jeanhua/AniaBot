@@ -5,68 +5,68 @@
 
 ## 消息类事件
 
-- OnGroupMsg(bot.Bot, command.Command, message.Message) bool
+- OnGroupMsg(context.Context, bot.Bot, command.Command, message.Message) (bool, error)
 	- 说明：收到群聊消息时触发。返回 `true` 继续执行后续插件，返回 `false` 阻止后续插件。
 	- 场景：命令处理、关键字监听、复读等。
 
-- OnFriendMsg(bot.Bot, command.Command, message.Message) bool
+- OnFriendMsg(context.Context, bot.Bot, command.Command, message.Message) (bool, error)
 	- 说明：收到好友（私聊）消息时触发。返回值含义同上。
 
 ## 初始化与生命周期事件
 
-- `Start(cfg *viper.Viper)`
+- `Start(ctx context.Context, cfg *viper.Viper) error`
 	- 说明：插件启动时调用，用于初始化（读取配置、建立客户端等）。接收全局配置 `viper` 实例。
 
-- `StartCron(bot.Bot, c CronManager)`
+- `StartCron(context.Context, bot.Bot, c CronManager) error`
 	- 说明：在插件中初始化定时任务（Cron）时调用，`CronManager` 提供注册定时任务的能力。
 
-- `Awake(bot.Bot)`
+- `Awake(context.Context, bot.Bot) error`
 	- 说明：Bot 启动完成后调用，适合执行依赖其他模块启动完成后的操作。
 
 ## 群/好友通知（Notice）事件
 
 这些事件用于处理平台或协议层的通知，如群成员变动、文件上传、撤回等。
 
-- `OnGroupUpload(bot.Bot, message.GroupUploadNotice)`
+- `OnGroupUpload(context.Context, bot.Bot, message.GroupUploadNotice) error`
 	- 说明：群文件上传通知。
 
-- `OnGroupAdmin(bot.Bot, message.GroupAdminNotice)`
+- `OnGroupAdmin(context.Context, bot.Bot, message.GroupAdminNotice) error`
 	- 说明：群管理员变更通知（设置/取消管理员）。
 
-- `OnGroupDecrease(bot.Bot, message.GroupDecreaseNotice)`
+- `OnGroupDecrease(context.Context, bot.Bot, message.GroupDecreaseNotice) error`
 	- 说明：群成员减少（退群/被踢）。
 
-- `OnGroupIncrease(bot.Bot, message.GroupIncreaseNotice)`
+- `OnGroupIncrease(context.Context, bot.Bot, message.GroupIncreaseNotice) error`
 	- 说明：群成员增加（入群）。
 
-- `OnGroupBan(bot.Bot, message.GroupBanNotice)`
+- `OnGroupBan(context.Context, bot.Bot, message.GroupBanNotice) error`
 	- 说明：群成员被禁言通知。
 
-- `OnFriendAdd(bot.Bot, message.FriendAddNotice)`
+- `OnFriendAdd(context.Context, bot.Bot, message.FriendAddNotice) error`
 	- 说明：收到新的好友添加通知。
 
-- `OnGroupRecall(bot.Bot, message.GroupRecallNotice)`
+- `OnGroupRecall(context.Context, bot.Bot, message.GroupRecallNotice) error`
 	- 说明：群消息撤回通知。
 
-- `OnFriendRecall(bot.Bot, message.FriendRecallNotice)`
+- `OnFriendRecall(context.Context, bot.Bot, message.FriendRecallNotice) error`
 	- 说明：好友消息撤回通知。
 
-- `OnPoke(bot.Bot, message.PokeNotice)`
+- `OnPoke(context.Context, bot.Bot, message.PokeNotice) error`
 	- 说明：收到戳一戳（poke）通知。
 
-- `OnLuckyKing(bot.Bot, message.LuckyKingNotice)`
+- `OnLuckyKing(context.Context, bot.Bot, message.LuckyKingNotice) error`
 	- 说明：群运气王通知（群内活动相关）。
 
-- `OnHonor(bot.Bot, message.HonorNotice)`
+- `OnHonor(context.Context, bot.Bot, message.HonorNotice) error`
 	- 说明：群荣誉变更通知（如名片、头衔等平台定义的荣誉）。
 
-- `OnGroupMsgEmojiLike(bot.Bot, message.GroupMsgEmojiLikeNotice)`
+- `OnGroupMsgEmojiLike(context.Context, bot.Bot, message.GroupMsgEmojiLikeNotice) error`
 	- 说明：群消息表情回应/点赞通知。
 
-- `OnEssence(bot.Bot, message.EssenceNotice)`
+- `OnEssence(context.Context, bot.Bot, message.EssenceNotice) error`
 	- 说明：群精华消息变更通知。
 
-- `OnGroupCard(bot.Bot, message.GroupCardNotice)`
+- `OnGroupCard(context.Context, bot.Bot, message.GroupCardNotice) error`
 	- 说明：群名片（群昵称）变更通知。
 
 ## 使用建议与示例
@@ -75,14 +75,14 @@
 - 示例：实现一个简单的群消息处理
 
 ```go
-func (p *MyPlugin) OnGroupMsg(b bot.Bot, cmd command.Command, msg message.Message) bool {
+func (p *MyPlugin) OnGroupMsg(ctx context.Context,bot bot.Bot, cmd command.Command, msg message.Message) (bool, error) {
 		if cmd.Name == "hello" {
 				builder := msgchain.Builder().Group()
 				builder.Text("你好，AniaBot 在。")
 				b.SendGroupMsg(msg.GroupId, builder.Build())
-				return false
+				return false, nil
 		}
-		return true
+		return true, nil
 }
 ```
 

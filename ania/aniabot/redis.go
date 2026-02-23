@@ -3,6 +3,7 @@ package aniabot
 import (
 	"context"
 	"encoding/json"
+	"log"
 
 	"github.com/jeanhua/AniaBot/common/storage"
 	"github.com/redis/go-redis/v9"
@@ -48,11 +49,26 @@ func (store *AniaRedisStorage) SetString(ctx context.Context, key, val string, o
 	for _, f := range option {
 		f(&cfg)
 	}
-	if _, err := store.rdb.Set(ctx, store.prefix+key, val, cfg.TTL).Result(); err != nil {
-		return false
+	fullKey := store.prefix + key
+	var err error
+	if cfg.CheckExist {
+		setArgs := redis.SetArgs{
+			Mode: "NX",
+			TTL:  cfg.TTL,
+		}
+		err = store.rdb.SetArgs(ctx, fullKey, val, setArgs).Err()
 	} else {
-		return true
+		err = store.rdb.Set(ctx, fullKey, val, cfg.TTL).Err()
 	}
+
+	if err != nil {
+		if cfg.CheckExist && err == redis.Nil {
+			return false
+		}
+		log.Printf("Redis operation failed: key=%s, error=%v", fullKey, err)
+		return false
+	}
+	return true
 }
 
 func (store *AniaRedisStorage) Get(ctx context.Context, key string, out any) bool {
@@ -71,15 +87,36 @@ func (store *AniaRedisStorage) Set(ctx context.Context, key string, val any, opt
 	for _, f := range option {
 		f(&cfg)
 	}
-	if b, err := json.Marshal(val); err != nil {
+
+	data, err := json.Marshal(val)
+	if err != nil {
+		log.Printf("JSON marshal failed: %v", err)
 		return false
-	} else {
-		if _, err := store.rdb.Set(ctx, store.prefix+key, b, cfg.TTL).Result(); err != nil {
+	}
+
+	fullKey := store.prefix + key
+
+	if cfg.CheckExist {
+		setArgs := redis.SetArgs{
+			Mode: "NX",
+			TTL:  cfg.TTL,
+		}
+		err = store.rdb.SetArgs(ctx, fullKey, data, setArgs).Err()
+		if err != nil {
+			if err == redis.Nil {
+				return false
+			}
 			return false
-		} else {
-			return true
+		}
+	} else {
+		err = store.rdb.Set(ctx, fullKey, data, cfg.TTL).Err()
+		if err != nil {
+			log.Printf("Redis Set failed: %v", err)
+			return false
 		}
 	}
+
+	return true
 }
 
 func (store *AniaRedisStorage) Del(ctx context.Context, key string) bool {
@@ -98,4 +135,22 @@ func (store *AniaRedisStorage) Clear(ctx context.Context) bool {
 		return false
 	}
 	return true
+}
+
+func (store *AniaRedisStorage) ScanKeys(ctx context.Context, pattern string, count int64) ([]string, error) {
+	var keys []string
+	var cursor uint64 = 0
+	for {
+		var err error
+		var scanned []string
+		scanned, cursor, err = store.rdb.Scan(ctx, cursor, pattern, count).Result()
+		if err != nil {
+			return nil, err
+		}
+		keys = append(keys, scanned...)
+		if cursor == 0 {
+			break
+		}
+	}
+	return keys, nil
 }

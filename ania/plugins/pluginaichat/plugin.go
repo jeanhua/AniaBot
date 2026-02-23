@@ -11,19 +11,22 @@ import (
 
 	"github.com/jeanhua/AniaBot/ania/component"
 	"github.com/jeanhua/AniaBot/ania/component/functool"
+	"github.com/jeanhua/AniaBot/common/aniaerror"
 	"github.com/jeanhua/AniaBot/common/bot"
 	"github.com/jeanhua/AniaBot/common/model/command"
 	"github.com/jeanhua/AniaBot/common/model/message"
 	"github.com/jeanhua/AniaBot/common/msgchain"
 	"github.com/jeanhua/AniaBot/common/plugin"
+	"github.com/jeanhua/AniaBot/common/storage"
 	"github.com/spf13/viper"
 	"github.com/tmc/langchaingo/llms"
 )
 
 type AIChatPlugin struct {
 	plugin.Meta
-	chats     sync.Map
-	chatsLock sync.Map
+	chats sync.Map
+
+	lockStorage storage.Storage
 
 	botConfig struct {
 		baseURL string
@@ -51,6 +54,10 @@ type AIChatPlugin struct {
 	}
 }
 
+const (
+	LockExpTime = time.Minute * 3
+)
+
 func NewAIChatPlugin() *AIChatPlugin {
 	return &AIChatPlugin{
 		Meta: plugin.Meta{
@@ -61,13 +68,12 @@ func NewAIChatPlugin() *AIChatPlugin {
 	}
 }
 
-func (p *AIChatPlugin) lock(id uint) bool {
-	_, loaded := p.chatsLock.LoadOrStore(id, 1)
-	return !loaded
+func (p *AIChatPlugin) tryLock(ctx context.Context, id uint) bool {
+	return p.lockStorage.SetString(ctx, fmt.Sprintf("%d", id), "1", storage.WithCheckExist(), storage.WithTTL(LockExpTime))
 }
 
-func (p *AIChatPlugin) unLock(id uint) {
-	p.chatsLock.Delete(id)
+func (p *AIChatPlugin) unLock(ctx context.Context, id uint) {
+	p.lockStorage.Del(ctx, fmt.Sprintf("%d", id))
 }
 
 func (p *AIChatPlugin) getChat(id uint) *component.ChatBot {
@@ -90,34 +96,32 @@ func (p *AIChatPlugin) getChat(id uint) *component.ChatBot {
 	return chat.(*component.ChatBot)
 }
 
-func (p *AIChatPlugin) OnGroupMsg(bot bot.Bot, cmd command.Command, msg message.Message) bool {
+func (p *AIChatPlugin) OnGroupMsg(ctx context.Context, bot bot.Bot, cmd command.Command, msg message.Message) (bool, error) {
 	if !cmd.Mention {
-		return true
+		return true, nil
 	}
-	if !p.lock(msg.GroupId) {
+	if !p.tryLock(ctx, msg.GroupId) {
 		builder := msgchain.Builder().Group()
 		builder.Text("正在等待响应中，不要着急哦~")
 		bot.SendGroupMsg(msg.GroupId, builder.Build())
-		return true
+		return true, nil
 	}
-	defer p.unLock(msg.GroupId)
+	defer p.unLock(ctx, msg.GroupId)
 	chat := p.getChat(msg.GroupId)
 	if chat == nil {
 		builder := msgchain.Builder().Group()
 		builder.Text("无法创建对话，请检查日志信息哦")
 		bot.SendGroupMsg(msg.GroupId, builder.Build())
-		return true
+		return true, nil
 	}
 
 	builder := msgchain.Builder().Group()
-	ctx, cancel := context.WithTimeout(context.Background(), time.Minute*3)
-	defer cancel()
 	extraText := extraMsg(ctx, bot, msg, p.ocrModel)
 	if strings.Contains(extraText, "#新对话") {
 		err := chat.ClearHistory(ctx)
 		if err != nil {
 			log.Println("无法清理AI聊天信息", err.Error())
-			return false
+			return false, nil
 		} else {
 			log.Println("清理AI对话信息成功")
 		}
@@ -155,17 +159,17 @@ func (p *AIChatPlugin) OnGroupMsg(bot bot.Bot, cmd command.Command, msg message.
 		if errors.Is(err, context.DeadlineExceeded) {
 			builder.Text("请求超时")
 			bot.SendGroupMsg(msg.GroupId, builder.Build())
-			return true
+			return true, nil
 		}
 		builder.Text("无法解析的错误信息，请查看日志")
 		log.Println(err.Error())
 		bot.SendGroupMsg(msg.GroupId, builder.Build())
-		return true
+		return true, nil
 	}
 
 	if resp == "" {
 		log.Println("AI请求没有返回什么东西")
-		return true
+		return true, nil
 	}
 
 	builder.Mention(msg.Sender.UserId)
@@ -173,35 +177,33 @@ func (p *AIChatPlugin) OnGroupMsg(bot bot.Bot, cmd command.Command, msg message.
 	if _, success := bot.SendGroupMsg(msg.GroupId, builder.Build()); success {
 		log.Printf("[发->群:%d]: %s", msg.GroupId, resp)
 	}
-	return true
+	return true, nil
 }
 
-func (p *AIChatPlugin) OnFriendMsg(bot bot.Bot, cmd command.Command, msg message.Message) bool {
-	if !p.lock(msg.Sender.UserId) {
+func (p *AIChatPlugin) OnFriendMsg(ctx context.Context, bot bot.Bot, cmd command.Command, msg message.Message) (bool, error) {
+	if !p.tryLock(ctx, msg.Sender.UserId) {
 		builder := msgchain.Builder().Friend()
 		builder.Text("正在等待响应中，不要着急哦~")
 		bot.SendFriendMsg(msg.Sender.UserId, builder.Build())
-		return true
+		return true, nil
 	}
-	defer p.unLock(msg.Sender.UserId)
+	defer p.unLock(ctx, msg.Sender.UserId)
 
 	chat := p.getChat(msg.Sender.UserId)
 	if chat == nil {
 		builder := msgchain.Builder().Friend()
 		builder.Text("无法创建对话，请检查日志信息哦")
 		bot.SendFriendMsg(msg.Sender.UserId, builder.Build())
-		return true
+		return true, nil
 	}
 
 	builder := msgchain.Builder().Friend()
-	ctx, cancel := context.WithTimeout(context.Background(), time.Minute*3)
-	defer cancel()
 	extraText := extraMsg(ctx, bot, msg, p.ocrModel)
 	if strings.Contains(extraText, "#新对话") {
 		err := chat.ClearHistory(ctx)
 		if err != nil {
 			log.Println("无法清理AI聊天信息", err.Error())
-			return false
+			return false, nil
 		} else {
 			log.Println("清理AI对话信息成功")
 		}
@@ -239,27 +241,30 @@ func (p *AIChatPlugin) OnFriendMsg(bot bot.Bot, cmd command.Command, msg message
 		if errors.Is(err, context.DeadlineExceeded) {
 			builder.Text("请求超时")
 			bot.SendFriendMsg(msg.Sender.UserId, builder.Build())
-			return true
+			return true, nil
 		}
 		builder.Text("无法解析的错误信息，请查看日志")
 		log.Println(err.Error())
 		bot.SendFriendMsg(msg.Sender.UserId, builder.Build())
-		return true
+		return true, nil
 	}
 
 	if resp == "" {
 		log.Println("AI请求没有返回什么东西")
-		return true
+		return true, nil
 	}
 
 	builder.Text(resp)
 	if _, success := bot.SendFriendMsg(msg.Sender.UserId, builder.Build()); success {
 		log.Printf("[发->好友:%d]: %s", msg.Sender.UserId, resp)
 	}
-	return true
+	return true, nil
 }
 
-func (p *AIChatPlugin) Start(cfg *viper.Viper) {
+func (p *AIChatPlugin) Start(ctx context.Context, cfg *viper.Viper) error {
+	p.lockStorage = p.Storage.Clone("lock")
+	p.lockStorage.Clear(ctx)
+
 	p.botConfig.baseURL = cfg.GetString("plugin.ai_chat_bot.base_url")
 	p.botConfig.model = cfg.GetString("plugin.ai_chat_bot.model")
 	p.botConfig.apiKey = cfg.GetString("plugin.ai_chat_bot.api_key")
@@ -267,12 +272,15 @@ func (p *AIChatPlugin) Start(cfg *viper.Viper) {
 
 	if p.botConfig.baseURL == "" {
 		log.Println("初始化失败：未配置 Base Url")
+		return aniaerror.ParameterInitializeError
 	}
 	if p.botConfig.model == "" {
 		log.Println("初始化失败：未配置 Model")
+		return aniaerror.ParameterInitializeError
 	}
 	if p.botConfig.apiKey == "" {
 		log.Println("初始化失败：未配置 API KEY")
+		return aniaerror.ParameterInitializeError
 	}
 	if p.llmParameter.prompt == "" {
 		log.Println("未配置 Prompt，将使用预设的默认提示词")
@@ -307,6 +315,7 @@ func (p *AIChatPlugin) Start(cfg *viper.Viper) {
 			p.ocrModel = ocrllm
 		}
 	}
+	return nil
 }
 
 func extraMsg(ctx context.Context, bot bot.Bot, msg message.Message, ocrLLM *component.ChatBot, opt ...llms.CallOption) string {

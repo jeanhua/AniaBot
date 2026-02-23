@@ -1,6 +1,7 @@
 package pluginantiwithdrawal
 
 import (
+	"context"
 	"log"
 	"strconv"
 	"strings"
@@ -30,7 +31,7 @@ func NewPlugin() *AntiWithdrawalPlugin {
 	return p
 }
 
-func (p *AntiWithdrawalPlugin) OnGroupMsg(bot bot.Bot, cmd command.Command, msg message.Message) bool {
+func (p *AntiWithdrawalPlugin) OnGroupMsg(ctx context.Context, bot bot.Bot, cmd command.Command, msg message.Message) (bool, error) {
 	queueI, _ := p.msg.LoadOrStore(msg.GroupId, NewMessageQueue[*message.Message](100))
 	queue := queueI.(*MessageQueue[*message.Message])
 	if cmd.Mention && cmd.Name == "explore" {
@@ -47,7 +48,7 @@ func (p *AntiWithdrawalPlugin) OnGroupMsg(bot bot.Bot, cmd command.Command, msg 
 			builder.Text("暂时没有保存到什么消息哦，请稍后再试")
 			builder.Face(14)
 			bot.SendGroupMsg(msg.GroupId, builder.Build())
-			return false
+			return false, nil
 		}
 		fbuilder := msgchain.Builder().GroupForward()
 		ncrkey, existRkey := bot.GetNCrkey()
@@ -89,13 +90,13 @@ func (p *AntiWithdrawalPlugin) OnGroupMsg(bot bot.Bot, cmd command.Command, msg 
 							case "file":
 								log.Println("无法解析文件URL")
 							}
-							return true
+							return true, nil
 						}
 						link := m.Message[i].Data["url"].(string)
 						if link != "" {
 							if modifyer, err := utils.NewURLModifier(link); err != nil {
 								log.Println("无法解析图片URL")
-								return true
+								return true, nil
 							} else {
 								newLink := modifyer.SetQuery("rkey", key_20).String()
 								switch seg.Type {
@@ -127,10 +128,10 @@ func (p *AntiWithdrawalPlugin) OnGroupMsg(bot bot.Bot, cmd command.Command, msg 
 			bot.SendGroupMsg(msg.GroupId, builder.Build())
 			log.Println("[群聊防撤回插件]: 无法转发消息")
 		}
-		return false
+		return false, nil
 	}
 	queue.Add(&msg)
-	return true
+	return true, nil
 }
 
 func isAfter3Minute(timestamp uint) bool {
@@ -141,17 +142,18 @@ func isAfter3Minute(timestamp uint) bool {
 	return false
 }
 
-func (p *AntiWithdrawalPlugin) Start(cfg *viper.Viper) {
+func (p *AntiWithdrawalPlugin) Start(ctx context.Context, cfg *viper.Viper) error {
 	p.adminId = cfg.GetUint("bot.admin_id")
+	return nil
 }
 
-func (p *AntiWithdrawalPlugin) OnFriendMsg(bot bot.Bot, cmd command.Command, msg message.Message) bool {
+func (p *AntiWithdrawalPlugin) OnFriendMsg(ctx context.Context, bot bot.Bot, cmd command.Command, msg message.Message) (bool, error) {
 	if cmd.Name == "explore" && msg.Sender.UserId == p.adminId {
 		if len(cmd.Args) == 0 {
 			builder := msgchain.Builder().Friend()
 			builder.Text("请输入完整参数 /explore [Group ID] [count]")
 			bot.SendFriendMsg(msg.Sender.UserId, builder.Build())
-			return false
+			return false, nil
 		} else if len(cmd.Args) >= 1 {
 			n := 50
 			Gid, err := strconv.Atoi(cmd.Args[0])
@@ -159,7 +161,7 @@ func (p *AntiWithdrawalPlugin) OnFriendMsg(bot bot.Bot, cmd command.Command, msg
 				builder := msgchain.Builder().Friend()
 				builder.Text("请输入正确参数:Group ID, 语法: /explore [Group ID] [count](option)")
 				bot.SendFriendMsg(msg.Sender.UserId, builder.Build())
-				return false
+				return false, nil
 			}
 			if len(cmd.Args) == 2 {
 				num, err := strconv.Atoi(cmd.Args[1])
@@ -172,7 +174,7 @@ func (p *AntiWithdrawalPlugin) OnFriendMsg(bot bot.Bot, cmd command.Command, msg
 				builder := msgchain.Builder().Friend()
 				builder.Text("请输入正确参数:Group ID Error, 语法: /explore [Group ID] [count](option)")
 				bot.SendFriendMsg(msg.Sender.UserId, builder.Build())
-				return false
+				return false, nil
 			}
 			queue := queueI.(*MessageQueue[*message.Message])
 			cachemsg := queue.Get(n)
@@ -181,7 +183,7 @@ func (p *AntiWithdrawalPlugin) OnFriendMsg(bot bot.Bot, cmd command.Command, msg
 				builder.Text("暂时没有保存到什么消息哦，请稍后再试")
 				builder.Face(14)
 				bot.SendFriendMsg(msg.Sender.UserId, builder.Build())
-				return false
+				return false, nil
 			}
 			fbuilder := msgchain.Builder().FriendForward()
 			ncrkey, existRkey := bot.GetNCrkey()
@@ -223,13 +225,13 @@ func (p *AntiWithdrawalPlugin) OnFriendMsg(bot bot.Bot, cmd command.Command, msg
 								case "file":
 									log.Println("无法解析文件URL")
 								}
-								return true
+								return true, nil
 							}
 							link := m.Message[i].Data["url"].(string)
 							if link != "" {
 								if modifyer, err := utils.NewURLModifier(link); err != nil {
 									log.Println("无法解析图片URL")
-									return true
+									return true, nil
 								} else {
 									newLink := modifyer.SetQuery("rkey", key_20).String()
 									switch seg.Type {
@@ -261,8 +263,8 @@ func (p *AntiWithdrawalPlugin) OnFriendMsg(bot bot.Bot, cmd command.Command, msg
 				bot.SendFriendMsg(msg.Sender.UserId, builder.Build())
 				log.Println("[群聊防撤回插件]: 无法转发消息")
 			}
-			return false
+			return false, nil
 		}
 	}
-	return true
+	return true, nil
 }
