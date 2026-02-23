@@ -3,7 +3,6 @@ package waifupics
 import (
 	"context"
 
-	"github.com/go-resty/resty/v2"
 	"github.com/jeanhua/AniaBot/common/bot"
 	"github.com/jeanhua/AniaBot/common/model/command"
 	"github.com/jeanhua/AniaBot/common/model/message"
@@ -13,7 +12,6 @@ import (
 
 type WaifuPlugin struct {
 	plugin.Meta
-	client   *resty.Client
 	pendding chan work
 }
 
@@ -66,14 +64,12 @@ func validateCate(category string) bool {
 
 func NewWaifuPlugin(maxWork int) *WaifuPlugin {
 	c := make(chan work, maxWork)
-	client := resty.New()
 	return &WaifuPlugin{
 		Meta: plugin.Meta{
 			Name:      "waifu.pics插件",
 			HelpWords: "发送 /waifu [类别] 获取，获取类别发送 /waifu help",
 		},
 		pendding: c,
-		client:   client,
 	}
 }
 
@@ -167,7 +163,7 @@ func (p *WaifuPlugin) workFunc(bot bot.Bot) {
 	for {
 		w := <-p.pendding
 		resp := respTy{}
-		if _, err := p.client.R().SetResult(&resp).Get("https://api.waifu.pics/sfw/" + w.category); err != nil {
+		if _, err := p.RestyClient.R().SetResult(&resp).Get("https://api.waifu.pics/sfw/" + w.category); err != nil {
 			switch w.target {
 			case TargetFriend:
 				builder := msgchain.Builder().Friend()

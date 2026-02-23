@@ -51,7 +51,7 @@ func (p *DouyinParser) OnGroupMsg(ctx context.Context, bot bot.Bot, cmd command.
 			return false, nil
 		}
 
-		result, err := getResourse(link)
+		result, err := getResourse(p.RestyClient, link)
 		if err != nil {
 			builder := msgchain.Builder().Group()
 			builder.Mention(msg.Sender.UserId)
@@ -85,7 +85,7 @@ func (p *DouyinParser) OnFriendMsg(ctx context.Context, bot bot.Bot, cmd command
 			return false, nil
 		}
 
-		result, err := getResourse(link)
+		result, err := getResourse(p.RestyClient, link)
 		if err != nil {
 			builder := msgchain.Builder().Friend()
 			builder.Text(" 无法解析，请稍后再试")
@@ -115,8 +115,7 @@ func (p *DouyinParser) extractDouyinLink(text string) (string, error) {
 	return match, nil
 }
 
-func getResourse(link string) (*responseTy, error) {
-	client := resty.New()
+func getResourse(client *resty.Client, link string) (*responseTy, error) {
 	result := responseTy{}
 	modifier, _ := utils.NewURLModifier("https://api.xhus.cn/api/autopars")
 	modifier.SetQuery("url", link)

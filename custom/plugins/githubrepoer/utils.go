@@ -8,8 +8,7 @@ import (
 	"github.com/go-resty/resty/v2"
 )
 
-func getRepoInfo(url string, compress, delComment, delEmptyLine bool, maxToken int, include, exclude string) (string, error) {
-	client := resty.New()
+func getRepoInfo(client *resty.Client, url string, compress, delComment, delEmptyLine bool, maxToken int, include, exclude string) (string, error) {
 	opt := map[string]any{
 		"removeComments":     delComment,
 		"removeEmptyLines":   delEmptyLine,

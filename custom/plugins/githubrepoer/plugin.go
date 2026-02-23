@@ -176,7 +176,7 @@ func (p *GithubRepoer) workFunc(bot bot.Bot) {
 	for {
 		w := <-p.pendding
 		log.Println("正在生产github报告:", w.repoURL)
-		info, err := getRepoInfo(w.repoURL, w.compress, w.delComment, w.delEmptyLine, p.maxToken, w.include, w.exclude)
+		info, err := getRepoInfo(p.RestyClient, w.repoURL, w.compress, w.delComment, w.delEmptyLine, p.maxToken, w.include, w.exclude)
 		if err != nil {
 			onErr(bot, w, err)
 			continue
