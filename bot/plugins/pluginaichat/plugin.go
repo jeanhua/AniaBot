@@ -9,8 +9,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/jeanhua/AniaBot/ania/component"
-	"github.com/jeanhua/AniaBot/ania/component/functool"
+	"github.com/jeanhua/AniaBot/bot/component"
+	"github.com/jeanhua/AniaBot/bot/component/functool"
 	"github.com/jeanhua/AniaBot/common/aniaerror"
 	"github.com/jeanhua/AniaBot/common/bot"
 	"github.com/jeanhua/AniaBot/common/model/command"

@@ -8,7 +8,7 @@ import (
 	"log"
 
 	"github.com/go-resty/resty/v2"
-	"github.com/jeanhua/AniaBot/ania/utils"
+	"github.com/jeanhua/AniaBot/bot/utils"
 	"github.com/tmc/langchaingo/llms"
 )
 

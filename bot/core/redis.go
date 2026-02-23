@@ -1,4 +1,4 @@
-package aniabot
+package core
 
 import (
 	"context"

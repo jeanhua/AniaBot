@@ -1,4 +1,4 @@
-package aniabot
+package core
 
 import (
 	"context"
@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/go-resty/resty/v2"
-	"github.com/jeanhua/AniaBot/ania/utils"
+	"github.com/jeanhua/AniaBot/bot/utils"
 	"github.com/jeanhua/AniaBot/common/adapter"
 	"github.com/jeanhua/AniaBot/common/model/message"
 	"github.com/jeanhua/AniaBot/common/msgchain"
