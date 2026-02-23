@@ -13,7 +13,7 @@
 **使用方式**：
 
 ```go
-import "github.com/jeanhua/AniaBot/ania/plugins/pluginlog"
+import "github.com/jeanhua/AniaBot/bot/plugins/pluginlog"
 
 bot.AddPlugin(pluginlog.NewPlugin())
 ```
@@ -33,7 +33,7 @@ bot.AddPlugin(pluginlog.NewPlugin())
 
 **使用方式**：
 ```go
-import "github.com/jeanhua/AniaBot/ania/plugins/pluginrepeat"
+import "github.com/jeanhua/AniaBot/bot/plugins/pluginrepeat"
 
 bot.AddPlugin(pluginrepeat.NewPlugin())
 ```
@@ -70,7 +70,7 @@ plugin:
 
 **使用方式**：
 ```go
-import "github.com/jeanhua/AniaBot/ania/plugins/pluginaichat"
+import "github.com/jeanhua/AniaBot/bot/plugins/pluginaichat"
 
 bot.AddPlugin(pluginaichat.NewAIChatPlugin())
 ```
@@ -97,7 +97,7 @@ bot.AddPlugin(pluginaichat.NewAIChatPlugin())
 **使用方式**：
 
 ```go
-import "github.com/jeanhua/AniaBot/ania/plugins/pluginantiwithdrawal"
+import "github.com/jeanhua/AniaBot/bot/plugins/pluginantiwithdrawal"
 
 bot.AddPlugin(pluginantiwithdrawal.NewPlugin())
 ```
@@ -121,7 +121,7 @@ plugin:
 
 **使用方式**：
 ```go
-import "github.com/jeanhua/AniaBot/ania/plugins/pluginnews"
+import "github.com/jeanhua/AniaBot/bot/plugins/pluginnews"
 
 bot.AddPlugin(pluginnews.NewPlugin())
 ```
@@ -132,10 +132,10 @@ bot.AddPlugin(pluginnews.NewPlugin())
 
 ```go
 import (
-    "github.com/jeanhua/AniaBot/ania/plugins/pluginlog"
-    "github.com/jeanhua/AniaBot/ania/plugins/pluginrepeat"
-    "github.com/jeanhua/AniaBot/ania/plugins/pluginaichat"
-    "github.com/jeanhua/AniaBot/ania/plugins/pluginantiwithdrawal"
+    "github.com/jeanhua/AniaBot/bot/plugins/pluginlog"
+    "github.com/jeanhua/AniaBot/bot/plugins/pluginrepeat"
+    "github.com/jeanhua/AniaBot/bot/plugins/pluginaichat"
+    "github.com/jeanhua/AniaBot/bot/plugins/pluginantiwithdrawal"
 )
 
 func main() {

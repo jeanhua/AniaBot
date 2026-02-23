@@ -8,7 +8,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/jeanhua/AniaBot/ania/utils"
+	"github.com/jeanhua/AniaBot/bot/utils"
 	"github.com/jeanhua/AniaBot/common/bot"
 	"github.com/jeanhua/AniaBot/common/model/command"
 	"github.com/jeanhua/AniaBot/common/model/message"
@@ -32,7 +32,7 @@ func NewPlugin() *AntiWithdrawalPlugin {
 }
 
 const (
-	ResourceTimeout = 60 * 3
+	ResourceTimeout = 60 * 3 // 时间戳，3分钟
 )
 
 func (p *AntiWithdrawalPlugin) OnGroupMsg(ctx context.Context, bot bot.Bot, cmd command.Command, msg message.Message) (bool, error) {

@@ -3,7 +3,7 @@ package functool
 import (
 	"log"
 
-	"github.com/jeanhua/AniaBot/ania/utils"
+	"github.com/jeanhua/AniaBot/bot/utils"
 	"github.com/tmc/langchaingo/llms"
 )
 

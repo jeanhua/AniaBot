@@ -117,10 +117,10 @@ go get -u github.com/jeanhua/AniaBot
 package main
 
 import (
-    "github.com/jeanhua/AniaBot/ania/aniabot"
-    "github.com/jeanhua/AniaBot/ania/adapter/napcat"
-    "github.com/jeanhua/AniaBot/ania/plugins/pluginaichat"
-    "github.com/jeanhua/AniaBot/ania/plugins/pluginlog"
+    "github.com/jeanhua/AniaBot/bot/core"
+    "github.com/jeanhua/AniaBot/bot/adapter/napcat"
+    "github.com/jeanhua/AniaBot/bot/plugins/pluginaichat"
+    "github.com/jeanhua/AniaBot/bot/plugins/pluginlog"
 )
 
 func main() {
@@ -128,7 +128,7 @@ func main() {
     adapter := napcat.NewNapcatWebSocketAdapter()
     
     // 创建机器人实例
-    bot := aniabot.NewAniaBot(adapter)
+    bot := core.NewAniaBot(adapter)
     
     // 注册插件
     bot.AddPlugin(pluginlog.NewPlugin())          // 日志插件

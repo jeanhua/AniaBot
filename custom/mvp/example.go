@@ -3,22 +3,21 @@ package mvp
 import (
 	"context"
 
-	"github.com/jeanhua/AniaBot/ania/adapter/napcat"
-	"github.com/jeanhua/AniaBot/ania/aniabot"
-
+	"github.com/jeanhua/AniaBot/bot/adapter/napcat"
+	"github.com/jeanhua/AniaBot/bot/core"
 	"github.com/jeanhua/AniaBot/common/bot"
 	"github.com/jeanhua/AniaBot/common/model/command"
 	"github.com/jeanhua/AniaBot/common/model/message"
 	"github.com/jeanhua/AniaBot/common/msgchain"
 	"github.com/jeanhua/AniaBot/common/plugin"
-	// "github.com/jeanhua/AniaBot/ania/plugins/pluginlog"
-	// "github.com/jeanhua/AniaBot/ania/plugins/pluginrepeat"
+	// "github.com/jeanhua/AniaBot/bot/plugins/pluginlog"
+	// "github.com/jeanhua/AniaBot/bot/plugins/pluginrepeat"
 )
 
 func main() {
 	// adapter := napcat.NewNapcatHttpAdapter() // HTTP 适配器
 	adapter := napcat.NewNapcatWebSocketAdapter() // Websocket适配器
-	bot := aniabot.NewAniaBot(adapter)
+	bot := core.NewAniaBot(adapter)
 	// 插件注册
 	// 系统内部插件
 	// bot.AddPlugin(pluginlog.NewPlugin())    // 控制台日志打印插件

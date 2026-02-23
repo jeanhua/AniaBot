@@ -4,7 +4,7 @@ import (
 	"context"
 	"log"
 
-	"github.com/jeanhua/AniaBot/ania/utils"
+	"github.com/jeanhua/AniaBot/bot/utils"
 	"github.com/jeanhua/AniaBot/common/bot"
 	"github.com/jeanhua/AniaBot/common/model/command"
 	"github.com/jeanhua/AniaBot/common/model/message"
