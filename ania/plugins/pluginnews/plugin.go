@@ -33,12 +33,12 @@ func (p *NewsPlugin) Start(ctx context.Context, cfg *viper.Viper) error {
 	p.cronExpress = cfg.GetString("plugin.dailyNews.cron")
 	if p.cronExpress == "" {
 		log.Println("读取daily news cron表达式错误")
-		return aniaerror.ParameterInitializationError
+		return aniaerror.ParameterInitializeError
 	}
 	p.api = cfg.GetString("plugin.dailyNews.api")
 	if p.api == "" {
 		log.Println("读取daily news api错误")
-		return aniaerror.ParameterInitializationError
+		return aniaerror.ParameterInitializeError
 	}
 	groups := cfg.GetIntSlice("plugin.dailyNews.groups")
 	for _, g := range groups {

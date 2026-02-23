@@ -272,15 +272,15 @@ func (p *AIChatPlugin) Start(ctx context.Context, cfg *viper.Viper) error {
 
 	if p.botConfig.baseURL == "" {
 		log.Println("初始化失败：未配置 Base Url")
-		return aniaerror.ParameterInitializationError
+		return aniaerror.ParameterInitializeError
 	}
 	if p.botConfig.model == "" {
 		log.Println("初始化失败：未配置 Model")
-		return aniaerror.ParameterInitializationError
+		return aniaerror.ParameterInitializeError
 	}
 	if p.botConfig.apiKey == "" {
 		log.Println("初始化失败：未配置 API KEY")
-		return aniaerror.ParameterInitializationError
+		return aniaerror.ParameterInitializeError
 	}
 	if p.llmParameter.prompt == "" {
 		log.Println("未配置 Prompt，将使用预设的默认提示词")
