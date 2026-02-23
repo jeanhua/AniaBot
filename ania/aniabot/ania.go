@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/go-resty/resty/v2"
 	"github.com/jeanhua/AniaBot/ania/utils"
 	"github.com/jeanhua/AniaBot/common/adapter"
 	"github.com/jeanhua/AniaBot/common/model/message"
@@ -25,7 +26,8 @@ type AniaBot struct {
 	admin   uint
 	cfg     *viper.Viper
 
-	storage storage.Storage
+	storage     storage.Storage
+	restyClient *resty.Client
 
 	pluginSet map[string]struct{}
 }
@@ -113,6 +115,11 @@ func (ania *AniaBot) Run() {
 			ania.cfg.GetInt("bot.store.db"))
 	}
 
+	// resty
+	if ania.restyClient == nil {
+		ania.restyClient = resty.New()
+	}
+
 	ania.admin = ania.cfg.GetUint("bot.admin_id")
 
 	ctx := context.Background()
@@ -122,8 +129,11 @@ func (ania *AniaBot) Run() {
 	for _, p := range ania.plugins {
 		log.Println("初始化插件: ", p.GetMeta().Name)
 		safeExecute("初始化", p, func(p plugin.Plugin) {
+			// DI
 			encodeName := base64.StdEncoding.EncodeToString([]byte(p.GetMeta().Name))
 			p.SetStorage(ania.storage.Clone(encodeName))
+			p.SetRestyClient(ania.restyClient)
+
 			startCtx, cancel := context.WithTimeout(ctx, StartEventTimeout)
 			p.Start(startCtx, ania.cfg)
 			cancel()

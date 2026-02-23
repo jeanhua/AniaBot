@@ -3,6 +3,7 @@ package plugin
 import (
 	"context"
 
+	"github.com/go-resty/resty/v2"
 	"github.com/jeanhua/AniaBot/common/bot"
 	"github.com/jeanhua/AniaBot/common/model/command"
 	"github.com/jeanhua/AniaBot/common/model/message"
@@ -16,7 +17,8 @@ type Meta struct {
 	AdminOnly bool   // 插件是否为管理员触发(对其他人隐藏)
 	Order     int    // 插件执行顺序，从小到大
 
-	Storage storage.Storage
+	Storage     storage.Storage
+	RestyClient *resty.Client
 }
 
 func (p *Meta) GetMeta() *Meta {
@@ -25,6 +27,10 @@ func (p *Meta) GetMeta() *Meta {
 
 func (p *Meta) SetStorage(s storage.Storage) {
 	p.Storage = s
+}
+
+func (p *Meta) SetRestyClient(c *resty.Client) {
+	p.RestyClient = c
 }
 
 // OnGroupMsg 收到群聊消息触发事件

@@ -3,6 +3,7 @@ package plugin
 import (
 	"context"
 
+	"github.com/go-resty/resty/v2"
 	"github.com/jeanhua/AniaBot/common/bot"
 	"github.com/jeanhua/AniaBot/common/model/command"
 	"github.com/jeanhua/AniaBot/common/model/message"
@@ -13,10 +14,15 @@ import (
 
 type Plugin interface {
 	GetMeta() *Meta
-	SetStorage(s storage.Storage)
+	DI
 	BasicEvent
 	StartupEvent
 	NoticeEvent
+}
+
+type DI interface {
+	SetStorage(s storage.Storage)
+	SetRestyClient(*resty.Client)
 }
 
 type BasicEvent interface {
