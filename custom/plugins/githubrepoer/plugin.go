@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jeanhua/AniaBot/common/aniaerror"
 	"github.com/jeanhua/AniaBot/common/bot"
 	"github.com/jeanhua/AniaBot/common/model/command"
 	"github.com/jeanhua/AniaBot/common/model/message"
@@ -52,7 +53,7 @@ func NewGithubRepoer(maxPendding int) *GithubRepoer {
 }
 
 // Start 插件初始化事件
-func (p *GithubRepoer) Start(cfg *viper.Viper) {
+func (p *GithubRepoer) Start(ctx context.Context, cfg *viper.Viper) error {
 	p.llmConfig.baseUrl = cfg.GetString("plugin.github_repoer.model.base_url")
 	p.llmConfig.apiKey = cfg.GetString("plugin.github_repoer.model.api_key")
 	p.llmConfig.model = cfg.GetString("plugin.github_repoer.model.model")
@@ -65,31 +66,33 @@ func (p *GithubRepoer) Start(cfg *viper.Viper) {
 		openai.WithModel(p.llmConfig.model),
 	)
 	if err != nil {
-		panic("无法创建model实例")
+		return aniaerror.ParameterInitializeError
 	}
 	p.llm = llm
+	return nil
 }
 
 // Awake Bot启动完成事件
-func (p *GithubRepoer) Awake(bot bot.Bot) {
+func (p *GithubRepoer) Awake(ctx context.Context, bot bot.Bot) error {
 	go p.workFunc(bot)
+	return nil
 }
 
 // OnGroupMsg 收到群聊消息触发事件
-func (p *GithubRepoer) OnGroupMsg(bot bot.Bot, cmd command.Command, msg message.Message) bool {
+func (p *GithubRepoer) OnGroupMsg(ctx context.Context, bot bot.Bot, cmd command.Command, msg message.Message) (bool, error) {
 	if cmd.Mention && cmd.Name == "gr" {
 		if len(cmd.Args) == 0 {
 			builder := msgchain.Builder().Group()
 			builder.Mention(msg.Sender.UserId).Text(" 请输入完整指令，如 /gr https://github.com/jeanhua/AniaBot")
 			bot.SendGroupMsg(msg.GroupId, builder.Build())
-			return false
+			return false, nil
 		}
 
 		if cmd.Args[0] == "help" {
 			builder := msgchain.Builder().Group()
 			builder.Mention(msg.Sender.UserId).Text(helpWords)
 			bot.SendGroupMsg(msg.GroupId, builder.Build())
-			return false
+			return false, nil
 		}
 
 		targetUrl := cmd.Args[0]
@@ -97,7 +100,7 @@ func (p *GithubRepoer) OnGroupMsg(bot bot.Bot, cmd command.Command, msg message.
 			builder := msgchain.Builder().Group()
 			builder.Mention(msg.Sender.UserId).Text(" 请输入之正确的链接").Face(14)
 			bot.SendGroupMsg(msg.GroupId, builder.Build())
-			return false
+			return false, nil
 		}
 
 		w := parseCmd(cmd.Args)
@@ -117,26 +120,26 @@ func (p *GithubRepoer) OnGroupMsg(bot bot.Bot, cmd command.Command, msg message.
 			builder.Mention(msg.Sender.UserId).Text(" 请求队列已满，请稍后再试哦").Face(14)
 			bot.SendGroupMsg(msg.GroupId, builder.Build())
 		}
-		return false
+		return false, nil
 	}
-	return true
+	return true, nil
 }
 
 // OnFriendMsg 收到私聊消息触发事件
-func (p *GithubRepoer) OnFriendMsg(bot bot.Bot, cmd command.Command, msg message.Message) bool {
+func (p *GithubRepoer) OnFriendMsg(ctx context.Context, bot bot.Bot, cmd command.Command, msg message.Message) (bool, error) {
 	if cmd.Name == "gr" {
 		if len(cmd.Args) == 0 {
 			builder := msgchain.Builder().Friend()
 			builder.Text("请输入完整指令，如 /gr https://github.com/jeanhua/AniaBot")
 			bot.SendFriendMsg(msg.Sender.UserId, builder.Build())
-			return false
+			return false, nil
 		}
 
 		if cmd.Args[0] == "help" {
 			builder := msgchain.Builder().Friend()
 			builder.Text(helpWords)
 			bot.SendFriendMsg(msg.Sender.UserId, builder.Build())
-			return false
+			return false, nil
 		}
 
 		targetUrl := cmd.Args[0]
@@ -144,7 +147,7 @@ func (p *GithubRepoer) OnFriendMsg(bot bot.Bot, cmd command.Command, msg message
 			builder := msgchain.Builder().Friend()
 			builder.Text("请输入之正确的链接").Face(14)
 			bot.SendFriendMsg(msg.Sender.UserId, builder.Build())
-			return false
+			return false, nil
 		}
 
 		w := parseCmd(cmd.Args)
@@ -164,9 +167,9 @@ func (p *GithubRepoer) OnFriendMsg(bot bot.Bot, cmd command.Command, msg message
 			builder.Text("请求队列已满，请稍后再试哦").Face(14)
 			bot.SendFriendMsg(msg.Sender.UserId, builder.Build())
 		}
-		return false
+		return false, nil
 	}
-	return true
+	return true, nil
 }
 
 func (p *GithubRepoer) workFunc(bot bot.Bot) {

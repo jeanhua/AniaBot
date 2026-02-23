@@ -1,6 +1,7 @@
 package acgwallpaper
 
 import (
+	"context"
 	"log"
 
 	"github.com/jeanhua/AniaBot/common/bot"
@@ -26,11 +27,12 @@ func NewAcgWallpaperPlugin(maxWork int) *AcgWallpaperPlugin {
 	}
 }
 
-func (p *AcgWallpaperPlugin) Awake(bot bot.Bot) {
+func (p *AcgWallpaperPlugin) Awake(ctx context.Context, bot bot.Bot) error {
 	go p.workFunc(bot)
+	return nil
 }
 
-func (p *AcgWallpaperPlugin) OnGroupMsg(bot bot.Bot, cmd command.Command, msg message.Message) bool {
+func (p *AcgWallpaperPlugin) OnGroupMsg(ctx context.Context, bot bot.Bot, cmd command.Command, msg message.Message) (bool, error) {
 	if cmd.Mention && cmd.Name == "acg" {
 		select {
 		case p.pendding <- work{target: TargetGroup, userId: msg.Sender.UserId, groupId: msg.GroupId}:
@@ -41,12 +43,12 @@ func (p *AcgWallpaperPlugin) OnGroupMsg(bot bot.Bot, cmd command.Command, msg me
 			builder.Text(" 任务队列满出来了，等待会再来问我要壁纸哦")
 			bot.SendGroupMsg(msg.GroupId, builder.Build())
 		}
-		return false
+		return false, nil
 	}
-	return true
+	return true, nil
 }
 
-func (p *AcgWallpaperPlugin) OnFriendMsg(bot bot.Bot, cmd command.Command, msg message.Message) bool {
+func (p *AcgWallpaperPlugin) OnFriendMsg(ctx context.Context, bot bot.Bot, cmd command.Command, msg message.Message) (bool, error) {
 	if cmd.Name == "acg" {
 		select {
 		case p.pendding <- work{target: TargetFriend, userId: msg.Sender.UserId, groupId: 0}:
@@ -55,9 +57,9 @@ func (p *AcgWallpaperPlugin) OnFriendMsg(bot bot.Bot, cmd command.Command, msg m
 			builder.Text("任务队列满出来了，等待会再来问我要壁纸哦")
 			bot.SendFriendMsg(msg.Sender.UserId, builder.Build())
 		}
-		return false
+		return false, nil
 	}
-	return true
+	return true, nil
 }
 
 func (p *AcgWallpaperPlugin) workFunc(bot bot.Bot) {

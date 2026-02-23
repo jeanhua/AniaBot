@@ -1,12 +1,14 @@
 package douyinparser
 
 import (
+	"context"
 	"fmt"
 	"regexp"
 	"strings"
 
 	"github.com/go-resty/resty/v2"
 	"github.com/jeanhua/AniaBot/ania/utils"
+	"github.com/jeanhua/AniaBot/common/aniaerror"
 	"github.com/jeanhua/AniaBot/common/bot"
 	"github.com/jeanhua/AniaBot/common/model/command"
 	"github.com/jeanhua/AniaBot/common/model/message"
@@ -29,11 +31,15 @@ func Newplugin() *DouyinParser {
 	}
 }
 
-func (p *DouyinParser) Start(cfg *viper.Viper) {
+func (p *DouyinParser) Start(ctx context.Context, cfg *viper.Viper) error {
 	p.re = regexp.MustCompile(`https://v\.douyin\.com/[a-zA-Z0-9\-_]+(?:/|\b)`)
+	if p.re == nil {
+		return aniaerror.ParameterInitializeError
+	}
+	return nil
 }
 
-func (p *DouyinParser) OnGroupMsg(bot bot.Bot, cmd command.Command, msg message.Message) bool {
+func (p *DouyinParser) OnGroupMsg(ctx context.Context, bot bot.Bot, cmd command.Command, msg message.Message) (bool, error) {
 	if cmd.Mention && cmd.Name == "douyin" {
 		text, _ := utils.ExtraMessageStr(msg)
 		link, err := p.extractDouyinLink(text)
@@ -42,7 +48,7 @@ func (p *DouyinParser) OnGroupMsg(bot bot.Bot, cmd command.Command, msg message.
 			builder.Mention(msg.Sender.UserId)
 			builder.Text(" 无法从分享的内容提取出抖音链接，请重新检查试试哦")
 			bot.SendGroupMsg(msg.GroupId, builder.Build())
-			return false
+			return false, nil
 		}
 
 		result, err := getResourse(link)
@@ -51,7 +57,7 @@ func (p *DouyinParser) OnGroupMsg(bot bot.Bot, cmd command.Command, msg message.
 			builder.Mention(msg.Sender.UserId)
 			builder.Text(" 无法解析，请稍后再试")
 			bot.SendGroupMsg(msg.GroupId, builder.Build())
-			return false
+			return false, nil
 		}
 
 		builder := msgchain.Builder().Group()
@@ -62,13 +68,13 @@ func (p *DouyinParser) OnGroupMsg(bot bot.Bot, cmd command.Command, msg message.
 			result.Data.URL,
 		))
 		bot.SendGroupMsg(msg.GroupId, builder.Build())
-		return false
+		return false, nil
 
 	}
-	return true
+	return true, nil
 }
 
-func (p *DouyinParser) OnFriendMsg(bot bot.Bot, cmd command.Command, msg message.Message) bool {
+func (p *DouyinParser) OnFriendMsg(ctx context.Context, bot bot.Bot, cmd command.Command, msg message.Message) (bool, error) {
 	if cmd.Name == "douyin" {
 		text, _ := utils.ExtraMessageStr(msg)
 		link, err := p.extractDouyinLink(text)
@@ -76,7 +82,7 @@ func (p *DouyinParser) OnFriendMsg(bot bot.Bot, cmd command.Command, msg message
 			builder := msgchain.Builder().Friend()
 			builder.Text(" 无法从分享的内容提取出抖音链接，请重新检查试试哦")
 			bot.SendFriendMsg(msg.Sender.UserId, builder.Build())
-			return false
+			return false, nil
 		}
 
 		result, err := getResourse(link)
@@ -84,7 +90,7 @@ func (p *DouyinParser) OnFriendMsg(bot bot.Bot, cmd command.Command, msg message
 			builder := msgchain.Builder().Friend()
 			builder.Text(" 无法解析，请稍后再试")
 			bot.SendFriendMsg(msg.Sender.UserId, builder.Build())
-			return false
+			return false, nil
 		}
 
 		builder := msgchain.Builder().Friend()
@@ -94,9 +100,9 @@ func (p *DouyinParser) OnFriendMsg(bot bot.Bot, cmd command.Command, msg message
 			result.Data.URL,
 		))
 		bot.SendFriendMsg(msg.Sender.UserId, builder.Build())
-		return false
+		return false, nil
 	}
-	return true
+	return true, nil
 }
 
 func (p *DouyinParser) extractDouyinLink(text string) (string, error) {

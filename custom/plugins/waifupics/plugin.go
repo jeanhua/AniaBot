@@ -1,6 +1,8 @@
 package waifupics
 
 import (
+	"context"
+
 	"github.com/go-resty/resty/v2"
 	"github.com/jeanhua/AniaBot/common/bot"
 	"github.com/jeanhua/AniaBot/common/model/command"
@@ -76,9 +78,9 @@ func NewWaifuPlugin(maxWork int) *WaifuPlugin {
 }
 
 // OnGroupMsg 收到群聊消息触发事件
-func (p *WaifuPlugin) OnGroupMsg(bot bot.Bot, cmd command.Command, msg message.Message) bool {
+func (p *WaifuPlugin) OnGroupMsg(ctx context.Context, bot bot.Bot, cmd command.Command, msg message.Message) (bool, error) {
 	if !cmd.Mention || cmd.Name != "waifu" {
-		return true
+		return true, nil
 	}
 	category := "waifu"
 	if len(cmd.Args) > 0 {
@@ -88,7 +90,7 @@ func (p *WaifuPlugin) OnGroupMsg(bot bot.Bot, cmd command.Command, msg message.M
 			builder.Text(" 发送 /waifu [类别] 获取哦, 类别如下").Face(12)
 			builder.Text(categoryHelps)
 			bot.SendGroupMsg(msg.GroupId, builder.Build())
-			return false
+			return false, nil
 		} else {
 			category = cmd.Args[0]
 			if !validateCate(category) {
@@ -96,7 +98,7 @@ func (p *WaifuPlugin) OnGroupMsg(bot bot.Bot, cmd command.Command, msg message.M
 				builder.Mention(msg.Sender.UserId)
 				builder.Text(" 不存在此分类哦")
 				bot.SendGroupMsg(msg.GroupId, builder.Build())
-				return false
+				return false, nil
 			}
 		}
 	}
@@ -114,13 +116,13 @@ func (p *WaifuPlugin) OnGroupMsg(bot bot.Bot, cmd command.Command, msg message.M
 		builder.Text(" 请求过于频繁，请稍后再试哦").Face(12)
 		bot.SendGroupMsg(msg.GroupId, builder.Build())
 	}
-	return false
+	return false, nil
 }
 
 // OnFriendMsg 收到私聊消息触发事件
-func (p *WaifuPlugin) OnFriendMsg(bot bot.Bot, cmd command.Command, msg message.Message) bool {
+func (p *WaifuPlugin) OnFriendMsg(ctx context.Context, bot bot.Bot, cmd command.Command, msg message.Message) (bool, error) {
 	if cmd.Name != "waifu" {
-		return true
+		return true, nil
 	}
 	category := "waifu"
 	if len(cmd.Args) > 0 {
@@ -129,14 +131,14 @@ func (p *WaifuPlugin) OnFriendMsg(bot bot.Bot, cmd command.Command, msg message.
 			builder.Text("发送 /waifu [类别] 获取哦, 类别如下").Face(12)
 			builder.Text(categoryHelps)
 			bot.SendFriendMsg(msg.Sender.UserId, builder.Build())
-			return false
+			return false, nil
 		} else {
 			category = cmd.Args[0]
 			if !validateCate(category) {
 				builder := msgchain.Builder().Friend()
 				builder.Text("不存在此分类哦")
 				bot.SendFriendMsg(msg.Sender.UserId, builder.Build())
-				return false
+				return false, nil
 			}
 		}
 	}
@@ -153,11 +155,12 @@ func (p *WaifuPlugin) OnFriendMsg(bot bot.Bot, cmd command.Command, msg message.
 		builder.Text("请求过于频繁，请稍后再试哦").Face(12)
 		bot.SendFriendMsg(msg.Sender.UserId, builder.Build())
 	}
-	return false
+	return false, nil
 }
 
-func (p *WaifuPlugin) Awake(bot bot.Bot) {
+func (p *WaifuPlugin) Awake(ctx context.Context, bot bot.Bot) error {
 	go p.workFunc(bot)
+	return nil
 }
 
 func (p *WaifuPlugin) workFunc(bot bot.Bot) {
