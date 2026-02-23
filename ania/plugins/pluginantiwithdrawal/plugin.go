@@ -229,7 +229,7 @@ func (p *AntiWithdrawalPlugin) OnFriendMsg(ctx context.Context, bot bot.Bot, cmd
 								}
 								return true, nil
 							}
-							link := m.Message[i].Data["url"].(string)
+							link, _ := m.Message[i].Data["url"].(string)
 							if link != "" {
 								if modifyer, err := utils.NewURLModifier(link); err != nil {
 									log.Println("无法解析图片URL")
