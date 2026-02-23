@@ -93,30 +93,7 @@ func (store *AniaRedisStorage) Set(ctx context.Context, key string, val any, opt
 		log.Printf("JSON marshal failed: %v", err)
 		return false
 	}
-
-	fullKey := store.prefix + key
-
-	if cfg.CheckExist {
-		setArgs := redis.SetArgs{
-			Mode: "NX",
-			TTL:  cfg.TTL,
-		}
-		err = store.rdb.SetArgs(ctx, fullKey, data, setArgs).Err()
-		if err != nil {
-			if err == redis.Nil {
-				return false
-			}
-			return false
-		}
-	} else {
-		err = store.rdb.Set(ctx, fullKey, data, cfg.TTL).Err()
-		if err != nil {
-			log.Printf("Redis Set failed: %v", err)
-			return false
-		}
-	}
-
-	return true
+	return store.SetString(ctx, key, string(data), option...)
 }
 
 func (store *AniaRedisStorage) Del(ctx context.Context, key string) bool {
