@@ -55,6 +55,12 @@ func WithConfig(config *viper.Viper) Option {
 	}
 }
 
+func WithResty(restyClient *resty.Client) Option {
+	return func(ania *AniaBot) {
+		ania.restyClient = restyClient
+	}
+}
+
 func NewAniaBot(adapter adapter.Adapter, option ...Option) *AniaBot {
 	ania := &AniaBot{
 		adapter:   adapter,

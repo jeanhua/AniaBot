@@ -31,6 +31,10 @@ func NewPlugin() *AntiWithdrawalPlugin {
 	return p
 }
 
+const (
+	ResourceTimeout = 60 * 3
+)
+
 func (p *AntiWithdrawalPlugin) OnGroupMsg(ctx context.Context, bot bot.Bot, cmd command.Command, msg message.Message) (bool, error) {
 	queueI, _ := p.msg.LoadOrStore(msg.GroupId, NewMessageQueue[*message.Message](100))
 	queue := queueI.(*MessageQueue[*message.Message])
@@ -62,7 +66,7 @@ func (p *AntiWithdrawalPlugin) OnGroupMsg(ctx context.Context, bot bot.Bot, cmd 
 					_builder.Text("[转发消息，暂不支持查看]")
 				case "image", "file":
 					if !existRkey {
-						if isAfter3Minute(m.Time) {
+						if isTimeout(m.Time) {
 							switch seg.Type {
 							case "image":
 								_builder.Text("[图片消息，已经超过3分钟过期时间]")
@@ -110,7 +114,7 @@ func (p *AntiWithdrawalPlugin) OnGroupMsg(ctx context.Context, bot bot.Bot, cmd 
 						}
 					}
 				case "video":
-					if isAfter3Minute(m.Time) {
+					if isTimeout(m.Time) {
 						_builder.Text("[视频消息，已经超过3分钟过期时间]")
 					} else {
 						_builder.Raw(m.Message[i])
@@ -134,12 +138,9 @@ func (p *AntiWithdrawalPlugin) OnGroupMsg(ctx context.Context, bot bot.Bot, cmd 
 	return true, nil
 }
 
-func isAfter3Minute(timestamp uint) bool {
+func isTimeout(timestamp uint) bool {
 	now := uint(time.Now().Unix())
-	if now-timestamp > 180 {
-		return true
-	}
-	return false
+	return now-timestamp > ResourceTimeout
 }
 
 func (p *AntiWithdrawalPlugin) Start(ctx context.Context, cfg *viper.Viper) error {
@@ -197,7 +198,7 @@ func (p *AntiWithdrawalPlugin) OnFriendMsg(ctx context.Context, bot bot.Bot, cmd
 						_builder.Text("[转发消息，暂不支持查看]")
 					case "image", "file":
 						if !existRkey {
-							if isAfter3Minute(m.Time) {
+							if isTimeout(m.Time) {
 								switch seg.Type {
 								case "image":
 									_builder.Text("[图片消息，已经超过3分钟过期时间]")
@@ -245,7 +246,7 @@ func (p *AntiWithdrawalPlugin) OnFriendMsg(ctx context.Context, bot bot.Bot, cmd
 							}
 						}
 					case "video":
-						if isAfter3Minute(m.Time) {
+						if isTimeout(m.Time) {
 							_builder.Text("[视频消息，已经超过3分钟过期时间]")
 						} else {
 							_builder.Raw(m.Message[i])

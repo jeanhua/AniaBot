@@ -55,7 +55,7 @@ type AIChatPlugin struct {
 }
 
 const (
-	LockExpTime = time.Minute * 3
+	LockExpTime = time.Minute * 10
 )
 
 func NewAIChatPlugin() *AIChatPlugin {
