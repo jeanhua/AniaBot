@@ -96,7 +96,7 @@ func (p *AntiWithdrawalPlugin) OnGroupMsg(ctx context.Context, bot bot.Bot, cmd 
 							}
 							return true, nil
 						}
-						link := m.Message[i].Data["url"].(string)
+						link, _ := m.Message[i].Data["url"].(string)
 						if link != "" {
 							if modifyer, err := utils.NewURLModifier(link); err != nil {
 								log.Println("无法解析图片URL")
@@ -107,8 +107,9 @@ func (p *AntiWithdrawalPlugin) OnGroupMsg(ctx context.Context, bot bot.Bot, cmd 
 								case "image":
 									_builder.ImageUrl(newLink)
 								case "file":
-									fileName := m.Message[i].Data["file"].(string)
-									_builder.FileUrl(fileName, newLink)
+									if fileName, ok := m.Message[i].Data["file"].(string); ok {
+										_builder.FileUrl(fileName, newLink)
+									}
 								}
 							}
 						}
@@ -239,8 +240,9 @@ func (p *AntiWithdrawalPlugin) OnFriendMsg(ctx context.Context, bot bot.Bot, cmd
 									case "image":
 										_builder.ImageUrl(newLink)
 									case "file":
-										fileName := m.Message[i].Data["file"].(string)
-										_builder.FileUrl(fileName, newLink)
+										if fileName, ok := m.Message[i].Data["file"].(string); ok {
+											_builder.FileUrl(fileName, newLink)
+										}
 									}
 								}
 							}

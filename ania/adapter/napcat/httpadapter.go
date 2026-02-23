@@ -282,7 +282,7 @@ func (n *napcatHttpAdapter) SendGroupAIVoiceMsg(groupId uint, character, msg str
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
 	defer cancel()
 	if _, err := n.httpClient.R().SetContext(ctx).SetResult(&resp).SetBody(data).Post(n.baseUrl + "/send_group_ai_record"); err != nil {
-		log.Println("HTTP请求失败, 无法发送私聊消息: ", err.Error())
+		log.Println("HTTP请求失败, 无法发送AI语音消息: ", err.Error())
 		return 0, false
 	}
 
