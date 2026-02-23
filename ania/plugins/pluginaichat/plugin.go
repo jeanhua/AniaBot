@@ -7,6 +7,7 @@ import (
 	"log"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/jeanhua/AniaBot/ania/component"
 	"github.com/jeanhua/AniaBot/ania/component/functool"
@@ -16,14 +17,16 @@ import (
 	"github.com/jeanhua/AniaBot/common/model/message"
 	"github.com/jeanhua/AniaBot/common/msgchain"
 	"github.com/jeanhua/AniaBot/common/plugin"
+	"github.com/jeanhua/AniaBot/common/storage"
 	"github.com/spf13/viper"
 	"github.com/tmc/langchaingo/llms"
 )
 
 type AIChatPlugin struct {
 	plugin.Meta
-	chats     sync.Map
-	chatsLock sync.Map
+	chats sync.Map
+
+	lockStorage storage.Storage
 
 	botConfig struct {
 		baseURL string
@@ -51,6 +54,10 @@ type AIChatPlugin struct {
 	}
 }
 
+const (
+	LockExpTime = time.Minute * 3
+)
+
 func NewAIChatPlugin() *AIChatPlugin {
 	return &AIChatPlugin{
 		Meta: plugin.Meta{
@@ -61,13 +68,12 @@ func NewAIChatPlugin() *AIChatPlugin {
 	}
 }
 
-func (p *AIChatPlugin) lock(id uint) bool {
-	_, loaded := p.chatsLock.LoadOrStore(id, 1)
-	return !loaded
+func (p *AIChatPlugin) tryLock(ctx context.Context, id uint) bool {
+	return p.lockStorage.SetString(ctx, fmt.Sprintf("%d", id), "1", storage.WithCheckExist(), storage.WithTTL(LockExpTime))
 }
 
-func (p *AIChatPlugin) unLock(id uint) {
-	p.chatsLock.Delete(id)
+func (p *AIChatPlugin) unLock(ctx context.Context, id uint) {
+	p.lockStorage.Del(ctx, fmt.Sprintf("%d", id))
 }
 
 func (p *AIChatPlugin) getChat(id uint) *component.ChatBot {
@@ -94,13 +100,13 @@ func (p *AIChatPlugin) OnGroupMsg(ctx context.Context, bot bot.Bot, cmd command.
 	if !cmd.Mention {
 		return true, nil
 	}
-	if !p.lock(msg.GroupId) {
+	if !p.tryLock(ctx, msg.GroupId) {
 		builder := msgchain.Builder().Group()
 		builder.Text("正在等待响应中，不要着急哦~")
 		bot.SendGroupMsg(msg.GroupId, builder.Build())
 		return true, nil
 	}
-	defer p.unLock(msg.GroupId)
+	defer p.unLock(ctx, msg.GroupId)
 	chat := p.getChat(msg.GroupId)
 	if chat == nil {
 		builder := msgchain.Builder().Group()
@@ -175,13 +181,13 @@ func (p *AIChatPlugin) OnGroupMsg(ctx context.Context, bot bot.Bot, cmd command.
 }
 
 func (p *AIChatPlugin) OnFriendMsg(ctx context.Context, bot bot.Bot, cmd command.Command, msg message.Message) (bool, error) {
-	if !p.lock(msg.Sender.UserId) {
+	if !p.tryLock(ctx, msg.Sender.UserId) {
 		builder := msgchain.Builder().Friend()
 		builder.Text("正在等待响应中，不要着急哦~")
 		bot.SendFriendMsg(msg.Sender.UserId, builder.Build())
 		return true, nil
 	}
-	defer p.unLock(msg.Sender.UserId)
+	defer p.unLock(ctx, msg.Sender.UserId)
 
 	chat := p.getChat(msg.Sender.UserId)
 	if chat == nil {
@@ -256,6 +262,9 @@ func (p *AIChatPlugin) OnFriendMsg(ctx context.Context, bot bot.Bot, cmd command
 }
 
 func (p *AIChatPlugin) Start(ctx context.Context, cfg *viper.Viper) error {
+	p.lockStorage = p.Storage.Clone("lock")
+	p.lockStorage.Clear(ctx)
+
 	p.botConfig.baseURL = cfg.GetString("plugin.ai_chat_bot.base_url")
 	p.botConfig.model = cfg.GetString("plugin.ai_chat_bot.model")
 	p.botConfig.apiKey = cfg.GetString("plugin.ai_chat_bot.api_key")
