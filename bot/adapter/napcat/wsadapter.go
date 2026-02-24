@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"runtime"
 	"sync"
 	"time"
 
@@ -15,10 +16,14 @@ import (
 )
 
 type napcatWebSocketAdapter struct {
-	wsConn  *websocket.Conn
-	trigger adapter.TriggerWrapper
-	ackMng  *ackManager
-	mu      sync.Mutex
+	wsConn      *websocket.Conn
+	trigger     adapter.TriggerWrapper
+	ackMng      *ackManager
+	mu          sync.Mutex
+	msgCh       chan []byte
+	workerWg    sync.WaitGroup
+	workerCount int
+	queueSize   int
 }
 
 type ackManager struct {
@@ -176,6 +181,16 @@ func (n *napcatWebSocketAdapter) Serve(v *viper.Viper) {
 		maxRetries = 5
 	}
 
+	// worker pool configuration
+	n.workerCount = v.GetInt("bot.adapter.ws.worker_count")
+	if n.workerCount <= 0 {
+		n.workerCount = runtime.NumCPU() * 2
+	}
+	n.queueSize = v.GetInt("bot.adapter.ws.worker_queue_size")
+	if n.queueSize <= 0 {
+		n.queueSize = 256
+	}
+
 	log.Println("已启用 napcat websocket adapter")
 
 	for {
@@ -196,7 +211,10 @@ func (n *napcatWebSocketAdapter) Serve(v *viper.Viper) {
 		}
 		log.Println("WebSocket 连接成功！")
 		n.wsConn = conn
+		n.startWorkerPool(n.workerCount, n.queueSize)
 		n.readLoop(conn)
+		n.stopWorkerPool()
+		n.wsConn = nil
 		log.Println("连接断开，准备重连...")
 	}
 
@@ -211,12 +229,50 @@ func (n *napcatWebSocketAdapter) readLoop(conn *websocket.Conn) {
 			log.Println("读取数据失败:", err)
 			return
 		}
-		go n.onMsg(msg)
+		if n.msgCh != nil {
+			select {
+			case n.msgCh <- msg:
+			default:
+				log.Println("消息队列已满，丢弃消息")
+			}
+		} else {
+			go n.onMsg(msg)
+		}
 	}
 }
 
 func (n *napcatWebSocketAdapter) SetTrigger(trigger adapter.TriggerWrapper) {
 	n.trigger = trigger
+}
+
+func (n *napcatWebSocketAdapter) startWorkerPool(count, qsize int) {
+	if count <= 0 {
+		count = 4
+	}
+	if qsize <= 0 {
+		qsize = 256
+	}
+	n.msgCh = make(chan []byte, qsize)
+	for i := 0; i < count; i++ {
+		n.workerWg.Add(1)
+		go func() {
+			defer n.workerWg.Done()
+			for data := range n.msgCh {
+				n.onMsg(data)
+			}
+		}()
+	}
+	log.Printf("启动 napcat websocket worker pool: workers=%d queue=%d", count, qsize)
+}
+
+func (n *napcatWebSocketAdapter) stopWorkerPool() {
+	if n.msgCh == nil {
+		return
+	}
+	close(n.msgCh)
+	n.workerWg.Wait()
+	n.msgCh = nil
+	log.Println("已停止 napcat websocket worker pool")
 }
 
 func (n *napcatWebSocketAdapter) onMsg(data []byte) {
