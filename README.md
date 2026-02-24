@@ -35,108 +35,173 @@
 <details>
   <summary>AniaBot项目质量报告, 点击展开</summary>
 
-（扶了扶眼镜，镜片反射出代码的寒光）好家伙，让我看看这QQ机器人框架……嚯！这目录结构整得跟军事化管理似的，让我这个“代码侦探”来好好盘一盘这位程序员的杰作！
+（戴上眼镜，推了推镜框，镜片反射出代码的光芒）
 
-## 🕵️‍♂️ 项目结构锐评
+“好家伙，这项目结构一打开，我仿佛看到了程序员在代码海洋里裸泳……等等，这泳姿还挺标准？让我们来康康这位壮士到底写了些什么神仙代码！”
 
-**先扬：**
-“组织结构清晰度我给8分！`bot/`、`common/`、`cmd/`、`custom/` 分层明确，一看就是强迫症患者的作品。特别是把 `adapter`、`component`、`plugins` 分开，这波操作我给满分，比那些把所有代码塞进一个 `main.go` 的勇士强多了！”
+## 🔍 **项目结构锐评**
 
-**后抑：**
-“但是！（拍桌子）`bot/utils` 里混了个 `aitooltransmit.go`，这名字起得跟快递公司似的。还有 `common/aniaerror/errors.go` 里定义的 `Timeout = context.DeadlineExceeded` —— 大哥，你这是给标准库起外号吗？直接 `context.DeadlineExceeded` 不香吗？”
+**目录组织**：7/10  
+`bot/`、`common/`、`custom/` 三分天下，分层清晰得像强迫症患者的书架。不过 `README/` 目录里放图片是什么操作？这是要把 README 当静态网站部署吗？还有 `scripts/build_linux.bat`——**在批处理文件里编译 Linux 二进制**，这波操作我直呼内行，属于是跨平台行为艺术了。
 
-## 🔍 代码质量大赏
+**命名规范**：8/10  
+包名 `napcat`、`pluginaichat` 清晰易懂，但 `functool` 是什么鬼？是“函数工具”的缩写吗？这命名简洁得像是给变量起名 `a1`、`a2`。不过 `msgchain` 链式构造器设计得挺优雅，值得点赞。
 
-### 亮点时刻 ✨
+## 💻 **代码质量毒舌时间**
 
-1. **插件系统设计优秀**：`common/plugin/plugin.go` 接口定义清晰，`Meta` 结构体嵌入实现继承，Go语言的优雅体现得淋漓尽致！
-   
-2. **消息链构造器巧妙**：`common/msgchain/builder.go` 的链式API设计，让我想起了Builder模式教科书案例：
+### **亮点时刻** ✨
+
+1. **插件系统设计**：9/10  
+   `common/plugin/plugin.go` 接口设计得相当漂亮，事件分离清晰，DI 注入合理。这插件架构比某些商业框架还专业，作者是不是偷偷在 GitHub 上开了小号做企业级开发？
+
+2. **消息链构造器**：8.5/10  
+   `msgchain.Builder()` 链式 API 设计得行云流水，支持群聊、私聊、转发消息，还能处理各种媒体类型。这代码写得，我都想给它颁个“最佳用户体验奖”。
+
+3. **错误处理机制**：8/10  
+   `safeExecute` 和 `safeExecuteWithReturn` 包装了 panic 恢复，每个插件事件都有超时控制。这防御性编程做得，比某些线上系统还严谨。
+
+### **槽点轰炸** 💣
+
+1. **HTTP 适配器的日志复制粘贴**：🤦‍♂️  
    ```go
-   msgchain.Builder().Group().Mention(123).Text("你好").Face(14).Build()
+   // 在 httpadapter.go 中，三个不同的函数里出现了相同的日志：
+   log.Println("HTTP请求失败, 无法获取消息详情: ", err.Error())
    ```
-   这流畅度，丝滑得能滑冰！
+   这位壮士，Ctrl+C/V 用得挺熟练啊？建议把这些错误信息统一一下，或者至少让它们有点个性差异。
 
-3. **并发控制到位**：`pluginaichat/plugin.go` 里的 `tryLock/unLock` 机制，防止AI对话被刷爆，考虑周到！
+2. **`noticehandle.go` 的 switch-case 地狱**：😱  
+   长达 100+ 行的 switch-case，每个 case 都是同样的模式：
+   ```go
+   case "group_upload":
+       var notice message.GroupUploadNotice
+       if err := json.Unmarshal(data, &notice); err != nil {
+           log.Println("解析消息通知事件[group_upload]错误: ", err.Error())
+           return
+       }
+       if trigger.OnGroupUpload != nil {
+           trigger.OnGroupUpload(notice)
+       }
+   ```
+   这代码重复得让我眼睛疼！建议用反射或者注册表模式重构，不然下次加新事件类型时，复制粘贴得手抽筋。
 
-### 槽点集锦 🤦‍♂️
+3. **`pluginantiwithdrawal/plugin.go` 的代码复制**：🔄  
+   群聊和私聊的 `OnGroupMsg` 和 `OnFriendMsg` 方法里，**有 80% 的代码是完全相同的**！这复制得也太明目张胆了，DRY（Don't Repeat Yourself）原则在你这里变成了 WET（Write Everything Twice）？
 
-**第一幕：重复代码的狂欢**
+4. **硬编码的魔法数字**：🔢  
+   ```go
+   const (
+       ResourceTimeout = 60 * 3 // 时间戳，3分钟
+   )
+   ```
+   为什么是 3 分钟？为什么不是可配置的？这注释写“时间戳”也不准确啊，明明是秒数。建议用 `time.Minute * 3` 更清晰。
+
+5. **`aichatbot.go` 中的硬编码循环**：🔄  
+   ```go
+   maxIterations := 5
+   for i := 0; i < maxIterations; i++ {
+       // ...
+       if i == maxIterations-1 {
+           // 最后一遍特殊处理
+       }
+   }
+   ```
+   这循环逻辑有点绕，最后一遍特殊处理放在循环里，不如拆分成更清晰的函数。
+
+## 🛠 **技术选型点评**
+
+**依赖库选择**：8/10  
+- `langchaingo`：Go 的 LLM 框架，选型前沿，点赞
+- `go-resty`：HTTP 客户端，比原生 `net/http` 好用
+- `redis/go-redis`：标准选择
+- `robfig/cron`：定时任务老牌选手
+
+**版本管理**：⚠️  
+`go.mod` 里有个骚操作：
 ```go
-// bot/adapter/napcat/wsadapter.go 第128-130行
-if msg.MessageType == "group" && n.trigger.OnGroupMsg != nil {
-    if msg.RawMessage != "" {
-        n.trigger.OnGroupMsg(msg)
+replace nhooyr.io/websocket v1.8.7 => nhooyr.io/websocket v1.8.14
+```
+这是手动解决依赖冲突？建议检查下为什么需要这个 replace。
+
+## 🎯 **最想吐槽的代码**
+
+**冠军**：`pluginantiwithdrawal/plugin.go` 中的图片链接处理  
+```go
+key_20 := ""
+key_10 := ""
+for _, k := range ncrkey {
+    switch k.Type {
+    case 20:
+        key_20 = strings.TrimPrefix(k.Rkey, "&rkey=")
+    case 10:
+        key_10 = strings.TrimPrefix(k.Rkey, "&rkey=")
     }
 }
-// 第132-134行（几乎一样的代码）
-else if msg.MessageType == "private" && msg.SubType == "friend" && n.trigger.OnFriendMsg != nil {
-    if msg.RawMessage != "" {
-        n.trigger.OnFriendMsg(msg)
+if key_20 == "" || key_10 == "" {
+    switch seg.Type {
+    case "image":
+        log.Println("无法解析图片URL")
+    case "file":
+        log.Println("无法解析文件URL")
+    }
+    return true, nil // ← 这里直接 return，但前面已经处理了一部分消息？
+}
+```
+这段代码的逻辑是：如果两个 key 都没找到，就**直接返回**，但此时可能已经处理了部分消息！而且变量名 `key_20`、`key_10` 是什么魔法数字？至少定义个常量吧！
+
+**亚军**：`wsadapter.go` 中的竞态条件隐患  
+```go
+func (n *napcatWebSocketAdapter) SendPokeMsg(userId uint, groupId *uint) {
+    params := map[string]uint{"user_id": userId}
+    if groupId != nil {
+        params["group_id"] = *groupId
+    }
+    req := wsPushData[any]{Action: "send_poke", Params: params}
+    if b, err := json.Marshal(req); err == nil {
+        n.mu.Lock()
+        n.wsConn.WriteMessage(websocket.TextMessage, b) // ← 没有错误处理！
+        n.mu.Unlock()
     }
 }
 ```
-“这位壮士，`if msg.RawMessage != ""` 检查写两遍，是怕编译器忘记吗？”
+发送戳一戳消息居然**没有错误处理**？万一连接断了怎么办？而且这个操作没有超时控制，可能永远卡住。
 
-**第二幕：错误处理的艺术**
+## 🏆 **最值得表扬的设计**
+
+**消息链构造器** (`common/msgchain/`)：9.5/10  
+这设计真的优雅！类型安全、链式调用、支持多种消息类型：
 ```go
-// bot/adapter/napcat/httpadapter.go 第33行
-defer func() {
-    if err := r.Body.Close(); err != nil {
-        log.Printf("关闭HTTP请求体出错: %v", err.Error())
-    }
-}()
+msgchain.Builder().Group()
+    .Mention(userId)
+    .Text("你好！")
+    .Face(14)
+    .ImageUrl("https://example.com/image.jpg")
 ```
-“关闭body出错还要log，这严谨程度让我感动……但等等，`err.Error()` 在 `%v` 里？这是要给错误信息套娃吗？”
+这 API 设计得，让使用者心情愉悦，值得所有 Go 开发者学习。
 
-**第三幕：魔法数字的派对**
-```go
-// bot/plugins/pluginantiwithdrawal/plugin.go
-const (
-    ResourceTimeout = 60 * 3 // 时间戳，3分钟
-)
-```
-“60 * 3 = 180秒 = 3分钟，这数学我给满分！但为啥不直接 `3 * time.Minute`？是怕 `time` 包收费吗？”
+**插件生命周期管理**：9/10  
+`Start` → `StartCron` → `Awake` 的启动顺序，加上每个事件都有超时控制，这设计考虑得很周全。插件排序、依赖注入、存储隔离，这套系统比某些“企业级”框架还专业。
 
-**第四幕：最骚的操作**
-```go
-// bot/core/core.go 第86行
-encodeName := base64.StdEncoding.EncodeToString([]byte(p.GetMeta().Name))
-p.SetStorage(ania.storage.Clone(encodeName))
-```
-“用base64编码插件名当存储前缀……（扶额）这脑回路，我愿称之为‘防同事看懂大法’！”
+## 💡 **抢救建议**
 
-## 📦 技术选型点评
+1. **消灭重复代码**：把 `noticehandle.go` 和防撤回插件中的重复逻辑抽成公共函数
+2. **统一错误处理**：HTTP 适配器中的错误日志需要统一，可以考虑用带上下文的日志
+3. **配置化魔法数字**：3分钟超时、5次最大迭代等硬编码值应该放到配置里
+4. **完善测试覆盖**：虽然有测试文件，但覆盖不全，特别是适配器层
+5. **连接健康检查**：WebSocket 适配器需要更完善的连接状态管理和重连机制
 
-**优点：**
-- `langchaingo` + `openai`：AI集成方案选型现代
-- `redis/go-redis/v9`：存储选型靠谱
-- `cron/v3`：定时任务库专业
+## 📊 **最终评分**
 
-**疑问：**
-“`build_linux.bat` 这文件名……（揉眼睛）在Windows里编译Linux二进制？这波操作我看不懂但大受震撼！”
+**项目结构**：7.5/10  
+**代码质量**：7/10（亮点很亮，槽点也很槽）  
+**架构设计**：9/10（插件系统设计优秀）  
+**可维护性**：7/10（重复代码较多）  
+**文档完整性**：8/10（README 很详细）
 
-## 🎯 终极吐槽与抢救建议
+**综合得分：7.7/10** 🎯
 
-### 抢救建议（严肃版）：
+> “这代码就像一碗螺蛳粉——闻起来有点臭（重复代码、硬编码），但吃起来真香（架构设计、插件系统）。建议作者先把那几处明显的‘异味’处理掉，这项目就能从‘优秀’升级为‘卓越’了！”
 
-1. **统一错误处理**：把 `log.Println` 满天飞的情况整理下，考虑结构化日志
-2. **提取公共方法**：HTTP和WebSocket adapter里大量重复逻辑，该抽象了！
-3. **配置验证**：`config.yaml` 读取后缺少必要字段验证，容易运行时爆炸
-4. **测试覆盖**：这么大个项目，测试文件呢？`_test.go` 文件一个没见着！
-
-### 幽默总结：
-
-“这代码就像一碗螺蛳粉——闻起来有点怪（那些魔法数字和重复代码），但吃起来真香（架构设计和插件系统）！作者在‘工程规范’和‘快速实现’之间反复横跳，最终呈现出一部‘有瑕疵的佳作’。”
-
-**综合评分：7.5/10**
-
-- 架构设计：★★★★☆
-- 代码规范：★★★☆☆  
-- 可维护性：★★★★☆
-- 测试覆盖：★☆☆☆☆（没看到测试文件，扣大分！）
-- 幽默指数：★★★★★（无意中创造了很多笑点）
-
-**最后一句：** “继续优化，这框架有潜力成为QQ机器人界的‘瑞士军刀’。但请先把测试补上，不然就是‘没开刃的瑞士军刀’——好看但不好用！” 🔪
+（摘下眼镜，擦了擦镜片）  
+“代码侦探，收工！”
 
 </details>
