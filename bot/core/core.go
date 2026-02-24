@@ -285,6 +285,10 @@ func (ania *AniaBot) AddPlugin(plugins ...plugin.Plugin) {
 	}
 }
 
+func (ania *AniaBot) Stop() {
+	ania.cancel()
+}
+
 func (ania *AniaBot) SendGroupMsg(groupId uint, chain msgchain.GroupChain) (msgId uint, success bool) {
 	return ania.adapter.SendGroupMsg(groupId, chain)
 }
