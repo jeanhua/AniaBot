@@ -91,6 +91,11 @@ func (p *InterceptorPlugin) check(target int, msg message.Message) bool {
 				return false
 			}
 		}
+		for _, id := range p.interceptUser {
+			if id == "all" || ieqs(msg.Sender.UserId, id) {
+				return false
+			}
+		}
 		for _, id := range p.permitGroup {
 			if id == "all" || ieqs(msg.GroupId, id) {
 				return true
