@@ -8,6 +8,7 @@
 2. 二次元壁纸图片：可获取随机二次元壁纸
 3. waifu.pics插件：获取分类随机二次元图和表情包
 4. GithubRepoer插件：给github项目进行质量分析并给出报告
+5. 消息拦截器插件：给群聊和用户配置黑白名单，拦截和放行消息事件
 
 ![help](./README/help.png)
 
@@ -32,7 +33,7 @@
 ![news](./README/gr.png)
 
 <details>
-  <summary>AniaBot项目质量报告</summary>
+  <summary>AniaBot项目质量报告, 点击展开</summary>
 
 （扶了扶眼镜，镜片反射出代码的寒光）好家伙，让我看看这QQ机器人框架……嚯！这目录结构整得跟军事化管理似的，让我这个“代码侦探”来好好盘一盘这位程序员的杰作！
 
