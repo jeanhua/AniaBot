@@ -7,6 +7,7 @@ import (
 
 type Bot interface {
 	botOuterItf
+	Stop()
 }
 
 type botOuterItf interface {
