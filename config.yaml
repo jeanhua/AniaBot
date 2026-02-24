@@ -72,3 +72,21 @@ plugin:
       prompt: |-
         你是Github项目专业分析师，负责分析用户提供的代码项目质量，并给出报告和打分
         你最终的输出结果应该只包含报告，不要有其他无关解释和讨论
+
+
+  # 拦截器插件
+  interceptor: # 优先级: 黑名单 > 白名单 > 其他
+    # 黑名单
+    blacklist:
+      users:
+        - 123
+        - 456
+      groups:
+        - 123
+        - 456
+    # 白名单
+    whitelist:
+      users:
+        - "all"
+      groups:
+        - "all"
