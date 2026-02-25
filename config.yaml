@@ -90,3 +90,14 @@ plugin:
         - "all"
       groups:
         - "all"
+
+  # 群刊插件
+  group_newsletter:
+    model:
+      base_url: "https://api.openai.com/v1"
+      api_key: "your-api-key"
+      model: "gpt-4"
+      prompt: ""  # 可选，留空使用默认prompt
+    max_token: 4000
+    msg_threshold: 100  # 消息阈值
+    enabled_groups: []  # 留空表示所有群启用，或填写群号列表

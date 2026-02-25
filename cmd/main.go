@@ -12,6 +12,7 @@ import (
 	"github.com/jeanhua/AniaBot/custom/plugins/acgwallpaper"
 	"github.com/jeanhua/AniaBot/custom/plugins/douyinparser"
 	"github.com/jeanhua/AniaBot/custom/plugins/githubrepoer"
+	"github.com/jeanhua/AniaBot/custom/plugins/groupnewsletter"
 	"github.com/jeanhua/AniaBot/custom/plugins/interceptor"
 	"github.com/jeanhua/AniaBot/custom/plugins/waifupics"
 )
@@ -33,6 +34,7 @@ func main() {
 	bot.AddPlugin(waifupics.NewWaifuPlugin(5))
 	bot.AddPlugin(githubrepoer.NewGithubRepoer(5))
 	bot.AddPlugin(interceptor.NewInterceptorPlugin())
+	bot.AddPlugin(groupnewsletter.NewGroupNewsletterPlugin())
 
 	bot.Run()
 }
