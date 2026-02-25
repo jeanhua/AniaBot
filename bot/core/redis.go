@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"log"
+	"strings"
 
 	"github.com/jeanhua/AniaBot/common/storage"
 	"github.com/redis/go-redis/v9"
@@ -123,6 +124,9 @@ func (store *AniaRedisStorage) ScanKeys(ctx context.Context, pattern string, cou
 		scanned, cursor, err = store.rdb.Scan(ctx, cursor, store.prefix+pattern, count).Result()
 		if err != nil {
 			return nil, err
+		}
+		for i := range scanned {
+			scanned[i] = strings.TrimPrefix(scanned[i], store.prefix)
 		}
 		keys = append(keys, scanned...)
 		if cursor == 0 {
