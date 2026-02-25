@@ -76,3 +76,9 @@ type NoticeEvent interface {
 	// OnGroupCard 处理群名片变更
 	OnGroupCard(context.Context, bot.Bot, message.GroupCardNotice) error
 }
+
+const (
+	LevelLog        = -1000 // 日志层插件Order参考
+	LevelNormal     = 0     // 普通插件Order参考
+	LevelPostHandle = 1000  // 后置处理层Order参考
+)

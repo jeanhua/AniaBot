@@ -21,6 +21,7 @@ func NewPlugin() *LogPlugin {
 	p.Name = "日志打印插件"
 	p.HelpWords = "用于在控制台打印日志信息"
 	p.AdminOnly = true
+	p.Order = plugin.LevelLog
 	return p
 }
 
