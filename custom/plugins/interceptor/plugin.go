@@ -27,7 +27,7 @@ func NewInterceptorPlugin() *InterceptorPlugin {
 		Meta: plugin.Meta{
 			Name:      "消息拦截器插件",
 			HelpWords: "拦截和放行配置信息中指定的群聊和用户，减少消息干扰",
-			Order:     1,
+			Order:     plugin.LevelLog + 1,
 			AdminOnly: true,
 		},
 	}
