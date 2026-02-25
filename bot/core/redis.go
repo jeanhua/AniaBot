@@ -120,7 +120,7 @@ func (store *AniaRedisStorage) ScanKeys(ctx context.Context, pattern string, cou
 	for {
 		var err error
 		var scanned []string
-		scanned, cursor, err = store.rdb.Scan(ctx, cursor, pattern, count).Result()
+		scanned, cursor, err = store.rdb.Scan(ctx, cursor, store.prefix+pattern, count).Result()
 		if err != nil {
 			return nil, err
 		}
