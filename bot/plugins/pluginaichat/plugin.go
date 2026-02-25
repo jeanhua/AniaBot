@@ -63,7 +63,7 @@ func NewAIChatPlugin() *AIChatPlugin {
 		Meta: plugin.Meta{
 			Name:      "AI对话插件",
 			HelpWords: "@我聊天哦，带上 #新对话 标签可以创建新对话",
-			Order:     1000,
+			Order:     plugin.LevelPostHandle,
 		},
 	}
 }
