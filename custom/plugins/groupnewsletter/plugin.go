@@ -38,6 +38,7 @@ type newsletterConfig struct {
 	prompt        string
 	maxToken      int
 	msgThreshold  int
+	maxMessages   int
 	enabledGroups []uint
 }
 
@@ -72,6 +73,7 @@ func (p *GroupNewsletter) Start(ctx context.Context, cfg *viper.Viper) error {
 	p.config.prompt = cfg.GetString("plugin.group_newsletter.model.prompt")
 	p.config.maxToken = cfg.GetInt("plugin.group_newsletter.max_token")
 	p.config.msgThreshold = cfg.GetInt("plugin.group_newsletter.msg_threshold")
+	p.config.maxMessages = cfg.GetInt("plugin.group_newsletter.max_messages")
 
 	enabledGroups := cfg.GetIntSlice("plugin.group_newsletter.enabled_groups")
 	for _, id := range enabledGroups {
@@ -82,6 +84,10 @@ func (p *GroupNewsletter) Start(ctx context.Context, cfg *viper.Viper) error {
 
 	if p.config.msgThreshold == 0 {
 		p.config.msgThreshold = 100
+	}
+
+	if p.config.maxMessages == 0 {
+		p.config.maxMessages = 500
 	}
 
 	if p.config.prompt == "" {
@@ -105,7 +111,7 @@ func (p *GroupNewsletter) Start(ctx context.Context, cfg *viper.Viper) error {
 
 	p.loadFromStorage()
 
-	log.Println("群刊插件初始化完成, 消息阈值:", p.config.msgThreshold)
+	log.Printf("群刊插件初始化完成, 消息阈值: %d, 最大消息数: %d\n", p.config.msgThreshold, p.config.maxMessages)
 	return nil
 }
 
@@ -207,6 +213,10 @@ func (p *GroupNewsletter) collectMessage(_ context.Context, bot bot.Bot, msg mes
 	}
 
 	buffer.messages = append(buffer.messages, collected)
+
+	if len(buffer.messages) > p.config.maxMessages {
+		buffer.messages = buffer.messages[len(buffer.messages)-p.config.maxMessages:]
+	}
 
 	key := "group_" + strconv.FormatUint(uint64(msg.GroupId), 10)
 	p.Storage.Set(context.Background(), key, buffer.messages)
