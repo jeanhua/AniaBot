@@ -65,6 +65,7 @@ func (b *ChatBot) Chat(ctx context.Context, userInput string, msgFunc functool.O
 		b.tools = append(b.tools, functool.MakeJinaTool()...)
 		b.tools = append(b.tools, functool.MakeTimeTool()...)
 		b.tools = append(b.tools, functool.MakeMemeTool()...)
+		b.tools = append(b.tools, functool.MakeFileTool())
 	}
 
 	callopt := append(opt, llms.WithTools(b.tools))
@@ -113,6 +114,8 @@ func (b *ChatBot) Chat(ctx context.Context, userInput string, msgFunc functool.O
 				callResult, err = functool.TryHandleTimeCall(call)
 			case functool.MEME_TOOL_NAME:
 				callResult, err = functool.TryHandleMemeFunc(call, msgFunc)
+			case functool.FILE_TOOL_NAME:
+				callResult, err = functool.TryHandleFileTool(call, msgFunc)
 			default:
 				err = errors.New("tool not exist")
 			}
