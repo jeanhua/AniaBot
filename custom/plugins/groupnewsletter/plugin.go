@@ -3,7 +3,6 @@ package groupnewsletter
 import (
 	"context"
 	"encoding/base64"
-	"encoding/json"
 	"fmt"
 	"log"
 	"strconv"
@@ -29,6 +28,12 @@ type GroupNewsletter struct {
 	groupMsgs  map[uint]*groupMessageBuffer
 	msgsMutex  sync.RWMutex
 	notifyChan chan uint
+	// 记录正在生成中的群，防止重复触发
+	generating map[uint]struct{}
+	generateMu sync.Mutex
+	// 插件自身生命周期 ctx，不依赖框架传入的短生命周期 ctx
+	pluginCtx context.Context
+	cancel    context.CancelFunc
 }
 
 type newsletterConfig struct {
@@ -52,7 +57,6 @@ type collectedMessage struct {
 	UserId   uint   `json:"user_id"`
 	Nickname string `json:"nickname"`
 	Content  string `json:"content"`
-	MsgId    uint   `json:"msg_id"`
 }
 
 func NewGroupNewsletterPlugin() *GroupNewsletter {
@@ -63,6 +67,7 @@ func NewGroupNewsletterPlugin() *GroupNewsletter {
 		},
 		groupMsgs:  make(map[uint]*groupMessageBuffer),
 		notifyChan: make(chan uint, 100),
+		generating: make(map[uint]struct{}),
 	}
 }
 
@@ -109,36 +114,44 @@ func (p *GroupNewsletter) Start(ctx context.Context, cfg *viper.Viper) error {
 		log.Println("群刊插件: 未配置LLM，请检查config.yaml中的plugin.group_newsletter配置")
 	}
 
+	p.pluginCtx, p.cancel = context.WithCancel(context.Background())
+
 	p.loadFromStorage()
 
 	log.Printf("群刊插件初始化完成, 消息阈值: %d, 最大消息数: %d\n", p.config.msgThreshold, p.config.maxMessages)
 	return nil
 }
 
-func (p *GroupNewsletter) Awake(_ context.Context, bot bot.Bot) error {
-	go p.processLoop(bot)
+func (p *GroupNewsletter) Stop() {
+	if p.cancel != nil {
+		p.cancel()
+	}
+}
+
+func (p *GroupNewsletter) Awake(_ context.Context, b bot.Bot) error {
+	go p.processLoop(b)
 	return nil
 }
 
-func (p *GroupNewsletter) OnGroupMsg(ctx context.Context, bot bot.Bot, cmd command.Command, msg message.Message) (bool, error) {
+func (p *GroupNewsletter) OnGroupMsg(ctx context.Context, b bot.Bot, cmd command.Command, msg message.Message) (bool, error) {
 	if !p.isGroupEnabled(msg.GroupId) {
 		return true, nil
 	}
 
 	if cmd.Mention && cmd.Name == "gn" {
-		return p.handleCommand(bot, cmd, msg)
+		return p.handleCommand(b, cmd, msg)
 	}
 
-	p.collectMessage(ctx, bot, msg)
+	p.collectMessage(ctx, b, msg)
 
 	return true, nil
 }
 
-func (p *GroupNewsletter) handleCommand(bot bot.Bot, cmd command.Command, msg message.Message) (bool, error) {
+func (p *GroupNewsletter) handleCommand(b bot.Bot, cmd command.Command, msg message.Message) (bool, error) {
 	if p.llm == nil {
 		builder := msgchain.Builder().Group()
 		builder.Reply(msg.MessageId).Text("群刊插件未正确配置，请检查API配置")
-		bot.SendGroupMsg(msg.GroupId, builder.Build())
+		b.SendGroupMsg(msg.GroupId, builder.Build())
 		return false, nil
 	}
 
@@ -147,20 +160,27 @@ func (p *GroupNewsletter) handleCommand(bot bot.Bot, cmd command.Command, msg me
 		if count == 0 {
 			builder := msgchain.Builder().Group()
 			builder.Reply(msg.MessageId).Text("当前没有收集到消息，无法生成群刊")
-			bot.SendGroupMsg(msg.GroupId, builder.Build())
+			b.SendGroupMsg(msg.GroupId, builder.Build())
 			return false, nil
 		}
-		go p.generateForGroup(context.Background(), bot, msg.GroupId, true)
+		// 检查是否已在生成中
+		if p.isGenerating(msg.GroupId) {
+			builder := msgchain.Builder().Group()
+			builder.Reply(msg.MessageId).Text("群刊正在生成中，请稍候...")
+			b.SendGroupMsg(msg.GroupId, builder.Build())
+			return false, nil
+		}
+		go p.generateForGroup(p.pluginCtx, b, msg.GroupId, true)
 		builder := msgchain.Builder().Group()
 		builder.Reply(msg.MessageId).Text("正在生成群刊，请稍后...")
-		bot.SendGroupMsg(msg.GroupId, builder.Build())
+		b.SendGroupMsg(msg.GroupId, builder.Build())
 		return false, nil
 	}
 
 	count := p.getMessageCount(msg.GroupId)
 	builder := msgchain.Builder().Group()
 	builder.Reply(msg.MessageId).Text(fmt.Sprintf("当前已收集 %d 条消息，需要 %d 条触发群刊生成", count, p.config.msgThreshold))
-	bot.SendGroupMsg(msg.GroupId, builder.Build())
+	b.SendGroupMsg(msg.GroupId, builder.Build())
 	return false, nil
 }
 
@@ -176,7 +196,32 @@ func (p *GroupNewsletter) isGroupEnabled(groupId uint) bool {
 	return false
 }
 
-func (p *GroupNewsletter) collectMessage(_ context.Context, bot bot.Bot, msg message.Message) {
+// isGenerating 检查某个群是否正在生成群刊
+func (p *GroupNewsletter) isGenerating(groupId uint) bool {
+	p.generateMu.Lock()
+	defer p.generateMu.Unlock()
+	_, ok := p.generating[groupId]
+	return ok
+}
+
+// trySetGenerating 尝试标记某个群为生成中，返回 false 表示已在生成
+func (p *GroupNewsletter) trySetGenerating(groupId uint) bool {
+	p.generateMu.Lock()
+	defer p.generateMu.Unlock()
+	if _, ok := p.generating[groupId]; ok {
+		return false
+	}
+	p.generating[groupId] = struct{}{}
+	return true
+}
+
+func (p *GroupNewsletter) clearGenerating(groupId uint) {
+	p.generateMu.Lock()
+	defer p.generateMu.Unlock()
+	delete(p.generating, groupId)
+}
+
+func (p *GroupNewsletter) collectMessage(_ context.Context, b bot.Bot, msg message.Message) {
 	p.msgsMutex.Lock()
 	defer p.msgsMutex.Unlock()
 
@@ -194,7 +239,7 @@ func (p *GroupNewsletter) collectMessage(_ context.Context, bot bot.Bot, msg mes
 	for _, m := range msg.Message {
 		content.WriteString(m.FriendlyText(
 			message.WithGetGroupUserInfo(msg.GroupId, func(groupId, userId uint) (info *message.GroupUserInfo, success bool) {
-				return bot.GetGroupUserInfo(groupId, userId)
+				return b.GetGroupUserInfo(groupId, userId)
 			}),
 		))
 	}
@@ -209,7 +254,6 @@ func (p *GroupNewsletter) collectMessage(_ context.Context, bot bot.Bot, msg mes
 		UserId:   msg.Sender.UserId,
 		Nickname: nickname,
 		Content:  content.String(),
-		MsgId:    msg.MessageId,
 	}
 
 	buffer.messages = append(buffer.messages, collected)
@@ -221,7 +265,8 @@ func (p *GroupNewsletter) collectMessage(_ context.Context, bot bot.Bot, msg mes
 	key := "group_" + strconv.FormatUint(uint64(msg.GroupId), 10)
 	p.Storage.Set(context.Background(), key, buffer.messages)
 
-	if len(buffer.messages) >= p.config.msgThreshold {
+	// 达到阈值且未在生成中，才发送通知；避免 channel 堆积无效信号
+	if len(buffer.messages) >= p.config.msgThreshold && !p.isGenerating(msg.GroupId) {
 		select {
 		case p.notifyChan <- msg.GroupId:
 		default:
@@ -241,14 +286,27 @@ func (p *GroupNewsletter) getMessageCount(groupId uint) int {
 	return 0
 }
 
-func (p *GroupNewsletter) processLoop(bot bot.Bot) {
+// processLoop 监听通知并串行处理，支持插件生命周期退出
+func (p *GroupNewsletter) processLoop(b bot.Bot) {
 	for {
-		groupId := <-p.notifyChan
-		p.generateForGroup(context.Background(), bot, groupId, false)
+		select {
+		case <-p.pluginCtx.Done():
+			log.Println("群刊插件: processLoop 退出")
+			return
+		case groupId := <-p.notifyChan:
+			p.generateForGroup(p.pluginCtx, b, groupId, false)
+		}
 	}
 }
 
-func (p *GroupNewsletter) generateForGroup(ctx context.Context, bot bot.Bot, groupId uint, force bool) {
+func (p *GroupNewsletter) generateForGroup(ctx context.Context, b bot.Bot, groupId uint, force bool) {
+	// 防止同一群并发生成
+	if !p.trySetGenerating(groupId) {
+		log.Printf("群 %d 已在生成中，跳过\n", groupId)
+		return
+	}
+	defer p.clearGenerating(groupId)
+
 	p.msgsMutex.Lock()
 	buffer, ok := p.groupMsgs[groupId]
 	if !ok {
@@ -275,6 +333,7 @@ func (p *GroupNewsletter) generateForGroup(ctx context.Context, bot bot.Bot, gro
 	buffer.mu.Unlock()
 	p.msgsMutex.Unlock()
 
+	// 清空后立即持久化（保存空状态，防止重启后重复生成）
 	p.saveToStorage(groupId)
 
 	log.Printf("群 %d 开始生成群刊，共 %d 条消息\n", groupId, len(msgs))
@@ -284,7 +343,7 @@ func (p *GroupNewsletter) generateForGroup(ctx context.Context, bot bot.Bot, gro
 		log.Println("生成群刊失败:", err)
 		builder := msgchain.Builder().Group()
 		builder.Text("群刊生成失败，请稍后再试")
-		bot.SendGroupMsg(groupId, builder.Build())
+		b.SendGroupMsg(groupId, builder.Build())
 		return
 	}
 
@@ -292,17 +351,24 @@ func (p *GroupNewsletter) generateForGroup(ctx context.Context, bot bot.Bot, gro
 
 	builder := msgchain.Builder().Group()
 	builder.Text("📰 叮！本期群刊已生成，请查收~")
-	bot.SendGroupMsg(groupId, builder.Build())
+	b.SendGroupMsg(groupId, builder.Build())
 
 	builder = msgchain.Builder().Group()
 	builder.FileBase64(name, base64.StdEncoding.EncodeToString([]byte(result)))
-	bot.SendGroupMsg(groupId, builder.Build())
+	b.SendGroupMsg(groupId, builder.Build())
 }
 
 func (p *GroupNewsletter) generateAI(ctx context.Context, msgs []collectedMessage) (string, error) {
-	msgData, err := json.MarshalIndent(msgs, "", "  ")
-	if err != nil {
-		return "", err
+	fmtData := strings.Builder{}
+	var cTime int64 = 0
+	for _, msg := range msgs {
+		// 距上一条消息超过30分钟，插入时间分隔
+		if cTime == 0 || msg.Time-cTime > 60*30 {
+			cTime = msg.Time
+			fmtData.WriteString("\n" + time.Unix(msg.Time, 0).Format("2006-01-02 15:04:05") + "\n")
+		}
+		fmtData.WriteString(fmt.Sprintf("[UserID]:%d\n[Username]:%s\n[Content]:%s\n",
+			msg.UserId, msg.Nickname, msg.Content))
 	}
 
 	ctx, cancel := context.WithTimeout(ctx, time.Minute*3)
@@ -312,7 +378,7 @@ func (p *GroupNewsletter) generateAI(ctx context.Context, msgs []collectedMessag
 		ctx,
 		[]llms.MessageContent{
 			llms.TextParts(llms.ChatMessageTypeSystem, p.config.prompt),
-			llms.TextParts(llms.ChatMessageTypeHuman, string(msgData)),
+			llms.TextParts(llms.ChatMessageTypeHuman, fmtData.String()),
 		},
 		llms.WithTemperature(1.2),
 		llms.WithTopP(0.9),
