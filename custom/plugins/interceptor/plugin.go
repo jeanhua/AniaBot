@@ -88,11 +88,13 @@ func (p *InterceptorPlugin) check(target int, msg message.Message) bool {
 	case TargetGroup:
 		for _, id := range p.interceptGroup {
 			if id == "all" || ieqs(msg.GroupId, id) {
+				log.Println("触发全部拦截")
 				return false
 			}
 		}
 		for _, id := range p.interceptUser {
 			if id == "all" || ieqs(msg.Sender.UserId, id) {
+				log.Println("触发好友拦截:", msg.Sender.UserId)
 				return false
 			}
 		}
