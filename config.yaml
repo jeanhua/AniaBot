@@ -102,3 +102,7 @@ plugin:
     msg_threshold: 100  # 消息阈值
     max_messages: 500   # 最大保存消息数
     enabled_groups: []  # 留空表示所有群启用，或填写群号列表
+
+  # gdmusic插件
+  gdmusic:
+    base_url: "https://music-api.gdstudio.xyz/api.php"  # 留空使用默认

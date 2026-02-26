@@ -11,6 +11,7 @@ import (
 
 	"github.com/jeanhua/AniaBot/custom/plugins/acgwallpaper"
 	"github.com/jeanhua/AniaBot/custom/plugins/douyinparser"
+	"github.com/jeanhua/AniaBot/custom/plugins/gdmusicplugin"
 	"github.com/jeanhua/AniaBot/custom/plugins/githubrepoer"
 	"github.com/jeanhua/AniaBot/custom/plugins/groupnewsletter"
 	"github.com/jeanhua/AniaBot/custom/plugins/interceptor"
@@ -35,6 +36,7 @@ func main() {
 	bot.AddPlugin(githubrepoer.NewGithubRepoer(5))
 	bot.AddPlugin(interceptor.NewInterceptorPlugin())
 	bot.AddPlugin(groupnewsletter.NewGroupNewsletterPlugin())
+	bot.AddPlugin(gdmusicplugin.NewMusicPlugin())
 
 	bot.Run()
 }
