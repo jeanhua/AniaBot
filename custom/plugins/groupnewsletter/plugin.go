@@ -241,6 +241,8 @@ func (p *GroupNewsletter) collectMessage(_ context.Context, b bot.Bot, msg messa
 			message.WithGetGroupUserInfo(msg.GroupId, func(groupId, userId uint) (info *message.GroupUserInfo, success bool) {
 				return b.GetGroupUserInfo(groupId, userId)
 			}),
+			message.WithGetForwardMsgFunc(b.GetForwardMsg),
+			message.WithGetMsgFunc(b.GetMsgDetail),
 		))
 	}
 
