@@ -2,6 +2,7 @@ package pluginaichat
 
 import (
 	"context"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"log"
@@ -147,6 +148,15 @@ func (p *AIChatPlugin) OnGroupMsg(ctx context.Context, bot bot.Bot, cmd command.
 			}
 			return success
 		},
+		SendFile: func(fileName, content string) bool {
+			builder := msgchain.Builder().Group()
+			builder.FileBase64(fileName, base64.StdEncoding.EncodeToString([]byte(content)))
+			_, success := bot.SendGroupMsg(msg.GroupId, builder.Build())
+			if success {
+				log.Printf("[发->群:%d]: [文件:%s]", msg.GroupId, fileName)
+			}
+			return success
+		},
 	}
 
 	resp, err := chat.Chat(ctx, extraText, msgFuncs,
@@ -225,6 +235,15 @@ func (p *AIChatPlugin) OnFriendMsg(ctx context.Context, bot bot.Bot, cmd command
 			_, success := bot.SendFriendMsg(msg.Sender.UserId, builder.Build())
 			if success {
 				log.Printf("[发->好友:%d]: [图片:%s]", msg.Sender.UserId, url)
+			}
+			return success
+		},
+		SendFile: func(fileName, content string) bool {
+			builder := msgchain.Builder().Friend()
+			builder.FileBase64(fileName, base64.StdEncoding.EncodeToString([]byte(content)))
+			_, success := bot.SendFriendMsg(msg.Sender.UserId, builder.Build())
+			if success {
+				log.Printf("[发->好友:%d]: [文件:%s]", msg.Sender.UserId, fileName)
 			}
 			return success
 		},
