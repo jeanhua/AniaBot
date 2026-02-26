@@ -267,17 +267,11 @@ func (p *MusicPlugin) handleGet(ctx context.Context, b bot.Bot, args []string, g
 	if isGroup {
 		builder := msgchain.Builder().Group()
 		builder.FileUrl(fileName, songURL.URL)
-		if _, ok := b.SendGroupMsg(groupId, builder.Build()); !ok {
-			p.reply(b, isGroup, groupId, userId, msgId,
-				fmt.Sprintf("文件发送失败，请使用链接下载：\n%s", songURL.URL))
-		}
+		b.SendGroupMsg(groupId, builder.Build())
 	} else {
 		builder := msgchain.Builder().Friend()
 		builder.FileUrl(fileName, songURL.URL)
-		if _, ok := b.SendFriendMsg(userId, builder.Build()); !ok {
-			p.reply(b, isGroup, groupId, userId, msgId,
-				fmt.Sprintf("文件发送失败，请使用链接下载：\n%s", songURL.URL))
-		}
+		b.SendFriendMsg(userId, builder.Build())
 	}
 	log.Printf("[GD音乐插件] 发送音乐: %s", title)
 }
