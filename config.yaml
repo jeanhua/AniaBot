@@ -98,7 +98,6 @@ plugin:
       api_key: "your-api-key"
       model: "gpt-4"
       prompt: ""  # 可选，留空使用默认prompt
-    max_token: 4000
     msg_threshold: 100  # 消息阈值
     max_messages: 500   # 最大保存消息数
     enabled_groups: []  # 留空表示所有群启用，或填写群号列表

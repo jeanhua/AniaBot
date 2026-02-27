@@ -10,11 +10,10 @@ import (
 type llmClient = *openai.LLM
 
 type newsletterConfig struct {
-	baseUrl  string
-	apiKey   string
-	model    string
-	prompt   string
-	maxToken int
+	baseUrl string
+	apiKey  string
+	model   string
+	prompt  string
 
 	// msgThreshold 达到多少条消息后触发自动生成
 	msgThreshold int
@@ -30,7 +29,6 @@ func loadConfig(cfg *viper.Viper) newsletterConfig {
 		apiKey:       cfg.GetString("plugin.group_newsletter.model.api_key"),
 		model:        cfg.GetString("plugin.group_newsletter.model.model"),
 		prompt:       cfg.GetString("plugin.group_newsletter.model.prompt"),
-		maxToken:     cfg.GetInt("plugin.group_newsletter.max_token"),
 		msgThreshold: cfg.GetInt("plugin.group_newsletter.msg_threshold"),
 		maxMessages:  cfg.GetInt("plugin.group_newsletter.max_messages"),
 	}
