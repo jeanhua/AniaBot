@@ -49,7 +49,7 @@ func (p *GroupNewsletter) generateForGroup(ctx context.Context, b bot.Bot, group
 		uuid.NewString()[:8])
 
 	b.SendGroupMsg(groupId, msgchain.Builder().Group().
-		Text("📰 叮！本期群刊已生成，请查收~").
+		Text(fmt.Sprintf("📰 叮！消息达到阈值:%d条，本期群刊已生成，请查收~", p.config.msgThreshold)).
 		Build())
 
 	b.SendGroupMsg(groupId, msgchain.Builder().Group().
