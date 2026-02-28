@@ -1,8 +1,6 @@
 package main
 
 import (
-	"log"
-
 	"github.com/jeanhua/AniaBot/bot/adapter/napcat"
 	"github.com/jeanhua/AniaBot/bot/core"
 	"github.com/jeanhua/AniaBot/bot/plugins/pluginaichat"
@@ -21,9 +19,6 @@ import (
 )
 
 func main() {
-	// log config
-	log.SetFlags(log.Ltime)
-
 	// adapter := napcat.NewNapcatHttpAdapter()
 	adapter := napcat.NewNapcatWebSocketAdapter()
 	bot := core.NewAniaBot(adapter)
