@@ -3,7 +3,6 @@ package core
 import (
 	"context"
 	"encoding/json"
-	"log"
 	"strings"
 
 	"github.com/jeanhua/AniaBot/common/storage"
@@ -66,7 +65,7 @@ func (store *AniaRedisStorage) SetString(ctx context.Context, key, val string, o
 		if cfg.CheckExist && err == redis.Nil {
 			return false
 		}
-		log.Printf("Redis operation failed: key=%s, error=%v", fullKey, err)
+		Logger().Printf("Redis operation failed: key=%s, error=%v", fullKey, err)
 		return false
 	}
 	return true
@@ -91,7 +90,7 @@ func (store *AniaRedisStorage) Set(ctx context.Context, key string, val any, opt
 
 	data, err := json.Marshal(val)
 	if err != nil {
-		log.Printf("JSON marshal failed: %v", err)
+		Logger().Printf("JSON marshal failed: %v", err)
 		return false
 	}
 	return store.SetString(ctx, key, string(data), option...)
