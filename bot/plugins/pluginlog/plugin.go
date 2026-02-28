@@ -2,7 +2,6 @@ package pluginlog
 
 import (
 	"context"
-	"log"
 
 	"github.com/jeanhua/AniaBot/bot/utils"
 	"github.com/jeanhua/AniaBot/common/bot"
@@ -31,7 +30,7 @@ func (p *LogPlugin) Start(ctx context.Context, cfg *viper.Viper) error {
 		lastStartTime = "未保存"
 	}
 	p.Storage.Set(context.Background(), "last_start_time", utils.GetFormattedTime())
-	log.Println("日志打印插件初始化完成, 上次重启时间: ", lastStartTime)
+	p.Logger.Println("日志打印插件初始化完成, 上次重启时间: ", lastStartTime)
 	return nil
 }
 
@@ -41,7 +40,7 @@ func (p *LogPlugin) OnGroupMsg(ctx context.Context, bot bot.Bot, cmd command.Com
 	if name == "" {
 		name = msg.Sender.Nickname
 	}
-	log.Printf("[收<-群:%d 昵称:%s]: %s", msg.GroupId, name, str)
+	p.Logger.Printf("[收<-群:%d 昵称:%s]: %s", msg.GroupId, name, str)
 	return true, nil
 }
 
@@ -51,6 +50,6 @@ func (p *LogPlugin) OnFriendMsg(ctx context.Context, bot bot.Bot, cmd command.Co
 	if name == "" {
 		name = msg.Sender.Nickname
 	}
-	log.Printf("[收<-好友:%d 昵称:%s]: %s", msg.Sender.UserId, name, str)
+	p.Logger.Printf("[收<-好友:%d 昵称:%s]: %s", msg.Sender.UserId, name, str)
 	return true, nil
 }

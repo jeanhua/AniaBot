@@ -2,6 +2,7 @@ package plugin
 
 import (
 	"context"
+	"log"
 
 	"github.com/go-resty/resty/v2"
 	"github.com/jeanhua/AniaBot/common/bot"
@@ -19,6 +20,7 @@ type Meta struct {
 
 	Storage     storage.Storage
 	RestyClient *resty.Client
+	Logger      *log.Logger
 }
 
 func (p *Meta) GetMeta() *Meta {
@@ -31,6 +33,10 @@ func (p *Meta) SetStorage(s storage.Storage) {
 
 func (p *Meta) SetRestyClient(c *resty.Client) {
 	p.RestyClient = c
+}
+
+func (p *Meta) SetLogger(logger *log.Logger) {
+	p.Logger = logger
 }
 
 // OnGroupMsg 收到群聊消息触发事件

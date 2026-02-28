@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"log"
+	"os"
 	"sort"
 	"strings"
 	"time"
@@ -143,6 +144,7 @@ func (ania *AniaBot) Run() {
 			encodeName := base64.StdEncoding.EncodeToString([]byte(p.GetMeta().Name))
 			p.SetStorage(ania.storage.Clone(encodeName))
 			p.SetRestyClient(ania.restyClient)
+			p.SetLogger(log.New(os.Stderr, fmt.Sprintf("[%s] ", p.GetMeta().Name), log.Ltime))
 
 			startCtx, cancel := context.WithTimeout(ania.ctx, StartEventTimeout)
 			p.Start(startCtx, ania.cfg)

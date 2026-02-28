@@ -2,6 +2,7 @@ package plugin
 
 import (
 	"context"
+	"log"
 
 	"github.com/go-resty/resty/v2"
 	"github.com/jeanhua/AniaBot/common/bot"
@@ -23,6 +24,7 @@ type Plugin interface {
 type DI interface {
 	SetStorage(s storage.Storage)
 	SetRestyClient(*resty.Client)
+	SetLogger(*log.Logger)
 }
 
 type BasicEvent interface {
