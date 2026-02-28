@@ -14,7 +14,6 @@ package gdmusicplugin
 import (
 	"context"
 	"fmt"
-	"log"
 	"strconv"
 	"strings"
 	"sync"
@@ -62,7 +61,7 @@ func (p *MusicPlugin) Start(ctx context.Context, cfg *viper.Viper) error {
 		baseURL = gdmusic.DefaultBaseURL
 	}
 	p.client = gdmusic.New(gdmusic.WithBaseURL(baseURL))
-	log.Println("GD音乐插件初始化完成，API地址:", baseURL)
+	p.Logger.Println("GD音乐插件初始化完成，API地址:", baseURL)
 	return nil
 }
 
@@ -192,7 +191,7 @@ func (p *MusicPlugin) fetchPage(ctx context.Context, b bot.Bot, sess *searchSess
 		Page:   sess.page,
 	})
 	if err != nil {
-		log.Printf("[GD音乐插件] 搜索失败: %v", err)
+		p.Logger.Printf("[GD音乐插件] 搜索失败: %v", err)
 		p.reply(b, isGroup, groupId, userId, msgId, "搜索失败，请稍后再试")
 		return false
 	}
@@ -219,7 +218,7 @@ func (p *MusicPlugin) sendResults(b bot.Bot, sess *searchSession, groupId, userI
 	sb.WriteString("\n\n/music get [序号]  获取音乐文件")
 	sb.WriteString("\n/music next|prev  翻页")
 	p.reply(b, isGroup, groupId, userId, msgId, sb.String())
-	log.Printf("[GD音乐插件] 搜索「%s」第%d页，返回 %d 条", sess.keyword, sess.page, len(sess.results))
+	p.Logger.Printf("[GD音乐插件] 搜索「%s」第%d页，返回 %d 条", sess.keyword, sess.page, len(sess.results))
 }
 
 // -----------------------------------------------------------------------
@@ -254,11 +253,11 @@ func (p *MusicPlugin) handleGet(ctx context.Context, b bot.Bot, args []string, g
 		Quality: gdmusic.Quality320,
 	})
 	if err != nil {
-		log.Printf("[GD音乐插件] 获取播放链接失败 url_id=%s source=%s: %v", result.URLid, result.Source, err)
+		p.Logger.Printf("[GD音乐插件] 获取播放链接失败 url_id=%s source=%s: %v", result.URLid, result.Source, err)
 		p.reply(b, isGroup, groupId, userId, msgId, "该歌曲暂无版权或平台不支持下载，换个平台试试（-s netease / -s kuwo）")
 		return
 	}
-	log.Printf("[GD音乐插件] 获取链接成功: %s - %s  br=%d", result.Name, result.ArtistName(), songURL.BR)
+	p.Logger.Printf("[GD音乐插件] 获取链接成功: %s - %s  br=%d", result.Name, result.ArtistName(), songURL.BR)
 
 	title := fmt.Sprintf("%s - %s", result.Name, result.ArtistName())
 	p.reply(b, isGroup, groupId, userId, msgId, fmt.Sprintf("🎵 正在发送：%s", title))
@@ -273,7 +272,7 @@ func (p *MusicPlugin) handleGet(ctx context.Context, b bot.Bot, args []string, g
 		builder.FileUrl(fileName, songURL.URL)
 		b.SendFriendMsg(userId, builder.Build())
 	}
-	log.Printf("[GD音乐插件] 发送音乐: %s", title)
+	p.Logger.Printf("[GD音乐插件] 发送音乐: %s", title)
 }
 
 // -----------------------------------------------------------------------

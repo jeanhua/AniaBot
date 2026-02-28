@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/base64"
 	"errors"
-	"log"
 	"net/url"
 	"time"
 
@@ -175,7 +174,7 @@ func (p *GithubRepoer) OnFriendMsg(ctx context.Context, bot bot.Bot, cmd command
 func (p *GithubRepoer) workFunc(bot bot.Bot) {
 	for {
 		w := <-p.pendding
-		log.Println("正在生产github报告:", w.repoURL)
+		p.Logger.Println("正在生产github报告:", w.repoURL)
 		info, err := getRepoInfo(p.RestyClient, w.repoURL, w.compress, w.delComment, w.delEmptyLine, p.maxToken, w.include, w.exclude)
 		if err != nil {
 			onErr(bot, w, err)

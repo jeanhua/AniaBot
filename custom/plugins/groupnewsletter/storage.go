@@ -2,7 +2,6 @@ package groupnewsletter
 
 import (
 	"context"
-	"log"
 	"strconv"
 	"strings"
 	"time"
@@ -42,7 +41,7 @@ func (p *GroupNewsletter) saveLoop() {
 				}
 			}
 			flush()
-			log.Println("[群刊] saveLoop 退出")
+			p.Logger.Println("saveLoop 退出")
 			return
 
 		case groupId := <-p.saveChan:
@@ -71,14 +70,14 @@ func (p *GroupNewsletter) saveGroupToStorage(groupId uint) {
 	buffer.mu.RUnlock()
 
 	if ok := p.Storage.Set(context.Background(), storageKey(groupId), msgs); !ok {
-		log.Printf("[群刊] 持久化群 %d 消息失败", groupId)
+		p.Logger.Printf("持久化群 %d 消息失败", groupId)
 	}
 }
 
 func (p *GroupNewsletter) loadFromStorage() {
 	keys, err := p.Storage.ScanKeys(context.Background(), storageKeyPrefix+"*", 100)
 	if err != nil {
-		log.Printf("[群刊] 加载存储消息失败: %v", err)
+		p.Logger.Printf("加载存储消息失败: %v", err)
 		return
 	}
 
@@ -91,12 +90,12 @@ func (p *GroupNewsletter) loadFromStorage() {
 		idStr := strings.TrimPrefix(key, storageKeyPrefix)
 		groupId64, err := strconv.ParseUint(idStr, 10, 64)
 		if err != nil {
-			log.Printf("[群刊] 解析群 ID 失败，key=%s: %v", key, err)
+			p.Logger.Printf("解析群 ID 失败，key=%s: %v", key, err)
 			continue
 		}
 
 		groupId := uint(groupId64)
 		p.groupMsgs[groupId] = &groupMessageBuffer{messages: msgs}
-		log.Printf("[群刊] 从存储恢复群 %d 的 %d 条消息", groupId, len(msgs))
+		p.Logger.Printf("从存储恢复群 %d 的 %d 条消息", groupId, len(msgs))
 	}
 }

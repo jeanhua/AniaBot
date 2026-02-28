@@ -2,7 +2,6 @@ package interceptor
 
 import (
 	"context"
-	"log"
 	"strconv"
 
 	"github.com/jeanhua/AniaBot/common/bot"
@@ -40,23 +39,23 @@ func (p *InterceptorPlugin) Start(ctx context.Context, cfg *viper.Viper) error {
 	p.permitGroup = cfg.GetStringSlice("plugin.interceptor.whitelist.groups")
 	p.permitUser = cfg.GetStringSlice("plugin.interceptor.whitelist.users")
 
-	log.Println("拦截器插件初始化完成, 配置信息如下:")
-	log.Println("拦截群聊:")
+	p.Logger.Println("拦截器插件初始化完成, 配置信息如下:")
+	p.Logger.Println("拦截群聊:")
 	for _, id := range p.interceptGroup {
-		log.Println(id)
+		p.Logger.Println(id)
 	}
-	log.Println("拦截好友:")
+	p.Logger.Println("拦截好友:")
 	for _, id := range p.interceptUser {
-		log.Println(id)
+		p.Logger.Println(id)
 	}
 
-	log.Println("放行群聊:")
+	p.Logger.Println("放行群聊:")
 	for _, id := range p.permitGroup {
-		log.Println(id)
+		p.Logger.Println(id)
 	}
-	log.Println("放行好友:")
+	p.Logger.Println("放行好友:")
 	for _, id := range p.permitUser {
-		log.Println(id)
+		p.Logger.Println(id)
 	}
 
 	return nil
@@ -65,7 +64,7 @@ func (p *InterceptorPlugin) Start(ctx context.Context, cfg *viper.Viper) error {
 func (p *InterceptorPlugin) OnGroupMsg(ctx context.Context, bot bot.Bot, cmd command.Command, msg message.Message) (bool, error) {
 	permit := p.check(TargetGroup, msg)
 	if !permit {
-		log.Println("拦截器插件拦截: [群]", msg.GroupId)
+		p.Logger.Println("拦截器插件拦截: [群]", msg.GroupId)
 	}
 	return permit, nil
 }
@@ -73,7 +72,7 @@ func (p *InterceptorPlugin) OnGroupMsg(ctx context.Context, bot bot.Bot, cmd com
 func (p *InterceptorPlugin) OnFriendMsg(ctx context.Context, bot bot.Bot, cmd command.Command, msg message.Message) (bool, error) {
 	permit := p.check(TargetFriend, msg)
 	if !permit {
-		log.Println("拦截器插件拦截: [好友]", msg.Sender.UserId)
+		p.Logger.Println("拦截器插件拦截: [好友]", msg.Sender.UserId)
 	}
 	return permit, nil
 }
@@ -88,13 +87,13 @@ func (p *InterceptorPlugin) check(target int, msg message.Message) bool {
 	case TargetGroup:
 		for _, id := range p.interceptGroup {
 			if id == "all" || ieqs(msg.GroupId, id) {
-				log.Println("触发全部拦截")
+				p.Logger.Println("触发全部拦截")
 				return false
 			}
 		}
 		for _, id := range p.interceptUser {
 			if id == "all" || ieqs(msg.Sender.UserId, id) {
-				log.Println("触发好友拦截:", msg.Sender.UserId)
+				p.Logger.Println("触发好友拦截:", msg.Sender.UserId)
 				return false
 			}
 		}

@@ -2,7 +2,6 @@ package acgwallpaper
 
 import (
 	"context"
-	"log"
 
 	"github.com/jeanhua/AniaBot/common/bot"
 	"github.com/jeanhua/AniaBot/common/model/command"
@@ -70,17 +69,17 @@ func (p *AcgWallpaperPlugin) workFunc(bot bot.Bot) {
 			builder := msgchain.Builder().Friend()
 			builder.ImageUrl("https://api.yppp.net/api.php")
 			if _, ok := bot.SendFriendMsg(w.userId, builder.Build()); ok {
-				log.Printf("[发->好友:%d]:[二次元壁纸]\n", w.userId)
+				p.Logger.Printf("[发->好友:%d]:[二次元壁纸]\n", w.userId)
 			} else {
-				log.Printf("[发->好友:%d]:[二次元壁纸] 发送失败!!!\n", w.userId)
+				p.Logger.Printf("[发->好友:%d]:[二次元壁纸] 发送失败!!!\n", w.userId)
 			}
 		case TargetGroup:
 			builder := msgchain.Builder().Group()
 			builder.ImageUrl("https://api.yppp.net/api.php")
 			if _, ok := bot.SendGroupMsg(w.groupId, builder.Build()); ok {
-				log.Printf("[发->群聊:%d]:[二次元壁纸]\n", w.groupId)
+				p.Logger.Printf("[发->群聊:%d]:[二次元壁纸]\n", w.groupId)
 			} else {
-				log.Printf("[发->群聊:%d]:[二次元壁纸] 发送失败!!!\n", w.groupId)
+				p.Logger.Printf("[发->群聊:%d]:[二次元壁纸] 发送失败!!!\n", w.groupId)
 			}
 		}
 	}

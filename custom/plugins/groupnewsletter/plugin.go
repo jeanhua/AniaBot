@@ -2,7 +2,6 @@ package groupnewsletter
 
 import (
 	"context"
-	"log"
 	"sync"
 
 	"github.com/jeanhua/AniaBot/common/bot"
@@ -54,14 +53,14 @@ func (p *GroupNewsletter) Start(_ context.Context, cfg *viper.Viper) error {
 	p.config = loadConfig(cfg)
 
 	if err := p.initLLM(); err != nil {
-		log.Printf("[群刊] 初始化 LLM 失败: %v", err)
+		p.Logger.Printf("初始化 LLM 失败: %v", err)
 	}
 
 	p.pluginCtx, p.cancel = context.WithCancel(context.Background())
 
 	p.loadFromStorage()
 
-	log.Printf("[群刊] 初始化完成，消息阈值: %d，最大消息数: %d",
+	p.Logger.Printf("初始化完成，消息阈值: %d，最大消息数: %d",
 		p.config.msgThreshold, p.config.maxMessages)
 	return nil
 }
@@ -108,7 +107,7 @@ func (p *GroupNewsletter) processLoop(b bot.Bot) {
 	for {
 		select {
 		case <-p.pluginCtx.Done():
-			log.Println("[群刊] processLoop 退出")
+			p.Logger.Println("processLoop 退出")
 			return
 		case groupId := <-p.notifyChan:
 			p.generateForGroup(p.pluginCtx, b, groupId, false)
