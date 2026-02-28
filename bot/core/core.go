@@ -109,13 +109,13 @@ func (ania *AniaBot) Run() {
 		cfg.AddConfigPath("./")
 		cfg.SetConfigName("config.dev")
 		if err := cfg.ReadInConfig(); err == nil {
-			log.Println("使用开发环境配置: config.dev.yaml")
+			Logger().Println("使用开发环境配置: config.dev.yaml")
 		} else {
 			cfg.SetConfigName("config")
 			if err := cfg.ReadInConfig(); err != nil {
-				log.Fatalf("无法读取配置文件: %v", err)
+				Logger().Fatalf("无法读取配置文件: %v", err)
 			}
-			log.Println("使用默认配置: config.yaml")
+			Logger().Println("使用默认配置: config.yaml")
 		}
 		ania.cfg = cfg
 	}
@@ -136,9 +136,9 @@ func (ania *AniaBot) Run() {
 	ania.admin = ania.cfg.GetUint("bot.admin_id")
 
 	// 初始化事件
-	log.Println("开始初始化插件...")
+	Logger().Println("开始初始化插件...")
 	for _, p := range ania.plugins {
-		log.Println("初始化插件: ", p.GetMeta().Name)
+		Logger().Println("初始化插件: ", p.GetMeta().Name)
 		safeExecute("初始化", p, func(p plugin.Plugin) {
 			// DI
 			encodeName := base64.StdEncoding.EncodeToString([]byte(p.GetMeta().Name))
@@ -154,7 +154,7 @@ func (ania *AniaBot) Run() {
 
 	// 初始化cron
 	c := cron.New()
-	log.Println("开始初始化cron...")
+	Logger().Println("开始初始化cron...")
 	for _, p := range ania.plugins {
 		safeExecute("初始化cron", p, func(p plugin.Plugin) {
 			startCtx, cancel := context.WithTimeout(ania.ctx, StartCronEventTimeout)
@@ -162,12 +162,12 @@ func (ania *AniaBot) Run() {
 			cancel()
 		})
 	}
-	log.Println("初始化cron完成")
+	Logger().Println("初始化cron完成")
 	c.Start()
 	defer c.Stop()
 
 	awakeTimer := time.AfterFunc(time.Second, func() {
-		log.Println("Awake...")
+		Logger().Println("Awake...")
 		for _, p := range ania.plugins {
 			safeExecute("Awake", p, func(p plugin.Plugin) {
 				awakeCtx, cancel := context.WithTimeout(ania.ctx, AwakeEventTimeout)
@@ -183,7 +183,7 @@ func (ania *AniaBot) Run() {
 func (ania *AniaBot) onGroupEvent(msg message.Message) {
 	defer func() {
 		if err := recover(); err != nil {
-			log.Println("群聊消息事件触发错误: ", err)
+			Logger().Println("群聊消息事件触发错误: ", err)
 		}
 	}()
 	if msg.Sender.UserId == msg.SelfId {
@@ -209,7 +209,7 @@ func (ania *AniaBot) onGroupEvent(msg message.Message) {
 		c.Text(pluginInfo.String())
 		_, ok := ania.SendGroupMsg(msg.GroupId, c.Build())
 		if !ok {
-			log.Println("Bot消息发送失败，无法响应 /help")
+			Logger().Println("Bot消息发送失败，无法响应 /help")
 		}
 		return
 	}
@@ -231,7 +231,7 @@ func (ania *AniaBot) onGroupEvent(msg message.Message) {
 func (ania *AniaBot) onFriendEvent(msg message.Message) {
 	defer func() {
 		if err := recover(); err != nil {
-			log.Println("私聊消息事件触发错误: ", err)
+			Logger().Println("私聊消息事件触发错误: ", err)
 		}
 	}()
 	if msg.Sender.UserId == msg.SelfId {
@@ -256,7 +256,7 @@ func (ania *AniaBot) onFriendEvent(msg message.Message) {
 		c.Text(pluginInfo.String())
 		_, ok := ania.SendFriendMsg(msg.Sender.UserId, c.Build())
 		if !ok {
-			log.Println("Bot消息发送失败，无法响应 /help")
+			Logger().Println("Bot消息发送失败，无法响应 /help")
 		}
 		return
 	}
@@ -283,7 +283,7 @@ func (ania *AniaBot) AddPlugin(plugins ...plugin.Plugin) {
 		}
 		ania.pluginSet[meta.Name] = struct{}{}
 		ania.plugins = append(ania.plugins, p)
-		log.Println("已添加插件: ", p.GetMeta().Name)
+		Logger().Println("已添加插件: ", p.GetMeta().Name)
 	}
 }
 
