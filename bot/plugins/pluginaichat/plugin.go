@@ -80,7 +80,7 @@ func (p *AIChatPlugin) unLock(ctx context.Context, id uint) {
 func (p *AIChatPlugin) getChat(id uint) *component.ChatBot {
 	chat, ok := p.chats.Load(id)
 	if !ok {
-		c, err := component.NewChatBot(
+		c, err := component.NewLegacyChatBot(
 			p.botConfig.baseURL,
 			p.botConfig.apiKey,
 			p.botConfig.model,
@@ -91,8 +91,8 @@ func (p *AIChatPlugin) getChat(id uint) *component.ChatBot {
 		if err != nil {
 			return nil
 		}
-		p.chats.Store(id, c)
-		return c
+		p.chats.Store(id, c.ChatBot)
+		return c.ChatBot
 	}
 	return chat.(*component.ChatBot)
 }
@@ -326,12 +326,12 @@ func (p *AIChatPlugin) Start(ctx context.Context, cfg *viper.Viper) error {
 		p.ocrParameter.top_k = cfg.GetInt("plugin.ai_chat_bot.ocr.top_k")
 		p.llmParameter.searchToken = searchToken
 
-		ocrllm, err := component.NewChatBot(ocrBaseUrl, ocrAPIKey, ocrModel, ocrPrompt, 10, searchToken)
+		ocrllm, err := component.NewLegacyChatBot(ocrBaseUrl, ocrAPIKey, ocrModel, ocrPrompt, 10, searchToken)
 		if err != nil {
 			log.Println("无法初始化OCR LLM", err.Error())
 			p.ocrEnable = false
 		} else {
-			p.ocrModel = ocrllm
+			p.ocrModel = ocrllm.ChatBot
 		}
 	}
 	return nil
