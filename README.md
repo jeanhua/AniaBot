@@ -2,7 +2,7 @@
 
 > 该分支为群聊部署的分支，特性会频繁变动，插件频繁修改，若想体验更多实时有趣的内容可关注本分支，若自行开发需要请切换main分支
 
-### 新增插件
+## 新增插件
 
 1. 抖音分享解析插件：分享抖音内容可解析视频直链
 2. 二次元壁纸图片：可获取随机二次元壁纸
@@ -14,23 +14,33 @@
 
 ![help](./README/help.png)
 
+### AI对话插件
+
 ![AI1](./README/AI1.png)
 
 ![AI2](./README/AI2.png)
 
 ![AI3](./README/AI3.png)
 
+### 二次元壁纸插件
+
 ![acg](./README/acg.png)
+
+### waifu.pics插件
 
 ![waifu_help](./README/waifu_help.png)
 
 ![waifu](./README/waifu.png)
 
+### 抖音视频解析插件
+
 ![douyin](./README/douyin.png)
 
-每日新闻插件
+### 每日新闻插件
 
 ![news](./README/news.png)
+
+### GithubRepoer插件
 
 ![news](./README/gr.png)
 
@@ -207,3 +217,11 @@ msgchain.Builder().Group()
 “代码侦探，收工！”
 
 </details>
+
+### 群刊插件
+
+![群刊插件](./README/newsletter.png)
+
+### GD音乐插件
+
+![GD音乐插件](./README/music.png)
