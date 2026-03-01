@@ -181,6 +181,11 @@ func (n *napcatWebSocketAdapter) GetFriendList() (*[]message.Friend, bool) {
 	return res, true
 }
 
+func (n *napcatWebSocketAdapter) GetGroupDetail(groupId uint) (*message.GroupInfo, bool) {
+	params := map[string]uint{"group_id": groupId}
+	return request[message.GroupInfo](n, "get_group_detail_info", params, "group_info")
+}
+
 func (n *napcatWebSocketAdapter) Serve(v *viper.Viper) {
 	n.ackMng = &ackManager{timeout: time.Second * 10}
 	url := v.GetString("bot.adapter.ws.address")

@@ -267,6 +267,20 @@ func (n *napcatHttpAdapter) GetFriendList() (*[]message.Friend, bool) {
 	return &resp.Data, true
 }
 
+func (n *napcatHttpAdapter) GetGroupDetail(groupId uint) (*message.GroupInfo, bool) {
+	data := map[string]uint{
+		"group_id": groupId,
+	}
+	resp := message.Response[message.GroupInfo]{}
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
+	defer cancel()
+	if _, err := n.httpClient.R().SetResult(&resp).SetContext(ctx).SetBody(data).Post(n.baseUrl + "/get_group_detail_info"); err != nil {
+		log.Println("HTTP请求失败, 无法获取群聊详情: ", err.Error())
+		return nil, false
+	}
+	return &resp.Data, true
+}
+
 type httpFriendPushData struct {
 	UserId  uint                  `json:"user_id"`
 	Message []message.OB11Segment `json:"message"`

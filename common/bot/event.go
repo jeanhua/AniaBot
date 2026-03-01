@@ -37,6 +37,8 @@ type botGetMsgItf interface {
 
 	// GetFriendList 获取好友列表
 	GetFriendList() (*[]message.Friend, bool)
+	// GetGroupDetail 获取群聊详情
+	GetGroupDetail(groupId uint) (info *message.GroupInfo, success bool)
 }
 
 type botSysItf interface {
