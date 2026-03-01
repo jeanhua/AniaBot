@@ -347,6 +347,17 @@ func (n *napcatHttpAdapter) GetFriendMsgHistory(userId uint, count int) (*[]mess
 	return &resp.Data.Messages, true
 }
 
+func (n *napcatHttpAdapter) GetAIChatacter() (*[]message.AIChatacter, bool) {
+	resp := message.Response[message.AIChatacterResp]{}
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
+	defer cancel()
+	if _, err := n.httpClient.R().SetResult(&resp).SetContext(ctx).Post(n.baseUrl + "/get_ai_chatacter"); err != nil {
+		log.Println("HTTP请求失败, 无法获取AI角色列表: ", err.Error())
+		return nil, false
+	}
+	return &resp.Data.Characters, true
+}
+
 type httpFriendPushData struct {
 	UserId  uint                  `json:"user_id"`
 	Message []message.OB11Segment `json:"message"`

@@ -354,3 +354,7 @@ func (ania *AniaBot) GetGroupMsgHistory(groupId uint, count int) (*[]message.Mes
 func (ania *AniaBot) GetFriendMsgHistory(userId uint, count int) (*[]message.Message, bool) {
 	return ania.adapter.GetFriendMsgHistory(userId, count)
 }
+
+func (ania *AniaBot) GetAIChatacter() (*[]message.AIChatacter, bool) {
+	return ania.adapter.GetAIChatacter()
+}

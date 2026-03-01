@@ -49,6 +49,9 @@ type botGetMsgItf interface {
 	GetGroupMsgHistory(groupId uint, count int) (*[]message.Message, bool)
 	// GetFriendMsgHistory 获取好友消息历史记录
 	GetFriendMsgHistory(userId uint, count int) (*[]message.Message, bool)
+
+	// GetAIChatacter 获取AI角色列表
+	GetAIChatacter() (*[]message.AIChatacter, bool)
 }
 
 type botSysItf interface {

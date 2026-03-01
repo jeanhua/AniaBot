@@ -238,6 +238,14 @@ func (n *napcatWebSocketAdapter) GetFriendMsgHistory(userId uint, count int) (*[
 	return &res.Messages, true
 }
 
+func (n *napcatWebSocketAdapter) GetAIChatacter() (*[]message.AIChatacter, bool) {
+	res, ok := request[message.AIChatacterResp](n, "get_ai_chatacter", struct{}{}, "ai_chatacter")
+	if !ok || res == nil {
+		return nil, false
+	}
+	return &res.Characters, true
+}
+
 func (n *napcatWebSocketAdapter) Serve(v *viper.Viper) {
 	n.ackMng = &ackManager{timeout: time.Second * 10}
 	url := v.GetString("bot.adapter.ws.address")

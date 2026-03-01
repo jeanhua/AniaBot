@@ -70,4 +70,5 @@ type GetMsg interface {
 	GetGroupDetail(groupId uint) (info *message.GroupInfo, success bool)
 	GetGroupMsgHistory(groupId uint, count int) (*[]message.Message, bool)
 	GetFriendMsgHistory(userId uint, count int) (*[]message.Message, bool)
+	GetAIChatacter() (*[]message.AIChatacter, bool)
 }
