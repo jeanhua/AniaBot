@@ -256,6 +256,108 @@ func (n *napcatHttpAdapter) GetNCrkey() ([]message.NCrkey, bool) {
 	return resp.Data, true
 }
 
+func (n *napcatHttpAdapter) GetFriendList() (*[]message.Friend, bool) {
+	resp := message.Response[[]message.Friend]{}
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
+	defer cancel()
+	if _, err := n.httpClient.R().SetResult(&resp).SetContext(ctx).Post(n.baseUrl + "/get_friend_list"); err != nil {
+		log.Println("HTTP请求失败, 无法获取好友列表: ", err.Error())
+		return nil, false
+	}
+	return &resp.Data, true
+}
+
+func (n *napcatHttpAdapter) GetGroupDetail(groupId uint) (*message.GroupInfo, bool) {
+	data := map[string]uint{
+		"group_id": groupId,
+	}
+	resp := message.Response[message.GroupInfo]{}
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
+	defer cancel()
+	if _, err := n.httpClient.R().SetResult(&resp).SetContext(ctx).SetBody(data).Post(n.baseUrl + "/get_group_detail_info"); err != nil {
+		log.Println("HTTP请求失败, 无法获取群聊详情: ", err.Error())
+		return nil, false
+	}
+	return &resp.Data, true
+}
+
+func (n *napcatHttpAdapter) SetMsgEmojiLike(msgId uint, emojiId int, like bool) (success bool) {
+	data := message.EmojiLike{
+		MessageID: msgId,
+		EmojiId:   emojiId,
+		Set:       like,
+	}
+	resp := message.Response[json.RawMessage]{}
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
+	defer cancel()
+	if _, err := n.httpClient.R().SetResult(&resp).SetContext(ctx).SetBody(data).Post(n.baseUrl + "/set_msg_emoji_like"); err != nil {
+		log.Println("HTTP请求失败, 无法设置消息表情点赞: ", err.Error())
+		return false
+	}
+	return resp.Status == "ok"
+}
+
+func (n *napcatHttpAdapter) SendGroupSign(groupId uint) (success bool) {
+	data := map[string]uint{
+		"group_id": groupId,
+	}
+	resp := message.Response[json.RawMessage]{}
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
+	defer cancel()
+	if _, err := n.httpClient.R().SetResult(&resp).SetContext(ctx).SetBody(data).Post(n.baseUrl + "/send_group_sign"); err != nil {
+		log.Println("HTTP请求失败, 无法发送群打卡: ", err.Error())
+		return false
+	}
+	return true
+}
+
+func (n *napcatHttpAdapter) GetGroupMsgHistory(groupId uint, count int) (*[]message.Message, bool) {
+	data := map[string]any{
+		"group_id":    groupId,
+		"count":       count,
+		"message_seq": 0,
+	}
+	resp := message.Response[struct {
+		Messages []message.Message `json:"messages"`
+	}]{}
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
+	defer cancel()
+	if _, err := n.httpClient.R().SetResult(&resp).SetContext(ctx).SetBody(data).Post(n.baseUrl + "/get_group_msg_history"); err != nil {
+		log.Println("HTTP请求失败, 无法获取群聊消息历史记录: ", err.Error())
+		return nil, false
+	}
+	return &resp.Data.Messages, true
+}
+
+func (n *napcatHttpAdapter) GetFriendMsgHistory(userId uint, count int) (*[]message.Message, bool) {
+	data := map[string]any{
+		"user_id":     userId,
+		"count":       count,
+		"message_seq": 0,
+	}
+	resp := message.Response[struct {
+		Messages []message.Message `json:"messages"`
+	}]{}
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
+	defer cancel()
+	if _, err := n.httpClient.R().SetResult(&resp).SetContext(ctx).SetBody(data).Post(n.baseUrl + "/get_friend_msg_history"); err != nil {
+		log.Println("HTTP请求失败, 无法获取好友消息历史记录: ", err.Error())
+		return nil, false
+	}
+	return &resp.Data.Messages, true
+}
+
+func (n *napcatHttpAdapter) GetAIChatacter() (*[]message.AIChatacter, bool) {
+	resp := message.Response[message.AIChatacterResp]{}
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
+	defer cancel()
+	if _, err := n.httpClient.R().SetResult(&resp).SetContext(ctx).Post(n.baseUrl + "/get_ai_chatacter"); err != nil {
+		log.Println("HTTP请求失败, 无法获取AI角色列表: ", err.Error())
+		return nil, false
+	}
+	return &resp.Data.Characters, true
+}
+
 type httpFriendPushData struct {
 	UserId  uint                  `json:"user_id"`
 	Message []message.OB11Segment `json:"message"`

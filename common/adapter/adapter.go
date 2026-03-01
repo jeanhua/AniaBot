@@ -56,6 +56,9 @@ type SendMsg interface {
 	SendPokeMsg(userId uint, groupId *uint)
 	SendGroupForwardMsg(groupId uint, chain msgchain.GroupForwardChain) (msgId uint, success bool)
 	SendFriendForwardMsg(userId uint, chain msgchain.FriendForwardChain) (msgId uint, success bool)
+	SetMsgEmojiLike(msgId uint, emojiId int, like bool) (success bool)
+
+	SendGroupSign(groupId uint) (success bool)
 }
 
 type GetMsg interface {
@@ -63,4 +66,9 @@ type GetMsg interface {
 	GetGroupUserInfo(groupId, userId uint) (info *message.GroupUserInfo, success bool)
 	GetForwardMsg(msgId string) (msgs *[]message.Message, success bool)
 	GetNCrkey() ([]message.NCrkey, bool)
+	GetFriendList() (*[]message.Friend, bool)
+	GetGroupDetail(groupId uint) (info *message.GroupInfo, success bool)
+	GetGroupMsgHistory(groupId uint, count int) (*[]message.Message, bool)
+	GetFriendMsgHistory(userId uint, count int) (*[]message.Message, bool)
+	GetAIChatacter() (*[]message.AIChatacter, bool)
 }

@@ -330,3 +330,31 @@ func (ania *AniaBot) GetGroupUserInfo(groupId, userId uint) (*message.GroupUserI
 func (ania *AniaBot) GetNCrkey() ([]message.NCrkey, bool) {
 	return ania.adapter.GetNCrkey()
 }
+
+func (ania *AniaBot) GetFriendList() (*[]message.Friend, bool) {
+	return ania.adapter.GetFriendList()
+}
+
+func (ania *AniaBot) GetGroupDetail(groupId uint) (*message.GroupInfo, bool) {
+	return ania.adapter.GetGroupDetail(groupId)
+}
+
+func (ania *AniaBot) SetMsgEmojiLike(msgId uint, emojiId int, like bool) (success bool) {
+	return ania.adapter.SetMsgEmojiLike(msgId, emojiId, like)
+}
+
+func (ania *AniaBot) SendGroupSign(groupId uint) (success bool) {
+	return ania.adapter.SendGroupSign(groupId)
+}
+
+func (ania *AniaBot) GetGroupMsgHistory(groupId uint, count int) (*[]message.Message, bool) {
+	return ania.adapter.GetGroupMsgHistory(groupId, count)
+}
+
+func (ania *AniaBot) GetFriendMsgHistory(userId uint, count int) (*[]message.Message, bool) {
+	return ania.adapter.GetFriendMsgHistory(userId, count)
+}
+
+func (ania *AniaBot) GetAIChatacter() (*[]message.AIChatacter, bool) {
+	return ania.adapter.GetAIChatacter()
+}

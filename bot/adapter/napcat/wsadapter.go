@@ -173,6 +173,79 @@ func (n *napcatWebSocketAdapter) SendPokeMsg(userId uint, groupId *uint) {
 	}
 }
 
+func (n *napcatWebSocketAdapter) GetFriendList() (*[]message.Friend, bool) {
+	res, ok := request[[]message.Friend](n, "get_friend_list", struct{}{}, "friend_list")
+	if !ok || res == nil {
+		return nil, false
+	}
+	return res, true
+}
+
+func (n *napcatWebSocketAdapter) GetGroupDetail(groupId uint) (*message.GroupInfo, bool) {
+	params := map[string]uint{"group_id": groupId}
+	return request[message.GroupInfo](n, "get_group_detail_info", params, "group_info")
+}
+
+func (n *napcatWebSocketAdapter) SetMsgEmojiLike(msgId uint, emojiId int, like bool) (success bool) {
+	params := message.EmojiLike{MessageID: msgId, EmojiId: emojiId, Set: like}
+	_, ok := request[any](n, "set_msg_emoji_like", params, "ack")
+	if !ok {
+		return false
+	}
+	return true
+}
+
+func (n *napcatWebSocketAdapter) SendGroupSign(groupId uint) (success bool) {
+	params := map[string]uint{
+		"group_id": groupId,
+	}
+	_, ok := request[any](n, "send_group_sign", params, "ack")
+	if !ok {
+		return false
+	}
+	return true
+}
+
+func (n *napcatWebSocketAdapter) GetGroupMsgHistory(groupId uint, count int) (*[]message.Message, bool) {
+	params := map[string]any{
+		"group_id":    groupId,
+		"count":       count,
+		"message_seq": 0,
+	}
+	type fwData struct {
+		Messages []message.Message `json:"messages"`
+	}
+	res, ok := request[fwData](n, "get_group_msg_history", params, "fw")
+	if !ok || res == nil {
+		return nil, false
+	}
+	return &res.Messages, true
+}
+
+func (n *napcatWebSocketAdapter) GetFriendMsgHistory(userId uint, count int) (*[]message.Message, bool) {
+	params := map[string]any{
+		"user_id":     userId,
+		"count":       count,
+		"message_seq": 0,
+	}
+	type fwData struct {
+		Messages []message.Message `json:"messages"`
+	}
+	res, ok := request[fwData](n, "get_friend_msg_history", params, "fw")
+	if !ok || res == nil {
+		return nil, false
+	}
+	return &res.Messages, true
+}
+
+func (n *napcatWebSocketAdapter) GetAIChatacter() (*[]message.AIChatacter, bool) {
+	res, ok := request[message.AIChatacterResp](n, "get_ai_chatacter", struct{}{}, "ai_chatacter")
+	if !ok || res == nil {
+		return nil, false
+	}
+	return &res.Characters, true
+}
+
 func (n *napcatWebSocketAdapter) Serve(v *viper.Viper) {
 	n.ackMng = &ackManager{timeout: time.Second * 10}
 	url := v.GetString("bot.adapter.ws.address")
