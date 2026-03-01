@@ -342,3 +342,7 @@ func (ania *AniaBot) GetGroupDetail(groupId uint) (*message.GroupInfo, bool) {
 func (ania *AniaBot) SetMsgEmojiLike(msgId uint, emojiId int, like bool) (success bool) {
 	return ania.adapter.SetMsgEmojiLike(msgId, emojiId, like)
 }
+
+func (ania *AniaBot) SendGroupSign(groupId uint) (success bool) {
+	return ania.adapter.SendGroupSign(groupId)
+}

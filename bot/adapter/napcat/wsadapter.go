@@ -188,8 +188,19 @@ func (n *napcatWebSocketAdapter) GetGroupDetail(groupId uint) (*message.GroupInf
 
 func (n *napcatWebSocketAdapter) SetMsgEmojiLike(msgId uint, emojiId int, like bool) (success bool) {
 	params := message.EmojiLike{MessageID: msgId, EmojiId: emojiId, Set: like}
-	res, ok := request[json.RawMessage](n, "set_msg_emoji_like", params, "ack")
-	if !ok || res == nil {
+	_, ok := request[any](n, "set_msg_emoji_like", params, "ack")
+	if !ok {
+		return false
+	}
+	return true
+}
+
+func (n *napcatWebSocketAdapter) SendGroupSign(groupId uint) (success bool) {
+	params := map[string]uint{
+		"group_id": groupId,
+	}
+	_, ok := request[any](n, "send_group_sign", params, "ack")
+	if !ok {
 		return false
 	}
 	return true

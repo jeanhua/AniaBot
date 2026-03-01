@@ -27,6 +27,9 @@ type botSendMsgItf interface {
 	SendFriendForwardMsg(userId uint, chain msgchain.FriendForwardChain) (msgId uint, success bool)
 	// SetMsgEmojiLike 设置消息表情点赞
 	SetMsgEmojiLike(msgId uint, emojiId int, like bool) (success bool)
+
+	// SendGroupSign 群打卡
+	SendGroupSign(groupId uint) (success bool)
 }
 
 type botGetMsgItf interface {

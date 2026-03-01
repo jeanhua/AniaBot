@@ -297,6 +297,20 @@ func (n *napcatHttpAdapter) SetMsgEmojiLike(msgId uint, emojiId int, like bool) 
 	return resp.Status == "ok"
 }
 
+func (n *napcatHttpAdapter) SendGroupSign(groupId uint) (success bool) {
+	data := map[string]uint{
+		"group_id": groupId,
+	}
+	resp := message.Response[json.RawMessage]{}
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
+	defer cancel()
+	if _, err := n.httpClient.R().SetResult(&resp).SetContext(ctx).SetBody(data).Post(n.baseUrl + "/send_group_sign"); err != nil {
+		log.Println("HTTP请求失败, 无法发送群打卡: ", err.Error())
+		return false
+	}
+	return true
+}
+
 type httpFriendPushData struct {
 	UserId  uint                  `json:"user_id"`
 	Message []message.OB11Segment `json:"message"`
