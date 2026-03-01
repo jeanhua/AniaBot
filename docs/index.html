@@ -2655,6 +2655,78 @@ page = <span class="nu">2</span></code></pre>
             <p>获取 NapCat rkey，用于刷新过期的图片/文件链接。</p>
           </div>
         </div>
+
+        <div class="api-method">
+          <div class="api-method-header">
+            <span class="method-badge">FUNC</span>
+            <span class="api-method-name">SendGroupSign(groupId uint) (success bool)</span>
+          </div>
+          <div class="api-method-body">
+            <p>在指定群发送群打卡消息。</p>
+          </div>
+        </div>
+
+        <div class="api-method">
+          <div class="api-method-header">
+            <span class="method-badge">FUNC</span>
+            <span class="api-method-name">SetMsgEmojiLike(msgId uint, emojiId int, like bool) (success bool)</span>
+          </div>
+          <div class="api-method-body">
+            <p>为指定消息设置表情点赞。<code>emojiId</code> 为表情 ID，<code>like</code> 为 true 表示点赞，false 表示取消点赞。</p>
+          </div>
+        </div>
+
+        <h2>获取信息</h2>
+
+        <div class="api-method">
+          <div class="api-method-header">
+            <span class="method-badge">FUNC</span>
+            <span class="api-method-name">GetFriendList() (*[]message.Friend, bool)</span>
+          </div>
+          <div class="api-method-body">
+            <p>获取 Bot 的好友列表，返回所有好友信息。</p>
+          </div>
+        </div>
+
+        <div class="api-method">
+          <div class="api-method-header">
+            <span class="method-badge">FUNC</span>
+            <span class="api-method-name">GetGroupDetail(groupId uint) (*message.GroupInfo, bool)</span>
+          </div>
+          <div class="api-method-body">
+            <p>获取指定群聊的详细信息，包括群名称、成员数、群公告等。</p>
+          </div>
+        </div>
+
+        <div class="api-method">
+          <div class="api-method-header">
+            <span class="method-badge">FUNC</span>
+            <span class="api-method-name">GetGroupMsgHistory(groupId uint, count int) (*[]message.Message, bool)</span>
+          </div>
+          <div class="api-method-body">
+            <p>获取群聊消息历史记录。<code>count</code> 指定获取的消息数量，最多 20 条。</p>
+          </div>
+        </div>
+
+        <div class="api-method">
+          <div class="api-method-header">
+            <span class="method-badge">FUNC</span>
+            <span class="api-method-name">GetFriendMsgHistory(userId uint, count int) (*[]message.Message, bool)</span>
+          </div>
+          <div class="api-method-body">
+            <p>获取与指定好友的私聊消息历史记录。<code>count</code> 指定获取的消息数量，最多 20 条。</p>
+          </div>
+        </div>
+
+        <div class="api-method">
+          <div class="api-method-header">
+            <span class="method-badge">FUNC</span>
+            <span class="api-method-name">GetAIChatacter() (*[]message.AIChatacter, bool)</span>
+          </div>
+          <div class="api-method-body">
+            <p>获取可用的 AI 语音角色列表，包含角色名称、ID 等信息。</p>
+          </div>
+        </div>
       </div>
 
       <!-- ===== STORAGE ===== -->
