@@ -12,6 +12,7 @@ import (
 	"github.com/jeanhua/AniaBot/common/model/command"
 	"github.com/jeanhua/AniaBot/common/model/message"
 	"github.com/jeanhua/AniaBot/common/plugin"
+	"github.com/jeanhua/AniaBot/common/storage"
 )
 
 type ActiveMan struct {
@@ -34,21 +35,21 @@ type groupSignInfo struct {
 	mu           sync.Mutex // 保护 lastSignDate
 }
 
-func (info *groupSignInfo) shouldSignToday() bool {
+func (info *groupSignInfo) shouldSignNow() bool {
+	now := time.Now()
+	if now.Hour() != info.signHour || now.Minute() != info.signMinute {
+		return false
+	}
+
 	info.mu.Lock()
 	defer info.mu.Unlock()
 
-	today := time.Now().Format("2006-01-02")
+	today := now.Format("2006-01-02")
 	if info.lastSignDate == today {
 		return false
 	}
 	info.lastSignDate = today
 	return true
-}
-
-func (info *groupSignInfo) isSignTime() bool {
-	now := time.Now()
-	return now.Hour() == info.signHour && now.Minute() == info.signMinute
 }
 
 func NewActiveMan(likeProb, pokeProb, signProb float64) *ActiveMan {
@@ -75,9 +76,8 @@ func (p *ActiveMan) checkAndSign(b bot.Bot) {
 		groupId := key.(uint)
 		info := value.(*groupSignInfo)
 
-		if info.isSignTime() && info.shouldSignToday() {
-			r := rand.New(rand.NewSource(time.Now().UnixNano()))
-			if r.Float64() < p.SignProb {
+		if info.shouldSignNow() {
+			if rand.Float64() < p.SignProb {
 				b.SendGroupSign(groupId)
 				p.Logger.Printf("群签到 群:%d", groupId)
 			}
@@ -87,32 +87,35 @@ func (p *ActiveMan) checkAndSign(b bot.Bot) {
 }
 
 func (p *ActiveMan) getOrCreateGroupSignInfo(groupId uint) *groupSignInfo {
-	val, ok := p.groupSignState.Load(groupId)
-	if ok {
-		return val.(*groupSignInfo)
-	}
 	info := &groupSignInfo{
 		signHour:   rand.Intn(24),
 		signMinute: rand.Intn(60),
 	}
-	p.groupSignState.Store(groupId, info)
-	return info
+	actual, _ := p.groupSignState.LoadOrStore(groupId, info)
+	return actual.(*groupSignInfo)
 }
 
 func (p *ActiveMan) OnGroupMsg(ctx context.Context, b bot.Bot, cmd command.Command, msg message.Message) (bool, error) {
+	if p.isRateLimited() {
+		return true, nil
+	}
+
 	p.getOrCreateGroupSignInfo(msg.GroupId)
 
-	r := rand.New(rand.NewSource(time.Now().UnixNano()))
-
-	if r.Float64() < p.LikeProb {
+	if rand.Float64() < p.LikeProb {
 		emojiId := rand.Intn(200)
 		b.SetMsgEmojiLike(msg.MessageId, emojiId, true)
 		p.Logger.Printf("点赞消息 %d 表情 %d", msg.MessageId, emojiId)
 	}
-	if r.Float64() < p.PokeProb {
+	if rand.Float64() < p.PokeProb {
 		b.SendPokeMsg(msg.Sender.UserId, &msg.GroupId)
 		p.Logger.Printf("戳一戳消息 群:%d 戳:%d", msg.GroupId, msg.Sender.UserId)
 	}
 
 	return true, nil
+}
+
+func (p *ActiveMan) isRateLimited() (limited bool) {
+	ok := p.Storage.SetString(context.Background(), "action", "1", storage.WithCheckExist(), storage.WithTTL(time.Minute))
+	return !ok
 }
