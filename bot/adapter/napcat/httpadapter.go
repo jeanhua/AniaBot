@@ -311,6 +311,42 @@ func (n *napcatHttpAdapter) SendGroupSign(groupId uint) (success bool) {
 	return true
 }
 
+func (n *napcatHttpAdapter) GetGroupMsgHistory(groupId uint, count int) (*[]message.Message, bool) {
+	data := map[string]any{
+		"group_id":    groupId,
+		"count":       count,
+		"message_seq": 0,
+	}
+	resp := message.Response[struct {
+		Messages []message.Message `json:"messages"`
+	}]{}
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
+	defer cancel()
+	if _, err := n.httpClient.R().SetResult(&resp).SetContext(ctx).SetBody(data).Post(n.baseUrl + "/get_group_msg_history"); err != nil {
+		log.Println("HTTP请求失败, 无法获取群聊消息历史记录: ", err.Error())
+		return nil, false
+	}
+	return &resp.Data.Messages, true
+}
+
+func (n *napcatHttpAdapter) GetFriendMsgHistory(userId uint, count int) (*[]message.Message, bool) {
+	data := map[string]any{
+		"user_id":     userId,
+		"count":       count,
+		"message_seq": 0,
+	}
+	resp := message.Response[struct {
+		Messages []message.Message `json:"messages"`
+	}]{}
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
+	defer cancel()
+	if _, err := n.httpClient.R().SetResult(&resp).SetContext(ctx).SetBody(data).Post(n.baseUrl + "/get_friend_msg_history"); err != nil {
+		log.Println("HTTP请求失败, 无法获取好友消息历史记录: ", err.Error())
+		return nil, false
+	}
+	return &resp.Data.Messages, true
+}
+
 type httpFriendPushData struct {
 	UserId  uint                  `json:"user_id"`
 	Message []message.OB11Segment `json:"message"`

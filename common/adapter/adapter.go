@@ -68,4 +68,6 @@ type GetMsg interface {
 	GetNCrkey() ([]message.NCrkey, bool)
 	GetFriendList() (*[]message.Friend, bool)
 	GetGroupDetail(groupId uint) (info *message.GroupInfo, success bool)
+	GetGroupMsgHistory(groupId uint, count int) (*[]message.Message, bool)
+	GetFriendMsgHistory(userId uint, count int) (*[]message.Message, bool)
 }

@@ -346,3 +346,11 @@ func (ania *AniaBot) SetMsgEmojiLike(msgId uint, emojiId int, like bool) (succes
 func (ania *AniaBot) SendGroupSign(groupId uint) (success bool) {
 	return ania.adapter.SendGroupSign(groupId)
 }
+
+func (ania *AniaBot) GetGroupMsgHistory(groupId uint, count int) (*[]message.Message, bool) {
+	return ania.adapter.GetGroupMsgHistory(groupId, count)
+}
+
+func (ania *AniaBot) GetFriendMsgHistory(userId uint, count int) (*[]message.Message, bool) {
+	return ania.adapter.GetFriendMsgHistory(userId, count)
+}

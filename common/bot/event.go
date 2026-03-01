@@ -44,6 +44,11 @@ type botGetMsgItf interface {
 	GetFriendList() (*[]message.Friend, bool)
 	// GetGroupDetail 获取群聊详情
 	GetGroupDetail(groupId uint) (info *message.GroupInfo, success bool)
+
+	// GetGroupMsgHistory 获取群聊消息历史记录
+	GetGroupMsgHistory(groupId uint, count int) (*[]message.Message, bool)
+	// GetFriendMsgHistory 获取好友消息历史记录
+	GetFriendMsgHistory(userId uint, count int) (*[]message.Message, bool)
 }
 
 type botSysItf interface {

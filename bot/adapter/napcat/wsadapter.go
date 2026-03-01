@@ -206,6 +206,38 @@ func (n *napcatWebSocketAdapter) SendGroupSign(groupId uint) (success bool) {
 	return true
 }
 
+func (n *napcatWebSocketAdapter) GetGroupMsgHistory(groupId uint, count int) (*[]message.Message, bool) {
+	params := map[string]any{
+		"group_id":    groupId,
+		"count":       count,
+		"message_seq": 0,
+	}
+	type fwData struct {
+		Messages []message.Message `json:"messages"`
+	}
+	res, ok := request[fwData](n, "get_group_msg_history", params, "fw")
+	if !ok || res == nil {
+		return nil, false
+	}
+	return &res.Messages, true
+}
+
+func (n *napcatWebSocketAdapter) GetFriendMsgHistory(userId uint, count int) (*[]message.Message, bool) {
+	params := map[string]any{
+		"user_id":     userId,
+		"count":       count,
+		"message_seq": 0,
+	}
+	type fwData struct {
+		Messages []message.Message `json:"messages"`
+	}
+	res, ok := request[fwData](n, "get_friend_msg_history", params, "fw")
+	if !ok || res == nil {
+		return nil, false
+	}
+	return &res.Messages, true
+}
+
 func (n *napcatWebSocketAdapter) Serve(v *viper.Viper) {
 	n.ackMng = &ackManager{timeout: time.Second * 10}
 	url := v.GetString("bot.adapter.ws.address")
