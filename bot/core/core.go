@@ -330,3 +330,7 @@ func (ania *AniaBot) GetGroupUserInfo(groupId, userId uint) (*message.GroupUserI
 func (ania *AniaBot) GetNCrkey() ([]message.NCrkey, bool) {
 	return ania.adapter.GetNCrkey()
 }
+
+func (ania *AniaBot) GetFriendList() (*[]message.Friend, bool) {
+	return ania.adapter.GetFriendList()
+}

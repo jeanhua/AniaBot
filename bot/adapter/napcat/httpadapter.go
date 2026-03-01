@@ -256,6 +256,17 @@ func (n *napcatHttpAdapter) GetNCrkey() ([]message.NCrkey, bool) {
 	return resp.Data, true
 }
 
+func (n *napcatHttpAdapter) GetFriendList() (*[]message.Friend, bool) {
+	resp := message.Response[[]message.Friend]{}
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
+	defer cancel()
+	if _, err := n.httpClient.R().SetResult(&resp).SetContext(ctx).Post(n.baseUrl + "/get_friend_list"); err != nil {
+		log.Println("HTTP请求失败, 无法获取好友列表: ", err.Error())
+		return nil, false
+	}
+	return &resp.Data, true
+}
+
 type httpFriendPushData struct {
 	UserId  uint                  `json:"user_id"`
 	Message []message.OB11Segment `json:"message"`

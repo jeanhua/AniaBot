@@ -173,6 +173,14 @@ func (n *napcatWebSocketAdapter) SendPokeMsg(userId uint, groupId *uint) {
 	}
 }
 
+func (n *napcatWebSocketAdapter) GetFriendList() (*[]message.Friend, bool) {
+	res, ok := request[[]message.Friend](n, "get_friend_list", struct{}{}, "friend_list")
+	if !ok || res == nil {
+		return nil, false
+	}
+	return res, true
+}
+
 func (n *napcatWebSocketAdapter) Serve(v *viper.Viper) {
 	n.ackMng = &ackManager{timeout: time.Second * 10}
 	url := v.GetString("bot.adapter.ws.address")
