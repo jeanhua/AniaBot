@@ -338,3 +338,7 @@ func (ania *AniaBot) GetFriendList() (*[]message.Friend, bool) {
 func (ania *AniaBot) GetGroupDetail(groupId uint) (*message.GroupInfo, bool) {
 	return ania.adapter.GetGroupDetail(groupId)
 }
+
+func (ania *AniaBot) SetMsgEmojiLike(msgId uint, emojiId int, like bool) (success bool) {
+	return ania.adapter.SetMsgEmojiLike(msgId, emojiId, like)
+}

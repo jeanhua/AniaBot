@@ -25,6 +25,8 @@ type botSendMsgItf interface {
 	SendGroupForwardMsg(groupId uint, chain msgchain.GroupForwardChain) (msgId uint, success bool)
 	// SendFriendForwardMsg 发送私聊合并转发消息
 	SendFriendForwardMsg(userId uint, chain msgchain.FriendForwardChain) (msgId uint, success bool)
+	// SetMsgEmojiLike 设置消息表情点赞
+	SetMsgEmojiLike(msgId uint, emojiId int, like bool) (success bool)
 }
 
 type botGetMsgItf interface {

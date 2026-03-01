@@ -281,6 +281,22 @@ func (n *napcatHttpAdapter) GetGroupDetail(groupId uint) (*message.GroupInfo, bo
 	return &resp.Data, true
 }
 
+func (n *napcatHttpAdapter) SetMsgEmojiLike(msgId uint, emojiId int, like bool) (success bool) {
+	data := message.EmojiLike{
+		MessageID: msgId,
+		EmojiId:   emojiId,
+		Set:       like,
+	}
+	resp := message.Response[json.RawMessage]{}
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
+	defer cancel()
+	if _, err := n.httpClient.R().SetResult(&resp).SetContext(ctx).SetBody(data).Post(n.baseUrl + "/set_msg_emoji_like"); err != nil {
+		log.Println("HTTP请求失败, 无法设置消息表情点赞: ", err.Error())
+		return false
+	}
+	return resp.Status == "ok"
+}
+
 type httpFriendPushData struct {
 	UserId  uint                  `json:"user_id"`
 	Message []message.OB11Segment `json:"message"`

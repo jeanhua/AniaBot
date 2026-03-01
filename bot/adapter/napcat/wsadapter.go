@@ -186,6 +186,15 @@ func (n *napcatWebSocketAdapter) GetGroupDetail(groupId uint) (*message.GroupInf
 	return request[message.GroupInfo](n, "get_group_detail_info", params, "group_info")
 }
 
+func (n *napcatWebSocketAdapter) SetMsgEmojiLike(msgId uint, emojiId int, like bool) (success bool) {
+	params := message.EmojiLike{MessageID: msgId, EmojiId: emojiId, Set: like}
+	res, ok := request[json.RawMessage](n, "set_msg_emoji_like", params, "ack")
+	if !ok || res == nil {
+		return false
+	}
+	return true
+}
+
 func (n *napcatWebSocketAdapter) Serve(v *viper.Viper) {
 	n.ackMng = &ackManager{timeout: time.Second * 10}
 	url := v.GetString("bot.adapter.ws.address")

@@ -56,6 +56,7 @@ type SendMsg interface {
 	SendPokeMsg(userId uint, groupId *uint)
 	SendGroupForwardMsg(groupId uint, chain msgchain.GroupForwardChain) (msgId uint, success bool)
 	SendFriendForwardMsg(userId uint, chain msgchain.FriendForwardChain) (msgId uint, success bool)
+	SetMsgEmojiLike(msgId uint, emojiId int, like bool) (success bool)
 }
 
 type GetMsg interface {
