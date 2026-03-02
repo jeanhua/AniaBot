@@ -2,6 +2,7 @@ package core
 
 import (
 	"context"
+	_ "embed"
 	"encoding/base64"
 	"fmt"
 	"log"
@@ -44,6 +45,9 @@ const (
 	MsgEventTimeout    = time.Minute * 5
 	NoticeEventTimeout = time.Minute * 5
 )
+
+//go:embed logo.txt
+var LogoASCII string
 
 type Option func(*AniaBot)
 
@@ -177,6 +181,8 @@ func (ania *AniaBot) Run() {
 		}
 	})
 	defer awakeTimer.Stop()
+	fmt.Println(LogoASCII)
+	Logger().Println("Bot启动完成...")
 	ania.adapter.Serve(ania.cfg)
 }
 
