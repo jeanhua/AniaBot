@@ -136,8 +136,10 @@ func (p *GroupNewsletter) rollbackMessages(groupId uint, snapshot []collectedMes
 	}
 }
 
-// clearMessages 生成成功后正式清空 buffer 并触发持久化
+// clearMessages 生成成功后正式清空 buffer 并删除存储中的消息
 func (p *GroupNewsletter) clearMessages(groupId uint) {
+	p.Storage.Del(context.Background(), storageKey(groupId))
+
 	p.msgsMu.Lock()
 	defer p.msgsMu.Unlock()
 
@@ -146,11 +148,6 @@ func (p *GroupNewsletter) clearMessages(groupId uint) {
 		buffer.messages = buffer.messages[:0]
 		buffer.persisted = 0
 		buffer.mu.Unlock()
-	}
-
-	select {
-	case p.saveChan <- groupId:
-	default:
 	}
 }
 

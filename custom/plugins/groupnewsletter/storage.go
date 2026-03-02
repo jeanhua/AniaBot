@@ -2,6 +2,7 @@ package groupnewsletter
 
 import (
 	"context"
+	"encoding/json"
 	"strconv"
 	"strings"
 	"time"
@@ -109,9 +110,17 @@ func (p *GroupNewsletter) loadFromStorage() {
 		}
 
 		groupId := uint(groupId64)
-		msgs := make([]collectedMessage, len(items))
-		for i, item := range items {
-			msgs[i] = item.(collectedMessage)
+		msgs := make([]collectedMessage, 0, len(items))
+		for _, item := range items {
+			data, err := json.Marshal(item)
+			if err != nil {
+				continue
+			}
+			var msg collectedMessage
+			if err := json.Unmarshal(data, &msg); err != nil {
+				continue
+			}
+			msgs = append(msgs, msg)
 		}
 		p.groupMsgs[groupId] = &groupMessageBuffer{
 			messages:  msgs,
