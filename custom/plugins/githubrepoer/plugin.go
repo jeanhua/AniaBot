@@ -14,6 +14,7 @@ import (
 	"github.com/jeanhua/AniaBot/common/model/message"
 	"github.com/jeanhua/AniaBot/common/msgchain"
 	"github.com/jeanhua/AniaBot/common/plugin"
+	"github.com/jeanhua/AniaBot/custom/component/md2img"
 	"github.com/spf13/viper"
 	"github.com/tmc/langchaingo/llms"
 	"github.com/tmc/langchaingo/llms/openai"
@@ -24,6 +25,7 @@ type GithubRepoer struct {
 	pendding  chan work
 	llm       *openai.LLM
 	maxToken  int
+	fmt       string
 	llmConfig struct {
 		baseUrl string
 		apiKey  string
@@ -58,6 +60,10 @@ func (p *GithubRepoer) Start(ctx context.Context, cfg *viper.Viper) error {
 	p.llmConfig.model = cfg.GetString("plugin.github_repoer.model.model")
 	p.llmConfig.prompt = cfg.GetString("plugin.github_repoer.model.prompt")
 	p.maxToken = cfg.GetInt("plugin.github_repoer.max_token")
+	p.fmt = cfg.GetString("plugin.github_repoer.fmt")
+	if p.fmt == "" {
+		p.fmt = "md"
+	}
 
 	llm, err := openai.New(
 		openai.WithBaseURL(p.llmConfig.baseUrl),
@@ -195,17 +201,13 @@ func (p *GithubRepoer) workFunc(bot bot.Bot) {
 			builder.Reply(w.msgId).Mention(w.userId).Text(" 叮! 生成成功, 正在发送报告...").Face(6)
 			bot.SendGroupMsg(w.groupId, builder.Build())
 
-			builder = msgchain.Builder().Group()
-			builder.FileBase64(name, base64.StdEncoding.EncodeToString([]byte(result)))
-			bot.SendGroupMsg(w.groupId, builder.Build())
+			p.sendResult(bot, w.target, w.groupId, w.userId, result, name)
 		} else {
 			builder := msgchain.Builder().Friend()
 			builder.Reply(w.msgId).Text("叮! 生成成功, 正在发送报告...").Face(6)
 			bot.SendFriendMsg(w.userId, builder.Build())
 
-			builder = msgchain.Builder().Friend()
-			builder.FileBase64(name, base64.StdEncoding.EncodeToString([]byte(result)))
-			bot.SendFriendMsg(w.userId, builder.Build())
+			p.sendResult(bot, w.target, w.groupId, w.userId, result, name)
 		}
 	}
 }
@@ -241,4 +243,41 @@ func (p *GithubRepoer) generateAI(ctx context.Context, info string) (string, err
 		return "", err
 	}
 	return response.Choices[0].Content, nil
+}
+
+func (p *GithubRepoer) sendResult(bot bot.Bot, target int, groupId, userId uint, result, name string) {
+	if p.fmt == "jpg" {
+		imgData, err := md2img.GetImage(result)
+		if target == TargetGroup {
+			if err != nil {
+				p.Logger.Printf("md转图片失败: %v", err)
+				bot.SendGroupMsg(groupId, msgchain.Builder().Group().
+					Text("转换失败，请查看原始md文件").Face(14).
+					Build())
+			}
+			bot.SendGroupMsg(groupId, msgchain.Builder().Group().
+				ImageBase64(base64.StdEncoding.EncodeToString(imgData)).
+				Build())
+		} else {
+			if err != nil {
+				p.Logger.Printf("md转图片失败: %v", err)
+				bot.SendFriendMsg(userId, msgchain.Builder().Friend().
+					Text("转换失败，请查看原始md文件").Face(14).
+					Build())
+			}
+			bot.SendFriendMsg(userId, msgchain.Builder().Friend().
+				ImageBase64(base64.StdEncoding.EncodeToString(imgData)).
+				Build())
+		}
+	} else {
+		if target == TargetGroup {
+			bot.SendGroupMsg(groupId, msgchain.Builder().Group().
+				FileBase64(name, base64.StdEncoding.EncodeToString([]byte(result))).
+				Build())
+		} else {
+			bot.SendFriendMsg(userId, msgchain.Builder().Friend().
+				FileBase64(name, base64.StdEncoding.EncodeToString([]byte(result))).
+				Build())
+		}
+	}
 }

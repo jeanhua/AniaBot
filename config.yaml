@@ -65,6 +65,7 @@ plugin:
   # GithubRepoer插件
   github_repoer:
     max_token: 100000 # 上下文限制
+    fmt: "md" # 输出格式 md或jpg
     model:
       base_url: "https://api.deepseek.com"
       api_key: ""
@@ -93,6 +94,7 @@ plugin:
 
   # 群刊插件
   group_newsletter:
+    fmt: "md" # 输出格式 md或jpg
     model:
       base_url: "https://api.openai.com/v1"
       api_key: "your-api-key"

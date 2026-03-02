@@ -14,6 +14,7 @@ type newsletterConfig struct {
 	apiKey  string
 	model   string
 	prompt  string
+	fmt     string
 
 	// msgThreshold 达到多少条消息后触发自动生成
 	msgThreshold int
@@ -31,6 +32,7 @@ func loadConfig(cfg *viper.Viper) newsletterConfig {
 		prompt:       cfg.GetString("plugin.group_newsletter.model.prompt"),
 		msgThreshold: cfg.GetInt("plugin.group_newsletter.msg_threshold"),
 		maxMessages:  cfg.GetInt("plugin.group_newsletter.max_messages"),
+		fmt:          cfg.GetString("plugin.group_newsletter.fmt"),
 	}
 
 	for _, id := range cfg.GetIntSlice("plugin.group_newsletter.enabled_groups") {
@@ -47,6 +49,9 @@ func loadConfig(cfg *viper.Viper) newsletterConfig {
 	}
 	if c.prompt == "" {
 		c.prompt = defaultPrompt
+	}
+	if c.fmt == "" {
+		c.fmt = "md"
 	}
 
 	return c

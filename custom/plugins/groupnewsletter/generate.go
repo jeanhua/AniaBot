@@ -10,6 +10,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jeanhua/AniaBot/common/bot"
 	"github.com/jeanhua/AniaBot/common/msgchain"
+	"github.com/jeanhua/AniaBot/custom/component/md2img"
 	"github.com/tmc/langchaingo/llms"
 )
 
@@ -51,9 +52,23 @@ func (p *GroupNewsletter) generateForGroup(ctx context.Context, b bot.Bot, group
 		Text(fmt.Sprintf("📰 叮！消息达到阈值:%d条，本期群刊已生成，请查收~", p.config.msgThreshold)).
 		Build())
 
-	b.SendGroupMsg(groupId, msgchain.Builder().Group().
-		FileBase64(name, base64.StdEncoding.EncodeToString([]byte(result))).
-		Build())
+	if p.config.fmt == "jpg" {
+		imgData, err := md2img.GetImage(result)
+		if err != nil {
+			p.Logger.Printf("[群刊] md转图片失败: %v", err)
+			b.SendGroupMsg(groupId, msgchain.Builder().Group().
+				Text("转换失败，请查看原始md文件").Face(14).
+				Build())
+			return
+		}
+		b.SendGroupMsg(groupId, msgchain.Builder().Group().
+			ImageBase64(base64.StdEncoding.EncodeToString(imgData)).
+			Build())
+	} else {
+		b.SendGroupMsg(groupId, msgchain.Builder().Group().
+			FileBase64(name, base64.StdEncoding.EncodeToString([]byte(result))).
+			Build())
+	}
 }
 
 // snapshotMessages 读取并临时清空 buffer，返回消息快照。

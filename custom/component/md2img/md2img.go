@@ -5,10 +5,9 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-)
 
-//go:embed convert.sh
-var convertSh []byte
+	"github.com/google/uuid"
+)
 
 //go:embed style.css
 var styleCss []byte
@@ -17,11 +16,6 @@ func init() {
 	tmpDir := "./tmp"
 	if err := os.MkdirAll(tmpDir, 0755); err != nil {
 		return
-	}
-
-	convertPath := filepath.Join(tmpDir, "convert.sh")
-	if _, err := os.Stat(convertPath); os.IsNotExist(err) {
-		os.WriteFile(convertPath, convertSh, 0755)
 	}
 
 	stylePath := filepath.Join(tmpDir, "style.css")
@@ -33,18 +27,35 @@ func init() {
 func GetImage(md string) ([]byte, error) {
 	tmpDir := "./tmp"
 
-	sourcePath := filepath.Join(tmpDir, "source.md")
-	if err := os.WriteFile(sourcePath, []byte(md), 0644); err != nil {
+	absTmpDir, err := filepath.Abs(tmpDir)
+	if err != nil {
 		return nil, err
 	}
 
-	cmd := exec.Command("bash", "convert.sh")
-	cmd.Dir = tmpDir
+	id := uuid.NewString()
+
+	sourcePath := filepath.Join(absTmpDir, id+".md")
+	if err := os.WriteFile(sourcePath, []byte(md), 0644); err != nil {
+		return nil, err
+	}
+	defer os.Remove(sourcePath)
+
+	imgPath := filepath.Join(absTmpDir, id+".jpg")
+	htmlPath := filepath.Join(absTmpDir, id+".html")
+	defer os.Remove(htmlPath)
+
+	stylePath := filepath.Join(absTmpDir, "style.css")
+
+	cmd := exec.Command("pandoc", sourcePath, "-o", htmlPath, "--css", stylePath, "--standalone", "--embed-resources")
 	if err := cmd.Run(); err != nil {
 		return nil, err
 	}
 
-	imgPath := filepath.Join(tmpDir, "output.jpg")
+	cmd = exec.Command("wkhtmltoimage", "--width", "750", "--quality", "100", htmlPath, imgPath)
+	if err := cmd.Run(); err != nil {
+		return nil, err
+	}
+
 	data, err := os.ReadFile(imgPath)
 	if err != nil {
 		return nil, err
