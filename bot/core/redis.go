@@ -134,3 +134,137 @@ func (store *AniaRedisStorage) ScanKeys(ctx context.Context, pattern string, cou
 	}
 	return keys, nil
 }
+
+func (store *AniaRedisStorage) LPush(ctx context.Context, key string, values ...any) int64 {
+	fullKey := store.prefix + key
+	var args []any
+	for _, v := range values {
+		data, err := json.Marshal(v)
+		if err != nil {
+			Logger().Printf("JSON marshal failed: %v", err)
+			continue
+		}
+		args = append(args, string(data))
+	}
+	resu, err := store.rdb.LPush(ctx, fullKey, args...).Result()
+	if err != nil {
+		Logger().Printf("Redis LPush failed: key=%s, error=%v", fullKey, err)
+		return 0
+	}
+	return resu
+}
+
+func (store *AniaRedisStorage) RPush(ctx context.Context, key string, values ...any) int64 {
+	fullKey := store.prefix + key
+	var args []any
+	for _, v := range values {
+		data, err := json.Marshal(v)
+		if err != nil {
+			Logger().Printf("JSON marshal failed: %v", err)
+			continue
+		}
+		args = append(args, string(data))
+	}
+	resu, err := store.rdb.RPush(ctx, fullKey, args...).Result()
+	if err != nil {
+		Logger().Printf("Redis RPush failed: key=%s, error=%v", fullKey, err)
+		return 0
+	}
+	return resu
+}
+
+func (store *AniaRedisStorage) LPop(ctx context.Context, key string) (any, bool) {
+	fullKey := store.prefix + key
+	resu, err := store.rdb.LPop(ctx, fullKey).Result()
+	if err != nil {
+		return nil, false
+	}
+	var out any
+	if err := json.Unmarshal([]byte(resu), &out); err != nil {
+		return nil, false
+	}
+	return out, true
+}
+
+func (store *AniaRedisStorage) RPop(ctx context.Context, key string) (any, bool) {
+	fullKey := store.prefix + key
+	resu, err := store.rdb.RPop(ctx, fullKey).Result()
+	if err != nil {
+		return nil, false
+	}
+	var out any
+	if err := json.Unmarshal([]byte(resu), &out); err != nil {
+		return nil, false
+	}
+	return out, true
+}
+
+func (store *AniaRedisStorage) LRange(ctx context.Context, key string, start, stop int64) ([]any, bool) {
+	fullKey := store.prefix + key
+	resu, err := store.rdb.LRange(ctx, fullKey, start, stop).Result()
+	if err != nil {
+		return nil, false
+	}
+	var results []any
+	for _, v := range resu {
+		var out any
+		if err := json.Unmarshal([]byte(v), &out); err != nil {
+			results = append(results, v)
+		} else {
+			results = append(results, out)
+		}
+	}
+	return results, true
+}
+
+func (store *AniaRedisStorage) LLen(ctx context.Context, key string) int64 {
+	fullKey := store.prefix + key
+	resu, err := store.rdb.LLen(ctx, fullKey).Result()
+	if err != nil {
+		return 0
+	}
+	return resu
+}
+
+func (store *AniaRedisStorage) LRem(ctx context.Context, key string, count int64, value any) int64 {
+	fullKey := store.prefix + key
+	data, err := json.Marshal(value)
+	if err != nil {
+		Logger().Printf("JSON marshal failed: %v", err)
+		return 0
+	}
+	resu, err := store.rdb.LRem(ctx, fullKey, count, string(data)).Result()
+	if err != nil {
+		Logger().Printf("Redis LRem failed: key=%s, error=%v", fullKey, err)
+		return 0
+	}
+	return resu
+}
+
+func (store *AniaRedisStorage) LSet(ctx context.Context, key string, index int64, value any) bool {
+	fullKey := store.prefix + key
+	data, err := json.Marshal(value)
+	if err != nil {
+		Logger().Printf("JSON marshal failed: %v", err)
+		return false
+	}
+	err = store.rdb.LSet(ctx, fullKey, index, string(data)).Err()
+	if err != nil {
+		Logger().Printf("Redis LSet failed: key=%s, error=%v", fullKey, err)
+		return false
+	}
+	return true
+}
+
+func (store *AniaRedisStorage) LIndex(ctx context.Context, key string, index int64) (any, bool) {
+	fullKey := store.prefix + key
+	resu, err := store.rdb.LIndex(ctx, fullKey, index).Result()
+	if err != nil {
+		return nil, false
+	}
+	var out any
+	if err := json.Unmarshal([]byte(resu), &out); err != nil {
+		return nil, false
+	}
+	return out, true
+}

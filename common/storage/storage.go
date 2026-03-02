@@ -37,4 +37,14 @@ type Storage interface {
 	Clear(ctx context.Context) bool
 
 	Clone(prefix string) Storage
+
+	LPush(ctx context.Context, key string, values ...any) int64
+	RPush(ctx context.Context, key string, values ...any) int64
+	LPop(ctx context.Context, key string) (any, bool)
+	RPop(ctx context.Context, key string) (any, bool)
+	LRange(ctx context.Context, key string, start, stop int64) ([]any, bool)
+	LLen(ctx context.Context, key string) int64
+	LRem(ctx context.Context, key string, count int64, value any) int64
+	LSet(ctx context.Context, key string, index int64, value any) bool
+	LIndex(ctx context.Context, key string, index int64) (any, bool)
 }
