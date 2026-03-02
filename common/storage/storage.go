@@ -47,4 +47,5 @@ type Storage interface {
 	LRem(ctx context.Context, key string, count int64, value any) int64
 	LSet(ctx context.Context, key string, index int64, value any) bool
 	LIndex(ctx context.Context, key string, index int64) (any, bool)
+	LTrim(ctx context.Context, key string, start, stop int64) bool
 }

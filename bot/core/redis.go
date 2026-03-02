@@ -268,3 +268,9 @@ func (store *AniaRedisStorage) LIndex(ctx context.Context, key string, index int
 	}
 	return out, true
 }
+
+func (store *AniaRedisStorage) LTrim(ctx context.Context, key string, start, stop int64) bool {
+	fullKey := store.prefix + key
+	_, err := store.rdb.LTrim(ctx, fullKey, start, stop).Result()
+	return err == nil
+}
