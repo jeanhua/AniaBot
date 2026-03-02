@@ -107,7 +107,10 @@ func (p *GroupNewsletter) rollbackMessages(groupId uint, snapshot []collectedMes
 	buffer, ok := p.groupMsgs[groupId]
 	if !ok {
 		// buffer 已不存在，重建
-		p.groupMsgs[groupId] = &groupMessageBuffer{messages: snapshot}
+		p.groupMsgs[groupId] = &groupMessageBuffer{
+			messages:  snapshot,
+			persisted: 0,
+		}
 		return
 	}
 
@@ -124,6 +127,7 @@ func (p *GroupNewsletter) rollbackMessages(groupId uint, snapshot []collectedMes
 		merged = merged[len(merged)-p.config.maxMessages:]
 	}
 	buffer.messages = merged
+	buffer.persisted = 0
 
 	// 持久化回滚后的状态
 	select {
@@ -140,6 +144,7 @@ func (p *GroupNewsletter) clearMessages(groupId uint) {
 	if buffer, ok := p.groupMsgs[groupId]; ok {
 		buffer.mu.Lock()
 		buffer.messages = buffer.messages[:0]
+		buffer.persisted = 0
 		buffer.mu.Unlock()
 	}
 

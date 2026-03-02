@@ -65,13 +65,27 @@ func (p *GroupNewsletter) saveGroupToStorage(groupId uint) {
 	}
 
 	buffer.mu.RLock()
-	msgs := make([]collectedMessage, len(buffer.messages))
-	copy(msgs, buffer.messages)
+	toPersist := buffer.messages[buffer.persisted:]
+	count := len(toPersist)
 	buffer.mu.RUnlock()
 
-	if ok := p.Storage.Set(context.Background(), storageKey(groupId), msgs); !ok {
-		p.Logger.Printf("持久化群 %d 消息失败", groupId)
+	if count == 0 {
+		return
 	}
+
+	key := storageKey(groupId)
+	for _, msg := range toPersist {
+		if p.Storage.RPush(context.Background(), key, msg) == 0 {
+			p.Logger.Printf("持久化群 %d 消息失败", groupId)
+			return
+		}
+	}
+
+	p.Storage.LTrim(context.Background(), key, -int64(p.config.maxMessages), -1)
+
+	buffer.mu.Lock()
+	buffer.persisted = len(buffer.messages)
+	buffer.mu.Unlock()
 }
 
 func (p *GroupNewsletter) loadFromStorage() {
@@ -82,8 +96,8 @@ func (p *GroupNewsletter) loadFromStorage() {
 	}
 
 	for _, key := range keys {
-		var msgs []collectedMessage
-		if !p.Storage.Get(context.Background(), key, &msgs) || len(msgs) == 0 {
+		items, ok := p.Storage.LRange(context.Background(), key, 0, -1)
+		if !ok || len(items) == 0 {
 			continue
 		}
 
@@ -95,7 +109,14 @@ func (p *GroupNewsletter) loadFromStorage() {
 		}
 
 		groupId := uint(groupId64)
-		p.groupMsgs[groupId] = &groupMessageBuffer{messages: msgs}
+		msgs := make([]collectedMessage, len(items))
+		for i, item := range items {
+			msgs[i] = item.(collectedMessage)
+		}
+		p.groupMsgs[groupId] = &groupMessageBuffer{
+			messages:  msgs,
+			persisted: len(msgs),
+		}
 		p.Logger.Printf("从存储恢复群 %d 的 %d 条消息", groupId, len(msgs))
 	}
 }

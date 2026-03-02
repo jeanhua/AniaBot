@@ -11,8 +11,9 @@ import (
 )
 
 type groupMessageBuffer struct {
-	messages []collectedMessage
-	mu       sync.RWMutex
+	messages  []collectedMessage
+	persisted int
+	mu        sync.RWMutex
 }
 
 type collectedMessage struct {
@@ -26,7 +27,8 @@ func (p *GroupNewsletter) collectMessage(_ context.Context, b bot.Bot, msg messa
 	p.msgsMu.Lock()
 	if _, ok := p.groupMsgs[msg.GroupId]; !ok {
 		p.groupMsgs[msg.GroupId] = &groupMessageBuffer{
-			messages: make([]collectedMessage, 0),
+			messages:  make([]collectedMessage, 0),
+			persisted: 0,
 		}
 	}
 	buffer := p.groupMsgs[msg.GroupId]
