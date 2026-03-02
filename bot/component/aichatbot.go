@@ -2,7 +2,6 @@ package component
 
 import (
 	"context"
-	"errors"
 	"fmt"
 
 	"github.com/jeanhua/AniaBot/bot/component/functool"
@@ -17,6 +16,7 @@ type ChatBot struct {
 	memory      *memory.ConversationWindowBuffer
 	searchToken string
 	tools       []llms.Tool
+	registry    *functool.ToolRegistry
 }
 
 func NewChatBot(baseURL, apiKey, model, prompt string, windowSize int, searchToken string) (*ChatBot, error) {
@@ -39,18 +39,39 @@ func NewChatBot(baseURL, apiKey, model, prompt string, windowSize int, searchTok
 		llm:         llm,
 		memory:      mem,
 		searchToken: searchToken,
+		tools:       functool.GetDefaultTools(),
 	}, nil
 }
 
 func (b *ChatBot) Chat(ctx context.Context, userInput string, msgFunc functool.OptionFuncs, opt ...llms.CallOption) (string, error) {
-	variables, err := b.memory.LoadMemoryVariables(ctx, map[string]any{})
+	messages, err := b.buildMessages(ctx, userInput)
 	if err != nil {
 		return "", err
 	}
 
-	var messages []llms.MessageContent
+	callopt := append(opt, llms.WithTools(b.tools))
 
-	messages = append(messages, llms.TextParts(llms.ChatMessageTypeSystem, b.prompt))
+	respText, err := b.executeWithTools(ctx, messages, callopt, msgFunc)
+	if err != nil {
+		return "", err
+	}
+
+	err = b.memory.SaveContext(ctx,
+		map[string]any{"prompt": userInput},
+		map[string]any{"response": respText},
+	)
+	return respText, err
+}
+
+func (b *ChatBot) buildMessages(ctx context.Context, userInput string) ([]llms.MessageContent, error) {
+	variables, err := b.memory.LoadMemoryVariables(ctx, map[string]any{})
+	if err != nil {
+		return nil, err
+	}
+
+	messages := []llms.MessageContent{
+		llms.TextParts(llms.ChatMessageTypeSystem, b.prompt),
+	}
 
 	if historyList, ok := variables["history"].([]llms.ChatMessage); ok {
 		for _, msg := range historyList {
@@ -59,17 +80,10 @@ func (b *ChatBot) Chat(ctx context.Context, userInput string, msgFunc functool.O
 	}
 
 	messages = append(messages, llms.TextParts(llms.ChatMessageTypeHuman, userInput))
+	return messages, nil
+}
 
-	// tool register
-	if b.tools == nil {
-		b.tools = append(b.tools, functool.MakeJinaTool()...)
-		b.tools = append(b.tools, functool.MakeTimeTool()...)
-		b.tools = append(b.tools, functool.MakeMemeTool()...)
-		b.tools = append(b.tools, functool.MakeFileTool())
-	}
-
-	callopt := append(opt, llms.WithTools(b.tools))
-
+func (b *ChatBot) executeWithTools(ctx context.Context, messages []llms.MessageContent, callopt []llms.CallOption, msgFunc functool.OptionFuncs) (string, error) {
 	maxIterations := 5
 	for i := 0; i < maxIterations; i++ {
 		completion, err := b.llm.GenerateContent(ctx, messages, callopt...)
@@ -84,81 +98,50 @@ func (b *ChatBot) Chat(ctx context.Context, userInput string, msgFunc functool.O
 		choice := completion.Choices[0]
 
 		if len(choice.ToolCalls) == 0 {
-			respText := choice.Content
-			err = b.memory.SaveContext(ctx,
-				map[string]any{"prompt": userInput},
-				map[string]any{"response": respText},
-			)
-			return respText, err
+			return choice.Content, nil
 		}
 
-		aiMsg := llms.MessageContent{
-			Role: llms.ChatMessageTypeAI,
-		}
-		if choice.Content != "" {
-			msgFunc.SendText(choice.Content)
-			aiMsg.Parts = append(aiMsg.Parts, llms.TextPart(choice.Content))
-		}
-		for _, call := range choice.ToolCalls {
-			aiMsg.Parts = append(aiMsg.Parts, call)
-		}
-		messages = append(messages, aiMsg)
+		messages = append(messages, functool.BuildAIMessage(choice.ToolCalls, choice.Content, msgFunc))
 
-		for _, call := range choice.ToolCalls {
-			var callResult string
-			var err error
-			switch call.FunctionCall.Name {
-			case functool.JINA_TOOL_SEARCH_NAME, functool.JINA_TOOL_EXPLORE_NAME:
-				callResult, err = functool.TryHanleJina(ctx, b.searchToken, call)
-			case functool.TIME_TOOL_NAME:
-				callResult, err = functool.TryHandleTimeCall(call)
-			case functool.MEME_TOOL_NAME:
-				callResult, err = functool.TryHandleMemeFunc(call, msgFunc)
-			case functool.FILE_TOOL_NAME:
-				callResult, err = functool.TryHandleFileTool(call, msgFunc)
-			default:
-				err = errors.New("tool not exist")
-			}
-			if err != nil {
-				callResult = fmt.Sprintf("Error executing tool: %v", err)
-			}
-			messages = append(messages, llms.MessageContent{
-				Role: llms.ChatMessageTypeTool,
-				Parts: []llms.ContentPart{
-					llms.ToolCallResponse{
-						ToolCallID: call.ID,
-						Name:       call.FunctionCall.Name,
-						Content:    callResult,
-					},
-				},
-			})
+		toolResults, err := b.executeToolCalls(ctx, choice.ToolCalls, msgFunc)
+		if err != nil {
+			return "", err
 		}
+		messages = append(messages, toolResults...)
 
 		if i == maxIterations-1 {
-			messages = append(messages, llms.TextParts(
-				llms.ChatMessageTypeSystem,
-				"你的Tool Call连续调用已经达到限制，请先基于当前获取结果回答用户问题，如果需要更多Tool Call，请先向用户发送请求，得到用户允许后重新刷新限额",
-			))
-
+			messages = append(messages, functool.BuildToolLimitMessage()...)
 			finalCompletion, err := b.llm.GenerateContent(ctx, messages)
 			if err != nil {
 				return "", err
 			}
-
 			if len(finalCompletion.Choices) == 0 {
 				return "", fmt.Errorf("no choices returned from final LLM call")
 			}
-
-			respText := finalCompletion.Choices[0].Content
-			err = b.memory.SaveContext(ctx,
-				map[string]any{"prompt": userInput},
-				map[string]any{"response": respText},
-			)
-			return respText, err
+			return finalCompletion.Choices[0].Content, nil
 		}
 	}
 
-	return "", fmt.Errorf("unexpected error: exceeded maximum iterations")
+	return "", functool.BuildToolLimitError()
+}
+
+func (b *ChatBot) executeToolCalls(ctx context.Context, toolCalls []llms.ToolCall, msgFunc functool.OptionFuncs) ([]llms.MessageContent, error) {
+	var results []llms.MessageContent
+	for _, call := range toolCalls {
+		result, err := b.executeSingleTool(ctx, call, msgFunc)
+		if err != nil {
+			result = fmt.Sprintf("Error executing tool: %v", err)
+		}
+		results = append(results, functool.BuildToolMessage(call, result))
+	}
+	return results, nil
+}
+
+func (b *ChatBot) executeSingleTool(ctx context.Context, call llms.ToolCall, msgFunc functool.OptionFuncs) (string, error) {
+	if b.registry != nil {
+		return b.registry.Execute(ctx, call, msgFunc)
+	}
+	return functool.ToolExecutorAdapter(b.searchToken, msgFunc).Execute(ctx, call, msgFunc)
 }
 
 func (b *ChatBot) ChatWithImage(ctx context.Context, userInput string, imageUrl string, opt ...llms.CallOption) (string, error) {
@@ -186,4 +169,12 @@ func (b *ChatBot) ChatWithImage(ctx context.Context, userInput string, imageUrl 
 
 func (b *ChatBot) ClearHistory(ctx context.Context) error {
 	return b.memory.Clear(ctx)
+}
+
+func (b *ChatBot) SetToolRegistry(registry *functool.ToolRegistry) {
+	b.registry = registry
+}
+
+func (b *ChatBot) SetTools(tools []llms.Tool) {
+	b.tools = tools
 }
