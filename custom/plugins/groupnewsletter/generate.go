@@ -16,7 +16,7 @@ import (
 
 func (p *GroupNewsletter) generateForGroup(ctx context.Context, b bot.Bot, groupId uint, force bool) {
 	if !p.trySetGenerating(groupId) {
-		p.Logger.Printf("[群刊] 群 %d 已在生成中，跳过", groupId)
+		p.Logger.Printf("群 %d 已在生成中，跳过", groupId)
 		return
 	}
 	defer p.clearGenerating(groupId)
@@ -27,11 +27,11 @@ func (p *GroupNewsletter) generateForGroup(ctx context.Context, b bot.Bot, group
 		return
 	}
 
-	p.Logger.Printf("[群刊] 群 %d 开始生成，共 %d 条消息", groupId, len(msgs))
+	p.Logger.Printf("群 %d 开始生成，共 %d 条消息", groupId, len(msgs))
 
 	result, err := p.generateAI(ctx, msgs)
 	if err != nil {
-		p.Logger.Printf("[群刊] 群 %d 生成失败: %v，消息已回滚", groupId, err)
+		p.Logger.Printf("群 %d 生成失败: %v，消息已回滚", groupId, err)
 		// 生成失败：将快照消息还原到 buffer 头部
 		p.rollbackMessages(groupId, msgs)
 
@@ -55,7 +55,7 @@ func (p *GroupNewsletter) generateForGroup(ctx context.Context, b bot.Bot, group
 	if p.config.fmt == "jpg" {
 		imgData, err := md2img.GetImage(result)
 		if err != nil {
-			p.Logger.Printf("[群刊] md转图片失败: %v", err)
+			p.Logger.Printf("md转图片失败: %v", err)
 			b.SendGroupMsg(groupId, msgchain.Builder().Group().
 				Text("转换失败，请查看原始md文件").Face(14).
 				Build())
