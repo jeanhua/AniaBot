@@ -9,8 +9,8 @@ import (
 	"github.com/google/uuid"
 )
 
-//go:embed style.css
-var styleCss []byte
+//go:embed snap.js
+var snapScript []byte
 
 func init() {
 	tmpDir := "./tmp"
@@ -18,10 +18,8 @@ func init() {
 		return
 	}
 
-	stylePath := filepath.Join(tmpDir, "style.css")
-	if _, err := os.Stat(stylePath); os.IsNotExist(err) {
-		os.WriteFile(stylePath, styleCss, 0644)
-	}
+	snapPath := filepath.Join(tmpDir, "snap.js")
+	os.WriteFile(snapPath, snapScript, 0644)
 }
 
 func GetImage(md string) ([]byte, error) {
@@ -40,18 +38,10 @@ func GetImage(md string) ([]byte, error) {
 	}
 	defer os.Remove(sourcePath)
 
-	imgPath := filepath.Join(absTmpDir, id+".jpg")
-	htmlPath := filepath.Join(absTmpDir, id+".html")
-	defer os.Remove(htmlPath)
+	imgPath := filepath.Join(absTmpDir, id+".png")
+	snapPath := filepath.Join(absTmpDir, "snap.js")
 
-	stylePath := filepath.Join(absTmpDir, "style.css")
-
-	cmd := exec.Command("pandoc", sourcePath, "-o", htmlPath, "--css", stylePath, "--standalone", "--embed-resources")
-	if err := cmd.Run(); err != nil {
-		return nil, err
-	}
-
-	cmd = exec.Command("wkhtmltoimage", "--width", "750", "--quality", "100", htmlPath, imgPath)
+	cmd := exec.Command("node", snapPath, sourcePath, imgPath)
 	if err := cmd.Run(); err != nil {
 		return nil, err
 	}
