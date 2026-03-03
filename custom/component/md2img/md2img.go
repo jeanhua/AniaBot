@@ -1,3 +1,10 @@
+// 使用 puppeteer 转换 markdown 为图片，使用前需要安装如下依赖：
+// npm install puppeteer-core highlight.js marked
+// 需安装 google-chrome
+/*
+	wget https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb
+	sudo apt install ./google-chrome-stable_current_amd64.deb -y
+*/
 package md2img
 
 import (
