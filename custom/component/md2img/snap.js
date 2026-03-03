@@ -126,7 +126,7 @@ if (!inputFile || !outputFile) {
         });
 
         await browser.close();
-        console.log(`✨ 转换成功! 宽度已优化为 750px，字号已调大。`);
+        console.log(`✨ 转换成功! 已保存为 ${outputFile}`);
 
     } catch (err) {
         console.error('转换过程中出错:', err);
