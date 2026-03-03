@@ -5,6 +5,10 @@
 	wget https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb
 	sudo apt install ./google-chrome-stable_current_amd64.deb -y
 */
+// 提前启动 chrome 浏览器
+/*
+	google-chrome --remote-debugging-port=9222 --user-data-dir=/tmp/chrome-profile-snap --headless=new --no-sandbox --disable-gpu --disable-dev-shm-usage
+*/
 package md2img
 
 import (
