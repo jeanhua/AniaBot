@@ -5,16 +5,19 @@ const fs = require('fs');
 
 const inputFile = process.argv[2];
 const outputFile = process.argv[3];
+const BROWSER_URL = process.env.CHROME_DEBUG_URL || 'http://127.0.0.1:9222';
 
 if (!inputFile || !outputFile) {
-    console.error('用法: node md2img.js <源文件.md> <目的文件.png>');
+    console.error('用法: node snap.js <源文件.md> <目的文件.png>');
+    console.error('示例: node snap.js readme.md output.png');
     process.exit(1);
 }
 
 (async () => {
+    let browser;
     try {
         if (!fs.existsSync(inputFile)) {
-            console.error(`错误: 找不到文件 ${inputFile}`);
+            console.error(`❌ 错误: 找不到文件 ${inputFile}`);
             process.exit(1);
         }
         const mdContent = fs.readFileSync(inputFile, 'utf-8');
@@ -102,33 +105,59 @@ if (!inputFile || !outputFile) {
                 </article>
             </div>
         </body>
-        </html>
-        `;
+        </html>`;
 
-        console.log('正在启动浏览器...');
-        const browser = await puppeteer.launch({
-            executablePath: '/usr/bin/google-chrome',
-            args: ['--no-sandbox', '--disable-setuid-sandbox']
-        });
+        console.log(`🔌 正在连接浏览器: ${BROWSER_URL}`);
+        try {
+            browser = await puppeteer.connect({
+                browserURL: BROWSER_URL,
+                defaultViewport: null
+            });
+        } catch (err) {
+            console.error(`❌ 无法连接浏览器，请确认已启动 Chrome 调试模式：`);
+            console.error(`   命令示例: google-chrome --remote-debugging-port=9222 --user-data-dir=/tmp/chrome-profile-snap --headless=new --no-sandbox --disable-gpu --disable-dev-shm-usage`);
+            console.error(`   或通过环境变量指定地址: CHROME_DEBUG_URL=http://127.0.0.1:9222 node snap.js ...`);
+            process.exit(1);
+        }
 
         const page = await browser.newPage();
+        await page.setViewport({ width: 850, height: 1000, deviceScaleFactor: 1.5 });
 
-        await page.setViewport({ width: 850, height: 1000, deviceScaleFactor: 2 });
-
-        console.log('正在渲染内容...');
-        await page.setContent(fullHtml, { waitUntil: 'networkidle0' });
+        console.log('🎨 正在渲染内容...');
+        await page.setContent(fullHtml, { waitUntil: 'networkidle0', timeout: 30000 });
 
         const element = await page.$('#capture-target');
+        if (!element) {
+            throw new Error('找不到 #capture-target 元素，请检查 HTML 结构');
+        }
+
         await element.screenshot({
             path: outputFile,
             type: 'png',
             omitBackground: true
         });
 
-        await browser.close();
+        await page.close();
         console.log(`✨ 转换成功! 已保存为 ${outputFile}`);
 
     } catch (err) {
-        console.error('转换过程中出错:', err);
+        console.error('💥 转换过程中出错:', err.message);
+        process.exit(1);
+    } finally{
+        if (browser) {
+        const timeout = setTimeout(() => {
+            console.warn('⚠️ disconnect 超时，强制退出');
+            process.exit(0);
+        }, 2000);
+        
+        try {
+            await browser.disconnect();
+            clearTimeout(timeout);
+            console.log('🔌 已断开浏览器连接');
+        } catch (e) {
+            clearTimeout(timeout);
+            console.warn('⚠️ 断开连接时警告:', e.message);
+        }
+    }
     }
 })();
