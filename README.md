@@ -186,7 +186,7 @@ func NewPlugin() *YourPlugin {
         Meta: plugin.Meta{
             Name:      "插件名称",
             HelpWords: "插件描述",
-            AdminOnly: false, // 当该字段为true时非管理员发送/help不会显示插件信息
+            AdminOnly: false, // 当该字段为true时非管理员发送/help(PluginSys插件)不会显示插件信息
             Order:     0, // 插件执行顺序，从小到大
         },
     }
