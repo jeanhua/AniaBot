@@ -8,6 +8,7 @@ import (
 	"github.com/jeanhua/AniaBot/bot/plugins/pluginlog"
 	"github.com/jeanhua/AniaBot/bot/plugins/pluginnews"
 	"github.com/jeanhua/AniaBot/bot/plugins/pluginrepeat"
+	"github.com/jeanhua/AniaBot/bot/plugins/pluginsys"
 
 	"github.com/jeanhua/AniaBot/custom/plugins/acgwallpaper"
 	"github.com/jeanhua/AniaBot/custom/plugins/activeman"
@@ -24,6 +25,7 @@ func main() {
 	adapter := napcat.NewNapcatWebSocketAdapter()
 	bot := core.NewAniaBot(adapter)
 	// 插件注册
+	bot.AddPlugin(pluginsys.NewPluginSys())
 	bot.AddPlugin(pluginlog.NewPlugin())
 	bot.AddPlugin(pluginrepeat.NewPlugin())
 	bot.AddPlugin(pluginantiwithdrawal.NewPlugin())

@@ -1154,7 +1154,7 @@
           </tr>
           <tr>
             <td><code>Go</code></td>
-            <td>1.21+</td>
+            <td>1.26.0</td>
             <td>编译运行环境</td>
           </tr>
           <tr>
@@ -1232,7 +1232,7 @@ GOOS=linux GOARCH=amd64 go build -o build/AniaBot ./cmd/</code></pre>
         </div>
 
         <h2>验证安装</h2>
-        <p>启动成功后，在 QQ 群中发送 <code>@Bot /help</code>，如果 Bot 回复了插件列表，说明安装成功。</p>
+        <p>启动成功后，在 QQ 群中发送 <code>@Bot /help</code>（PluginSys 系统插件），如果 Bot 回复了插件列表，说明安装成功。</p>
 
         <div class="page-nav">
           <button class="page-nav-item next" onclick="showSection('arch')">
@@ -2747,6 +2747,17 @@ page = <span class="nu">2</span></code></pre>
     <span class="fn">Del</span>(ctx context.Context, key <span class="ty">string</span>) <span class="ty">bool</span>
     <span class="fn">Clear</span>(ctx context.Context) <span class="ty">bool</span>
     <span class="fn">Clone</span>(prefix <span class="ty">string</span>) <span class="ty">Storage</span>
+
+    <span class="fn">LPush</span>(ctx context.Context, key <span class="ty">string</span>, values ...<span class="kw">any</span>) <span class="ty">int64</span>
+    <span class="fn">RPush</span>(ctx context.Context, key <span class="ty">string</span>, values ...<span class="kw">any</span>) <span class="ty">int64</span>
+    <span class="fn">LPop</span>(ctx context.Context, key <span class="ty">string</span>) (<span class="kw">any</span>, <span class="ty">bool</span>)
+    <span class="fn">RPop</span>(ctx context.Context, key <span class="ty">string</span>) (<span class="kw">any</span>, <span class="ty">bool</span>)
+    <span class="fn">LRange</span>(ctx context.Context, key <span class="ty">string</span>, start, stop <span class="ty">int64</span>) ([]<span class="kw">any</span>, <span class="ty">bool</span>)
+    <span class="fn">LLen</span>(ctx context.Context, key <span class="ty">string</span>) <span class="ty">int64</span>
+    <span class="fn">LRem</span>(ctx context.Context, key <span class="ty">string</span>, count <span class="ty">int64</span>, value <span class="kw">any</span>) <span class="ty">int64</span>
+    <span class="fn">LSet</span>(ctx context.Context, key <span class="ty">string</span>, index <span class="ty">int64</span>, value <span class="kw">any</span>) <span class="ty">bool</span>
+    <span class="fn">LIndex</span>(ctx context.Context, key <span class="ty">string</span>, index <span class="ty">int64</span>) (<span class="kw">any</span>, <span class="ty">bool</span>)
+    <span class="fn">LTrim</span>(ctx context.Context, key <span class="ty">string</span>, start, stop <span class="ty">int64</span>) <span class="ty">bool</span>
 }</code></pre>
 
         <h2>配置选项</h2>
@@ -2765,6 +2776,42 @@ page = <span class="nu">2</span></code></pre>
             <td><code>storage.WithCheckExist()</code></td>
             <td>键不存在时才写入（NX）</td>
             <td>分布式锁</td>
+          </tr>
+        </table>
+
+        <h2>List 操作</h2>
+        <table>
+          <tr>
+            <th>方法</th>
+            <th>说明</th>
+          </tr>
+          <tr>
+            <td><code>LPush / RPush</code></td>
+            <td>向列表左侧 / 右侧批量追加元素，返回列表长度</td>
+          </tr>
+          <tr>
+            <td><code>LPop / RPop</code></td>
+            <td>从左侧 / 右侧弹出一个元素，返回 <code>(any, bool)</code></td>
+          </tr>
+          <tr>
+            <td><code>LRange</code></td>
+            <td>按区间读取列表元素，返回 <code>([]any, bool)</code></td>
+          </tr>
+          <tr>
+            <td><code>LLen</code></td>
+            <td>获取列表长度</td>
+          </tr>
+          <tr>
+            <td><code>LRem</code></td>
+            <td>按值删除元素，返回删除数量</td>
+          </tr>
+          <tr>
+            <td><code>LSet / LIndex</code></td>
+            <td>按索引更新 / 读取元素</td>
+          </tr>
+          <tr>
+            <td><code>LTrim</code></td>
+            <td>裁剪列表，仅保留指定区间</td>
           </tr>
         </table>
 
@@ -2795,6 +2842,12 @@ subStore.<span class="fn">Set</span>(ctx, <span class="st">"key"</span>, data)
 
 <span class="cm">// 模糊扫描 key</span>
 keys, err := p.Storage.<span class="fn">ScanKeys</span>(ctx, <span class="st">"group_*"</span>, <span class="nu">100</span>)
+
+<span class="cm">// List：队列操作</span>
+p.Storage.<span class="fn">RPush</span>(ctx, <span class="st">"job_queue"</span>, <span class="st">"task-1"</span>, <span class="st">"task-2"</span>)
+item, ok := p.Storage.<span class="fn">LPop</span>(ctx, <span class="st">"job_queue"</span>)
+size := p.Storage.<span class="fn">LLen</span>(ctx, <span class="st">"job_queue"</span>)
+items, ok := p.Storage.<span class="fn">LRange</span>(ctx, <span class="st">"job_queue"</span>, <span class="nu">0</span>, <span class="nu">-1</span>)
 
 <span class="cm">// 清空当前前缀下所有键</span>
 p.Storage.<span class="fn">Clear</span>(ctx)</code></pre>
