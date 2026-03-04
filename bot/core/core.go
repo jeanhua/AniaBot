@@ -8,12 +8,12 @@ import (
 	"log"
 	"os"
 	"sort"
-	"strings"
 	"time"
 
 	"github.com/go-resty/resty/v2"
 	"github.com/jeanhua/AniaBot/bot/utils"
 	"github.com/jeanhua/AniaBot/common/adapter"
+	"github.com/jeanhua/AniaBot/common/bot"
 	"github.com/jeanhua/AniaBot/common/model/message"
 	"github.com/jeanhua/AniaBot/common/msgchain"
 	"github.com/jeanhua/AniaBot/common/plugin"
@@ -170,20 +170,30 @@ func (ania *AniaBot) Run() {
 	c.Start()
 	defer c.Stop()
 
-	awakeTimer := time.AfterFunc(time.Second, func() {
-		Logger().Println("Awake...")
-		for _, p := range ania.plugins {
-			safeExecute("Awake", p, func(p plugin.Plugin) {
-				awakeCtx, cancel := context.WithTimeout(ania.ctx, AwakeEventTimeout)
-				p.Awake(awakeCtx, ania)
-				cancel()
-			})
-		}
-	})
-	defer awakeTimer.Stop()
 	fmt.Println(LogoASCII)
 	Logger().Println("Bot启动完成...")
+
+	Logger().Println("Awake...")
+	for _, p := range ania.plugins {
+		safeExecute("Awake", p, func(p plugin.Plugin) {
+			awakeCtx, cancel := context.WithTimeout(ania.ctx, AwakeEventTimeout)
+			p.Awake(awakeCtx, ania)
+			cancel()
+		})
+	}
 	ania.adapter.Serve(ania.cfg)
+}
+
+func (ania *AniaBot) GetPluginList() []bot.PluginInfo {
+	pluginList := make([]bot.PluginInfo, 0, len(ania.plugins))
+	for _, p := range ania.plugins {
+		pluginList = append(pluginList, bot.PluginInfo{
+			Name:      p.GetMeta().Name,
+			HelpWords: p.GetMeta().HelpWords,
+			AdminOnly: p.GetMeta().AdminOnly,
+		})
+	}
+	return pluginList
 }
 
 func (ania *AniaBot) onGroupEvent(msg message.Message) {
@@ -197,28 +207,6 @@ func (ania *AniaBot) onGroupEvent(msg message.Message) {
 	}
 
 	cmd := utils.ParseCommand(msg)
-	if cmd.Name == "help" && cmd.Mention {
-		var pluginInfo strings.Builder
-		pluginInfo.WriteString("\n欢迎使用AniaBot，已加载插件:")
-		idx := 1
-		for _, p := range ania.plugins {
-			if p.GetMeta().AdminOnly && msg.Sender.UserId != ania.admin {
-				continue
-			}
-			pName := p.GetMeta().Name
-			pHelpWords := p.GetMeta().HelpWords
-			pluginInfo.WriteString(fmt.Sprintf("\n%d. %s: %s", idx, pName, pHelpWords))
-			idx += 1
-		}
-		c := msgchain.Builder().Group()
-		c.Mention(msg.Sender.UserId)
-		c.Text(pluginInfo.String())
-		_, ok := ania.SendGroupMsg(msg.GroupId, c.Build())
-		if !ok {
-			Logger().Println("Bot消息发送失败，无法响应 /help")
-		}
-		return
-	}
 
 	for _, p := range ania.plugins {
 		next := safeExecuteWithReturn("群聊消息事件", p, func(p plugin.Plugin) bool {
@@ -245,27 +233,6 @@ func (ania *AniaBot) onFriendEvent(msg message.Message) {
 	}
 
 	cmd := utils.ParseCommand(msg)
-	if cmd.Name == "help" {
-		var pluginInfo strings.Builder
-		pluginInfo.WriteString("欢迎使用AniaBot，已加载插件:")
-		idx := 1
-		for _, p := range ania.plugins {
-			if p.GetMeta().AdminOnly && msg.Sender.UserId != ania.admin {
-				continue
-			}
-			pName := p.GetMeta().Name
-			pHelpWords := p.GetMeta().HelpWords
-			pluginInfo.WriteString(fmt.Sprintf("\n%d. %s: %s", idx, pName, pHelpWords))
-			idx += 1
-		}
-		c := msgchain.Builder().Friend()
-		c.Text(pluginInfo.String())
-		_, ok := ania.SendFriendMsg(msg.Sender.UserId, c.Build())
-		if !ok {
-			Logger().Println("Bot消息发送失败，无法响应 /help")
-		}
-		return
-	}
 
 	for _, p := range ania.plugins {
 		next := safeExecuteWithReturn("私聊消息事件", p, func(p plugin.Plugin) bool {

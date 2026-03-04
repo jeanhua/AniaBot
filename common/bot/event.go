@@ -9,6 +9,7 @@ type Bot interface {
 	botSendMsgItf
 	botGetMsgItf
 	botSysItf
+	pluginItf
 	Stop()
 }
 
@@ -57,4 +58,14 @@ type botGetMsgItf interface {
 type botSysItf interface {
 	// GetNCrkey 获取rkey
 	GetNCrkey() ([]message.NCrkey, bool)
+}
+
+type pluginItf interface {
+	GetPluginList() []PluginInfo
+}
+
+type PluginInfo struct {
+	Name      string
+	HelpWords string
+	AdminOnly bool
 }
