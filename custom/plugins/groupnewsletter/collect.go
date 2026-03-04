@@ -49,9 +49,11 @@ func (p *GroupNewsletter) collectMessage(_ context.Context, b bot.Bot, msg messa
 
 	buffer.mu.Lock()
 	buffer.messages = append(buffer.messages, collected)
-	// 超出上限时，只保留最新的 maxMessages 条
 	if len(buffer.messages) > p.config.maxMessages {
 		buffer.messages = buffer.messages[len(buffer.messages)-p.config.maxMessages:]
+		if buffer.persisted > len(buffer.messages) {
+			buffer.persisted = len(buffer.messages)
+		}
 	}
 	count := len(buffer.messages)
 	buffer.mu.Unlock()

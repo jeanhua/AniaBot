@@ -66,6 +66,9 @@ func (p *GroupNewsletter) saveGroupToStorage(groupId uint) {
 	}
 
 	buffer.mu.RLock()
+	if buffer.persisted > len(buffer.messages) {
+		buffer.persisted = len(buffer.messages)
+	}
 	toPersist := buffer.messages[buffer.persisted:]
 	count := len(toPersist)
 	buffer.mu.RUnlock()
