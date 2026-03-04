@@ -15,8 +15,7 @@ import (
 
 type PluginSys struct {
 	plugin.Meta
-	adminId    uint
-	pluginInfo []bot.PluginInfo
+	adminId uint
 }
 
 func NewPluginSys() *PluginSys {
@@ -34,17 +33,13 @@ func (p *PluginSys) Start(ctx context.Context, cfg *viper.Viper) error {
 	return nil
 }
 
-func (p *PluginSys) Awake(ctx context.Context, bot bot.Bot) error {
-	p.pluginInfo = bot.GetPluginList()
-	return nil
-}
-
 func (p *PluginSys) OnFriendMsg(ctx context.Context, bot bot.Bot, cmd command.Command, msg message.Message) (bool, error) {
 	if cmd.Name == "help" {
+		plugins := bot.GetPluginList()
 		var pluginInfo strings.Builder
 		pluginInfo.WriteString("欢迎使用AniaBot，已加载插件:")
 		idx := 1
-		for _, info := range p.pluginInfo {
+		for _, info := range plugins {
 			if info.AdminOnly && msg.Sender.UserId != p.adminId {
 				continue
 			}
@@ -66,10 +61,11 @@ func (p *PluginSys) OnFriendMsg(ctx context.Context, bot bot.Bot, cmd command.Co
 
 func (p *PluginSys) OnGroupMsg(ctx context.Context, bot bot.Bot, cmd command.Command, msg message.Message) (bool, error) {
 	if cmd.Name == "help" && cmd.Mention {
+		plugins := bot.GetPluginList()
 		var pluginInfo strings.Builder
 		pluginInfo.WriteString("\n欢迎使用AniaBot，已加载插件:")
 		idx := 1
-		for _, info := range p.pluginInfo {
+		for _, info := range plugins {
 			if info.AdminOnly && msg.Sender.UserId != p.adminId {
 				continue
 			}
