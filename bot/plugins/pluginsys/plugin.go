@@ -22,7 +22,7 @@ type PluginSys struct {
 func NewPluginSys() *PluginSys {
 	return &PluginSys{
 		Meta: plugin.Meta{
-			Name:      "PluginSys",
+			Name:      "系统插件",
 			HelpWords: "AniaBot系统插件",
 			Order:     plugin.LevelLog,
 		},
