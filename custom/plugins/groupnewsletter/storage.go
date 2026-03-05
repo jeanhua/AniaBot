@@ -6,18 +6,20 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/jeanhua/AniaBot/common/model/message"
 )
 
 const storageKeyPrefix = "group_"
 
-func storageKey(groupId uint) string {
-	return storageKeyPrefix + strconv.FormatUint(uint64(groupId), 10)
+func storageKey(groupId message.QID) string {
+	return storageKeyPrefix + groupId.String()
 }
 
 // saveLoop 消费 saveChan，批量去重后异步持久化，不阻塞消息收集
 func (p *GroupNewsletter) saveLoop() {
 	// 用 ticker 做批量合并：每 2 秒最多触发一次同一群的写入
-	pending := make(map[uint]struct{})
+	pending := make(map[message.QID]struct{})
 	ticker := time.NewTicker(2 * time.Second)
 	defer ticker.Stop()
 
@@ -25,7 +27,7 @@ func (p *GroupNewsletter) saveLoop() {
 		for groupId := range pending {
 			p.saveGroupToStorage(groupId)
 		}
-		pending = make(map[uint]struct{})
+		pending = make(map[message.QID]struct{})
 	}
 
 	for {
@@ -56,7 +58,7 @@ func (p *GroupNewsletter) saveLoop() {
 	}
 }
 
-func (p *GroupNewsletter) saveGroupToStorage(groupId uint) {
+func (p *GroupNewsletter) saveGroupToStorage(groupId message.QID) {
 	p.msgsMu.RLock()
 	buffer, ok := p.groupMsgs[groupId]
 	p.msgsMu.RUnlock()
@@ -112,7 +114,7 @@ func (p *GroupNewsletter) loadFromStorage() {
 			continue
 		}
 
-		groupId := uint(groupId64)
+		groupId := message.QID(groupId64)
 		msgs := make([]collectedMessage, 0, len(items))
 		for _, item := range items {
 			data, err := json.Marshal(item)

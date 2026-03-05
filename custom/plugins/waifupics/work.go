@@ -1,5 +1,7 @@
 package waifupics
 
+import "github.com/jeanhua/AniaBot/common/model/message"
+
 const (
 	TargetFriend = iota
 	TargetGroup
@@ -7,7 +9,7 @@ const (
 
 type work struct {
 	category string
-	target   uint
-	userId   uint
-	groupId  uint
+	target   int
+	userId   message.QID
+	groupId  message.QID
 }

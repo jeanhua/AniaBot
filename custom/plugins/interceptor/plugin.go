@@ -2,7 +2,6 @@ package interceptor
 
 import (
 	"context"
-	"strconv"
 
 	"github.com/jeanhua/AniaBot/common/bot"
 	"github.com/jeanhua/AniaBot/common/model/command"
@@ -86,37 +85,33 @@ func (p *InterceptorPlugin) check(target int, msg message.Message) bool {
 	switch target {
 	case TargetGroup:
 		for _, id := range p.interceptGroup {
-			if id == "all" || ieqs(msg.GroupId, id) {
+			if id == "all" || msg.GroupId.String() == id {
 				p.Logger.Println("触发全部拦截")
 				return false
 			}
 		}
 		for _, id := range p.interceptUser {
-			if id == "all" || ieqs(msg.Sender.UserId, id) {
+			if id == "all" || msg.Sender.UserId.String() == id {
 				p.Logger.Println("触发好友拦截:", msg.Sender.UserId)
 				return false
 			}
 		}
 		for _, id := range p.permitGroup {
-			if id == "all" || ieqs(msg.GroupId, id) {
+			if id == "all" || msg.GroupId.String() == id {
 				return true
 			}
 		}
 	case TargetFriend:
 		for _, id := range p.interceptUser {
-			if id == "all" || ieqs(msg.Sender.UserId, id) {
+			if id == "all" || msg.Sender.UserId.String() == id {
 				return false
 			}
 		}
 		for _, id := range p.permitUser {
-			if id == "all" || ieqs(msg.Sender.UserId, id) {
+			if id == "all" || msg.Sender.UserId.String() == id {
 				return true
 			}
 		}
 	}
 	return false
-}
-
-func ieqs(numInt uint, numStr string) bool {
-	return strconv.Itoa(int(numInt)) == numStr
 }

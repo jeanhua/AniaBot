@@ -18,18 +18,18 @@ type GroupNewsletter struct {
 	config newsletterConfig
 
 	// 消息 buffer，按 groupId 索引
-	groupMsgs map[uint]*groupMessageBuffer
+	groupMsgs map[message.QID]*groupMessageBuffer
 	msgsMu    sync.RWMutex
 
 	// 消息阈值触发通知
-	notifyChan chan uint
+	notifyChan chan message.QID
 
 	// 防止同一群重复生成
-	generating map[uint]struct{}
+	generating map[message.QID]struct{}
 	generateMu sync.Mutex
 
 	// 异步持久化队列
-	saveChan chan uint
+	saveChan chan message.QID
 
 	// 插件自身生命周期，不依赖框架传入的短生命周期 ctx
 	pluginCtx context.Context
@@ -42,10 +42,10 @@ func NewGroupNewsletterPlugin() *GroupNewsletter {
 			Name:      "群刊插件",
 			HelpWords: "自动收集群消息并生成有趣的群刊，发送 /gn 查看当前收集状态，/gn gen 立即生成群刊",
 		},
-		groupMsgs:  make(map[uint]*groupMessageBuffer),
-		notifyChan: make(chan uint, 100),
-		generating: make(map[uint]struct{}),
-		saveChan:   make(chan uint, 200),
+		groupMsgs:  make(map[message.QID]*groupMessageBuffer),
+		notifyChan: make(chan message.QID, 100),
+		generating: make(map[message.QID]struct{}),
+		saveChan:   make(chan message.QID, 200),
 	}
 }
 
@@ -90,7 +90,7 @@ func (p *GroupNewsletter) OnGroupMsg(ctx context.Context, b bot.Bot, cmd command
 	return true, nil
 }
 
-func (p *GroupNewsletter) isGroupEnabled(groupId uint) bool {
+func (p *GroupNewsletter) isGroupEnabled(groupId message.QID) bool {
 	if len(p.config.enabledGroups) == 0 {
 		return true
 	}

@@ -245,7 +245,7 @@ func (p *GithubRepoer) generateAI(ctx context.Context, info string) (string, err
 	return response.Choices[0].Content, nil
 }
 
-func (p *GithubRepoer) sendResult(bot bot.Bot, target int, groupId, userId uint, result, name string) {
+func (p *GithubRepoer) sendResult(bot bot.Bot, target int, groupId, userId message.QID, result, name string) {
 	if p.fmt == "jpg" {
 		imgData, err := md2img.GetImage(result)
 		if target == TargetGroup {

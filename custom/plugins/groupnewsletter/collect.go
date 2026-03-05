@@ -17,10 +17,10 @@ type groupMessageBuffer struct {
 }
 
 type collectedMessage struct {
-	Time     int64  `json:"time"`
-	UserId   uint   `json:"user_id"`
-	Nickname string `json:"nickname"`
-	Content  string `json:"content"`
+	Time     int64       `json:"time"`
+	UserId   message.QID `json:"user_id"`
+	Nickname string      `json:"nickname"`
+	Content  string      `json:"content"`
 }
 
 func (p *GroupNewsletter) collectMessage(_ context.Context, b bot.Bot, msg message.Message) {
@@ -74,7 +74,7 @@ func (p *GroupNewsletter) collectMessage(_ context.Context, b bot.Bot, msg messa
 	}
 }
 
-func (p *GroupNewsletter) getMessageCount(groupId uint) int {
+func (p *GroupNewsletter) getMessageCount(groupId message.QID) int {
 	p.msgsMu.RLock()
 	buffer, ok := p.groupMsgs[groupId]
 	p.msgsMu.RUnlock()
@@ -92,7 +92,7 @@ func buildContent(b bot.Bot, msg message.Message) string {
 	var sb strings.Builder
 	for _, m := range msg.Message {
 		sb.WriteString(m.FriendlyText(
-			message.WithGetGroupUserInfo(msg.GroupId, func(groupId, userId uint) (*message.GroupUserInfo, bool) {
+			message.WithGetGroupUserInfo(msg.GroupId, func(groupId, userId message.QID) (*message.GroupUserInfo, bool) {
 				return b.GetGroupUserInfo(groupId, userId)
 			}),
 			message.WithGetForwardMsgFunc(b.GetForwardMsg),
@@ -103,7 +103,7 @@ func buildContent(b bot.Bot, msg message.Message) string {
 }
 
 // isGenerating 检查某个群是否正在生成群刊
-func (p *GroupNewsletter) isGenerating(groupId uint) bool {
+func (p *GroupNewsletter) isGenerating(groupId message.QID) bool {
 	p.generateMu.Lock()
 	defer p.generateMu.Unlock()
 	_, ok := p.generating[groupId]
@@ -111,7 +111,7 @@ func (p *GroupNewsletter) isGenerating(groupId uint) bool {
 }
 
 // trySetGenerating 尝试标记某个群为生成中，返回 false 表示已在生成
-func (p *GroupNewsletter) trySetGenerating(groupId uint) bool {
+func (p *GroupNewsletter) trySetGenerating(groupId message.QID) bool {
 	p.generateMu.Lock()
 	defer p.generateMu.Unlock()
 	if _, ok := p.generating[groupId]; ok {
@@ -121,7 +121,7 @@ func (p *GroupNewsletter) trySetGenerating(groupId uint) bool {
 	return true
 }
 
-func (p *GroupNewsletter) clearGenerating(groupId uint) {
+func (p *GroupNewsletter) clearGenerating(groupId message.QID) {
 	p.generateMu.Lock()
 	defer p.generateMu.Unlock()
 	delete(p.generating, groupId)

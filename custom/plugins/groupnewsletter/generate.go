@@ -9,12 +9,13 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jeanhua/AniaBot/common/bot"
+	"github.com/jeanhua/AniaBot/common/model/message"
 	"github.com/jeanhua/AniaBot/common/msgchain"
 	"github.com/jeanhua/AniaBot/custom/component/md2img"
 	"github.com/tmc/langchaingo/llms"
 )
 
-func (p *GroupNewsletter) generateForGroup(ctx context.Context, b bot.Bot, groupId uint, force bool) {
+func (p *GroupNewsletter) generateForGroup(ctx context.Context, b bot.Bot, groupId message.QID, force bool) {
 	if !p.trySetGenerating(groupId) {
 		p.Logger.Printf("群 %d 已在生成中，跳过", groupId)
 		return
@@ -73,7 +74,7 @@ func (p *GroupNewsletter) generateForGroup(ctx context.Context, b bot.Bot, group
 
 // snapshotMessages 读取并临时清空 buffer，返回消息快照。
 // 若消息不足（非 force 模式）或 buffer 为空，返回 false。
-func (p *GroupNewsletter) snapshotMessages(groupId uint, force bool) ([]collectedMessage, bool) {
+func (p *GroupNewsletter) snapshotMessages(groupId message.QID, force bool) ([]collectedMessage, bool) {
 	p.msgsMu.Lock()
 	defer p.msgsMu.Unlock()
 
@@ -100,7 +101,7 @@ func (p *GroupNewsletter) snapshotMessages(groupId uint, force bool) ([]collecte
 }
 
 // rollbackMessages 将快照消息还原到 buffer 头部（追加到当前已有消息之前）
-func (p *GroupNewsletter) rollbackMessages(groupId uint, snapshot []collectedMessage) {
+func (p *GroupNewsletter) rollbackMessages(groupId message.QID, snapshot []collectedMessage) {
 	p.msgsMu.Lock()
 	defer p.msgsMu.Unlock()
 
@@ -137,7 +138,7 @@ func (p *GroupNewsletter) rollbackMessages(groupId uint, snapshot []collectedMes
 }
 
 // clearMessages 生成成功后正式清空 buffer 并删除存储中的消息
-func (p *GroupNewsletter) clearMessages(groupId uint) {
+func (p *GroupNewsletter) clearMessages(groupId message.QID) {
 	p.Storage.Del(context.Background(), storageKey(groupId))
 
 	p.msgsMu.Lock()

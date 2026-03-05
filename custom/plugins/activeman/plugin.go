@@ -73,7 +73,7 @@ func (p *ActiveMan) StartCron(ctx context.Context, b bot.Bot, c plugin.CronManag
 
 func (p *ActiveMan) checkAndSign(b bot.Bot) {
 	p.groupSignState.Range(func(key, value any) bool {
-		groupId := key.(uint)
+		groupId := key.(message.QID)
 		info := value.(*groupSignInfo)
 
 		if info.shouldSignNow() {
@@ -86,7 +86,7 @@ func (p *ActiveMan) checkAndSign(b bot.Bot) {
 	})
 }
 
-func (p *ActiveMan) getOrCreateGroupSignInfo(groupId uint) *groupSignInfo {
+func (p *ActiveMan) getOrCreateGroupSignInfo(groupId message.QID) *groupSignInfo {
 	info := &groupSignInfo{
 		signHour:   rand.Intn(24),
 		signMinute: rand.Intn(60),

@@ -40,8 +40,8 @@ type searchSession struct {
 type MusicPlugin struct {
 	plugin.Meta
 	client      *gdmusic.Client
-	groupCache  sync.Map // map[uint]*searchSession
-	friendCache sync.Map // map[uint]*searchSession
+	groupCache  sync.Map // map[message.QID]*searchSession
+	friendCache sync.Map // map[message.QID]*searchSession
 }
 
 // NewMusicPlugin 创建音乐插件实例
@@ -94,7 +94,7 @@ func (p *MusicPlugin) OnFriendMsg(ctx context.Context, b bot.Bot, cmd command.Co
 }
 
 // dispatch 根据子命令分发
-func (p *MusicPlugin) dispatch(ctx context.Context, b bot.Bot, args []string, groupId, userId, msgId uint, isGroup bool) {
+func (p *MusicPlugin) dispatch(ctx context.Context, b bot.Bot, args []string, groupId, userId, msgId message.QID, isGroup bool) {
 	switch args[0] {
 	case "get":
 		p.handleGet(ctx, b, args[1:], groupId, userId, msgId, isGroup)
@@ -149,7 +149,7 @@ func parseSearchArgs(args []string) (keyword string, count, page int, source gdm
 	return
 }
 
-func (p *MusicPlugin) handleSearch(ctx context.Context, b bot.Bot, args []string, groupId, userId, msgId uint, isGroup bool) {
+func (p *MusicPlugin) handleSearch(ctx context.Context, b bot.Bot, args []string, groupId, userId, msgId message.QID, isGroup bool) {
 	keyword, count, page, source := parseSearchArgs(args)
 	if keyword == "" {
 		p.reply(b, isGroup, groupId, userId, msgId, "请输入搜索关键词，例如：/music 周杰伦 晴天")
@@ -164,7 +164,7 @@ func (p *MusicPlugin) handleSearch(ctx context.Context, b bot.Bot, args []string
 }
 
 // handleTurn 翻页：delta = +1 下一页，-1 上一页
-func (p *MusicPlugin) handleTurn(ctx context.Context, b bot.Bot, delta int, groupId, userId, msgId uint, isGroup bool) {
+func (p *MusicPlugin) handleTurn(ctx context.Context, b bot.Bot, delta int, groupId, userId, msgId message.QID, isGroup bool) {
 	sess := p.loadSession(isGroup, groupId, userId)
 	if sess == nil {
 		p.reply(b, isGroup, groupId, userId, msgId, "请先搜索音乐，例如：/music 周杰伦 晴天")
@@ -184,7 +184,7 @@ func (p *MusicPlugin) handleTurn(ctx context.Context, b bot.Bot, delta int, grou
 }
 
 // fetchPage 请求 API 并填充 sess.results，失败时自动回复错误，返回是否成功
-func (p *MusicPlugin) fetchPage(ctx context.Context, b bot.Bot, sess *searchSession, groupId, userId, msgId uint, isGroup bool) bool {
+func (p *MusicPlugin) fetchPage(ctx context.Context, b bot.Bot, sess *searchSession, groupId, userId, msgId message.QID, isGroup bool) bool {
 	results, err := p.client.Search(ctx, sess.keyword, &gdmusic.SearchOptions{
 		Source: sess.source,
 		Count:  sess.count,
@@ -205,7 +205,7 @@ func (p *MusicPlugin) fetchPage(ctx context.Context, b bot.Bot, sess *searchSess
 }
 
 // sendResults 发送当前页搜索结果列表
-func (p *MusicPlugin) sendResults(b bot.Bot, sess *searchSession, groupId, userId, msgId uint, isGroup bool) {
+func (p *MusicPlugin) sendResults(b bot.Bot, sess *searchSession, groupId, userId, msgId message.QID, isGroup bool) {
 	var sb strings.Builder
 	sb.WriteString(fmt.Sprintf("🎵 「%s」第 %d 页（平台: %s，每页 %d 条）\n",
 		sess.keyword, sess.page, sess.source, sess.count))
@@ -225,7 +225,7 @@ func (p *MusicPlugin) sendResults(b bot.Bot, sess *searchSession, groupId, userI
 // 发送音乐文件
 // -----------------------------------------------------------------------
 
-func (p *MusicPlugin) handleGet(ctx context.Context, b bot.Bot, args []string, groupId, userId, msgId uint, isGroup bool) {
+func (p *MusicPlugin) handleGet(ctx context.Context, b bot.Bot, args []string, groupId, userId, msgId message.QID, isGroup bool) {
 	if len(args) == 0 {
 		p.reply(b, isGroup, groupId, userId, msgId, "请提供序号，例如：/music get 1")
 		return
@@ -279,7 +279,7 @@ func (p *MusicPlugin) handleGet(ctx context.Context, b bot.Bot, args []string, g
 // 会话存取
 // -----------------------------------------------------------------------
 
-func (p *MusicPlugin) storeSession(isGroup bool, groupId, userId uint, sess *searchSession) {
+func (p *MusicPlugin) storeSession(isGroup bool, groupId, userId message.QID, sess *searchSession) {
 	if isGroup {
 		p.groupCache.Store(groupId, sess)
 	} else {
@@ -287,7 +287,7 @@ func (p *MusicPlugin) storeSession(isGroup bool, groupId, userId uint, sess *sea
 	}
 }
 
-func (p *MusicPlugin) loadSession(isGroup bool, groupId, userId uint) *searchSession {
+func (p *MusicPlugin) loadSession(isGroup bool, groupId, userId message.QID) *searchSession {
 	var v interface{}
 	var ok bool
 	if isGroup {
@@ -305,7 +305,7 @@ func (p *MusicPlugin) loadSession(isGroup bool, groupId, userId uint) *searchSes
 // 工具函数
 // -----------------------------------------------------------------------
 
-func (p *MusicPlugin) reply(b bot.Bot, isGroup bool, groupId, userId, msgId uint, text string) {
+func (p *MusicPlugin) reply(b bot.Bot, isGroup bool, groupId, userId, msgId message.QID, text string) {
 	if isGroup {
 		builder := msgchain.Builder().Group()
 		builder.Reply(msgId).Mention(userId).Text(" " + text)
@@ -324,7 +324,7 @@ func sanitizeFileName(name string) string {
 	).Replace(name)
 }
 
-func (p *MusicPlugin) sendHelp(b bot.Bot, groupId, userId, msgId uint, isGroup bool) {
+func (p *MusicPlugin) sendHelp(b bot.Bot, groupId, userId, msgId message.QID, isGroup bool) {
 	p.reply(b, isGroup, groupId, userId, msgId, helpText)
 }
 

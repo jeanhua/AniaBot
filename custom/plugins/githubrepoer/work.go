@@ -1,5 +1,7 @@
 package githubrepoer
 
+import "github.com/jeanhua/AniaBot/common/model/message"
+
 const (
 	TargetFriend = iota
 	TargetGroup
@@ -7,9 +9,9 @@ const (
 
 type work struct {
 	target       int
-	userId       uint
-	groupId      uint
-	msgId        uint
+	userId       message.QID
+	groupId      message.QID
+	msgId        message.QID
 	repoURL      string
 	compress     bool
 	include      string

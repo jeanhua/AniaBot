@@ -2,6 +2,7 @@ package groupnewsletter
 
 import (
 	"github.com/jeanhua/AniaBot/common/aniaerror"
+	"github.com/jeanhua/AniaBot/common/model/message"
 	"github.com/spf13/viper"
 	"github.com/tmc/langchaingo/llms/openai"
 )
@@ -21,7 +22,7 @@ type newsletterConfig struct {
 	// maxMessages buffer 中最多保留多少条消息
 	maxMessages int
 
-	enabledGroups []uint
+	enabledGroups []message.QID
 }
 
 func loadConfig(cfg *viper.Viper) newsletterConfig {
@@ -37,7 +38,7 @@ func loadConfig(cfg *viper.Viper) newsletterConfig {
 
 	for _, id := range cfg.GetIntSlice("plugin.group_newsletter.enabled_groups") {
 		if id > 0 {
-			c.enabledGroups = append(c.enabledGroups, uint(id))
+			c.enabledGroups = append(c.enabledGroups, message.QID(id))
 		}
 	}
 
