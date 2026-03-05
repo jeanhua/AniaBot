@@ -107,3 +107,11 @@ plugin:
   # gdmusic插件
   gdmusic:
     base_url: "https://music-api.gdstudio.xyz/api.php"  # 留空使用默认
+
+  # url解析插件
+  url_parser:
+    token: "xxx" # jina ai token
+    llm:
+      base_url: "https://open.bigmodel.cn/api/paas/v4"
+      api_key: ""
+      model: "GLM-4-Flash-250414"

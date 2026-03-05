@@ -17,6 +17,7 @@ import (
 	"github.com/jeanhua/AniaBot/custom/plugins/githubrepoer"
 	"github.com/jeanhua/AniaBot/custom/plugins/groupnewsletter"
 	"github.com/jeanhua/AniaBot/custom/plugins/interceptor"
+	"github.com/jeanhua/AniaBot/custom/plugins/urlparser"
 	"github.com/jeanhua/AniaBot/custom/plugins/waifupics"
 )
 
@@ -41,6 +42,7 @@ func main() {
 	bot.AddPlugin(groupnewsletter.NewGroupNewsletterPlugin())
 	bot.AddPlugin(gdmusicplugin.NewMusicPlugin())
 	bot.AddPlugin(activeman.NewActiveMan(0.1, 0.1, 0.1))
+	bot.AddPlugin(urlparser.NewURLParserPlugin())
 
 	bot.Run()
 }
