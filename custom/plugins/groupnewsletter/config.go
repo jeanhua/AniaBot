@@ -1,6 +1,8 @@
 package groupnewsletter
 
 import (
+	_ "embed"
+
 	"github.com/jeanhua/AniaBot/common/aniaerror"
 	"github.com/jeanhua/AniaBot/common/model/message"
 	"github.com/spf13/viper"
@@ -9,6 +11,9 @@ import (
 
 // llmClient 抽象 LLM 接口，方便测试替换
 type llmClient = *openai.LLM
+
+//go:embed prompt.md
+var defaultPrompt string
 
 type newsletterConfig struct {
 	baseUrl string

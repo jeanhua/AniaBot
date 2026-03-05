@@ -176,7 +176,7 @@ func (p *GroupNewsletter) generateAI(ctx context.Context, msgs []collectedMessag
 			llms.TextParts(llms.ChatMessageTypeSystem, p.config.prompt),
 			llms.TextParts(llms.ChatMessageTypeHuman, sb.String()),
 		},
-		llms.WithTemperature(1.2),
+		llms.WithTemperature(1.5),
 		llms.WithTopP(0.9),
 	)
 	if err != nil {
