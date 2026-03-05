@@ -159,13 +159,13 @@ func (n *napcatHttpAdapter) SendGroupAIVoiceMsg(groupId message.QID, character, 
 	return resp.Data.MessageId, checkResponseStatus(&resp)
 }
 
-func (n *napcatHttpAdapter) SendPokeMsg(userId message.QID, groupId *message.QID) {
+func (n *napcatHttpAdapter) SendPokeMsg(userId message.QID, groupId *message.QID) (success bool) {
 	data := map[string]message.QID{}
 	data["user_id"] = userId
 	if groupId != nil {
 		data["group_id"] = *groupId
 	}
-	n.postAndCheck(n.baseUrl+"/send_poke", data, nil)
+	return n.postAndCheck(n.baseUrl+"/send_poke", data, nil)
 }
 
 func (n *napcatHttpAdapter) SendGroupForwardMsg(groupId message.QID, chain msgchain.GroupForwardChain) (msgId message.QID, success bool) {
@@ -264,8 +264,7 @@ func (n *napcatHttpAdapter) SetMsgEmojiLike(msgId message.QID, emojiId int, like
 func (n *napcatHttpAdapter) SendGroupSign(groupId message.QID) bool {
 	data := map[string]message.QID{"group_id": groupId}
 	resp := message.Response[json.RawMessage]{}
-	n.postAndCheck(n.baseUrl+"/send_group_sign", data, &resp)
-	return true
+	return n.postAndCheck(n.baseUrl+"/send_group_sign", data, &resp)
 }
 
 func (n *napcatHttpAdapter) GetGroupMsgHistory(groupId message.QID, count int) (*[]message.Message, bool) {

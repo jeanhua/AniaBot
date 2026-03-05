@@ -273,8 +273,8 @@ func (ania *AniaBot) SendGroupAIVoiceMsg(groupId message.QID, character, msg str
 	return ania.adapter.SendGroupAIVoiceMsg(groupId, character, msg)
 }
 
-func (ania *AniaBot) SendPokeMsg(userId message.QID, groupId *message.QID) {
-	ania.adapter.SendPokeMsg(userId, groupId)
+func (ania *AniaBot) SendPokeMsg(userId message.QID, groupId *message.QID) (success bool) {
+	return ania.adapter.SendPokeMsg(userId, groupId)
 }
 
 func (ania *AniaBot) GetMsgDetail(msgId message.QID) (*message.Message, bool) {

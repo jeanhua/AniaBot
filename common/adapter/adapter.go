@@ -53,7 +53,7 @@ type SendMsg interface {
 	SendGroupMsg(groupId message.QID, chain msgchain.GroupChain) (msgId message.QID, success bool)
 	SendGroupAIVoiceMsg(groupId message.QID, character, msg string) (msgId message.QID, success bool)
 	SendFriendMsg(userId message.QID, chain msgchain.FriendChain) (msgId message.QID, success bool)
-	SendPokeMsg(userId message.QID, groupId *message.QID)
+	SendPokeMsg(userId message.QID, groupId *message.QID) (success bool)
 	SendGroupForwardMsg(groupId message.QID, chain msgchain.GroupForwardChain) (msgId message.QID, success bool)
 	SendFriendForwardMsg(userId message.QID, chain msgchain.FriendForwardChain) (msgId message.QID, success bool)
 	SetMsgEmojiLike(msgId message.QID, emojiId int, like bool) (success bool)
