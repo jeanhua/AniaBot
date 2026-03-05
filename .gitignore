@@ -41,6 +41,3 @@ config.dev.yaml
 # custom plugin
 # custom/plugins/*
 # !custom/plugins/pluginexample/
-
-# docs
-docs/
