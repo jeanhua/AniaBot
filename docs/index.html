@@ -1014,6 +1014,7 @@
         <a href="#" onclick="showSection('interceptor')" id="nav-interceptor"><span class="icon">🚧</span> 消息拦截器插件</a>
         <a href="#" onclick="showSection('newsletter')" id="nav-newsletter"><span class="icon">📜</span> 群刊插件</a>
         <a href="#" onclick="showSection('gdmusic')" id="nav-gdmusic"><span class="icon">🎶</span> GD 音乐插件</a>
+        <a href="#" onclick="showSection('urlparser')" id="nav-urlparser"><span class="icon">🔗</span> URL 解析插件</a>
       </div>
       <div class="sidebar-section">
         <div class="sidebar-section-title">参考</div>
@@ -1136,6 +1137,15 @@
               </div>
             </div>
             <p class="plugin-desc">多平台音乐搜索、翻页、下载发送，支持网易云、酷我等平台。</p>
+          </div>
+          <div class="plugin-card" onclick="showSection('urlparser')">
+            <div class="plugin-header"><span class="plugin-emoji">🔗</span>
+              <div>
+                <div class="plugin-name">URL 解析插件</div>
+                <div class="plugin-pkg">urlparser</div>
+              </div>
+            </div>
+            <p class="plugin-desc">自动解析群聊中的 URL 并提取相关信息，AI 驱动的内容分析。</p>
           </div>
         </div>
       </div>
@@ -1441,6 +1451,16 @@ GOOS=linux GOARCH=amd64 go build -o build/AniaBot ./cmd/</code></pre>
         <pre><code>plugin:
   gdmusic:
     base_url: <span class="st">"https://music-api.gdstudio.xyz/api.php"</span>  <span class="cm"># 留空使用默认</span></code></pre>
+
+        <h2>URL 解析插件配置</h2>
+        <div class="code-header">config.yaml — plugin.url_parser 段</div>
+        <pre><code>plugin:
+  url_parser:
+    token: <span class="st">"your_token"</span>
+    llm:
+      base_url: <span class="st">"https://api.openai.com/v1"</span>
+      api_key: <span class="st">"your_api_key"</span>
+      model: <span class="st">"gpt-4o"</span></code></pre>
       </div>
 
       <!-- ===== CORE ===== -->
@@ -1903,6 +1923,16 @@ bot.<span class="fn">SendGroupForwardMsg</span>(groupId, fbuilder.<span class="f
             </div>
             <p class="plugin-desc">多平台音乐搜索、翻页浏览、发送音频文件，支持6大平台。</p>
             <span class="tag green">开箱即用</span>
+          </div>
+          <div class="plugin-card" onclick="showSection('urlparser')">
+            <div class="plugin-header"><span class="plugin-emoji">🔗</span>
+              <div>
+                <div class="plugin-name">URL 解析插件</div>
+                <div class="plugin-pkg">urlparser</div>
+              </div>
+            </div>
+            <p class="plugin-desc">自动解析群聊中的 URL 并提取相关信息，AI 驱动的内容分析。</p>
+            <span class="tag orange">需配置LLM</span>
           </div>
         </div>
       </div>
@@ -2551,6 +2581,54 @@ keyword = <span class="st">"周杰伦 晴天"</span>
 count = <span class="nu">3</span>
 source = <span class="st">"kuwo"</span>
 page = <span class="nu">2</span></code></pre>
+      </div>
+
+      <!-- ===== URLPARSER ===== -->
+      <div class="section" id="section-urlparser">
+        <h1>🔗 URL 解析插件</h1>
+        <span class="tag blue">urlparser</span> <span class="tag orange">需配置LLM</span>
+        <p style="margin-top:16px;">自动解析群聊中的 URL 并提取相关信息，基于 AI 的内容分析插件。使用 LLM 分析 URL 对应页面的内容，提取关键信息并返回。</p>
+
+        <h2>工作原理</h2>
+        <div class="steps">
+          <div class="step">
+            <div class="step-num">1</div>
+            <h3>URL 检测</h3>
+            <p>监听群聊消息，使用正则表达式检测消息中的 URL 链接。</p>
+          </div>
+          <div class="step">
+            <div class="step-num">2</div>
+            <h3>异步任务队列</h3>
+            <p>将待解析的 URL 加入异步工作队列 <code>workLoop</code>，避免阻塞消息处理。</p>
+          </div>
+          <div class="step">
+            <div class="step-num">3</div>
+            <h3>LLM 内容分析</h3>
+            <p>调用 LLM 分析 URL 对应页面的内容，提取标题、摘要、关键信息等。</p>
+          </div>
+          <div class="step">
+            <div class="step-num">4</div>
+            <h3>返回结果</h3>
+            <p>将分析结果格式化后发送给群聊。</p>
+          </div>
+        </div>
+
+        <h2>配置</h2>
+        <pre><code><span class="kw">plugin</span>:
+  <span class="cm"># URL 解析插件配置</span>
+  url_parser:
+    token: <span class="st">"your_token"</span>
+    llm:
+      base_url: <span class="st">"https://api.openai.com/v1"</span>
+      api_key: <span class="st">"your_api_key"</span>
+      model: <span class="st">"gpt-4o"</span></code></pre>
+
+        <h2>实现要点</h2>
+        <ul>
+          <li><strong>异步处理</strong>：使用 channel 作为任务队列，<code>workLoop</code> 协程异步处理</li>
+          <li><strong>并发控制</strong>：channel 带缓冲大小（100），防止任务堆积</li>
+          <li><strong>LLM 集成</strong>：基于 langchaingo 的 OpenAI LLM，灵活切换模型和 API</li>
+        </ul>
       </div>
 
       <!-- ===== API ===== -->

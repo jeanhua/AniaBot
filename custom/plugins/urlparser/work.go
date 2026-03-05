@@ -31,6 +31,7 @@ func (p *URLParserPlugin) workLoop(bot bot.Bot) {
 			p.Logger.Println("GenerateContent failed", err)
 			continue
 		}
+		p.Logger.Printf("[发->群 %d] %s", w.GroupID, resp.Choices[0].Content)
 		builder := msgchain.Builder().Group()
 		builder.Reply(w.MsgID)
 		builder.Text(resp.Choices[0].Content)
