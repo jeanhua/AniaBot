@@ -7,9 +7,11 @@ const (
 	TargetGroup
 )
 
+type wTarget int
+
 type work struct {
 	category string
-	target   int
+	target   wTarget
 	userId   message.QID
 	groupId  message.QID
 }

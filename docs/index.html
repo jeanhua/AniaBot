@@ -1455,7 +1455,6 @@ GOOS=linux GOARCH=amd64 go build -o build/AniaBot ./cmd/</code></pre>
     cancel context.CancelFunc
     adapter adapter.Adapter
     plugins []plugin.Plugin
-    admin   uint
     cfg     *viper.Viper
     storage     storage.Storage
     restyClient *resty.Client

@@ -3,12 +3,14 @@ package acgwallpaper
 import "github.com/jeanhua/AniaBot/common/model/message"
 
 const (
-	TargetFriend = iota
+	TargetFriend wTarget = iota
 	TargetGroup
 )
 
+type wTarget int
+
 type work struct {
-	target  uint
+	target  wTarget
 	userId  message.QID
 	groupId message.QID
 }
