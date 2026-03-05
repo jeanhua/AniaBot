@@ -2,11 +2,14 @@ package groupnewsletter
 
 import (
 	"context"
+	"fmt"
+	"strings"
 	"sync"
 
 	"github.com/jeanhua/AniaBot/common/bot"
 	"github.com/jeanhua/AniaBot/common/model/command"
 	"github.com/jeanhua/AniaBot/common/model/message"
+	"github.com/jeanhua/AniaBot/common/msgchain"
 	"github.com/jeanhua/AniaBot/common/plugin"
 	"github.com/spf13/viper"
 )
@@ -16,6 +19,8 @@ type GroupNewsletter struct {
 
 	llm    llmClient
 	config newsletterConfig
+
+	adminId message.QID
 
 	// 消息 buffer，按 groupId 索引
 	groupMsgs map[message.QID]*groupMessageBuffer
@@ -58,6 +63,8 @@ func (p *GroupNewsletter) Start(_ context.Context, cfg *viper.Viper) error {
 
 	p.pluginCtx, p.cancel = context.WithCancel(context.Background())
 
+	p.adminId = message.QID(cfg.GetUint64("bot.admin_id"))
+
 	p.loadFromStorage()
 
 	p.Logger.Printf("初始化完成，消息阈值: %d，最大消息数: %d",
@@ -87,6 +94,37 @@ func (p *GroupNewsletter) OnGroupMsg(ctx context.Context, b bot.Bot, cmd command
 	}
 
 	p.collectMessage(ctx, b, msg)
+	return true, nil
+}
+
+func (p *GroupNewsletter) OnFriendMsg(ctx context.Context, bot bot.Bot, cmd command.Command, msg message.Message) (bool, error) {
+	if msg.Sender.UserId != p.adminId {
+		return true, nil
+	}
+
+	if cmd.Name == "gn" {
+		strBuilder := &strings.Builder{}
+		strBuilder.WriteString("群刊插件已收集消息:")
+		p.msgsMu.RLock()
+		for groupId := range p.groupMsgs {
+			strBuilder.WriteString("\n")
+			info, ok := bot.GetGroupDetail(groupId)
+			if ok {
+				strBuilder.WriteString(fmt.Sprintf("[%s %d]", info.GroupName, groupId))
+			} else {
+				strBuilder.WriteString(fmt.Sprintf("[%d]", groupId))
+			}
+			strBuilder.WriteString(": ")
+			strBuilder.WriteString(fmt.Sprintf("%d 条", p.getMessageCount(groupId)))
+		}
+		p.msgsMu.RUnlock()
+
+		builder := msgchain.Builder().Friend()
+		builder.Text(strBuilder.String())
+		bot.SendFriendMsg(msg.Sender.UserId, builder.Build())
+		return false, nil
+	}
+
 	return true, nil
 }
 
