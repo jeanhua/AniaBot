@@ -69,10 +69,13 @@ func (p *URLParserPlugin) OnGroupMsg(ctx context.Context, bot bot.Bot, cmd comma
 	text := getMsgText(msg)
 	url := getUrl(text)
 	if url != "" {
-		p.pendding <- work{
+		select {
+		case p.pendding <- work{
 			GroupID: msg.GroupId,
 			URL:     url,
 			MsgID:   msg.MessageId,
+		}:
+		default:
 		}
 	}
 	return true, nil
