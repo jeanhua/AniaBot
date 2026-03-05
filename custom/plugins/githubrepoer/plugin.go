@@ -42,8 +42,8 @@ var helpWords = `
 4. --del-comment 去除所有的注释
 5. --del-emptyline 去除所有空行`
 
-func NewGithubRepoer(maxPendding int) *GithubRepoer {
-	pd := make(chan work, maxPendding)
+func NewGithubRepoer(maxWork int) *GithubRepoer {
+	pd := make(chan work, maxWork)
 	return &GithubRepoer{
 		Meta: plugin.Meta{
 			Name:      "GithubRepoer插件",

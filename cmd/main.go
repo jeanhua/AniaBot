@@ -42,7 +42,7 @@ func main() {
 	bot.AddPlugin(groupnewsletter.NewGroupNewsletterPlugin())
 	bot.AddPlugin(gdmusicplugin.NewMusicPlugin())
 	bot.AddPlugin(activeman.NewActiveMan(0.1, 0.1, 0.1))
-	bot.AddPlugin(urlparser.NewURLParserPlugin())
+	bot.AddPlugin(urlparser.NewURLParserPlugin(10))
 
 	bot.Run()
 }

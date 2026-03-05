@@ -20,13 +20,13 @@ type URLParserPlugin struct {
 	token string
 }
 
-func NewURLParserPlugin() *URLParserPlugin {
+func NewURLParserPlugin(maxWork int) *URLParserPlugin {
 	return &URLParserPlugin{
 		Meta: plugin.Meta{
 			Name:      "URL解析插件",
 			HelpWords: "自动解析群聊中的 URL 并提取相关信息",
 		},
-		pendding: make(chan work, 100),
+		pendding: make(chan work, maxWork),
 	}
 }
 
