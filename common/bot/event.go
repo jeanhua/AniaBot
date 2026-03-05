@@ -15,41 +15,41 @@ type Bot interface {
 
 type botSendMsgItf interface {
 	// SendGroupMsg 发送群聊消息
-	SendGroupMsg(groupId uint, chain msgchain.GroupChain) (msgId uint, success bool)
+	SendGroupMsg(groupId message.QID, chain msgchain.GroupChain) (msgId message.QID, success bool)
 	// SendGroupAIVoiceMsg 发送群聊AI语音消息
-	SendGroupAIVoiceMsg(groupId uint, character, msg string) (msgId uint, success bool)
+	SendGroupAIVoiceMsg(groupId message.QID, character, msg string) (msgId message.QID, success bool)
 	// SendFriendMsg 发送私聊消息
-	SendFriendMsg(userId uint, chain msgchain.FriendChain) (msgId uint, success bool)
+	SendFriendMsg(userId message.QID, chain msgchain.FriendChain) (msgId message.QID, success bool)
 	// SendPokeMsg 发送戳一戳消息
-	SendPokeMsg(userId uint, groupId *uint)
+	SendPokeMsg(userId message.QID, groupId *message.QID)
 	// SendGroupForwardMsg 发送群聊合并转发消息
-	SendGroupForwardMsg(groupId uint, chain msgchain.GroupForwardChain) (msgId uint, success bool)
+	SendGroupForwardMsg(groupId message.QID, chain msgchain.GroupForwardChain) (msgId message.QID, success bool)
 	// SendFriendForwardMsg 发送私聊合并转发消息
-	SendFriendForwardMsg(userId uint, chain msgchain.FriendForwardChain) (msgId uint, success bool)
+	SendFriendForwardMsg(userId message.QID, chain msgchain.FriendForwardChain) (msgId message.QID, success bool)
 	// SetMsgEmojiLike 设置消息表情点赞
-	SetMsgEmojiLike(msgId uint, emojiId int, like bool) (success bool)
+	SetMsgEmojiLike(msgId message.QID, emojiId int, like bool) (success bool)
 
 	// SendGroupSign 群打卡
-	SendGroupSign(groupId uint) (success bool)
+	SendGroupSign(groupId message.QID) (success bool)
 }
 
 type botGetMsgItf interface {
 	// GetMsgDetail 获取消息详情
-	GetMsgDetail(msgId uint) (msg *message.Message, success bool)
+	GetMsgDetail(msgId message.QID) (msg *message.Message, success bool)
 	// GetForwardMsg 获取合并转发消息详情
-	GetForwardMsg(msgId string) (msgs *[]message.Message, success bool)
+	GetForwardMsg(msgId message.QID) (msgs *[]message.Message, success bool)
 	// GetGroupUserInfo 获取群聊中某成员信息
-	GetGroupUserInfo(groupId, userId uint) (info *message.GroupUserInfo, success bool)
+	GetGroupUserInfo(groupId, userId message.QID) (info *message.GroupUserInfo, success bool)
 
 	// GetFriendList 获取好友列表
 	GetFriendList() (*[]message.Friend, bool)
 	// GetGroupDetail 获取群聊详情
-	GetGroupDetail(groupId uint) (info *message.GroupInfo, success bool)
+	GetGroupDetail(groupId message.QID) (info *message.GroupInfo, success bool)
 
 	// GetGroupMsgHistory 获取群聊消息历史记录
-	GetGroupMsgHistory(groupId uint, count int) (*[]message.Message, bool)
+	GetGroupMsgHistory(groupId message.QID, count int) (*[]message.Message, bool)
 	// GetFriendMsgHistory 获取好友消息历史记录
-	GetFriendMsgHistory(userId uint, count int) (*[]message.Message, bool)
+	GetFriendMsgHistory(userId message.QID, count int) (*[]message.Message, bool)
 
 	// GetAIChatacter 获取AI角色列表
 	GetAIChatacter() (*[]message.AIChatacter, bool)

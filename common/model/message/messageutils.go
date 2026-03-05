@@ -7,35 +7,35 @@ import (
 )
 
 type msgHandleOpt struct {
-	groupId              uint
-	ignoreMentionId      uint
-	getMsgFunc           func(msgId uint) (*Message, bool)
-	getGroupUserInfoFunc func(groupId, userId uint) (info *GroupUserInfo, success bool)
+	groupId              QID
+	ignoreMentionId      QID
+	getMsgFunc           func(msgId QID) (*Message, bool)
+	getGroupUserInfoFunc func(groupId, userId QID) (info *GroupUserInfo, success bool)
 	getImageOCRFunc      func(url string) string
-	getForwardMsgFunc    func(msgId string) (*[]Message, bool)
+	getForwardMsgFunc    func(msgId QID) (*[]Message, bool)
 }
 
 type MsgOptFunc func(*msgHandleOpt)
 
-func WithIgnoreMentionId(userId uint) MsgOptFunc {
+func WithIgnoreMentionId(userId QID) MsgOptFunc {
 	return func(o *msgHandleOpt) {
 		o.ignoreMentionId = userId
 	}
 }
 
-func WithGetMsgFunc(getMsgFunc func(msgId uint) (*Message, bool)) MsgOptFunc {
+func WithGetMsgFunc(getMsgFunc func(msgId QID) (*Message, bool)) MsgOptFunc {
 	return func(o *msgHandleOpt) {
 		o.getMsgFunc = getMsgFunc
 	}
 }
 
-func WithGetForwardMsgFunc(getForwardMsgFunc func(msgId string) (*[]Message, bool)) MsgOptFunc {
+func WithGetForwardMsgFunc(getForwardMsgFunc func(msgId QID) (*[]Message, bool)) MsgOptFunc {
 	return func(o *msgHandleOpt) {
 		o.getForwardMsgFunc = getForwardMsgFunc
 	}
 }
 
-func WithGetGroupUserInfo(groupId uint, getGroupUserInfo func(groupId, userId uint) (info *GroupUserInfo, success bool)) MsgOptFunc {
+func WithGetGroupUserInfo(groupId QID, getGroupUserInfo func(groupId, userId QID) (info *GroupUserInfo, success bool)) MsgOptFunc {
 	return func(o *msgHandleOpt) {
 		o.groupId = groupId
 		o.getGroupUserInfoFunc = getGroupUserInfo
@@ -206,40 +206,3 @@ func (s OB11Segment) FriendlyText(optFunc ...MsgOptFunc) string {
 		return fmt.Sprintf("[%s]", s.Type)
 	}
 }
-
-// func (s OB11Segment) ShortText() string {
-// 	switch s.Type {
-// 	case "text":
-// 		return s.Data["text"].(string)
-// 	case "face":
-// 		idStr := s.Data["id"].(string)
-// 		id, err := strconv.Atoi(idStr)
-// 		if err != nil {
-// 			return "[QQ表情]"
-// 		}
-// 		dsc, ok := emojiMap[id]
-// 		if ok {
-// 			return fmt.Sprintf("[QQ表情:%s]", dsc)
-// 		} else {
-// 			return "[QQ表情]"
-// 		}
-// 	case "image":
-// 		return "[图片]"
-// 	case "record":
-// 		return "[录音]"
-// 	case "video":
-// 		return "[视频]"
-// 	case "at":
-// 		return fmt.Sprintf("[at:%s]", s.Data["qq"].(string))
-// 	case "music":
-// 		return "[音乐]"
-// 	case "reply":
-// 		return "[回复消息]"
-// 	case "forward":
-// 		return "[转发消息]"
-// 	case "file":
-// 		return fmt.Sprintf("[文件:%s]", s.Data["name"].(string))
-// 	default:
-// 		return fmt.Sprintf("[%s]", s.Type)
-// 	}
-// }

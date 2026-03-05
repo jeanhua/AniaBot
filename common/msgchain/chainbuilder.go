@@ -4,7 +4,7 @@ import "github.com/jeanhua/AniaBot/common/model/message"
 
 type GroupChainBuilder interface {
 	Text(text string) GroupChainBuilder
-	Face(faceId uint) GroupChainBuilder
+	Face(faceId int) GroupChainBuilder
 	ImageUrl(url string) GroupChainBuilder
 	ImageBase64(bs64code string) GroupChainBuilder
 	ImageLocal(path string) GroupChainBuilder
@@ -14,19 +14,19 @@ type GroupChainBuilder interface {
 	FileUrl(name, url string) GroupChainBuilder
 	FileLocal(name, path string) GroupChainBuilder
 	FileBase64(name, bs64code string) GroupChainBuilder
-	Reply(msgId uint) GroupChainBuilder
+	Reply(msgId message.QID) GroupChainBuilder
 	RecordUrl(url string) GroupChainBuilder
 	RecordLocal(path string) GroupChainBuilder
 	RecordBase64(bs64code string) GroupChainBuilder
 	Raw(rawMsg ...message.OB11Segment) GroupChainBuilder
 
-	Mention(userId uint) GroupChainBuilder
+	Mention(userId message.QID) GroupChainBuilder
 	Build() GroupChain
 }
 
 type FriendChainBuilder interface {
 	Text(text string) FriendChainBuilder
-	Face(faceId uint) FriendChainBuilder
+	Face(faceId int) FriendChainBuilder
 	ImageUrl(url string) FriendChainBuilder
 	ImageBase64(bs64code string) FriendChainBuilder
 	ImageLocal(path string) FriendChainBuilder
@@ -36,7 +36,7 @@ type FriendChainBuilder interface {
 	FileUrl(name, url string) FriendChainBuilder
 	FileLocal(name, path string) FriendChainBuilder
 	FileBase64(name, bs64code string) FriendChainBuilder
-	Reply(msgId uint) FriendChainBuilder
+	Reply(msgId message.QID) FriendChainBuilder
 	RecordUrl(url string) FriendChainBuilder
 	RecordLocal(path string) FriendChainBuilder
 	RecordBase64(bs64code string) FriendChainBuilder
@@ -46,11 +46,11 @@ type FriendChainBuilder interface {
 }
 
 type GroupForwardChainBuilder interface {
-	Message(userId uint, nickname string, c GroupChain)
+	Message(userId message.QID, nickname string, c GroupChain)
 	Build() GroupForwardChain
 }
 type FriendForwardChainBuilder interface {
-	Message(userId uint, nickname string, c FriendChain)
+	Message(userId message.QID, nickname string, c FriendChain)
 	Build() FriendForwardChain
 }
 type FriendChain interface {

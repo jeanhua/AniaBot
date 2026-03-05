@@ -15,7 +15,7 @@ import (
 
 type RepeatPlugin struct {
 	plugin.Meta
-	admin      uint
+	admin      message.QID
 	repeatGMap sync.Map
 	enable     atomic.Bool
 }
@@ -104,7 +104,7 @@ func (p *RepeatPlugin) OnGroupMsg(ctx context.Context, bot bot.Bot, cmd command.
 }
 
 func (p *RepeatPlugin) Start(ctx context.Context, cfg *viper.Viper) error {
-	p.admin = cfg.GetUint("bot.admin_id")
+	p.admin = message.QID(cfg.GetUint("bot.admin_id"))
 	p.enable.Store(true)
 	return nil
 }

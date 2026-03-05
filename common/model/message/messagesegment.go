@@ -32,12 +32,12 @@ type MusicMessage struct {
 }
 
 type MentionMessage struct {
-	QQ    uint
+	QQ    QID
 	IsAll bool
 }
 
 type ReplyMessage struct {
-	Id uint
+	Id QID
 }
 
 type FileMessage struct {
@@ -53,5 +53,5 @@ type VideoMessage dataMessage
 type RecordMessage dataMessage
 
 type ForwardMessage struct {
-	Id string
+	Id QID
 }

@@ -19,7 +19,7 @@ import (
 type AntiWithdrawalPlugin struct {
 	plugin.Meta
 	msg     sync.Map
-	adminId uint
+	adminId message.QID
 }
 
 func NewPlugin() *AntiWithdrawalPlugin {
@@ -144,7 +144,7 @@ func isTimeout(timestamp uint) bool {
 }
 
 func (p *AntiWithdrawalPlugin) Start(ctx context.Context, cfg *viper.Viper) error {
-	p.adminId = cfg.GetUint("bot.admin_id")
+	p.adminId = message.QID(cfg.GetUint("bot.admin_id"))
 	return nil
 }
 
