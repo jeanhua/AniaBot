@@ -28,7 +28,6 @@ type AniaBot struct {
 
 	adapter adapter.Adapter
 	plugins []plugin.Plugin
-	admin   uint
 	cfg     *viper.Viper
 
 	storage     storage.Storage
@@ -136,8 +135,6 @@ func (ania *AniaBot) Run() {
 	if ania.restyClient == nil {
 		ania.restyClient = resty.New()
 	}
-
-	ania.admin = ania.cfg.GetUint("bot.admin_id")
 
 	// 初始化事件
 	Logger().Println("开始初始化插件...")
@@ -264,39 +261,39 @@ func (ania *AniaBot) Stop() {
 	ania.cancel()
 }
 
-func (ania *AniaBot) SendGroupMsg(groupId uint, chain msgchain.GroupChain) (msgId uint, success bool) {
+func (ania *AniaBot) SendGroupMsg(groupId message.QID, chain msgchain.GroupChain) (msgId message.QID, success bool) {
 	return ania.adapter.SendGroupMsg(groupId, chain)
 }
 
-func (ania *AniaBot) SendFriendMsg(userID uint, chain msgchain.FriendChain) (msgId uint, success bool) {
+func (ania *AniaBot) SendFriendMsg(userID message.QID, chain msgchain.FriendChain) (msgId message.QID, success bool) {
 	return ania.adapter.SendFriendMsg(userID, chain)
 }
 
-func (ania *AniaBot) SendGroupAIVoiceMsg(groupId uint, character, msg string) (msgId uint, success bool) {
+func (ania *AniaBot) SendGroupAIVoiceMsg(groupId message.QID, character, msg string) (msgId message.QID, success bool) {
 	return ania.adapter.SendGroupAIVoiceMsg(groupId, character, msg)
 }
 
-func (ania *AniaBot) SendPokeMsg(userId uint, groupId *uint) {
+func (ania *AniaBot) SendPokeMsg(userId message.QID, groupId *message.QID) {
 	ania.adapter.SendPokeMsg(userId, groupId)
 }
 
-func (ania *AniaBot) GetMsgDetail(msgId uint) (*message.Message, bool) {
+func (ania *AniaBot) GetMsgDetail(msgId message.QID) (*message.Message, bool) {
 	return ania.adapter.GetMsgDetail(msgId)
 }
 
-func (ania *AniaBot) SendGroupForwardMsg(groupId uint, chain msgchain.GroupForwardChain) (msgId uint, success bool) {
+func (ania *AniaBot) SendGroupForwardMsg(groupId message.QID, chain msgchain.GroupForwardChain) (msgId message.QID, success bool) {
 	return ania.adapter.SendGroupForwardMsg(groupId, chain)
 }
 
-func (ania *AniaBot) SendFriendForwardMsg(userId uint, chain msgchain.FriendForwardChain) (msgId uint, success bool) {
+func (ania *AniaBot) SendFriendForwardMsg(userId message.QID, chain msgchain.FriendForwardChain) (msgId message.QID, success bool) {
 	return ania.adapter.SendFriendForwardMsg(userId, chain)
 }
 
-func (ania *AniaBot) GetForwardMsg(msgId string) (msgs *[]message.Message, success bool) {
+func (ania *AniaBot) GetForwardMsg(msgId message.QID) (msgs *[]message.Message, success bool) {
 	return ania.adapter.GetForwardMsg(msgId)
 }
 
-func (ania *AniaBot) GetGroupUserInfo(groupId, userId uint) (*message.GroupUserInfo, bool) {
+func (ania *AniaBot) GetGroupUserInfo(groupId, userId message.QID) (*message.GroupUserInfo, bool) {
 	return ania.adapter.GetGroupUserInfo(groupId, userId)
 }
 
@@ -308,23 +305,23 @@ func (ania *AniaBot) GetFriendList() (*[]message.Friend, bool) {
 	return ania.adapter.GetFriendList()
 }
 
-func (ania *AniaBot) GetGroupDetail(groupId uint) (*message.GroupInfo, bool) {
+func (ania *AniaBot) GetGroupDetail(groupId message.QID) (*message.GroupInfo, bool) {
 	return ania.adapter.GetGroupDetail(groupId)
 }
 
-func (ania *AniaBot) SetMsgEmojiLike(msgId uint, emojiId int, like bool) (success bool) {
+func (ania *AniaBot) SetMsgEmojiLike(msgId message.QID, emojiId int, like bool) (success bool) {
 	return ania.adapter.SetMsgEmojiLike(msgId, emojiId, like)
 }
 
-func (ania *AniaBot) SendGroupSign(groupId uint) (success bool) {
+func (ania *AniaBot) SendGroupSign(groupId message.QID) (success bool) {
 	return ania.adapter.SendGroupSign(groupId)
 }
 
-func (ania *AniaBot) GetGroupMsgHistory(groupId uint, count int) (*[]message.Message, bool) {
+func (ania *AniaBot) GetGroupMsgHistory(groupId message.QID, count int) (*[]message.Message, bool) {
 	return ania.adapter.GetGroupMsgHistory(groupId, count)
 }
 
-func (ania *AniaBot) GetFriendMsgHistory(userId uint, count int) (*[]message.Message, bool) {
+func (ania *AniaBot) GetFriendMsgHistory(userId message.QID, count int) (*[]message.Message, bool) {
 	return ania.adapter.GetFriendMsgHistory(userId, count)
 }
 

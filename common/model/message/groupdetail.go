@@ -1,8 +1,8 @@
 package message
 
 type GroupInfo struct {
-	GroupID     uint   `json:"group_id"`
+	GroupID     QID    `json:"group_id"`
 	GroupName   string `json:"group_name"`
-	MemberCount uint   `json:"member_count"`
+	MemberCount int    `json:"member_count"`
 	GroupRemark string `json:"group_remark"`
 }

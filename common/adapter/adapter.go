@@ -50,25 +50,25 @@ type TriggerWrapper struct {
 }
 
 type SendMsg interface {
-	SendGroupMsg(groupId uint, chain msgchain.GroupChain) (msgId uint, success bool)
-	SendGroupAIVoiceMsg(groupId uint, character, msg string) (msgId uint, success bool)
-	SendFriendMsg(userId uint, chain msgchain.FriendChain) (msgId uint, success bool)
-	SendPokeMsg(userId uint, groupId *uint)
-	SendGroupForwardMsg(groupId uint, chain msgchain.GroupForwardChain) (msgId uint, success bool)
-	SendFriendForwardMsg(userId uint, chain msgchain.FriendForwardChain) (msgId uint, success bool)
-	SetMsgEmojiLike(msgId uint, emojiId int, like bool) (success bool)
+	SendGroupMsg(groupId message.QID, chain msgchain.GroupChain) (msgId message.QID, success bool)
+	SendGroupAIVoiceMsg(groupId message.QID, character, msg string) (msgId message.QID, success bool)
+	SendFriendMsg(userId message.QID, chain msgchain.FriendChain) (msgId message.QID, success bool)
+	SendPokeMsg(userId message.QID, groupId *message.QID)
+	SendGroupForwardMsg(groupId message.QID, chain msgchain.GroupForwardChain) (msgId message.QID, success bool)
+	SendFriendForwardMsg(userId message.QID, chain msgchain.FriendForwardChain) (msgId message.QID, success bool)
+	SetMsgEmojiLike(msgId message.QID, emojiId int, like bool) (success bool)
 
-	SendGroupSign(groupId uint) (success bool)
+	SendGroupSign(groupId message.QID) (success bool)
 }
 
 type GetMsg interface {
-	GetMsgDetail(msgId uint) (msg *message.Message, success bool)
-	GetGroupUserInfo(groupId, userId uint) (info *message.GroupUserInfo, success bool)
-	GetForwardMsg(msgId string) (msgs *[]message.Message, success bool)
+	GetMsgDetail(msgId message.QID) (msg *message.Message, success bool)
+	GetGroupUserInfo(groupId, userId message.QID) (info *message.GroupUserInfo, success bool)
+	GetForwardMsg(msgId message.QID) (msgs *[]message.Message, success bool)
 	GetNCrkey() ([]message.NCrkey, bool)
 	GetFriendList() (*[]message.Friend, bool)
-	GetGroupDetail(groupId uint) (info *message.GroupInfo, success bool)
-	GetGroupMsgHistory(groupId uint, count int) (*[]message.Message, bool)
-	GetFriendMsgHistory(userId uint, count int) (*[]message.Message, bool)
+	GetGroupDetail(groupId message.QID) (info *message.GroupInfo, success bool)
+	GetGroupMsgHistory(groupId message.QID, count int) (*[]message.Message, bool)
+	GetFriendMsgHistory(userId message.QID, count int) (*[]message.Message, bool)
 	GetAIChatacter() (*[]message.AIChatacter, bool)
 }

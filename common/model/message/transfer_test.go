@@ -86,8 +86,8 @@ func TestParseFunctions(t *testing.T) {
 
 	// ParseForward
 	var forw ForwardMessage
-	ok = ParseForward(OB11Segment{Type: SegmentForward, Data: map[string]interface{}{"id": "fid"}}, &forw)
-	if !ok || forw.Id != "fid" {
-		t.Fatalf("ParseForward failed: ok=%v id=%s", ok, forw.Id)
+	ok = ParseForward(OB11Segment{Type: SegmentForward, Data: map[string]interface{}{"id": "123"}}, &forw)
+	if !ok || forw.Id != 123 {
+		t.Fatalf("ParseForward failed: ok=%v id=%d", ok, forw.Id)
 	}
 }

@@ -7,13 +7,13 @@ type Message struct {
 	PostType    string        `json:"post_type"`
 	MessageType string        `json:"message_type"`
 	SubType     string        `json:"sub_type"`
-	MessageId   uint          `json:"message_id"`
-	UserId      uint          `json:"user_id"`
-	GroupId     uint          `json:"group_id"`
+	MessageId   QID           `json:"message_id"`
+	UserId      QID           `json:"user_id"`
+	GroupId     QID           `json:"group_id"`
 	Message     []OB11Segment `json:"message"`
 	RawMessage  string        `json:"raw_message"`
 	Sender      MessageSender `json:"sender"`
-	SelfId      uint          `json:"self_id"`
+	SelfId      QID           `json:"self_id"`
 }
 
 type ForwardMessageSegment struct {
@@ -25,19 +25,19 @@ type ForwardMessageSegment struct {
 }
 
 type GroupForwardMessage struct {
-	GroupId uint `json:"group_id"`
+	GroupId QID `json:"group_id"`
 	ForwardMessageSegment
 }
 
 type FriendForwardMessage struct {
-	UserId uint `json:"user_id"`
+	UserId QID `json:"user_id"`
 	ForwardMessageSegment
 }
 
 type NodeMsg struct {
 	Type string `json:"type"` // node
 	Data struct {
-		UserId   uint          `json:"user_id"`
+		UserId   QID           `json:"user_id"`
 		Nickname string        `json:"nickname"`
 		Content  []OB11Segment `json:"content"`
 	} `json:"data"`
@@ -49,7 +49,7 @@ type OB11Segment struct {
 }
 
 type MessageSender struct {
-	UserId   uint   `json:"user_id"`
+	UserId   QID    `json:"user_id"`
 	Nickname string `json:"nickname"`
 	Sex      string `json:"sex"`
 	Card     string `json:"card"`
@@ -108,14 +108,14 @@ type JsonDetailMeta struct {
 }
 
 type AiVoiceMsg struct {
-	GroupId   uint   `json:"group_id"`
+	GroupId   QID    `json:"group_id"`
 	Character string `json:"character"`
 	Text      string `json:"text"`
 }
 
 type GroupUserInfo struct {
-	GroupID         uint   `json:"group_id"`
-	UserID          uint   `json:"user_id"`
+	GroupID         QID    `json:"group_id"`
+	UserID          QID    `json:"user_id"`
 	Nickname        string `json:"nickname"`
 	Card            string `json:"card"`
 	Sex             string `json:"sex"`

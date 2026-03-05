@@ -68,15 +68,15 @@ func NewAIChatPlugin() *AIChatPlugin {
 	}
 }
 
-func (p *AIChatPlugin) tryLock(ctx context.Context, id uint) bool {
-	return p.lockStorage.SetString(ctx, fmt.Sprintf("%d", id), "1", storage.WithCheckExist(), storage.WithTTL(LockExpTime))
+func (p *AIChatPlugin) tryLock(ctx context.Context, id message.QID) bool {
+	return p.lockStorage.SetString(ctx, id.String(), "1", storage.WithCheckExist(), storage.WithTTL(LockExpTime))
 }
 
-func (p *AIChatPlugin) unLock(ctx context.Context, id uint) {
-	p.lockStorage.Del(ctx, fmt.Sprintf("%d", id))
+func (p *AIChatPlugin) unLock(ctx context.Context, id message.QID) {
+	p.lockStorage.Del(ctx, id.String())
 }
 
-func (p *AIChatPlugin) getChat(id uint) *component.ChatBot {
+func (p *AIChatPlugin) getChat(id message.QID) *component.ChatBot {
 	chat, ok := p.chats.Load(id)
 	if !ok {
 		c, err := component.NewChatBot(

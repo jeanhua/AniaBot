@@ -1,8 +1,6 @@
 package msgchain
 
 import (
-	"fmt"
-
 	"github.com/jeanhua/AniaBot/common/model/message"
 )
 
@@ -114,11 +112,11 @@ func (c *friendChainBuilder) GetFriendMsg() []message.OB11Segment {
 	return c.message
 }
 
-func (c *chainBuilder) Mention(userId uint) {
+func (c *chainBuilder) Mention(userId message.QID) {
 	c.message = append(c.message, message.OB11Segment{
 		Type: "at",
 		Data: map[string]interface{}{
-			"qq": fmt.Sprintf("%d", userId),
+			"qq": userId.String(),
 		},
 	})
 }
@@ -132,7 +130,7 @@ func (c *chainBuilder) Text(text string) {
 	})
 }
 
-func (c *chainBuilder) Face(faceId uint) {
+func (c *chainBuilder) Face(faceId int) {
 	c.message = append(c.message, message.OB11Segment{
 		Type: "face",
 		Data: map[string]interface{}{
@@ -228,11 +226,11 @@ func (c *chainBuilder) FileBase64(name, bs64code string) {
 	})
 }
 
-func (c *chainBuilder) Reply(msgId uint) {
+func (c *chainBuilder) Reply(msgId message.QID) {
 	c.message = append(c.message, message.OB11Segment{
 		Type: "reply",
 		Data: map[string]interface{}{
-			"id": msgId,
+			"id": msgId.String(),
 		},
 	})
 }
@@ -275,7 +273,7 @@ func (c *friendChainBuilder) Text(text string) FriendChainBuilder {
 	return c
 }
 
-func (c *friendChainBuilder) Face(faceId uint) FriendChainBuilder {
+func (c *friendChainBuilder) Face(faceId int) FriendChainBuilder {
 	c.chainBuilder.Face(faceId)
 	return c
 }
@@ -325,7 +323,7 @@ func (c *friendChainBuilder) FileBase64(name, bs64code string) FriendChainBuilde
 	return c
 }
 
-func (c *friendChainBuilder) Reply(msgId uint) FriendChainBuilder {
+func (c *friendChainBuilder) Reply(msgId message.QID) FriendChainBuilder {
 	c.chainBuilder.Reply(msgId)
 	return c
 }
@@ -356,7 +354,7 @@ func (c *groupChainBuilder) Text(text string) GroupChainBuilder {
 	return c
 }
 
-func (c *groupChainBuilder) Face(faceId uint) GroupChainBuilder {
+func (c *groupChainBuilder) Face(faceId int) GroupChainBuilder {
 	c.chainBuilder.Face(faceId)
 	return c
 }
@@ -406,7 +404,7 @@ func (c *groupChainBuilder) FileBase64(name, bs64code string) GroupChainBuilder 
 	return c
 }
 
-func (c *groupChainBuilder) Reply(msgId uint) GroupChainBuilder {
+func (c *groupChainBuilder) Reply(msgId message.QID) GroupChainBuilder {
 	c.chainBuilder.Reply(msgId)
 	return c
 }
@@ -431,17 +429,17 @@ func (c *groupChainBuilder) Raw(rawMsg ...message.OB11Segment) GroupChainBuilder
 	return c
 }
 
-func (c *groupChainBuilder) Mention(userId uint) GroupChainBuilder {
+func (c *groupChainBuilder) Mention(userId message.QID) GroupChainBuilder {
 	c.chainBuilder.Mention(userId)
 	return c
 }
 
-func (fc *friendForwardChainBuilder) Message(userId uint, nickname string, c FriendChain) {
+func (fc *friendForwardChainBuilder) Message(userId message.QID, nickname string, c FriendChain) {
 	fc.message.Messages = append(fc.message.Messages,
 		message.NodeMsg{
 			Type: "node",
 			Data: struct {
-				UserId   uint                  `json:"user_id"`
+				UserId   message.QID           `json:"user_id"`
 				Nickname string                `json:"nickname"`
 				Content  []message.OB11Segment `json:"content"`
 			}{
@@ -453,12 +451,12 @@ func (fc *friendForwardChainBuilder) Message(userId uint, nickname string, c Fri
 	)
 }
 
-func (fc *groupForwardChainBuilder) Message(userId uint, nickname string, c GroupChain) {
+func (fc *groupForwardChainBuilder) Message(userId message.QID, nickname string, c GroupChain) {
 	fc.message.Messages = append(fc.message.Messages,
 		message.NodeMsg{
 			Type: "node",
 			Data: struct {
-				UserId   uint                  `json:"user_id"`
+				UserId   message.QID           `json:"user_id"`
 				Nickname string                `json:"nickname"`
 				Content  []message.OB11Segment `json:"content"`
 			}{

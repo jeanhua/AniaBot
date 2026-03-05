@@ -78,7 +78,7 @@ func ParseMention(s OB11Segment, m *MentionMessage) bool {
 		return false
 	}
 
-	m.QQ = uint(id)
+	m.QQ = QID(id)
 	return true
 }
 
@@ -97,7 +97,7 @@ func ParseReply(s OB11Segment, r *ReplyMessage) bool {
 		return false
 	}
 
-	r.Id = uint(id)
+	r.Id = QID(id)
 	return true
 }
 
@@ -182,6 +182,10 @@ func ParseForward(s OB11Segment, f *ForwardMessage) bool {
 		return false
 	}
 
-	f.Id = id
+	qid, err := FromString(id)
+	if err != nil {
+		return false
+	}
+	f.Id = qid
 	return true
 }

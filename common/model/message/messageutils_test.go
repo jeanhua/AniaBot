@@ -29,7 +29,7 @@ func TestFriendlyText_TextFaceImageMentionReplyJson(t *testing.T) {
 
 	// reply with getMsgFunc returning a message with text
 	segReply := OB11Segment{Type: SegmentReply, Data: map[string]interface{}{"id": "10"}}
-	getMsg := func(msgId uint) (*Message, bool) {
+	getMsg := func(msgId QID) (*Message, bool) {
 		return &Message{
 			Sender:  MessageSender{UserId: 2, Nickname: "nick", Card: ""},
 			Message: []OB11Segment{{Type: SegmentText, Data: map[string]interface{}{"text": "replied"}}},
@@ -55,7 +55,7 @@ func TestFriendlyText_TextFaceImageMentionReplyJson(t *testing.T) {
 func contains(s, sub string) bool {
 	return len(s) >= len(sub) && (s == sub || (len(s) > len(sub) && (jsonContains(s, sub) || stringContains(s, sub))))
 }
-func jsonContains(s, sub string) bool { return false }
+func jsonContains(_, _ string) bool { return false }
 func stringContains(s, sub string) bool {
 	return (len(s) >= len(sub)) && (func() bool { return indexOf(s, sub) >= 0 })()
 }

@@ -52,7 +52,7 @@ func (p *NewsPlugin) StartCron(ctx context.Context, bot bot.Bot, c plugin.CronMa
 		for _, group := range p.groups {
 			builder := msgchain.Builder().Group()
 			builder.ImageUrl(p.api)
-			_, ok := bot.SendGroupMsg(group, builder.Build())
+			_, ok := bot.SendGroupMsg(message.QID(group), builder.Build())
 			if ok {
 				p.Logger.Printf("[发->群%d]: [每日新闻]", group)
 			} else {

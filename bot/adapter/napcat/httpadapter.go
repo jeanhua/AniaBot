@@ -120,7 +120,7 @@ func (n *napcatHttpAdapter) SetTrigger(trigger adapter.TriggerWrapper) {
 	n.trigger = trigger
 }
 
-func (n *napcatHttpAdapter) SendGroupMsg(groupId uint, chain msgchain.GroupChain) (msgId uint, success bool) {
+func (n *napcatHttpAdapter) SendGroupMsg(groupId message.QID, chain msgchain.GroupChain) (msgId message.QID, success bool) {
 	data := httpGroupPushData{
 		GroupId: groupId,
 		Message: chain.GetGroupMsg(),
@@ -133,7 +133,7 @@ func (n *napcatHttpAdapter) SendGroupMsg(groupId uint, chain msgchain.GroupChain
 	return resp.Data.MessageId, checkResponseStatus(&resp)
 }
 
-func (n *napcatHttpAdapter) SendFriendMsg(userId uint, chain msgchain.FriendChain) (msgId uint, success bool) {
+func (n *napcatHttpAdapter) SendFriendMsg(userId message.QID, chain msgchain.FriendChain) (msgId message.QID, success bool) {
 	data := httpFriendPushData{
 		UserId:  userId,
 		Message: chain.GetFriendMsg(),
@@ -146,7 +146,7 @@ func (n *napcatHttpAdapter) SendFriendMsg(userId uint, chain msgchain.FriendChai
 	return resp.Data.MessageId, checkResponseStatus(&resp)
 }
 
-func (n *napcatHttpAdapter) SendGroupAIVoiceMsg(groupId uint, character, msg string) (msgId uint, success bool) {
+func (n *napcatHttpAdapter) SendGroupAIVoiceMsg(groupId message.QID, character, msg string) (msgId message.QID, success bool) {
 	data := message.AiVoiceMsg{
 		GroupId:   groupId,
 		Character: character,
@@ -159,8 +159,8 @@ func (n *napcatHttpAdapter) SendGroupAIVoiceMsg(groupId uint, character, msg str
 	return resp.Data.MessageId, checkResponseStatus(&resp)
 }
 
-func (n *napcatHttpAdapter) SendPokeMsg(userId uint, groupId *uint) {
-	data := map[string]uint{}
+func (n *napcatHttpAdapter) SendPokeMsg(userId message.QID, groupId *message.QID) {
+	data := map[string]message.QID{}
 	data["user_id"] = userId
 	if groupId != nil {
 		data["group_id"] = *groupId
@@ -168,7 +168,7 @@ func (n *napcatHttpAdapter) SendPokeMsg(userId uint, groupId *uint) {
 	n.postAndCheck(n.baseUrl+"/send_poke", data, nil)
 }
 
-func (n *napcatHttpAdapter) SendGroupForwardMsg(groupId uint, chain msgchain.GroupForwardChain) (msgId uint, success bool) {
+func (n *napcatHttpAdapter) SendGroupForwardMsg(groupId message.QID, chain msgchain.GroupForwardChain) (msgId message.QID, success bool) {
 	data := message.GroupForwardMessage{
 		GroupId:               groupId,
 		ForwardMessageSegment: chain.GetForwardMsg(),
@@ -180,7 +180,7 @@ func (n *napcatHttpAdapter) SendGroupForwardMsg(groupId uint, chain msgchain.Gro
 	return resp.Data.MessageId, checkResponseStatus(&resp)
 }
 
-func (n *napcatHttpAdapter) SendFriendForwardMsg(userId uint, chain msgchain.FriendForwardChain) (msgId uint, success bool) {
+func (n *napcatHttpAdapter) SendFriendForwardMsg(userId message.QID, chain msgchain.FriendForwardChain) (msgId message.QID, success bool) {
 	data := message.FriendForwardMessage{
 		UserId:                userId,
 		ForwardMessageSegment: chain.GetForwardMsg(),
@@ -192,8 +192,8 @@ func (n *napcatHttpAdapter) SendFriendForwardMsg(userId uint, chain msgchain.Fri
 	return resp.Data.MessageId, checkResponseStatus(&resp)
 }
 
-func (n *napcatHttpAdapter) GetMsgDetail(msgId uint) (*message.Message, bool) {
-	data := map[string]uint{"message_id": msgId}
+func (n *napcatHttpAdapter) GetMsgDetail(msgId message.QID) (*message.Message, bool) {
+	data := map[string]message.QID{"message_id": msgId}
 	result := httpMsgDetail{}
 	if !n.postAndCheck(n.baseUrl+"/get_msg", data, &result) {
 		return nil, false
@@ -201,8 +201,8 @@ func (n *napcatHttpAdapter) GetMsgDetail(msgId uint) (*message.Message, bool) {
 	return &result.Data, true
 }
 
-func (n *napcatHttpAdapter) GetForwardMsg(msgId string) (msgs *[]message.Message, success bool) {
-	data := map[string]string{"message_id": msgId}
+func (n *napcatHttpAdapter) GetForwardMsg(msgId message.QID) (msgs *[]message.Message, success bool) {
+	data := map[string]message.QID{"message_id": msgId}
 	result := httpForwardMsgDetail{}
 	if !n.postAndCheck(n.baseUrl+"/get_forward_msg", data, &result) {
 		return nil, false
@@ -210,7 +210,7 @@ func (n *napcatHttpAdapter) GetForwardMsg(msgId string) (msgs *[]message.Message
 	return &result.Data, true
 }
 
-func (n *napcatHttpAdapter) GetGroupUserInfo(groupId, userId uint) (*message.GroupUserInfo, bool) {
+func (n *napcatHttpAdapter) GetGroupUserInfo(groupId, userId message.QID) (*message.GroupUserInfo, bool) {
 	data := map[string]any{
 		"group_id": groupId,
 		"user_id":  userId,
@@ -239,8 +239,8 @@ func (n *napcatHttpAdapter) GetFriendList() (*[]message.Friend, bool) {
 	return &resp.Data, true
 }
 
-func (n *napcatHttpAdapter) GetGroupDetail(groupId uint) (*message.GroupInfo, bool) {
-	data := map[string]uint{"group_id": groupId}
+func (n *napcatHttpAdapter) GetGroupDetail(groupId message.QID) (*message.GroupInfo, bool) {
+	data := map[string]message.QID{"group_id": groupId}
 	resp := message.Response[message.GroupInfo]{}
 	if !n.postAndCheck(n.baseUrl+"/get_group_detail_info", data, &resp) {
 		return nil, false
@@ -248,7 +248,7 @@ func (n *napcatHttpAdapter) GetGroupDetail(groupId uint) (*message.GroupInfo, bo
 	return &resp.Data, true
 }
 
-func (n *napcatHttpAdapter) SetMsgEmojiLike(msgId uint, emojiId int, like bool) bool {
+func (n *napcatHttpAdapter) SetMsgEmojiLike(msgId message.QID, emojiId int, like bool) bool {
 	data := message.EmojiLike{
 		MessageID: msgId,
 		EmojiId:   emojiId,
@@ -261,14 +261,14 @@ func (n *napcatHttpAdapter) SetMsgEmojiLike(msgId uint, emojiId int, like bool) 
 	return checkResponseStatus(&resp)
 }
 
-func (n *napcatHttpAdapter) SendGroupSign(groupId uint) bool {
-	data := map[string]uint{"group_id": groupId}
+func (n *napcatHttpAdapter) SendGroupSign(groupId message.QID) bool {
+	data := map[string]message.QID{"group_id": groupId}
 	resp := message.Response[json.RawMessage]{}
 	n.postAndCheck(n.baseUrl+"/send_group_sign", data, &resp)
 	return true
 }
 
-func (n *napcatHttpAdapter) GetGroupMsgHistory(groupId uint, count int) (*[]message.Message, bool) {
+func (n *napcatHttpAdapter) GetGroupMsgHistory(groupId message.QID, count int) (*[]message.Message, bool) {
 	data := map[string]any{
 		"group_id":    groupId,
 		"count":       count,
@@ -283,7 +283,7 @@ func (n *napcatHttpAdapter) GetGroupMsgHistory(groupId uint, count int) (*[]mess
 	return &resp.Messages, true
 }
 
-func (n *napcatHttpAdapter) GetFriendMsgHistory(userId uint, count int) (*[]message.Message, bool) {
+func (n *napcatHttpAdapter) GetFriendMsgHistory(userId message.QID, count int) (*[]message.Message, bool) {
 	data := map[string]any{
 		"user_id":     userId,
 		"count":       count,
@@ -307,12 +307,12 @@ func (n *napcatHttpAdapter) GetAIChatacter() (*[]message.AIChatacter, bool) {
 }
 
 type httpFriendPushData struct {
-	UserId  uint                  `json:"user_id"`
+	UserId  message.QID           `json:"user_id"`
 	Message []message.OB11Segment `json:"message"`
 }
 
 type httpGroupPushData struct {
-	GroupId uint                  `json:"group_id"`
+	GroupId message.QID           `json:"group_id"`
 	Message []message.OB11Segment `json:"message"`
 }
 

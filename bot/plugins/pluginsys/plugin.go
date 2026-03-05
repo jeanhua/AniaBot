@@ -15,7 +15,7 @@ import (
 
 type PluginSys struct {
 	plugin.Meta
-	adminId uint
+	adminId message.QID
 }
 
 func NewPluginSys() *PluginSys {
@@ -29,7 +29,7 @@ func NewPluginSys() *PluginSys {
 }
 
 func (p *PluginSys) Start(ctx context.Context, cfg *viper.Viper) error {
-	p.adminId = cfg.GetUint("bot.admin_id")
+	p.adminId = message.QID(cfg.GetUint("bot.admin_id"))
 	return nil
 }
 
