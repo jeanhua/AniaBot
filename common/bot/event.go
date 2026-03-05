@@ -21,7 +21,7 @@ type botSendMsgItf interface {
 	// SendFriendMsg 发送私聊消息
 	SendFriendMsg(userId message.QID, chain msgchain.FriendChain) (msgId message.QID, success bool)
 	// SendPokeMsg 发送戳一戳消息
-	SendPokeMsg(userId message.QID, groupId *message.QID)
+	SendPokeMsg(userId message.QID, groupId *message.QID) (success bool)
 	// SendGroupForwardMsg 发送群聊合并转发消息
 	SendGroupForwardMsg(groupId message.QID, chain msgchain.GroupForwardChain) (msgId message.QID, success bool)
 	// SendFriendForwardMsg 发送私聊合并转发消息

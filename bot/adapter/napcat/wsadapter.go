@@ -160,17 +160,16 @@ func (n *napcatWebSocketAdapter) GetNCrkey() ([]message.NCrkey, bool) {
 	return *res, true
 }
 
-func (n *napcatWebSocketAdapter) SendPokeMsg(userId message.QID, groupId *message.QID) {
+func (n *napcatWebSocketAdapter) SendPokeMsg(userId message.QID, groupId *message.QID) (success bool) {
 	params := map[string]message.QID{"user_id": userId}
 	if groupId != nil {
 		params["group_id"] = *groupId
 	}
-	req := wsPushData[any]{Action: "send_poke", Params: params}
-	if b, err := json.Marshal(req); err == nil {
-		n.mu.Lock()
-		n.wsConn.WriteMessage(websocket.TextMessage, b)
-		n.mu.Unlock()
+	_, ok := request[any](n, "send_poke", params, "ack")
+	if !ok {
+		return false
 	}
+	return true
 }
 
 func (n *napcatWebSocketAdapter) GetFriendList() (*[]message.Friend, bool) {
