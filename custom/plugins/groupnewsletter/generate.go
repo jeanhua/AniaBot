@@ -163,7 +163,7 @@ func (p *GroupNewsletter) generateAI(ctx context.Context, msgs []collectedMessag
 			sb.WriteString(time.Unix(msg.Time, 0).Format("2006-01-02 15:04:05"))
 			sb.WriteString("\n")
 		}
-		fmt.Fprintf(&sb, "[UserID]:%d\n[Username]:%s\n[Content]:%s\n",
+		fmt.Fprintf(&sb, "[UserID]:%d\n[Username]:%s\n[Content]:%s\n\n\n",
 			msg.UserId, msg.Nickname, msg.Content)
 	}
 

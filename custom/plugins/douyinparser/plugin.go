@@ -62,10 +62,11 @@ func (p *DouyinParser) OnGroupMsg(ctx context.Context, bot bot.Bot, cmd command.
 
 		builder := msgchain.Builder().Group()
 		builder.Mention(msg.Sender.UserId)
-		builder.Text(" ").Face(24).Text(fmt.Sprintf("解析成功\n博主: %s\n标题: %s\n视频直链: %s",
-			result.Data.Author.Name,
-			result.Data.Title,
-			result.Data.URL,
+		builder.Text(" ").Face(24).Text(fmt.Sprintf("解析成功\n博主: %s\n标题: %s\n签名: %s\n视频直链: %s",
+			result.Data.AdditionalData[0].Nickname,
+			result.Data.AdditionalData[0].Desc,
+			result.Data.AdditionalData[0].Signature,
+			result.Data.VideoURL,
 		))
 		bot.SendGroupMsg(msg.GroupId, builder.Build())
 		return false, nil
@@ -94,10 +95,11 @@ func (p *DouyinParser) OnFriendMsg(ctx context.Context, bot bot.Bot, cmd command
 		}
 
 		builder := msgchain.Builder().Friend()
-		builder.Face(24).Text(fmt.Sprintf("解析成功\n博主: %s\n标题: %s\n视频直链: %s",
-			result.Data.Author.Name,
-			result.Data.Title,
-			result.Data.URL,
+		builder.Face(24).Text(fmt.Sprintf("解析成功\n博主: %s\n标题: %s\n签名: %s\n视频直链: %s",
+			result.Data.AdditionalData[0].Nickname,
+			result.Data.AdditionalData[0].Desc,
+			result.Data.AdditionalData[0].Signature,
+			result.Data.VideoURL,
 		))
 		bot.SendFriendMsg(msg.Sender.UserId, builder.Build())
 		return false, nil
@@ -117,7 +119,7 @@ func (p *DouyinParser) extractDouyinLink(text string) (string, error) {
 
 func getResourse(client *resty.Client, link string) (*responseTy, error) {
 	result := responseTy{}
-	modifier, _ := utils.NewURLModifier("https://api.xhus.cn/api/autopars")
+	modifier, _ := utils.NewURLModifier("https://api.xinyew.cn/api/douyinjx")
 	modifier.SetQuery("url", link)
 	_, err := client.R().SetResult(&result).Get(modifier.String())
 	if err != nil {
@@ -133,16 +135,14 @@ type responseTy struct {
 	Code int    `json:"code"`
 	Msg  string `json:"msg"`
 	Data struct {
-		Title  string `json:"title"`
-		Type   string `json:"type"`
-		Author struct {
-			Name   string `json:"name"`
-			ID     int64  `json:"id"`
-			Avatar string `json:"avatar"`
-		} `json:"author"`
-		Avatar string   `json:"avatar"`
-		Cover  string   `json:"cover"`
-		Images []string `json:"images"`
-		URL    string   `json:"url"`
+		PlayURL        string `json:"play_url"`
+		VideoURL       string `json:"video_url"`
+		ParseTime      string `json:"parse_time"`
+		AdditionalData []struct {
+			Desc      string `json:"desc"`
+			URL       string `json:"url"`
+			Nickname  string `json:"nickname"`
+			Signature string `json:"signature"`
+		} `json:"additional_data"`
 	} `json:"data"`
 }
