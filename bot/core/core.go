@@ -5,7 +5,6 @@ import (
 	_ "embed"
 	"encoding/base64"
 	"fmt"
-	"io"
 	"log/slog"
 	"os"
 	"sort"
@@ -34,8 +33,7 @@ type AniaBot struct {
 	storage     storage.Storage
 	restyClient *resty.Client
 
-	logLevel  slog.Level
-	logWriter io.Writer
+	logger *slog.Logger
 
 	pluginSet map[string]struct{}
 }
@@ -72,15 +70,10 @@ func WithResty(restyClient *resty.Client) Option {
 	}
 }
 
-func WithLogLevel(level slog.Level) Option {
+func WithLogger(logger *slog.Logger) Option {
 	return func(ania *AniaBot) {
-		ania.logLevel = level
-	}
-}
-
-func WithLogWriter(writer io.Writer) Option {
-	return func(ania *AniaBot) {
-		ania.logWriter = writer
+		ania.logger = logger
+		inlogger = logger
 	}
 }
 
@@ -92,12 +85,12 @@ func NewAniaBot(adapter adapter.Adapter, option ...Option) *AniaBot {
 		adapter:   adapter,
 		pluginSet: map[string]struct{}{},
 		plugins:   make([]plugin.Plugin, 0),
-
-		logLevel:  slog.LevelDebug,
-		logWriter: os.Stderr,
 	}
 	for _, op := range option {
 		op(ania)
+	}
+	if ania.logger == nil {
+		ania.logger = Logger()
 	}
 	return ania
 }
@@ -125,9 +118,6 @@ func (ania *AniaBot) Run() {
 		OnGroupCard:         ania.onGroupCardEvent,
 	}
 	ania.adapter.SetTrigger(trigger)
-
-	// logger
-	createLogger(ania.logLevel, ania.logWriter)
 
 	// config
 	if ania.cfg == nil {

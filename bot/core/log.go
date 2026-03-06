@@ -1,23 +1,22 @@
 package core
 
 import (
-	"io"
 	"log/slog"
 	"os"
 )
 
-var logger *slog.Logger
+var inlogger *slog.Logger
 
-func createLogger(level slog.Level, writer io.Writer) *slog.Logger {
-	logger = slog.New(slog.NewJSONHandler(writer, &slog.HandlerOptions{
-		Level: level,
+func createLogger() *slog.Logger {
+	inlogger = slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
+		Level: slog.LevelDebug,
 	}))
-	return logger
+	return inlogger
 }
 
 func Logger() *slog.Logger {
-	if logger == nil {
-		logger = createLogger(slog.LevelDebug, os.Stderr)
+	if inlogger == nil {
+		inlogger = createLogger()
 	}
-	return logger
+	return inlogger
 }
