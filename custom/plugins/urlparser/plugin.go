@@ -66,6 +66,9 @@ func (p *URLParserPlugin) Awake(ctx context.Context, bot bot.Bot) error {
 }
 
 func (p *URLParserPlugin) OnGroupMsg(ctx context.Context, bot bot.Bot, cmd command.Command, msg message.Message) (bool, error) {
+	if cmd.Mention {
+		return true, nil
+	}
 	text := getMsgText(msg)
 	url := getUrl(text)
 	if url != "" {
