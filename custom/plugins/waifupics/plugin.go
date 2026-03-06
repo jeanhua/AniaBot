@@ -86,6 +86,7 @@ func (p *WaifuPlugin) OnGroupMsg(ctx context.Context, bot bot.Bot, cmd command.C
 			builder.Text(" 发送 /waifu [类别] 获取哦, 类别如下").Face(12)
 			builder.Text(categoryHelps)
 			bot.SendGroupMsg(msg.GroupId, builder.Build())
+			p.Logger.Info("发送分类帮助", "groupId", msg.GroupId)
 			return false, nil
 		} else {
 			category = cmd.Args[0]
@@ -94,6 +95,7 @@ func (p *WaifuPlugin) OnGroupMsg(ctx context.Context, bot bot.Bot, cmd command.C
 				builder.Mention(msg.Sender.UserId)
 				builder.Text(" 不存在此分类哦")
 				bot.SendGroupMsg(msg.GroupId, builder.Build())
+				p.Logger.Info("发送不存在分类帮助", "groupId", msg.GroupId, "category", category)
 				return false, nil
 			}
 		}
@@ -111,6 +113,7 @@ func (p *WaifuPlugin) OnGroupMsg(ctx context.Context, bot bot.Bot, cmd command.C
 		builder.Mention(msg.Sender.UserId)
 		builder.Text(" 请求过于频繁，请稍后再试哦").Face(12)
 		bot.SendGroupMsg(msg.GroupId, builder.Build())
+		p.Logger.Info("发送请求过于频繁帮助", "groupId", msg.GroupId)
 	}
 	return false, nil
 }
@@ -127,6 +130,7 @@ func (p *WaifuPlugin) OnFriendMsg(ctx context.Context, bot bot.Bot, cmd command.
 			builder.Text("发送 /waifu [类别] 获取哦, 类别如下").Face(12)
 			builder.Text(categoryHelps)
 			bot.SendFriendMsg(msg.Sender.UserId, builder.Build())
+			p.Logger.Info("发送分类帮助", "userId", msg.Sender.UserId)
 			return false, nil
 		} else {
 			category = cmd.Args[0]
@@ -134,6 +138,7 @@ func (p *WaifuPlugin) OnFriendMsg(ctx context.Context, bot bot.Bot, cmd command.
 				builder := msgchain.Builder().Friend()
 				builder.Text("不存在此分类哦")
 				bot.SendFriendMsg(msg.Sender.UserId, builder.Build())
+				p.Logger.Info("发送不存在分类帮助", "userId", msg.Sender.UserId, "category", category)
 				return false, nil
 			}
 		}
@@ -150,6 +155,7 @@ func (p *WaifuPlugin) OnFriendMsg(ctx context.Context, bot bot.Bot, cmd command.
 		builder := msgchain.Builder().Friend()
 		builder.Text("请求过于频繁，请稍后再试哦").Face(12)
 		bot.SendFriendMsg(msg.Sender.UserId, builder.Build())
+		p.Logger.Info("发送请求过于频繁帮助", "userId", msg.Sender.UserId)
 	}
 	return false, nil
 }
@@ -169,11 +175,13 @@ func (p *WaifuPlugin) workFunc(bot bot.Bot) {
 				builder := msgchain.Builder().Friend()
 				builder.Text("请求失败，请稍后再试哦")
 				bot.SendFriendMsg(w.userId, builder.Build())
+				p.Logger.Info("发送请求失败帮助", "userId", w.userId)
 			case TargetGroup:
 				builder := msgchain.Builder().Group()
 				builder.Mention(w.userId)
 				builder.Text(" 请求失败，请稍后再试哦")
 				bot.SendGroupMsg(w.groupId, builder.Build())
+				p.Logger.Info("发送请求失败帮助", "groupId", w.groupId, "userId", w.userId)
 			}
 			continue
 		}
@@ -182,10 +190,12 @@ func (p *WaifuPlugin) workFunc(bot bot.Bot) {
 			builder := msgchain.Builder().Friend()
 			builder.ImageUrl(resp.URL)
 			bot.SendFriendMsg(w.userId, builder.Build())
+			p.Logger.Info("发送图片", "userId", w.userId, "url", resp.URL)
 		case TargetGroup:
 			builder := msgchain.Builder().Group()
 			builder.ImageUrl(resp.URL)
 			bot.SendGroupMsg(w.groupId, builder.Build())
+			p.Logger.Info("发送图片", "groupId", w.groupId, "url", resp.URL)
 		}
 	}
 }

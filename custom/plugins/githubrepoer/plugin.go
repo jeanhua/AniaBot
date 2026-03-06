@@ -180,7 +180,7 @@ func (p *GithubRepoer) OnFriendMsg(ctx context.Context, bot bot.Bot, cmd command
 func (p *GithubRepoer) workFunc(bot bot.Bot) {
 	for {
 		w := <-p.pendding
-		p.Logger.Println("正在生产github报告:", w.repoURL)
+		p.Logger.Info("正在生产github报告", "repoURL", w.repoURL, "compress", w.compress, "delComment", w.delComment, "delEmptyLine", w.delEmptyLine, "maxToken", p.maxToken, "include", w.include, "exclude", w.exclude)
 		info, err := getRepoInfo(p.RestyClient, w.repoURL, w.compress, w.delComment, w.delEmptyLine, p.maxToken, w.include, w.exclude)
 		if err != nil {
 			onErr(bot, w, err)
@@ -250,7 +250,7 @@ func (p *GithubRepoer) sendResult(bot bot.Bot, target wTarget, groupId, userId m
 		imgData, err := md2img.GetImage(result)
 		if target == TargetGroup {
 			if err != nil {
-				p.Logger.Printf("md转图片失败: %v", err)
+				p.Logger.Error("md转图片失败", "error", err)
 				bot.SendGroupMsg(groupId, msgchain.Builder().Group().
 					Text("转换失败，请查看原始md文件").Face(14).
 					Build())
@@ -260,7 +260,7 @@ func (p *GithubRepoer) sendResult(bot bot.Bot, target wTarget, groupId, userId m
 				Build())
 		} else {
 			if err != nil {
-				p.Logger.Printf("md转图片失败: %v", err)
+				p.Logger.Error("md转图片失败", "error", err)
 				bot.SendFriendMsg(userId, msgchain.Builder().Friend().
 					Text("转换失败，请查看原始md文件").Face(14).
 					Build())

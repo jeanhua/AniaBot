@@ -69,17 +69,17 @@ func (p *AcgWallpaperPlugin) workFunc(bot bot.Bot) {
 			builder := msgchain.Builder().Friend()
 			builder.ImageUrl("https://api.yppp.net/api.php")
 			if _, ok := bot.SendFriendMsg(w.userId, builder.Build()); ok {
-				p.Logger.Printf("[发->好友:%d]:[二次元壁纸]\n", w.userId)
+				p.Logger.Info("发送二次元壁纸消息", "userId", w.userId)
 			} else {
-				p.Logger.Printf("[发->好友:%d]:[二次元壁纸] 发送失败!!!\n", w.userId)
+				p.Logger.Error("发送二次元壁纸消息失败", "userId", w.userId)
 			}
 		case TargetGroup:
 			builder := msgchain.Builder().Group()
 			builder.ImageUrl("https://api.yppp.net/api.php")
 			if _, ok := bot.SendGroupMsg(w.groupId, builder.Build()); ok {
-				p.Logger.Printf("[发->群聊:%d]:[二次元壁纸]\n", w.groupId)
+				p.Logger.Info("发送二次元壁纸消息", "groupId", w.groupId)
 			} else {
-				p.Logger.Printf("[发->群聊:%d]:[二次元壁纸] 发送失败!!!\n", w.groupId)
+				p.Logger.Error("发送二次元壁纸消息失败", "groupId", w.groupId)
 			}
 		}
 	}

@@ -79,7 +79,7 @@ func (p *ActiveMan) checkAndSign(b bot.Bot) {
 		if info.shouldSignNow() {
 			if rand.Float64() < p.SignProb {
 				b.SendGroupSign(groupId)
-				p.Logger.Printf("群签到 群:%d", groupId)
+				p.Logger.Info("群签到", "groupId", groupId)
 			}
 		}
 		return true
@@ -105,11 +105,11 @@ func (p *ActiveMan) OnGroupMsg(ctx context.Context, b bot.Bot, cmd command.Comma
 	if rand.Float64() < p.LikeProb {
 		emojiId := rand.Intn(200)
 		b.SetMsgEmojiLike(msg.MessageId, emojiId, true)
-		p.Logger.Printf("点赞消息 %d 表情 %d", msg.MessageId, emojiId)
+		p.Logger.Info("点赞消息", "messageId", msg.MessageId, "emojiId", emojiId)
 	}
 	if rand.Float64() < p.PokeProb {
 		b.SendPokeMsg(msg.Sender.UserId, &msg.GroupId)
-		p.Logger.Printf("戳一戳消息 群:%d 戳:%d", msg.GroupId, msg.Sender.UserId)
+		p.Logger.Info("戳一戳消息", "groupId", msg.GroupId, "userId", msg.Sender.UserId)
 	}
 
 	return true, nil

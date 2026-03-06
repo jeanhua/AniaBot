@@ -19,7 +19,7 @@ func (p *URLParserPlugin) workLoop(bot bot.Bot) {
 	for w := range p.pendding {
 		content, err := fetchPageContent(context.Background(), p.token, w.URL)
 		if err != nil {
-			p.Logger.Println("fetchPageContent failed", err)
+			p.Logger.Info("fetchPageContent failed", "url", w.URL, "err", err)
 			continue
 		}
 
@@ -28,10 +28,10 @@ func (p *URLParserPlugin) workLoop(bot bot.Bot) {
 			llms.TextParts(llms.ChatMessageTypeHuman, content),
 		}, llms.WithMaxTokens(300))
 		if err != nil {
-			p.Logger.Println("GenerateContent failed", err)
+			p.Logger.Info("GenerateContent failed", "url", w.URL, "err", err)
 			continue
 		}
-		p.Logger.Printf("[发->群 %d] %s", w.GroupID, resp.Choices[0].Content)
+		p.Logger.Info("[发->群 %d] %s", "groupId", w.GroupID, "content", resp.Choices[0].Content)
 		builder := msgchain.Builder().Group()
 		builder.Reply(w.MsgID)
 		builder.Text(resp.Choices[0].Content)

@@ -44,7 +44,7 @@ func (p *GroupNewsletter) saveLoop() {
 				}
 			}
 			flush()
-			p.Logger.Println("saveLoop 退出")
+			p.Logger.Info("saveLoop 退出")
 			return
 
 		case groupId := <-p.saveChan:
@@ -82,7 +82,7 @@ func (p *GroupNewsletter) saveGroupToStorage(groupId message.QID) {
 	key := storageKey(groupId)
 	for _, msg := range toPersist {
 		if p.Storage.RPush(context.Background(), key, msg) == 0 {
-			p.Logger.Printf("持久化群 %d 消息失败", groupId)
+			p.Logger.Error("持久化群消息失败", "groupId", groupId)
 			return
 		}
 	}
@@ -97,7 +97,7 @@ func (p *GroupNewsletter) saveGroupToStorage(groupId message.QID) {
 func (p *GroupNewsletter) loadFromStorage() {
 	keys, err := p.Storage.ScanKeys(context.Background(), storageKeyPrefix+"*", 100)
 	if err != nil {
-		p.Logger.Printf("加载存储消息失败: %v", err)
+		p.Logger.Error("加载存储消息失败", "error", err)
 		return
 	}
 
@@ -110,7 +110,7 @@ func (p *GroupNewsletter) loadFromStorage() {
 		idStr := strings.TrimPrefix(key, storageKeyPrefix)
 		groupId64, err := strconv.ParseUint(idStr, 10, 64)
 		if err != nil {
-			p.Logger.Printf("解析群 ID 失败，key=%s: %v", key, err)
+			p.Logger.Error("解析群 ID 失败", "key", key, "error", err)
 			continue
 		}
 
@@ -131,6 +131,6 @@ func (p *GroupNewsletter) loadFromStorage() {
 			messages:  msgs,
 			persisted: len(msgs),
 		}
-		p.Logger.Printf("从存储恢复群 %d 的 %d 条消息", groupId, len(msgs))
+		p.Logger.Info("从存储恢复群消息", "groupId", groupId, "count", len(msgs))
 	}
 }

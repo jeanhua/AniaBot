@@ -58,7 +58,7 @@ func (p *GroupNewsletter) Start(_ context.Context, cfg *viper.Viper) error {
 	p.config = loadConfig(cfg)
 
 	if err := p.initLLM(); err != nil {
-		p.Logger.Printf("初始化 LLM 失败: %v", err)
+		p.Logger.Error("初始化 LLM 失败", "error", err)
 	}
 
 	p.pluginCtx, p.cancel = context.WithCancel(context.Background())
@@ -67,8 +67,7 @@ func (p *GroupNewsletter) Start(_ context.Context, cfg *viper.Viper) error {
 
 	p.loadFromStorage()
 
-	p.Logger.Printf("初始化完成，消息阈值: %d，最大消息数: %d",
-		p.config.msgThreshold, p.config.maxMessages)
+	p.Logger.Info("初始化完成", "msgThreshold", p.config.msgThreshold, "maxMessages", p.config.maxMessages)
 	return nil
 }
 
@@ -145,7 +144,7 @@ func (p *GroupNewsletter) processLoop(b bot.Bot) {
 	for {
 		select {
 		case <-p.pluginCtx.Done():
-			p.Logger.Println("processLoop 退出")
+			p.Logger.Info("processLoop 退出")
 			return
 		case groupId := <-p.notifyChan:
 			p.generateForGroup(p.pluginCtx, b, groupId, false)
