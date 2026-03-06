@@ -89,16 +89,16 @@ func (p *AntiWithdrawalPlugin) OnGroupMsg(ctx context.Context, bot bot.Bot, cmd 
 						if key_20 == "" || key_10 == "" {
 							switch seg.Type {
 							case "image":
-								p.Logger.Println("无法解析图片URL")
+								p.Logger.Error("无法解析图片URL")
 							case "file":
-								p.Logger.Println("无法解析文件URL")
+								p.Logger.Error("无法解析文件URL")
 							}
 							return true, nil
 						}
 						link, _ := m.Message[i].Data["url"].(string)
 						if link != "" {
 							if modifyer, err := utils.NewURLModifier(link); err != nil {
-								p.Logger.Println("无法解析图片URL")
+								p.Logger.Error("无法解析图片URL", "error", err)
 								return true, nil
 							} else {
 								newLink := modifyer.SetQuery("rkey", key_20).String()
@@ -130,7 +130,7 @@ func (p *AntiWithdrawalPlugin) OnGroupMsg(ctx context.Context, bot bot.Bot, cmd 
 			builder := msgchain.Builder().Group()
 			builder.Text("无法获取消息列表")
 			bot.SendGroupMsg(msg.GroupId, builder.Build())
-			p.Logger.Println("[群聊防撤回插件]: 无法转发消息")
+			p.Logger.Error("无法转发消息")
 		}
 		return false, nil
 	}
@@ -222,16 +222,16 @@ func (p *AntiWithdrawalPlugin) OnFriendMsg(ctx context.Context, bot bot.Bot, cmd
 							if key_20 == "" || key_10 == "" {
 								switch seg.Type {
 								case "image":
-									p.Logger.Println("无法解析图片URL")
+									p.Logger.Error("无法解析图片URL")
 								case "file":
-									p.Logger.Println("无法解析文件URL")
+									p.Logger.Error("无法解析文件URL")
 								}
 								return true, nil
 							}
 							link, _ := m.Message[i].Data["url"].(string)
 							if link != "" {
 								if modifyer, err := utils.NewURLModifier(link); err != nil {
-									p.Logger.Println("无法解析图片URL")
+									p.Logger.Error("无法解析图片URL", "error", err)
 									return true, nil
 								} else {
 									newLink := modifyer.SetQuery("rkey", key_20).String()
@@ -263,7 +263,7 @@ func (p *AntiWithdrawalPlugin) OnFriendMsg(ctx context.Context, bot bot.Bot, cmd
 				builder := msgchain.Builder().Friend()
 				builder.Text("无法获取消息列表")
 				bot.SendFriendMsg(msg.Sender.UserId, builder.Build())
-				p.Logger.Println("[群聊防撤回插件]: 无法转发消息")
+				p.Logger.Error("无法转发消息")
 			}
 			return false, nil
 		}

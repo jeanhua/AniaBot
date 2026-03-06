@@ -1,12 +1,23 @@
 package core
 
 import (
-	"log"
+	"io"
+	"log/slog"
 	"os"
 )
 
-var aniaLogger = log.New(os.Stderr, "[AniaBot] ", log.Ltime)
+var logger *slog.Logger
 
-func Logger() *log.Logger {
-	return aniaLogger
+func createLogger(level slog.Level, writer io.Writer) *slog.Logger {
+	logger = slog.New(slog.NewJSONHandler(writer, &slog.HandlerOptions{
+		Level: level,
+	}))
+	return logger
+}
+
+func Logger() *slog.Logger {
+	if logger == nil {
+		logger = createLogger(slog.LevelDebug, os.Stderr)
+	}
+	return logger
 }

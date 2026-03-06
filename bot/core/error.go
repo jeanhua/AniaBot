@@ -10,9 +10,9 @@ import (
 func logError(err error, p plugin.Plugin, tag string) {
 	if err != nil {
 		if errors.Is(err, context.DeadlineExceeded) {
-			Logger().Println(tag+"执行超时", p.GetMeta().Name)
+			Logger().Error("执行超时", "tag", tag, "plugin", p.GetMeta().Name)
 		} else {
-			Logger().Println(tag+"执行错误", p.GetMeta().Name, err)
+			Logger().Error("执行错误", "tag", tag, "plugin", p.GetMeta().Name, "error", err)
 		}
 	}
 }

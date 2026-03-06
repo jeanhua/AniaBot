@@ -120,10 +120,10 @@ func (p *AIChatPlugin) OnGroupMsg(ctx context.Context, bot bot.Bot, cmd command.
 	if strings.Contains(extraText, "#新对话") {
 		err := chat.ClearHistory(ctx)
 		if err != nil {
-			p.Logger.Println("无法清理AI聊天信息", err.Error())
+			p.Logger.Error("无法清理AI聊天信息", "error", err)
 			return false, nil
 		} else {
-			p.Logger.Println("清理AI对话信息成功")
+			p.Logger.Info("清理AI对话信息成功")
 		}
 	}
 
@@ -134,7 +134,7 @@ func (p *AIChatPlugin) OnGroupMsg(ctx context.Context, bot bot.Bot, cmd command.
 			builder.Text(" " + s)
 			_, success := bot.SendGroupMsg(msg.GroupId, builder.Build())
 			if success {
-				p.Logger.Printf("[发->群:%d]: %s", msg.GroupId, s)
+				p.Logger.Info("发送文本", "group", msg.GroupId, "user", msg.Sender.UserId, "text", s)
 			}
 			return success
 		},
@@ -143,7 +143,7 @@ func (p *AIChatPlugin) OnGroupMsg(ctx context.Context, bot bot.Bot, cmd command.
 			builder.ImageUrl(url)
 			_, success := bot.SendGroupMsg(msg.GroupId, builder.Build())
 			if success {
-				p.Logger.Printf("[发->群:%d]: [图片:%s]", msg.GroupId, url)
+				p.Logger.Info("发送图片", "group", msg.GroupId, "user", msg.Sender.UserId, "image", url)
 			}
 			return success
 		},
@@ -152,7 +152,7 @@ func (p *AIChatPlugin) OnGroupMsg(ctx context.Context, bot bot.Bot, cmd command.
 			builder.FileBase64(fileName, base64.StdEncoding.EncodeToString([]byte(content)))
 			_, success := bot.SendGroupMsg(msg.GroupId, builder.Build())
 			if success {
-				p.Logger.Printf("[发->群:%d]: [文件:%s]", msg.GroupId, fileName)
+				p.Logger.Info("发送文件", "group", msg.GroupId, "user", msg.Sender.UserId, "file", fileName)
 			}
 			return success
 		},
@@ -171,20 +171,20 @@ func (p *AIChatPlugin) OnGroupMsg(ctx context.Context, bot bot.Bot, cmd command.
 			return true, nil
 		}
 		builder.Text("无法解析的错误信息，请查看日志")
-		p.Logger.Println(err.Error())
+		p.Logger.Error("AI请求错误", "error", err.Error())
 		bot.SendGroupMsg(msg.GroupId, builder.Build())
 		return true, nil
 	}
 
 	if resp == "" {
-		p.Logger.Println("AI请求没有返回什么东西")
+		p.Logger.Info("AI请求没有返回什么东西")
 		return true, nil
 	}
 
 	builder.Mention(msg.Sender.UserId)
 	builder.Text(" " + resp)
 	if _, success := bot.SendGroupMsg(msg.GroupId, builder.Build()); success {
-		p.Logger.Printf("[发->群:%d]: %s", msg.GroupId, resp)
+		p.Logger.Info("发送文本", "group", msg.GroupId, "user", msg.Sender.UserId, "text", resp)
 	}
 	return true, nil
 }
@@ -211,10 +211,10 @@ func (p *AIChatPlugin) OnFriendMsg(ctx context.Context, bot bot.Bot, cmd command
 	if strings.Contains(extraText, "#新对话") {
 		err := chat.ClearHistory(ctx)
 		if err != nil {
-			p.Logger.Println("无法清理AI聊天信息", err.Error())
+			p.Logger.Error("无法清理AI聊天信息", "error", err.Error())
 			return false, nil
 		} else {
-			p.Logger.Println("清理AI对话信息成功")
+			p.Logger.Info("清理AI对话信息成功")
 		}
 	}
 
@@ -224,7 +224,7 @@ func (p *AIChatPlugin) OnFriendMsg(ctx context.Context, bot bot.Bot, cmd command
 			builder.Text(s)
 			_, success := bot.SendFriendMsg(msg.Sender.UserId, builder.Build())
 			if success {
-				p.Logger.Printf("[发->好友:%d]: %s", msg.Sender.UserId, s)
+				p.Logger.Info("发送文本", "user", msg.Sender.UserId, "text", s)
 			}
 			return success
 		},
@@ -233,7 +233,7 @@ func (p *AIChatPlugin) OnFriendMsg(ctx context.Context, bot bot.Bot, cmd command
 			builder.ImageUrl(url)
 			_, success := bot.SendFriendMsg(msg.Sender.UserId, builder.Build())
 			if success {
-				p.Logger.Printf("[发->好友:%d]: [图片:%s]", msg.Sender.UserId, url)
+				p.Logger.Info("发送图片", "user", msg.Sender.UserId, "image", url)
 			}
 			return success
 		},
@@ -242,7 +242,7 @@ func (p *AIChatPlugin) OnFriendMsg(ctx context.Context, bot bot.Bot, cmd command
 			builder.FileBase64(fileName, base64.StdEncoding.EncodeToString([]byte(content)))
 			_, success := bot.SendFriendMsg(msg.Sender.UserId, builder.Build())
 			if success {
-				p.Logger.Printf("[发->好友:%d]: [文件:%s]", msg.Sender.UserId, fileName)
+				p.Logger.Info("发送文件", "user", msg.Sender.UserId, "file", fileName)
 			}
 			return success
 		},
@@ -262,19 +262,19 @@ func (p *AIChatPlugin) OnFriendMsg(ctx context.Context, bot bot.Bot, cmd command
 			return true, nil
 		}
 		builder.Text("无法解析的错误信息，请查看日志")
-		p.Logger.Println(err.Error())
+		p.Logger.Error("AI请求错误", "error", err.Error())
 		bot.SendFriendMsg(msg.Sender.UserId, builder.Build())
 		return true, nil
 	}
 
 	if resp == "" {
-		p.Logger.Println("AI请求没有返回什么东西")
+		p.Logger.Info("AI请求没有返回什么东西")
 		return true, nil
 	}
 
 	builder.Text(resp)
 	if _, success := bot.SendFriendMsg(msg.Sender.UserId, builder.Build()); success {
-		p.Logger.Printf("[发->好友:%d]: %s", msg.Sender.UserId, resp)
+		p.Logger.Info("发送文本", "user", msg.Sender.UserId, "text", resp)
 	}
 	return true, nil
 }
@@ -289,19 +289,19 @@ func (p *AIChatPlugin) Start(ctx context.Context, cfg *viper.Viper) error {
 	p.llmParameter.prompt = cfg.GetString("plugin.ai_chat_bot.prompt")
 
 	if p.botConfig.baseURL == "" {
-		p.Logger.Println("初始化失败：未配置 Base Url")
+		p.Logger.Error("初始化失败：未配置 Base Url")
 		return aniaerror.ParameterInitializeError
 	}
 	if p.botConfig.model == "" {
-		p.Logger.Println("初始化失败：未配置 Model")
+		p.Logger.Error("初始化失败：未配置 Model")
 		return aniaerror.ParameterInitializeError
 	}
 	if p.botConfig.apiKey == "" {
-		p.Logger.Println("初始化失败：未配置 API KEY")
+		p.Logger.Error("初始化失败：未配置 API KEY")
 		return aniaerror.ParameterInitializeError
 	}
 	if p.llmParameter.prompt == "" {
-		p.Logger.Println("未配置 Prompt，将使用预设的默认提示词")
+		p.Logger.Warn("未配置 Prompt，将使用预设的默认提示词")
 		p.llmParameter.prompt = "你是一个ai对话机器人，在QQ上和别人聊天，说话不要长篇大论"
 	}
 
@@ -312,7 +312,7 @@ func (p *AIChatPlugin) Start(ctx context.Context, cfg *viper.Viper) error {
 
 	p.ocrEnable = cfg.GetBool("plugin.ai_chat_bot.ocr.enable")
 	if p.ocrEnable {
-		p.Logger.Println("已启用OCR LLM")
+		p.Logger.Info("已启用OCR LLM")
 		ocrBaseUrl := cfg.GetString("plugin.ai_chat_bot.ocr.base_url")
 		ocrAPIKey := cfg.GetString("plugin.ai_chat_bot.ocr.api_key")
 		ocrModel := cfg.GetString("plugin.ai_chat_bot.ocr.model")
@@ -327,7 +327,7 @@ func (p *AIChatPlugin) Start(ctx context.Context, cfg *viper.Viper) error {
 
 		ocrllm, err := component.NewChatBot(ocrBaseUrl, ocrAPIKey, ocrModel, ocrPrompt, 10, searchToken)
 		if err != nil {
-			p.Logger.Println("无法初始化OCR LLM", err.Error())
+			p.Logger.Error("无法初始化OCR LLM", "error", err.Error())
 			p.ocrEnable = false
 		} else {
 			p.ocrModel = ocrllm
@@ -356,7 +356,7 @@ func (p *AIChatPlugin) extraMsg(ctx context.Context, bot bot.Bot, msg message.Me
 					}
 					resp, err := ocrLLM.ChatWithImage(ctx, "描述图片内容", url, opt...)
 					if err != nil {
-						p.Logger.Println("OCR请求失败:", err.Error())
+						p.Logger.Error("OCR请求失败:", "error", err.Error())
 						return "OCR请求失败，无法解析的图片内容"
 					} else {
 						return resp
