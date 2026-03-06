@@ -2,7 +2,7 @@ package plugin
 
 import (
 	"context"
-	"log"
+	"log/slog"
 
 	"github.com/go-resty/resty/v2"
 	"github.com/jeanhua/AniaBot/common/bot"
@@ -20,7 +20,7 @@ type Meta struct {
 
 	Storage     storage.Storage
 	RestyClient *resty.Client
-	Logger      *log.Logger
+	Logger      *slog.Logger
 }
 
 func (p *Meta) GetMeta() *Meta {
@@ -35,7 +35,7 @@ func (p *Meta) SetRestyClient(c *resty.Client) {
 	p.RestyClient = c
 }
 
-func (p *Meta) SetLogger(logger *log.Logger) {
+func (p *Meta) SetLogger(logger *slog.Logger) {
 	p.Logger = logger
 }
 

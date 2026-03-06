@@ -30,6 +30,7 @@ func NewPluginSys() *PluginSys {
 
 func (p *PluginSys) Start(ctx context.Context, cfg *viper.Viper) error {
 	p.adminId = message.QID(cfg.GetUint("bot.admin_id"))
+	p.Logger.Info("系统插件初始化", "adminId", p.adminId)
 	return nil
 }
 
@@ -52,7 +53,7 @@ func (p *PluginSys) OnFriendMsg(ctx context.Context, bot bot.Bot, cmd command.Co
 		c.Text(pluginInfo.String())
 		_, ok := bot.SendFriendMsg(msg.Sender.UserId, c.Build())
 		if !ok {
-			p.Logger.Println("Bot消息发送失败，无法响应 /help")
+			p.Logger.Error("Bot消息发送失败，无法响应 /help")
 		}
 		return false, nil
 	}
@@ -79,7 +80,7 @@ func (p *PluginSys) OnGroupMsg(ctx context.Context, bot bot.Bot, cmd command.Com
 		c.Text(pluginInfo.String())
 		_, ok := bot.SendGroupMsg(msg.GroupId, c.Build())
 		if !ok {
-			p.Logger.Println("Bot消息发送失败，无法响应 /help")
+			p.Logger.Error("Bot消息发送失败，无法响应 /help")
 		}
 		return false, nil
 	}

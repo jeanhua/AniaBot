@@ -1,12 +1,22 @@
 package core
 
 import (
-	"log"
+	"log/slog"
 	"os"
 )
 
-var aniaLogger = log.New(os.Stderr, "[AniaBot] ", log.Ltime)
+var inlogger *slog.Logger
 
-func Logger() *log.Logger {
-	return aniaLogger
+func createLogger() *slog.Logger {
+	inlogger = slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
+		Level: slog.LevelDebug,
+	}))
+	return inlogger
+}
+
+func Logger() *slog.Logger {
+	if inlogger == nil {
+		inlogger = createLogger()
+	}
+	return inlogger
 }

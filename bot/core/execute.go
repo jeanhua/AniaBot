@@ -7,7 +7,7 @@ import (
 func safeExecuteWithReturn[T any](label string, p plugin.Plugin, f func(p plugin.Plugin) T) T {
 	defer func() {
 		if err := recover(); err != nil {
-			Logger().Printf("%s: 插件[%s]触发错误 %v", label, p.GetMeta().Name, err)
+			Logger().Error("插件触发错误", "label", label, "plugin", p.GetMeta().Name, "error", err)
 		}
 	}()
 	return f(p)
@@ -16,7 +16,7 @@ func safeExecuteWithReturn[T any](label string, p plugin.Plugin, f func(p plugin
 func safeExecute(label string, p plugin.Plugin, f func(p plugin.Plugin)) {
 	defer func() {
 		if err := recover(); err != nil {
-			Logger().Printf("%s: 插件[%s]触发错误 %v", label, p.GetMeta().Name, err)
+			Logger().Error("插件触发错误", "label", label, "plugin", p.GetMeta().Name, "error", err)
 		}
 	}()
 	f(p)
