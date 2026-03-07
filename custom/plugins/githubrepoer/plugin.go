@@ -79,7 +79,9 @@ func (p *GithubRepoer) Start(ctx context.Context, cfg *viper.Viper) error {
 
 // Awake Bot启动完成事件
 func (p *GithubRepoer) Awake(ctx context.Context, bot bot.Bot) error {
-	go p.workFunc(bot)
+	bot.Go("GithubRepoer插件工作线程", func() {
+		p.workFunc(bot)
+	})
 	return nil
 }
 

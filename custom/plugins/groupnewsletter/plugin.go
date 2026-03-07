@@ -78,8 +78,12 @@ func (p *GroupNewsletter) Stop() {
 }
 
 func (p *GroupNewsletter) Awake(_ context.Context, b bot.Bot) error {
-	go p.processLoop(b)
-	go p.saveLoop()
+	b.Go("GroupNewsletter插件处理循环线程", func() {
+		p.processLoop(b)
+	})
+	b.Go("GroupNewsletter插件保存循环线程", func() {
+		p.saveLoop()
+	})
 	return nil
 }
 

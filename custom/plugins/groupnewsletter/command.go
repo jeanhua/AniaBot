@@ -42,7 +42,9 @@ func (p *GroupNewsletter) handleGenCommand(b bot.Bot, msg message.Message, reply
 		return false, nil
 	}
 
-	go p.generateForGroup(p.pluginCtx, b, msg.GroupId, true)
+	b.Go("GroupNewsletter插件生成群刊线程", func() {
+		p.generateForGroup(p.pluginCtx, b, msg.GroupId, true)
+	})
 	reply(fmt.Sprintf("正在生成群刊（共 %d 条消息），请稍后…", count))
 	return false, nil
 }

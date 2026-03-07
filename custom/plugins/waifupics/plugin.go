@@ -161,7 +161,9 @@ func (p *WaifuPlugin) OnFriendMsg(ctx context.Context, bot bot.Bot, cmd command.
 }
 
 func (p *WaifuPlugin) Awake(ctx context.Context, bot bot.Bot) error {
-	go p.workFunc(bot)
+	bot.Go("WaifuPlugin插件工作线程", func() {
+		p.workFunc(bot)
+	})
 	return nil
 }
 

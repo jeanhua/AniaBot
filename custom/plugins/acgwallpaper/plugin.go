@@ -27,7 +27,9 @@ func NewAcgWallpaperPlugin(maxWork int) *AcgWallpaperPlugin {
 }
 
 func (p *AcgWallpaperPlugin) Awake(ctx context.Context, bot bot.Bot) error {
-	go p.workFunc(bot)
+	bot.Go("AcgWallPager插件工作线程", func() {
+		p.workFunc(bot)
+	})
 	return nil
 }
 

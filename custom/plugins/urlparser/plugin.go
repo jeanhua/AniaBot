@@ -68,7 +68,9 @@ func (p *URLParserPlugin) Start(ctx context.Context, cfg *viper.Viper) error {
 }
 
 func (p *URLParserPlugin) Awake(ctx context.Context, bot bot.Bot) error {
-	go p.workLoop(bot)
+	bot.Go("URLParser插件工作循环线程", func() {
+		p.workLoop(bot)
+	})
 	return nil
 }
 
