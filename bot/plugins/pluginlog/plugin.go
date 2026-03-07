@@ -25,11 +25,11 @@ func NewPlugin() *LogPlugin {
 }
 
 func (p *LogPlugin) Start(ctx context.Context, cfg *viper.Viper) error {
-	lastStartTime, ok := p.Storage.GetString(context.Background(), "last_start_time")
+	lastStartTime, ok := p.Storage.GetString(ctx, "last_start_time")
 	if !ok {
 		lastStartTime = "未保存"
 	}
-	p.Storage.Set(context.Background(), "last_start_time", utils.GetFormattedTime())
+	p.Storage.SetString(ctx, "last_start_time", utils.GetFormattedTime())
 	p.Logger.Info("日志打印插件初始化完成", "lastStartTime", lastStartTime)
 	return nil
 }
