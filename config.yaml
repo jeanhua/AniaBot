@@ -110,6 +110,7 @@ plugin:
 
   # url解析插件
   url_parser:
+    cache_ttl: 60 # 缓存时间，单位分钟
     token: "xxx" # jina ai token
     llm:
       base_url: "https://open.bigmodel.cn/api/paas/v4"

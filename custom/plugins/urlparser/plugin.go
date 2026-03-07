@@ -16,6 +16,9 @@ type URLParserPlugin struct {
 	plugin.Meta
 	pendding chan work
 
+	// 缓存时间，单位分钟
+	cacheTTL int
+
 	llm   *openai.LLM
 	token string
 }
@@ -31,6 +34,10 @@ func NewURLParserPlugin(maxWork int) *URLParserPlugin {
 }
 
 func (p *URLParserPlugin) Start(ctx context.Context, cfg *viper.Viper) error {
+	p.cacheTTL = cfg.GetInt("plugin.url_parser.cache_ttl")
+	if p.cacheTTL <= 0 {
+		p.cacheTTL = 60
+	}
 	token := cfg.GetString("plugin.url_parser.token")
 	if token == "" {
 		return errors.New("url_parser.token is empty")

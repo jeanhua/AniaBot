@@ -18,7 +18,6 @@ type work struct {
 }
 
 const (
-	cacheTTL   = time.Minute * 5
 	ctxTimeout = time.Minute * 5
 )
 
@@ -53,7 +52,7 @@ func (p *URLParserPlugin) workLoop(bot bot.Bot) {
 		}
 
 		result := resp.Choices[0].Content
-		p.Storage.SetString(ctx, "cache:"+w.URL, result, storage.WithTTL(cacheTTL))
+		p.Storage.SetString(ctx, "cache:"+w.URL, result, storage.WithTTL(time.Minute*time.Duration(p.cacheTTL)))
 
 		p.Logger.Info("发送提炼内容", "groupId", w.GroupID, "content", result)
 		builder := msgchain.Builder().Group()
