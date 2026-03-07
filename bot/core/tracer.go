@@ -10,7 +10,7 @@ func (ania *AniaBot) Go(name string, f func()) {
 		}()
 		defer func() {
 			if err := recover(); err != nil {
-				ania.logger.Error("goroutine panic", "err", err)
+				ania.logger.Error("goroutine panic", "name", name, "err", err)
 			}
 		}()
 		f()
