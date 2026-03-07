@@ -3,6 +3,7 @@ package bot
 import (
 	"github.com/jeanhua/AniaBot/common/model/message"
 	"github.com/jeanhua/AniaBot/common/msgchain"
+	"github.com/jeanhua/AniaBot/common/tracer"
 )
 
 type Bot interface {
@@ -11,6 +12,8 @@ type Bot interface {
 	botSysItf
 	pluginItf
 	Stop()
+
+	tracer.Tracer
 }
 
 type botSendMsgItf interface {

@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"os"
 	"sort"
+	"sync/atomic"
 	"time"
 
 	"github.com/go-resty/resty/v2"
@@ -35,7 +36,11 @@ type AniaBot struct {
 
 	logger *slog.Logger
 
+	// 插件名称集合
 	pluginSet map[string]struct{}
+
+	// goroutine数目
+	goroutineNum atomic.Int32
 }
 
 const (
