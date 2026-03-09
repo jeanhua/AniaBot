@@ -10,12 +10,10 @@ import (
 	"github.com/jeanhua/AniaBot/common/model/message"
 	"github.com/jeanhua/AniaBot/common/msgchain"
 	"github.com/jeanhua/AniaBot/common/plugin"
-	"github.com/spf13/viper"
 )
 
 type PluginSys struct {
 	plugin.Meta
-	adminId message.QID
 }
 
 func NewPluginSys() *PluginSys {
@@ -28,12 +26,6 @@ func NewPluginSys() *PluginSys {
 	}
 }
 
-func (p *PluginSys) Start(ctx context.Context, cfg *viper.Viper) error {
-	p.adminId = message.QID(cfg.GetUint("bot.admin_id"))
-	p.Logger.Info("系统插件初始化", "adminId", p.adminId)
-	return nil
-}
-
 func (p *PluginSys) OnFriendMsg(ctx context.Context, bot bot.Bot, cmd command.Command, msg message.Message) (bool, error) {
 	if cmd.Name == "help" {
 		plugins := bot.GetPluginList()
@@ -41,7 +33,7 @@ func (p *PluginSys) OnFriendMsg(ctx context.Context, bot bot.Bot, cmd command.Co
 		pluginInfo.WriteString("欢迎使用AniaBot，已加载插件:")
 		idx := 1
 		for _, info := range plugins {
-			if info.AdminOnly && msg.Sender.UserId != p.adminId {
+			if info.AdminOnly && msg.Sender.UserId != p.SystemConfig.AdminId {
 				continue
 			}
 			pName := info.Name
@@ -67,7 +59,7 @@ func (p *PluginSys) OnGroupMsg(ctx context.Context, bot bot.Bot, cmd command.Com
 		pluginInfo.WriteString("\n欢迎使用AniaBot，已加载插件:")
 		idx := 1
 		for _, info := range plugins {
-			if info.AdminOnly && msg.Sender.UserId != p.adminId {
+			if info.AdminOnly && msg.Sender.UserId != p.SystemConfig.AdminId {
 				continue
 			}
 			pName := info.Name
@@ -91,7 +83,7 @@ func (p *PluginSys) OnPanic(ctx context.Context, bot bot.Bot, name string, err a
 	p.Logger.Error("插件运行时panic", "name", name, "err", err)
 	builder := msgchain.Builder().Friend()
 	builder.Text(fmt.Sprintf("线程 %s 运行时panic: %v", name, err))
-	_, ok := bot.SendFriendMsg(p.adminId, builder.Build())
+	_, ok := bot.SendFriendMsg(p.SystemConfig.AdminId, builder.Build())
 	if !ok {
 		p.Logger.Error("Bot消息发送失败，无法通知管理员")
 	}

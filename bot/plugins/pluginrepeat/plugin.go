@@ -15,7 +15,6 @@ import (
 
 type RepeatPlugin struct {
 	plugin.Meta
-	admin      message.QID
 	repeatGMap sync.Map
 	enable     atomic.Bool
 }
@@ -39,7 +38,7 @@ func (p *RepeatPlugin) OnGroupMsg(ctx context.Context, bot bot.Bot, cmd command.
 
 	if cmd.Mention {
 		if cmd.Name == "close" && len(cmd.Args) >= 1 && cmd.Args[0] == "repeat" {
-			if msg.Sender.UserId == p.admin {
+			if msg.Sender.UserId == p.SystemConfig.AdminId {
 				p.enable.Store(false)
 				builder := msgchain.Builder().Group()
 				builder.Text("已关闭复读机")
@@ -52,7 +51,7 @@ func (p *RepeatPlugin) OnGroupMsg(ctx context.Context, bot bot.Bot, cmd command.
 				return false, nil
 			}
 		} else if cmd.Name == "enable" && len(cmd.Args) >= 1 && cmd.Args[0] == "repeat" {
-			if msg.Sender.UserId == p.admin {
+			if msg.Sender.UserId == p.SystemConfig.AdminId {
 				p.enable.Store(true)
 				builder := msgchain.Builder().Group()
 				builder.Text("已开启复读机")
@@ -104,7 +103,6 @@ func (p *RepeatPlugin) OnGroupMsg(ctx context.Context, bot bot.Bot, cmd command.
 }
 
 func (p *RepeatPlugin) Start(ctx context.Context, cfg *viper.Viper) error {
-	p.admin = message.QID(cfg.GetUint("bot.admin_id"))
 	p.enable.Store(true)
 	return nil
 }

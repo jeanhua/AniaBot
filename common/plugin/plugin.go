@@ -26,6 +26,7 @@ type DI interface {
 	SetStorage(s storage.Storage)
 	SetRestyClient(*resty.Client)
 	SetLogger(*slog.Logger)
+	SetConfig(SystemConfig)
 }
 
 type BasicEvent interface {
@@ -89,4 +90,8 @@ const (
 type PanicEvent interface {
 	// OnPanic 处理插件运行时panic
 	OnPanic(ctx context.Context, bot bot.Bot, name string, err any)
+}
+
+type SystemConfig struct {
+	AdminId message.QID
 }

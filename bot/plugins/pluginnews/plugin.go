@@ -17,8 +17,6 @@ type NewsPlugin struct {
 	cronExpress string
 	api         string
 	groups      []uint
-
-	adminId message.QID
 }
 
 func NewNewsPlugin() *NewsPlugin {
@@ -31,7 +29,6 @@ func NewNewsPlugin() *NewsPlugin {
 }
 
 func (p *NewsPlugin) Start(ctx context.Context, cfg *viper.Viper) error {
-	p.adminId = message.QID(cfg.GetInt64("bot.admin_id"))
 	p.cronExpress = cfg.GetString("plugin.dailyNews.cron")
 	if p.cronExpress == "" {
 		p.Logger.Error("读取daily news cron表达式错误")
@@ -73,7 +70,7 @@ func (p *NewsPlugin) OnGroupMsg(ctx context.Context, bot bot.Bot, cmd command.Co
 }
 
 func (p *NewsPlugin) OnFriendMsg(ctx context.Context, bot bot.Bot, cmd command.Command, msg message.Message) (bool, error) {
-	if msg.Sender.UserId == p.adminId && cmd.Name == "news" && len(cmd.Args) > 0 && cmd.Args[0] == "force" {
+	if msg.Sender.UserId == p.SystemConfig.AdminId && cmd.Name == "news" && len(cmd.Args) > 0 && cmd.Args[0] == "force" {
 		p.sendNews(bot)
 		return false, nil
 	}
