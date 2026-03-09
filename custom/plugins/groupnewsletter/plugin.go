@@ -85,11 +85,14 @@ func (p *GroupNewsletter) Awake(_ context.Context, b bot.Bot) error {
 
 func (p *GroupNewsletter) OnGroupMsg(ctx context.Context, b bot.Bot, cmd command.Command, msg message.Message) (bool, error) {
 	if !p.isGroupEnabled(msg.GroupId) {
-		builder := msgchain.Builder().Group()
-		builder.Mention(msg.Sender.UserId)
-		builder.Text(" 本群未启用群刊插件，无法处理此命令")
-		b.SendGroupMsg(msg.GroupId, builder.Build())
-		return false, nil
+		if cmd.Mention && cmd.Name == "gn" {
+			builder := msgchain.Builder().Group()
+			builder.Mention(msg.Sender.UserId)
+			builder.Text(" 本群未启用群刊插件，无法处理此命令")
+			b.SendGroupMsg(msg.GroupId, builder.Build())
+			return false, nil
+		}
+		return true, nil
 	}
 
 	if cmd.Mention && cmd.Name == "gn" {
