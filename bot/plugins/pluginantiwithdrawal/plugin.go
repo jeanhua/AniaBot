@@ -13,13 +13,11 @@ import (
 	"github.com/jeanhua/AniaBot/common/model/message"
 	"github.com/jeanhua/AniaBot/common/msgchain"
 	"github.com/jeanhua/AniaBot/common/plugin"
-	"github.com/spf13/viper"
 )
 
 type AntiWithdrawalPlugin struct {
 	plugin.Meta
-	msg     sync.Map
-	adminId message.QID
+	msg sync.Map
 }
 
 func NewPlugin() *AntiWithdrawalPlugin {
@@ -143,13 +141,8 @@ func isTimeout(timestamp uint) bool {
 	return now-timestamp > ResourceTimeout
 }
 
-func (p *AntiWithdrawalPlugin) Start(ctx context.Context, cfg *viper.Viper) error {
-	p.adminId = message.QID(cfg.GetUint("bot.admin_id"))
-	return nil
-}
-
 func (p *AntiWithdrawalPlugin) OnFriendMsg(ctx context.Context, bot bot.Bot, cmd command.Command, msg message.Message) (bool, error) {
-	if cmd.Name == "explore" && msg.Sender.UserId == p.adminId {
+	if cmd.Name == "explore" && msg.Sender.UserId == p.SystemConfig.AdminId {
 		if len(cmd.Args) == 0 {
 			builder := msgchain.Builder().Friend()
 			builder.Text("请输入完整参数 /explore [Group ID] [count]")

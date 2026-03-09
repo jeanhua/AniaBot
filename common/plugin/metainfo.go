@@ -18,9 +18,10 @@ type Meta struct {
 	AdminOnly bool   // 插件是否为管理员触发(对其他人隐藏)
 	Order     int    // 插件执行顺序，从小到大
 
-	Storage     storage.Storage
-	RestyClient *resty.Client
-	Logger      *slog.Logger
+	Storage      storage.Storage
+	RestyClient  *resty.Client
+	Logger       *slog.Logger
+	SystemConfig SystemConfig
 }
 
 func (p *Meta) GetMeta() *Meta {
@@ -132,4 +133,11 @@ func (p *Meta) OnEssence(ctx context.Context, bot bot.Bot, notice message.Essenc
 // OnGroupCard 处理群名片变更
 func (p *Meta) OnGroupCard(ctx context.Context, bot bot.Bot, notice message.GroupCardNotice) error {
 	return nil
+}
+
+// OnPanic 处理插件运行时panic
+func (p *Meta) OnPanic(ctx context.Context, bot bot.Bot, name string, err any) {}
+
+func (p *Meta) SetConfig(cfg SystemConfig) {
+	p.SystemConfig = cfg
 }
