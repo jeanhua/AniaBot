@@ -19,6 +19,7 @@ type Plugin interface {
 	BasicEvent
 	StartupEvent
 	NoticeEvent
+	PanicEvent
 }
 
 type DI interface {
@@ -84,3 +85,8 @@ const (
 	LevelNormal     = 0     // 普通插件Order参考
 	LevelPostHandle = 1000  // 后置处理层Order参考
 )
+
+type PanicEvent interface {
+	// OnPanic 处理插件运行时panic
+	OnPanic(ctx context.Context, bot bot.Bot, name string, err any)
+}

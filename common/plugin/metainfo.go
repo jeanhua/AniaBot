@@ -133,3 +133,6 @@ func (p *Meta) OnEssence(ctx context.Context, bot bot.Bot, notice message.Essenc
 func (p *Meta) OnGroupCard(ctx context.Context, bot bot.Bot, notice message.GroupCardNotice) error {
 	return nil
 }
+
+// OnPanic 处理插件运行时panic
+func (p *Meta) OnPanic(ctx context.Context, bot bot.Bot, name string, err any) {}

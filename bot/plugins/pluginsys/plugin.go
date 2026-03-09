@@ -86,3 +86,13 @@ func (p *PluginSys) OnGroupMsg(ctx context.Context, bot bot.Bot, cmd command.Com
 	}
 	return true, nil
 }
+
+func (p *PluginSys) OnPanic(ctx context.Context, bot bot.Bot, name string, err any) {
+	p.Logger.Error("插件运行时panic", "name", name, "err", err)
+	builder := msgchain.Builder().Friend()
+	builder.Text(fmt.Sprintf("线程 %s 运行时panic: %v", name, err))
+	_, ok := bot.SendFriendMsg(p.adminId, builder.Build())
+	if !ok {
+		p.Logger.Error("Bot消息发送失败，无法通知管理员")
+	}
+}
