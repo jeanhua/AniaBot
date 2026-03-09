@@ -20,8 +20,6 @@ type GroupNewsletter struct {
 	llm    llmClient
 	config newsletterConfig
 
-	adminId message.QID
-
 	// 消息 buffer，按 groupId 索引
 	groupMsgs map[message.QID]*groupMessageBuffer
 	msgsMu    sync.RWMutex
@@ -63,8 +61,6 @@ func (p *GroupNewsletter) Start(_ context.Context, cfg *viper.Viper) error {
 
 	p.pluginCtx, p.cancel = context.WithCancel(context.Background())
 
-	p.adminId = message.QID(cfg.GetUint64("bot.admin_id"))
-
 	p.loadFromStorage()
 
 	p.Logger.Info("初始化完成", "msgThreshold", p.config.msgThreshold, "maxMessages", p.config.maxMessages)
@@ -101,7 +97,7 @@ func (p *GroupNewsletter) OnGroupMsg(ctx context.Context, b bot.Bot, cmd command
 }
 
 func (p *GroupNewsletter) OnFriendMsg(ctx context.Context, bot bot.Bot, cmd command.Command, msg message.Message) (bool, error) {
-	if msg.Sender.UserId != p.adminId {
+	if msg.Sender.UserId != p.SystemConfig.AdminId {
 		return true, nil
 	}
 
