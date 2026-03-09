@@ -55,6 +55,10 @@ func NewGroupNewsletterPlugin() *GroupNewsletter {
 func (p *GroupNewsletter) Start(_ context.Context, cfg *viper.Viper) error {
 	p.config = loadConfig(cfg)
 
+	for _, groupId := range p.config.enabledGroups {
+		p.Logger.Info("注册群聊", "groupId", groupId)
+	}
+
 	if err := p.initLLM(); err != nil {
 		p.Logger.Error("初始化 LLM 失败", "error", err)
 	}
