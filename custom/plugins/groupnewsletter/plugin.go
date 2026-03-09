@@ -11,6 +11,7 @@ import (
 	"github.com/jeanhua/AniaBot/common/model/message"
 	"github.com/jeanhua/AniaBot/common/msgchain"
 	"github.com/jeanhua/AniaBot/common/plugin"
+	"github.com/jeanhua/AniaBot/custom/component/md2img"
 	"github.com/spf13/viper"
 )
 
@@ -37,6 +38,9 @@ type GroupNewsletter struct {
 	// 插件自身生命周期，不依赖框架传入的短生命周期 ctx
 	pluginCtx context.Context
 	cancel    context.CancelFunc
+
+	// md2img 组件
+	md2img *md2img.Md2Img
 }
 
 func NewGroupNewsletterPlugin() *GroupNewsletter {
@@ -66,6 +70,9 @@ func (p *GroupNewsletter) Start(_ context.Context, cfg *viper.Viper) error {
 	p.pluginCtx, p.cancel = context.WithCancel(context.Background())
 
 	p.loadFromStorage()
+
+	// 初始化 md2img 组件
+	p.md2img = md2img.NewMd2Img(cfg.GetString("component.md2img.apipoint"), p.RestyClient)
 
 	p.Logger.Info("初始化完成", "msgThreshold", p.config.msgThreshold, "maxMessages", p.config.maxMessages)
 	return nil

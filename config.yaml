@@ -116,3 +116,7 @@ plugin:
       base_url: "https://open.bigmodel.cn/api/paas/v4"
       api_key: ""
       model: "GLM-4-Flash-250414"
+
+component:
+  md2img:
+    apipoint: "http://localhost:3000"

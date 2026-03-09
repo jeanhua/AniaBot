@@ -11,7 +11,6 @@ import (
 	"github.com/jeanhua/AniaBot/common/bot"
 	"github.com/jeanhua/AniaBot/common/model/message"
 	"github.com/jeanhua/AniaBot/common/msgchain"
-	"github.com/jeanhua/AniaBot/custom/component/md2img"
 	"github.com/tmc/langchaingo/llms"
 )
 
@@ -54,7 +53,7 @@ func (p *GroupNewsletter) generateForGroup(ctx context.Context, b bot.Bot, group
 		Build())
 
 	if p.config.fmt == "jpg" {
-		imgData, err := md2img.GetImage(result)
+		imgData, err := p.md2img.GetImage(result)
 		if err != nil {
 			p.Logger.Error("md转图片失败", "groupId", groupId, "error", err)
 			b.SendGroupMsg(groupId, msgchain.Builder().Group().

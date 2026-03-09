@@ -32,6 +32,9 @@ type GithubRepoer struct {
 		model   string
 		prompt  string
 	}
+
+	// md2img 组件
+	md2img *md2img.Md2Img
 }
 
 var helpWords = `
@@ -64,6 +67,9 @@ func (p *GithubRepoer) Start(ctx context.Context, cfg *viper.Viper) error {
 	if p.fmt == "" {
 		p.fmt = "md"
 	}
+
+	// 初始化 md2img 组件
+	p.md2img = md2img.NewMd2Img(cfg.GetString("component.md2img.apipoint"), p.RestyClient)
 
 	llm, err := openai.New(
 		openai.WithBaseURL(p.llmConfig.baseUrl),
@@ -249,7 +255,7 @@ func (p *GithubRepoer) generateAI(ctx context.Context, info string) (string, err
 
 func (p *GithubRepoer) sendResult(bot bot.Bot, target wTarget, groupId, userId message.QID, result, name string) {
 	if p.fmt == "jpg" {
-		imgData, err := md2img.GetImage(result)
+		imgData, err := p.md2img.GetImage(result)
 		if target == TargetGroup {
 			if err != nil {
 				p.Logger.Error("md转图片失败", "error", err)
