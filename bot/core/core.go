@@ -348,3 +348,10 @@ func (ania *AniaBot) GetFriendMsgHistory(userId message.QID, count int) (*[]mess
 func (ania *AniaBot) GetAIChatacter() (*[]message.AIChatacter, bool) {
 	return ania.adapter.GetAIChatacter()
 }
+
+func (ania *AniaBot) GetConfig() bot.Config {
+	return bot.Config{
+		AdminId:      message.QID(ania.cfg.GetInt64("bot.admin_id")),
+		GoroutineNum: int(ania.goroutineNum.Load()),
+	}
+}

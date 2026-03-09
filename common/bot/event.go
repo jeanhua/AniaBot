@@ -11,6 +11,7 @@ type Bot interface {
 	botGetMsgItf
 	botSysItf
 	pluginItf
+	configItf
 	Stop()
 
 	tracer.Tracer
@@ -71,4 +72,13 @@ type PluginInfo struct {
 	Name      string
 	HelpWords string
 	AdminOnly bool
+}
+
+type configItf interface {
+	GetConfig() Config
+}
+
+type Config struct {
+	AdminId      message.QID
+	GoroutineNum int
 }
