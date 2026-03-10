@@ -27,6 +27,9 @@ func NewInterceptorPlugin() *InterceptorPlugin {
 			HelpWords: "拦截和放行配置信息中指定的群聊和用户，减少消息干扰",
 			Order:     plugin.LevelLog + 1,
 			AdminOnly: true,
+			ShowFor:   plugin.ShowForNone,
+			Author:    "jeanhua",
+			Version:   "1.0.0",
 		},
 	}
 }

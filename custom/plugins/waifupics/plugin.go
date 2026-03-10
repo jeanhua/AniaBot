@@ -68,6 +68,10 @@ func NewWaifuPlugin(maxWork int) *WaifuPlugin {
 		Meta: plugin.Meta{
 			Name:      "waifu.pics插件",
 			HelpWords: "发送 /waifu [类别] 获取，获取类别发送 /waifu help",
+			Order:     plugin.LevelNormal,
+			ShowFor:   plugin.ShowForGroup | plugin.ShowForFriend,
+			Author:    "jeanhua",
+			Version:   "1.0.0",
 		},
 		pendding: c,
 	}

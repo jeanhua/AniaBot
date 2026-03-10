@@ -55,6 +55,9 @@ func NewChatRecordsMakerPlugin() *ChatRecordsMakerPlugin {
 			Name:      "聊天记录伪造插件",
 			HelpWords: "伪造合并转发聊天记录，发送「伪造记录」开始创建",
 			Order:     plugin.LevelNormal,
+			ShowFor:   plugin.ShowForFriend,
+			Author:    "jeanhua",
+			Version:   "1.0.0",
 		},
 		sessions: make(map[message.QID]*session),
 	}

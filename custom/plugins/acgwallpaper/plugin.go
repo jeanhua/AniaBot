@@ -21,6 +21,10 @@ func NewAcgWallpaperPlugin(maxWork int) *AcgWallpaperPlugin {
 		Meta: plugin.Meta{
 			Name:      "二次元壁纸插件",
 			HelpWords: "给我发送 /acg 获取哦",
+			Order:     plugin.LevelNormal,
+			ShowFor:   plugin.ShowForGroup | plugin.ShowForFriend,
+			Author:    "jeanhua",
+			Version:   "1.0.0",
 		},
 		pendding: pendding,
 	}

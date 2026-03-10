@@ -27,6 +27,10 @@ func Newplugin() *DouyinParser {
 		Meta: plugin.Meta{
 			Name:      "抖音视频解析插件",
 			HelpWords: "发送 /douyin [分享内容] 给我解析视频哦",
+			Order:     plugin.LevelNormal,
+			ShowFor:   plugin.ShowForGroup | plugin.ShowForFriend,
+			Author:    "jeanhua",
+			Version:   "1.0.0",
 		},
 	}
 }

@@ -51,6 +51,10 @@ func NewGithubRepoer(maxWork int) *GithubRepoer {
 		Meta: plugin.Meta{
 			Name:      "GithubRepoer插件",
 			HelpWords: "发送 /gr [github项目链接] 即可获取项目分析报告, 发送 /gr help 获取参数详情",
+			Order:     plugin.LevelNormal,
+			ShowFor:   plugin.ShowForGroup | plugin.ShowForFriend,
+			Author:    "jeanhua",
+			Version:   "1.0.0",
 		},
 		pendding: pd,
 	}

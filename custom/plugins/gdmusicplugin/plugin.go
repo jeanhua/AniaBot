@@ -50,6 +50,10 @@ func NewMusicPlugin() *MusicPlugin {
 		Meta: plugin.Meta{
 			Name:      "GD音乐插件",
 			HelpWords: "/music [关键词] 搜索，/music get [序号] 发送，/music next|prev 翻页，/music help 帮助",
+			Order:     plugin.LevelNormal,
+			ShowFor:   plugin.ShowForGroup | plugin.ShowForFriend,
+			Author:    "jeanhua",
+			Version:   "1.0.0",
 		},
 	}
 }

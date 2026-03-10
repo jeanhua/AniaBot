@@ -57,6 +57,10 @@ func NewActiveMan(likeProb, pokeProb, signProb float64) *ActiveMan {
 		Meta: plugin.Meta{
 			Name:      "随机活跃插件",
 			HelpWords: "本插件将随机在群里面活跃，点赞、戳一戳和签到",
+			Order:     plugin.LevelNormal,
+			ShowFor:   plugin.ShowForGroup,
+			Author:    "jeanhua",
+			Version:   "1.0.0",
 		},
 		LikeProb: likeProb,
 		PokeProb: pokeProb,

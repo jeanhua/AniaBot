@@ -28,6 +28,10 @@ func NewURLParserPlugin(maxWork int) *URLParserPlugin {
 		Meta: plugin.Meta{
 			Name:      "URL解析插件",
 			HelpWords: "自动解析群聊中的 URL 并提取相关信息",
+			Order:     plugin.LevelNormal,
+			ShowFor:   plugin.ShowForGroup,
+			Author:    "jeanhua",
+			Version:   "1.0.0",
 		},
 		pendding: make(chan work, maxWork),
 	}

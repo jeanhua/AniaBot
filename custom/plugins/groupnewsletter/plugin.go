@@ -48,6 +48,10 @@ func NewGroupNewsletterPlugin() *GroupNewsletter {
 		Meta: plugin.Meta{
 			Name:      "群刊插件",
 			HelpWords: "自动收集群消息并生成有趣的群刊，发送 /gn 查看当前收集状态，/gn gen 立即生成群刊",
+			Order:     plugin.LevelNormal,
+			ShowFor:   plugin.ShowForGroup,
+			Author:    "jeanhua",
+			Version:   "1.0.0",
 		},
 		groupMsgs:  make(map[message.QID]*groupMessageBuffer),
 		notifyChan: make(chan message.QID, 100),
