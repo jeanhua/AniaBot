@@ -194,14 +194,20 @@ func (ania *AniaBot) Run() {
 	fmt.Println(LogoASCII)
 	Logger().Info("Bot启动完成...")
 
-	Logger().Info("Awake...")
-	for _, p := range ania.plugins {
-		safeExecute("Awake", p, func(p plugin.Plugin) {
-			awakeCtx, cancel := context.WithTimeout(ania.ctx, AwakeEventTimeout)
-			p.Awake(awakeCtx, ania)
-			cancel()
-		})
-	}
+	timer := time.NewTimer(time.Second)
+	defer timer.Stop()
+	go func() {
+		<-timer.C
+		Logger().Info("Awake...")
+		for _, p := range ania.plugins {
+			safeExecute("Awake", p, func(p plugin.Plugin) {
+				awakeCtx, cancel := context.WithTimeout(ania.ctx, AwakeEventTimeout)
+				p.Awake(awakeCtx, ania)
+				cancel()
+			})
+		}
+	}()
+
 	ania.adapter.Serve(ania.cfg)
 }
 

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/jeanhua/AniaBot/common/bot"
 	"github.com/jeanhua/AniaBot/common/model/command"
@@ -14,6 +15,8 @@ import (
 
 type PluginSys struct {
 	plugin.Meta
+
+	lastPanicTime *time.Time
 }
 
 func NewPluginSys() *PluginSys {
@@ -24,6 +27,16 @@ func NewPluginSys() *PluginSys {
 			Order:     plugin.LevelLog,
 		},
 	}
+}
+
+func (p *PluginSys) Awake(ctx context.Context, bot bot.Bot) error {
+	builder := msgchain.Builder().Friend()
+	builder.Text("AniaBot启动成功，发送 /help 查看插件加载信息")
+	_, ok := bot.SendFriendMsg(p.SystemConfig.AdminId, builder.Build())
+	if !ok {
+		p.Logger.Error("Bot消息发送失败，无法发送启动成功消息")
+	}
+	return nil
 }
 
 func (p *PluginSys) OnFriendMsg(ctx context.Context, bot bot.Bot, cmd command.Command, msg message.Message) (bool, error) {
@@ -81,10 +94,14 @@ func (p *PluginSys) OnGroupMsg(ctx context.Context, bot bot.Bot, cmd command.Com
 
 func (p *PluginSys) OnPanic(ctx context.Context, bot bot.Bot, name string, err any) {
 	p.Logger.Error("插件运行时panic", "name", name, "err", err)
-	builder := msgchain.Builder().Friend()
-	builder.Text(fmt.Sprintf("线程 %s 运行时panic: %v", name, err))
-	_, ok := bot.SendFriendMsg(p.SystemConfig.AdminId, builder.Build())
-	if !ok {
-		p.Logger.Error("Bot消息发送失败，无法通知管理员")
+	now := time.Now()
+	if p.lastPanicTime == nil || now.Sub(*p.lastPanicTime) > time.Minute {
+		p.lastPanicTime = &now
+		builder := msgchain.Builder().Friend()
+		builder.Text(fmt.Sprintf("线程 %s 运行时panic: %v", name, err))
+		_, ok := bot.SendFriendMsg(p.SystemConfig.AdminId, builder.Build())
+		if !ok {
+			p.Logger.Error("Bot消息发送失败，无法通知管理员")
+		}
 	}
 }
