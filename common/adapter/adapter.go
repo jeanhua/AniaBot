@@ -50,25 +50,41 @@ type TriggerWrapper struct {
 }
 
 type SendMsg interface {
+	// SendGroupMsg 发送群消息
 	SendGroupMsg(groupId message.QID, chain msgchain.GroupChain) (msgId message.QID, success bool)
+	// SendGroupAIVoiceMsg 发送群AI语音消息
 	SendGroupAIVoiceMsg(groupId message.QID, character, msg string) (msgId message.QID, success bool)
+	// SendFriendMsg 发送好友消息
 	SendFriendMsg(userId message.QID, chain msgchain.FriendChain) (msgId message.QID, success bool)
+	// SendPokeMsg 发送戳一戳消息
 	SendPokeMsg(userId message.QID, groupId *message.QID) (success bool)
+	// SendGroupForwardMsg 发送群转发消息
 	SendGroupForwardMsg(groupId message.QID, chain msgchain.GroupForwardChain) (msgId message.QID, success bool)
+	// SendFriendForwardMsg 发送好友转发消息
 	SendFriendForwardMsg(userId message.QID, chain msgchain.FriendForwardChain) (msgId message.QID, success bool)
+	// SetMsgEmojiLike 设置消息表情点赞
 	SetMsgEmojiLike(msgId message.QID, emojiId int, like bool) (success bool)
-
+	// SendGroupSign 发送群签到消息
 	SendGroupSign(groupId message.QID) (success bool)
 }
 
 type GetMsg interface {
+	// GetMsgDetail 获取消息详情
 	GetMsgDetail(msgId message.QID) (msg *message.Message, success bool)
+	// GetGroupUserInfo 获取群用户信息
 	GetGroupUserInfo(groupId, userId message.QID) (info *message.GroupUserInfo, success bool)
+	// GetForwardMsg 获取转发消息
 	GetForwardMsg(msgId message.QID) (msgs *[]message.Message, success bool)
+	// GetNCrkey 获取NCRKEY
 	GetNCrkey() ([]message.NCrkey, bool)
+	// GetFriendList 获取好友列表
 	GetFriendList() (*[]message.Friend, bool)
+	// GetGroupDetail 获取群详情
 	GetGroupDetail(groupId message.QID) (info *message.GroupInfo, success bool)
+	// GetGroupMsgHistory 获取群消息历史
 	GetGroupMsgHistory(groupId message.QID, count int) (*[]message.Message, bool)
+	// GetFriendMsgHistory 获取好友消息历史
 	GetFriendMsgHistory(userId message.QID, count int) (*[]message.Message, bool)
+	// GetAIChatacter 获取AI聊天角色
 	GetAIChatacter() (*[]message.AIChatacter, bool)
 }

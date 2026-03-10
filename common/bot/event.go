@@ -64,6 +64,7 @@ type botSysItf interface {
 }
 
 type pluginItf interface {
+	// GetPluginList 获取插件列表
 	GetPluginList() []PluginInfo
 }
 
