@@ -1598,7 +1598,7 @@ GOOS=linux GOARCH=amd64 go build -o build/AniaBot ./cmd/</code></pre>
             Name:      <span class="st">"我的插件"</span>,
             HelpWords: <span class="st">"@我 /hello 打招呼"</span>,
             AdminOnly: <span class="kw">false</span>,
-            ShowFor:   plugin.ShowForGroup | plugin.ShowForFriend,
+            ShowFor:   plugininfo.ShowForGroup | plugininfo.ShowForFriend,
             Author:    <span class="st">"jeanhua"</span>,
             Version:   <span class="st">"1.0.0"</span>,
             Order:     plugin.LevelNormal,
@@ -1719,7 +1719,7 @@ GOOS=linux GOARCH=amd64 go build -o build/AniaBot ./cmd/</code></pre>
 )
 
 <span class="cm">// 组合示例：群聊和私聊都显示</span>
-ShowFor: plugin.ShowForGroup | plugin.ShowForFriend</code></pre>
+ShowFor: plugininfo.ShowForGroup | plugininfo.ShowForFriend</code></pre>
 
         <h2>使用存储</h2>
         <p>通过注入的 <code>p.Storage</code> 进行持久化存储，存储已自动按插件名隔离前缀：</p>

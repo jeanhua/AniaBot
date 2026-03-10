@@ -187,7 +187,7 @@ func NewPlugin() *YourPlugin {
             Name:      "插件名称",
             HelpWords: "插件描述",
             AdminOnly: false, // 当该字段为true时非管理员发送/help(PluginSys插件)不会显示插件信息
-            ShowFor:   plugin.ShowForGroup | plugin.ShowForFriend, // 插件显示范围
+            ShowFor:   plugininfo.ShowForGroup | plugininfo.ShowForFriend, // 插件显示范围
             Author:    "作者名称", // 插件作者
             Version:   "1.0.0",    // 插件版本号
             Order:     0, // 插件执行顺序，从小到大
@@ -225,7 +225,7 @@ func NewPlugin() *HelloPlugin {
             Name:      "问候插件",
             HelpWords: "一个简单的问候插件，发送 /hello 触发",
             AdminOnly: false,
-            ShowFor:   plugin.ShowForGroup | plugin.ShowForFriend,
+            ShowFor:   plugininfo.ShowForGroup | plugininfo.ShowForFriend,
             Author:    "jeanhua",
             Version:   "1.0.0",
             Order:     10,
@@ -410,7 +410,7 @@ func NewPlugin() *WeatherPlugin {
             Name:      "天气查询",
             HelpWords: "查询天气，使用方式：/weather 城市名",
             AdminOnly: false,
-            ShowFor:   plugin.ShowForGroup | plugin.ShowForFriend,
+            ShowFor:   plugininfo.ShowForGroup | plugininfo.ShowForFriend,
             Author:    "jeanhua",
             Version:   "1.0.0",
             Order:     20,

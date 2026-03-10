@@ -11,6 +11,7 @@ import (
 	"github.com/jeanhua/AniaBot/common/model/message"
 	"github.com/jeanhua/AniaBot/common/msgchain"
 	"github.com/jeanhua/AniaBot/common/plugin"
+	"github.com/jeanhua/AniaBot/common/plugininfo"
 )
 
 type PluginSys struct {
@@ -25,7 +26,7 @@ func NewPluginSys() *PluginSys {
 			Name:      "系统插件",
 			HelpWords: "AniaBot系统插件",
 			Order:     plugin.LevelLog,
-			ShowFor:   plugin.ShowForGroup | plugin.ShowForFriend,
+			ShowFor:   plugininfo.ShowForGroup | plugininfo.ShowForFriend,
 			Author:    "jeanhua",
 			Version:   "1.0.0",
 		},
@@ -52,7 +53,7 @@ func (p *PluginSys) OnFriendMsg(ctx context.Context, bot bot.Bot, cmd command.Co
 			if info.AdminOnly && msg.Sender.UserId != p.SystemConfig.AdminId {
 				continue
 			}
-			if msg.Sender.UserId != p.SystemConfig.AdminId && p.ShowFor&plugin.ShowForFriend == 0 {
+			if msg.Sender.UserId != p.SystemConfig.AdminId && info.ShowFor&plugininfo.ShowForFriend == 0 {
 				continue
 			}
 			pName := info.Name
@@ -81,7 +82,7 @@ func (p *PluginSys) OnGroupMsg(ctx context.Context, bot bot.Bot, cmd command.Com
 			if info.AdminOnly && msg.Sender.UserId != p.SystemConfig.AdminId {
 				continue
 			}
-			if p.ShowFor&plugin.ShowForGroup == 0 {
+			if info.ShowFor&plugininfo.ShowForGroup == 0 {
 				continue
 			}
 			pName := info.Name

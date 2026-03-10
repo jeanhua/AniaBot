@@ -8,15 +8,16 @@ import (
 	"github.com/jeanhua/AniaBot/common/bot"
 	"github.com/jeanhua/AniaBot/common/model/command"
 	"github.com/jeanhua/AniaBot/common/model/message"
+	"github.com/jeanhua/AniaBot/common/plugininfo"
 	"github.com/jeanhua/AniaBot/common/storage"
 	"github.com/spf13/viper"
 )
 
 type Meta struct {
-	Name      string  // 插件名字
-	HelpWords string  // 插件帮助字段，发送 /help 指令显示
-	AdminOnly bool    // 插件是否为管理员触发(对其他人隐藏)
-	ShowFor   ShowFor // 插件显示范围
+	Name      string             // 插件名字
+	HelpWords string             // 插件帮助字段，发送 /help 指令显示
+	AdminOnly bool               // 插件是否为管理员触发(对其他人隐藏)
+	ShowFor   plugininfo.ShowFor // 插件显示范围
 
 	Author  string // 插件作者
 	Version string // 插件版本
