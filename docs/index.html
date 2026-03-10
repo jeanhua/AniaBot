@@ -1597,6 +1597,10 @@ GOOS=linux GOARCH=amd64 go build -o build/AniaBot ./cmd/</code></pre>
         Meta: plugin.Meta{
             Name:      <span class="st">"我的插件"</span>,
             HelpWords: <span class="st">"@我 /hello 打招呼"</span>,
+            AdminOnly: <span class="kw">false</span>,
+            ShowFor:   plugin.ShowForGroup | plugin.ShowForFriend,
+            Author:    <span class="st">"jeanhua"</span>,
+            Version:   <span class="st">"1.0.0"</span>,
             Order:     plugin.LevelNormal,
         },
     }
@@ -1661,6 +1665,61 @@ GOOS=linux GOARCH=amd64 go build -o build/AniaBot ./cmd/</code></pre>
             <td>处理撤回、禁言等事件</td>
           </tr>
         </table>
+
+        <h2>Meta 字段说明</h2>
+        <table>
+          <tr>
+            <th>字段</th>
+            <th>类型</th>
+            <th>说明</th>
+          </tr>
+          <tr>
+            <td><code>Name</code></td>
+            <td><code>string</code></td>
+            <td>插件名称，用于标识插件</td>
+          </tr>
+          <tr>
+            <td><code>HelpWords</code></td>
+            <td><code>string</code></td>
+            <td>插件帮助描述，显示在 /help 命令中</td>
+          </tr>
+          <tr>
+            <td><code>AdminOnly</code></td>
+            <td><code>bool</code></td>
+            <td>为 true 时仅管理员可见该插件信息</td>
+          </tr>
+          <tr>
+            <td><code>ShowFor</code></td>
+            <td><code>ShowFor</code></td>
+            <td>插件显示范围：<code>ShowForGroup</code>(群聊)、<code>ShowForFriend</code>(私聊)或组合</td>
+          </tr>
+          <tr>
+            <td><code>Author</code></td>
+            <td><code>string</code></td>
+            <td>插件作者名称</td>
+          </tr>
+          <tr>
+            <td><code>Version</code></td>
+            <td><code>string</code></td>
+            <td>插件版本号，如 "1.0.0"</td>
+          </tr>
+          <tr>
+            <td><code>Order</code></td>
+            <td><code>int</code></td>
+            <td>插件执行顺序，值越小越先执行</td>
+          </tr>
+        </table>
+
+        <h2>ShowFor 取值</h2>
+        <div class="code-header">common/plugin/showfor.go</div>
+        <pre><code><span class="kw">const</span> (
+    ShowForNone   ShowFor = <span class="nu">0</span>                <span class="cm">// 不显示</span>
+    ShowForGroup  ShowFor = <span class="nu">1</span> &lt;&lt; <span class="nu">0</span>          <span class="cm">// 仅在群聊中显示</span>
+    ShowForFriend ShowFor = <span class="nu">1</span> &lt;&lt; <span class="nu">1</span>          <span class="cm">// 仅在私聊中显示</span>
+)
+
+<span class="cm">// 组合示例：群聊和私聊都显示</span>
+ShowFor: plugin.ShowForGroup | plugin.ShowForFriend</code></pre>
 
         <h2>使用存储</h2>
         <p>通过注入的 <code>p.Storage</code> 进行持久化存储，存储已自动按插件名隔离前缀：</p>
