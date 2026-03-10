@@ -1,4 +1,6 @@
+// md2img api服务，需要先启动容器
 // docker run -d -p 3000:3000 --name md2img-api jeanhua/md2img-api:latest
+// 开源仓库地址: https://github.com/jeanhua/md2img-api
 package md2img
 
 import (
