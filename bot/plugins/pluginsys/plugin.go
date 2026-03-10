@@ -29,6 +29,16 @@ func NewPluginSys() *PluginSys {
 	}
 }
 
+func (p *PluginSys) Awake(ctx context.Context, bot bot.Bot) error {
+	builder := msgchain.Builder().Friend()
+	builder.Text("AniaBot启动成功，发送 /help 查看插件加载信息")
+	_, ok := bot.SendFriendMsg(p.SystemConfig.AdminId, builder.Build())
+	if !ok {
+		p.Logger.Error("Bot消息发送失败，无法发送启动成功消息")
+	}
+	return nil
+}
+
 func (p *PluginSys) OnFriendMsg(ctx context.Context, bot bot.Bot, cmd command.Command, msg message.Message) (bool, error) {
 	if cmd.Name == "help" {
 		plugins := bot.GetPluginList()
