@@ -245,6 +245,14 @@ func (n *napcatWebSocketAdapter) GetAIChatacter() (*[]message.AIChatacter, bool)
 	return &res.Characters, true
 }
 
+func (n *napcatWebSocketAdapter) GetGroupList() (*[]message.GroupInfo, bool) {
+	res, ok := request[[]message.GroupInfo](n, "get_group_list", struct{}{}, "group_list")
+	if !ok || res == nil {
+		return nil, false
+	}
+	return res, true
+}
+
 func (n *napcatWebSocketAdapter) Serve(v *viper.Viper) {
 	n.ackMng = &ackManager{timeout: time.Second * 10}
 	url := v.GetString("bot.adapter.ws.address")
