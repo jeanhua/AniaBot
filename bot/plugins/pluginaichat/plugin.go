@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/jeanhua/AniaBot/bot/component"
-	"github.com/jeanhua/AniaBot/bot/component/functool"
+	"github.com/jeanhua/AniaBot/bot/component/llmtool"
 	"github.com/jeanhua/AniaBot/common/aniaerror"
 	"github.com/jeanhua/AniaBot/common/bot"
 	"github.com/jeanhua/AniaBot/common/model/command"
@@ -127,8 +127,8 @@ func (p *AIChatPlugin) OnGroupMsg(ctx context.Context, bot bot.Bot, cmd command.
 		}
 	}
 
-	msgFuncs := functool.OptionFuncs{
-		SendText: func(s string) bool {
+	msgFuncs := llmtool.CallBackFuncs{
+		SendText: func(s string) (string, error) {
 			builder := msgchain.Builder().Group()
 			builder.Mention(msg.Sender.UserId)
 			builder.Text(" " + s)
@@ -136,25 +136,25 @@ func (p *AIChatPlugin) OnGroupMsg(ctx context.Context, bot bot.Bot, cmd command.
 			if success {
 				p.Logger.Info("发送文本", "group", msg.GroupId, "user", msg.Sender.UserId, "text", s)
 			}
-			return success
+			return "发送成功", nil
 		},
-		SendImage: func(url string) bool {
+		SendImage: func(url string) (string, error) {
 			builder := msgchain.Builder().Group()
 			builder.ImageUrl(url)
 			_, success := bot.SendGroupMsg(msg.GroupId, builder.Build())
 			if success {
 				p.Logger.Info("发送图片", "group", msg.GroupId, "user", msg.Sender.UserId, "image", url)
 			}
-			return success
+			return "发送成功", nil
 		},
-		SendFile: func(fileName, content string) bool {
+		SendFile: func(fileName, content string) (string, error) {
 			builder := msgchain.Builder().Group()
 			builder.FileBase64(fileName, base64.StdEncoding.EncodeToString([]byte(content)))
 			_, success := bot.SendGroupMsg(msg.GroupId, builder.Build())
 			if success {
 				p.Logger.Info("发送文件", "group", msg.GroupId, "user", msg.Sender.UserId, "file", fileName)
 			}
-			return success
+			return "发送成功", nil
 		},
 	}
 
@@ -218,33 +218,33 @@ func (p *AIChatPlugin) OnFriendMsg(ctx context.Context, bot bot.Bot, cmd command
 		}
 	}
 
-	msgFuncs := functool.OptionFuncs{
-		SendText: func(s string) bool {
+	msgFuncs := llmtool.CallBackFuncs{
+		SendText: func(s string) (string, error) {
 			builder := msgchain.Builder().Friend()
 			builder.Text(s)
 			_, success := bot.SendFriendMsg(msg.Sender.UserId, builder.Build())
 			if success {
 				p.Logger.Info("发送文本", "user", msg.Sender.UserId, "text", s)
 			}
-			return success
+			return "发送成功", nil
 		},
-		SendImage: func(url string) bool {
+		SendImage: func(url string) (string, error) {
 			builder := msgchain.Builder().Friend()
 			builder.ImageUrl(url)
 			_, success := bot.SendFriendMsg(msg.Sender.UserId, builder.Build())
 			if success {
 				p.Logger.Info("发送图片", "user", msg.Sender.UserId, "image", url)
 			}
-			return success
+			return "发送成功", nil
 		},
-		SendFile: func(fileName, content string) bool {
+		SendFile: func(fileName, content string) (string, error) {
 			builder := msgchain.Builder().Friend()
 			builder.FileBase64(fileName, base64.StdEncoding.EncodeToString([]byte(content)))
 			_, success := bot.SendFriendMsg(msg.Sender.UserId, builder.Build())
 			if success {
 				p.Logger.Info("发送文件", "user", msg.Sender.UserId, "file", fileName)
 			}
-			return success
+			return "发送成功", nil
 		},
 	}
 
@@ -354,7 +354,7 @@ func (p *AIChatPlugin) extraMsg(ctx context.Context, bot bot.Bot, msg message.Me
 					if ocrLLM == nil {
 						return "OCR服务未开启，无法解析图片"
 					}
-					resp, err := ocrLLM.ChatWithImage(ctx, "描述图片内容", url, opt...)
+					resp, err := ocrLLM.GetSingleImageDesc(ctx, "描述图片内容", url, opt...)
 					if err != nil {
 						p.Logger.Error("OCR请求失败:", "error", err.Error())
 						return "OCR请求失败，无法解析的图片内容"
