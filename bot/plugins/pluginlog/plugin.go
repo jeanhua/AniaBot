@@ -8,6 +8,7 @@ import (
 	"github.com/jeanhua/AniaBot/common/model/command"
 	"github.com/jeanhua/AniaBot/common/model/message"
 	"github.com/jeanhua/AniaBot/common/plugin"
+	"github.com/jeanhua/AniaBot/common/plugininfo"
 	"github.com/spf13/viper"
 )
 
@@ -23,7 +24,7 @@ func NewPlugin() *LogPlugin {
 	p.Version = "1.0.0"
 	p.AdminOnly = true
 	p.Order = plugin.LevelLog
-	p.ShowFor = plugin.ShowForNone
+	p.ShowFor = plugininfo.ShowForNone
 	return p
 }
 

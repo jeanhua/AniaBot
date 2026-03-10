@@ -3,6 +3,7 @@ package bot
 import (
 	"github.com/jeanhua/AniaBot/common/model/message"
 	"github.com/jeanhua/AniaBot/common/msgchain"
+	"github.com/jeanhua/AniaBot/common/plugininfo"
 	"github.com/jeanhua/AniaBot/common/tracer"
 )
 
@@ -68,14 +69,5 @@ type botSysItf interface {
 
 type pluginItf interface {
 	// GetPluginList 获取插件列表
-	GetPluginList() []PluginInfo
-}
-
-type PluginInfo struct {
-	Name      string
-	HelpWords string
-	AdminOnly bool
-
-	Author  string
-	Version string
+	GetPluginList() []plugininfo.PluginInfo
 }

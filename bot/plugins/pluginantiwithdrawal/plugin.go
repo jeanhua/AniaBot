@@ -13,6 +13,7 @@ import (
 	"github.com/jeanhua/AniaBot/common/model/message"
 	"github.com/jeanhua/AniaBot/common/msgchain"
 	"github.com/jeanhua/AniaBot/common/plugin"
+	"github.com/jeanhua/AniaBot/common/plugininfo"
 )
 
 type AntiWithdrawalPlugin struct {
@@ -27,7 +28,7 @@ func NewPlugin() *AntiWithdrawalPlugin {
 	p.Author = "jeanhua"
 	p.Version = "1.0.0"
 	p.AdminOnly = false
-	p.ShowFor = plugin.ShowForGroup
+	p.ShowFor = plugininfo.ShowForGroup
 	return p
 }
 

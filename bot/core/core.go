@@ -14,10 +14,10 @@ import (
 	"github.com/go-resty/resty/v2"
 	"github.com/jeanhua/AniaBot/bot/utils"
 	"github.com/jeanhua/AniaBot/common/adapter"
-	"github.com/jeanhua/AniaBot/common/bot"
 	"github.com/jeanhua/AniaBot/common/model/message"
 	"github.com/jeanhua/AniaBot/common/msgchain"
 	"github.com/jeanhua/AniaBot/common/plugin"
+	"github.com/jeanhua/AniaBot/common/plugininfo"
 	"github.com/jeanhua/AniaBot/common/storage"
 	"github.com/robfig/cron/v3"
 	"github.com/spf13/viper"
@@ -211,13 +211,14 @@ func (ania *AniaBot) Run() {
 	ania.adapter.Serve(ania.cfg)
 }
 
-func (ania *AniaBot) GetPluginList() []bot.PluginInfo {
-	pluginList := make([]bot.PluginInfo, 0, len(ania.plugins))
+func (ania *AniaBot) GetPluginList() []plugininfo.PluginInfo {
+	pluginList := make([]plugininfo.PluginInfo, 0, len(ania.plugins))
 	for _, p := range ania.plugins {
-		pluginList = append(pluginList, bot.PluginInfo{
+		pluginList = append(pluginList, plugininfo.PluginInfo{
 			Name:      p.GetMeta().Name,
 			HelpWords: p.GetMeta().HelpWords,
 			AdminOnly: p.GetMeta().AdminOnly,
+			ShowFor:   p.GetMeta().ShowFor,
 			Author:    p.GetMeta().Author,
 			Version:   p.GetMeta().Version,
 		})

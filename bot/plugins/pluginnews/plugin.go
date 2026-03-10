@@ -9,6 +9,7 @@ import (
 	"github.com/jeanhua/AniaBot/common/model/message"
 	"github.com/jeanhua/AniaBot/common/msgchain"
 	"github.com/jeanhua/AniaBot/common/plugin"
+	"github.com/jeanhua/AniaBot/common/plugininfo"
 	"github.com/spf13/viper"
 )
 
@@ -25,7 +26,7 @@ func NewNewsPlugin() *NewsPlugin {
 			Name:      "每日新闻插件",
 			HelpWords: "每日准点在指定群里新闻播报，发送 /news 立即获取，管理员发送 /news force 强制执行发送任务",
 			Order:     plugin.LevelNormal,
-			ShowFor:   plugin.ShowForGroup,
+			ShowFor:   plugininfo.ShowForGroup,
 			Author:    "jeanhua",
 			Version:   "1.0.0",
 		},
