@@ -15,16 +15,6 @@ func RegisterToolInitializer(initFunc ToolInitializer) {
 	initializers = append(initializers, initFunc)
 }
 
-func InitToolRegistry(searchToken string, msgFunc OptionFuncs) *ToolRegistry {
-	registry := NewToolRegistry()
-
-	for _, initFunc := range initializers {
-		initFunc(registry, searchToken, msgFunc)
-	}
-
-	return registry
-}
-
 func GetDefaultTools() []llms.Tool {
 	tools := []llms.Tool{}
 	tools = append(tools, MakeJinaTool()...)
