@@ -11,6 +11,7 @@ import (
 	"github.com/jeanhua/AniaBot/common/model/message"
 	"github.com/jeanhua/AniaBot/common/msgchain"
 	"github.com/jeanhua/AniaBot/common/plugin"
+	"github.com/jeanhua/AniaBot/common/plugininfo"
 	"github.com/jeanhua/AniaBot/custom/component/md2img"
 	"github.com/spf13/viper"
 )
@@ -49,7 +50,7 @@ func NewGroupNewsletterPlugin() *GroupNewsletter {
 			Name:      "群刊插件",
 			HelpWords: "自动收集群消息并生成有趣的群刊，发送 /gn 查看当前收集状态，/gn gen 立即生成群刊",
 			Order:     plugin.LevelNormal,
-			ShowFor:   plugin.ShowForGroup,
+			ShowFor:   plugininfo.ShowForGroup,
 			Author:    "jeanhua",
 			Version:   "1.0.0",
 		},

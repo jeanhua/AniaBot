@@ -7,6 +7,7 @@ import (
 	"github.com/jeanhua/AniaBot/common/model/command"
 	"github.com/jeanhua/AniaBot/common/model/message"
 	"github.com/jeanhua/AniaBot/common/plugin"
+	"github.com/jeanhua/AniaBot/common/plugininfo"
 	"github.com/spf13/viper"
 )
 
@@ -27,7 +28,7 @@ func NewInterceptorPlugin() *InterceptorPlugin {
 			HelpWords: "拦截和放行配置信息中指定的群聊和用户，减少消息干扰",
 			Order:     plugin.LevelLog + 1,
 			AdminOnly: true,
-			ShowFor:   plugin.ShowForNone,
+			ShowFor:   plugininfo.ShowForNone,
 			Author:    "jeanhua",
 			Version:   "1.0.0",
 		},

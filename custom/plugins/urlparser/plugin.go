@@ -8,6 +8,7 @@ import (
 	"github.com/jeanhua/AniaBot/common/model/command"
 	"github.com/jeanhua/AniaBot/common/model/message"
 	"github.com/jeanhua/AniaBot/common/plugin"
+	"github.com/jeanhua/AniaBot/common/plugininfo"
 	"github.com/spf13/viper"
 	"github.com/tmc/langchaingo/llms/openai"
 )
@@ -29,7 +30,7 @@ func NewURLParserPlugin(maxWork int) *URLParserPlugin {
 			Name:      "URL解析插件",
 			HelpWords: "自动解析群聊中的 URL 并提取相关信息",
 			Order:     plugin.LevelNormal,
-			ShowFor:   plugin.ShowForGroup,
+			ShowFor:   plugininfo.ShowForGroup,
 			Author:    "jeanhua",
 			Version:   "1.0.0",
 		},

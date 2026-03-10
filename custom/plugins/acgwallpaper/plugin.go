@@ -8,6 +8,7 @@ import (
 	"github.com/jeanhua/AniaBot/common/model/message"
 	"github.com/jeanhua/AniaBot/common/msgchain"
 	"github.com/jeanhua/AniaBot/common/plugin"
+	"github.com/jeanhua/AniaBot/common/plugininfo"
 )
 
 type AcgWallpaperPlugin struct {
@@ -22,7 +23,7 @@ func NewAcgWallpaperPlugin(maxWork int) *AcgWallpaperPlugin {
 			Name:      "二次元壁纸插件",
 			HelpWords: "给我发送 /acg 获取哦",
 			Order:     plugin.LevelNormal,
-			ShowFor:   plugin.ShowForGroup | plugin.ShowForFriend,
+			ShowFor:   plugininfo.ShowForGroup | plugininfo.ShowForFriend,
 			Author:    "jeanhua",
 			Version:   "1.0.0",
 		},

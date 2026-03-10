@@ -23,6 +23,7 @@ import (
 	"github.com/jeanhua/AniaBot/common/model/message"
 	"github.com/jeanhua/AniaBot/common/msgchain"
 	"github.com/jeanhua/AniaBot/common/plugin"
+	"github.com/jeanhua/AniaBot/common/plugininfo"
 	"github.com/jeanhua/AniaBot/custom/plugins/gdmusicplugin/gdmusic"
 	"github.com/spf13/viper"
 )
@@ -51,7 +52,7 @@ func NewMusicPlugin() *MusicPlugin {
 			Name:      "GD音乐插件",
 			HelpWords: "/music [关键词] 搜索，/music get [序号] 发送，/music next|prev 翻页，/music help 帮助",
 			Order:     plugin.LevelNormal,
-			ShowFor:   plugin.ShowForGroup | plugin.ShowForFriend,
+			ShowFor:   plugininfo.ShowForGroup | plugininfo.ShowForFriend,
 			Author:    "jeanhua",
 			Version:   "1.0.0",
 		},

@@ -14,6 +14,7 @@ import (
 	"github.com/jeanhua/AniaBot/common/model/message"
 	"github.com/jeanhua/AniaBot/common/msgchain"
 	"github.com/jeanhua/AniaBot/common/plugin"
+	"github.com/jeanhua/AniaBot/common/plugininfo"
 	"github.com/jeanhua/AniaBot/custom/component/md2img"
 	"github.com/spf13/viper"
 	"github.com/tmc/langchaingo/llms"
@@ -52,7 +53,7 @@ func NewGithubRepoer(maxWork int) *GithubRepoer {
 			Name:      "GithubRepoer插件",
 			HelpWords: "发送 /gr [github项目链接] 即可获取项目分析报告, 发送 /gr help 获取参数详情",
 			Order:     plugin.LevelNormal,
-			ShowFor:   plugin.ShowForGroup | plugin.ShowForFriend,
+			ShowFor:   plugininfo.ShowForGroup | plugininfo.ShowForFriend,
 			Author:    "jeanhua",
 			Version:   "1.0.0",
 		},

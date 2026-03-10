@@ -14,6 +14,7 @@ import (
 	"github.com/jeanhua/AniaBot/common/model/message"
 	"github.com/jeanhua/AniaBot/common/msgchain"
 	"github.com/jeanhua/AniaBot/common/plugin"
+	"github.com/jeanhua/AniaBot/common/plugininfo"
 	"github.com/spf13/viper"
 )
 
@@ -28,7 +29,7 @@ func Newplugin() *DouyinParser {
 			Name:      "抖音视频解析插件",
 			HelpWords: "发送 /douyin [分享内容] 给我解析视频哦",
 			Order:     plugin.LevelNormal,
-			ShowFor:   plugin.ShowForGroup | plugin.ShowForFriend,
+			ShowFor:   plugininfo.ShowForGroup | plugininfo.ShowForFriend,
 			Author:    "jeanhua",
 			Version:   "1.0.0",
 		},

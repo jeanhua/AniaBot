@@ -8,6 +8,7 @@ import (
 	"github.com/jeanhua/AniaBot/common/model/message"
 	"github.com/jeanhua/AniaBot/common/msgchain"
 	"github.com/jeanhua/AniaBot/common/plugin"
+	"github.com/jeanhua/AniaBot/common/plugininfo"
 )
 
 type WaifuPlugin struct {
@@ -69,7 +70,7 @@ func NewWaifuPlugin(maxWork int) *WaifuPlugin {
 			Name:      "waifu.pics插件",
 			HelpWords: "发送 /waifu [类别] 获取，获取类别发送 /waifu help",
 			Order:     plugin.LevelNormal,
-			ShowFor:   plugin.ShowForGroup | plugin.ShowForFriend,
+			ShowFor:   plugininfo.ShowForGroup | plugininfo.ShowForFriend,
 			Author:    "jeanhua",
 			Version:   "1.0.0",
 		},

@@ -13,6 +13,7 @@ import (
 	"github.com/jeanhua/AniaBot/common/model/message"
 	"github.com/jeanhua/AniaBot/common/msgchain"
 	"github.com/jeanhua/AniaBot/common/plugin"
+	"github.com/jeanhua/AniaBot/common/plugininfo"
 	"github.com/spf13/viper"
 )
 
@@ -55,7 +56,7 @@ func NewChatRecordsMakerPlugin() *ChatRecordsMakerPlugin {
 			Name:      "聊天记录伪造插件",
 			HelpWords: "伪造合并转发聊天记录，发送「伪造记录」开始创建",
 			Order:     plugin.LevelNormal,
-			ShowFor:   plugin.ShowForFriend,
+			ShowFor:   plugininfo.ShowForFriend,
 			Author:    "jeanhua",
 			Version:   "1.0.0",
 		},
