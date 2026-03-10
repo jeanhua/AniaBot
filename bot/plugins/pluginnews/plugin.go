@@ -24,6 +24,10 @@ func NewNewsPlugin() *NewsPlugin {
 		Meta: plugin.Meta{
 			Name:      "每日新闻插件",
 			HelpWords: "每日准点在指定群里新闻播报，发送 /news 立即获取，管理员发送 /news force 强制执行发送任务",
+			Order:     plugin.LevelNormal,
+			ShowFor:   plugin.ShowForGroup,
+			Author:    "jeanhua",
+			Version:   "1.0.0",
 		},
 	}
 }

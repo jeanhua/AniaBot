@@ -64,6 +64,9 @@ func NewAIChatPlugin() *AIChatPlugin {
 			Name:      "AI对话插件",
 			HelpWords: "@我聊天哦，带上 #新对话 标签可以创建新对话",
 			Order:     plugin.LevelPostHandle,
+			ShowFor:   plugin.ShowForGroup | plugin.ShowForFriend,
+			Author:    "jeanhua",
+			Version:   "1.0.0",
 		},
 	}
 }

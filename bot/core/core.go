@@ -218,6 +218,8 @@ func (ania *AniaBot) GetPluginList() []bot.PluginInfo {
 			Name:      p.GetMeta().Name,
 			HelpWords: p.GetMeta().HelpWords,
 			AdminOnly: p.GetMeta().AdminOnly,
+			Author:    p.GetMeta().Author,
+			Version:   p.GetMeta().Version,
 		})
 	}
 	return pluginList
@@ -278,6 +280,9 @@ func (ania *AniaBot) onFriendEvent(msg message.Message) {
 func (ania *AniaBot) AddPlugin(plugins ...plugin.Plugin) {
 	for _, p := range plugins {
 		meta := p.GetMeta()
+		if meta.ShowFor == 1 {
+			panic("插件必须指定ShowFor")
+		}
 		if _, ok := ania.pluginSet[meta.Name]; ok {
 			panic("插件名称相同，请检查插件是否重复加载")
 		}

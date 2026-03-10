@@ -24,7 +24,10 @@ func NewPlugin() *AntiWithdrawalPlugin {
 	p := &AntiWithdrawalPlugin{}
 	p.Name = "群防撤回插件"
 	p.HelpWords = "群聊回顾最近的n条消息，发送 /explore [n] 获取，n<=100，默认50"
+	p.Author = "jeanhua"
+	p.Version = "1.0.0"
 	p.AdminOnly = false
+	p.ShowFor = plugin.ShowForGroup
 	return p
 }
 

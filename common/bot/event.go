@@ -75,4 +75,7 @@ type PluginInfo struct {
 	Name      string
 	HelpWords string
 	AdminOnly bool
+
+	Author  string
+	Version string
 }
