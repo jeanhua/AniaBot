@@ -12,6 +12,7 @@ import (
 
 	"github.com/jeanhua/AniaBot/custom/plugins/acgwallpaper"
 	"github.com/jeanhua/AniaBot/custom/plugins/activeman"
+	"github.com/jeanhua/AniaBot/custom/plugins/chatrecordsmaker"
 	"github.com/jeanhua/AniaBot/custom/plugins/douyinparser"
 	"github.com/jeanhua/AniaBot/custom/plugins/gdmusicplugin"
 	"github.com/jeanhua/AniaBot/custom/plugins/githubrepoer"
@@ -43,6 +44,7 @@ func main() {
 	bot.AddPlugin(gdmusicplugin.NewMusicPlugin())
 	bot.AddPlugin(activeman.NewActiveMan(0.1, 0.1, 0.1))
 	bot.AddPlugin(urlparser.NewURLParserPlugin(10))
+	bot.AddPlugin(chatrecordsmaker.NewChatRecordsMakerPlugin())
 
 	bot.Run()
 }
