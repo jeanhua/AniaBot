@@ -79,6 +79,8 @@ type GetMsg interface {
 	GetNCrkey() ([]message.NCrkey, bool)
 	// GetFriendList 获取好友列表
 	GetFriendList() (*[]message.Friend, bool)
+	// GetGroupList 获取群聊列表
+	GetGroupList() (*[]message.GroupInfo, bool)
 	// GetGroupDetail 获取群详情
 	GetGroupDetail(groupId message.QID) (info *message.GroupInfo, success bool)
 	// GetGroupMsgHistory 获取群消息历史
