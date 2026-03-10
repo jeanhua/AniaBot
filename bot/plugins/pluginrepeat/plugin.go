@@ -31,6 +31,9 @@ func NewPlugin() *RepeatPlugin {
 	p.Name = "复读机插件"
 	p.HelpWords = "只会复读..., at我发送 /close(enable) repeat 可关闭(开启)复读机"
 	p.AdminOnly = false
+	p.ShowFor = plugin.ShowForGroup
+	p.Author = "jeanhua"
+	p.Version = "1.0.0"
 	return p
 }
 

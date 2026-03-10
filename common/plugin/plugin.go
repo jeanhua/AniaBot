@@ -87,6 +87,16 @@ const (
 	LevelPostHandle = 1000  // 后置处理层Order参考
 )
 
+type ShowFor int
+
+const (
+	_ ShowFor = 1 << iota
+
+	ShowForGroup  // 对群聊显示
+	ShowForFriend // 对私聊显示
+	ShowForNone   // 隐藏
+)
+
 type PanicEvent interface {
 	// OnPanic 处理插件运行时panic
 	OnPanic(ctx context.Context, bot bot.Bot, name string, err any)
