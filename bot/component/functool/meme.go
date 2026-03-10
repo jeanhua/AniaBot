@@ -1,38 +1,38 @@
 package functool
 
 import (
-	"encoding/json"
+	"context"
+	"errors"
 	"log"
 	"math/rand/v2"
 
 	"github.com/go-resty/resty/v2"
+	"github.com/jeanhua/AniaBot/bot/component/llmtool"
 	"github.com/jeanhua/AniaBot/bot/utils"
-	"github.com/tmc/langchaingo/llms"
 )
 
-type memeParam struct {
+type MemeParams struct {
 	Text string `json:"text" desc:"表情包的文本描述,比如开心、生气、为什么、你真是的...等等短句"`
 }
 
-const (
-	MEME_TOOL_NAME = "meme"
-)
+type MemeTool struct {
+	llmtool.BaseTool[MemeParams]
+}
 
-func MakeMemeTool() []llms.Tool {
-	return []llms.Tool{
-		utils.StructToOpenAITool("meme", "用于向用户发送表情包", memeParam{}),
+func NewMemeTool() *MemeTool {
+	return &MemeTool{
+		BaseTool: llmtool.MakeBaseTool("meme", "用于向用户发送表情包", MemeParams{}),
 	}
 }
 
-func TryHandleMemeFunc(call llms.ToolCall, msgFuncs OptionFuncs) (string, error) {
-	log.Println("执行meme... 参数:", call.FunctionCall.Arguments)
-	var param = memeParam{}
-	if err := json.Unmarshal([]byte(call.FunctionCall.Arguments), &param); err != nil {
-		return "发送失败", err
-	}
+func (t *MemeTool) Execute(ctx context.Context, params any, callbacks llmtool.CallBackFuncs) (string, error) {
+	p := params.(*MemeParams)
+	log.Println("执行meme... 参数:", p)
+
 	modifier, _ := utils.NewURLModifier("https://api.suol.cc/v1/meme.php")
-	modifier.SetQuery("msg", param.Text)
+	modifier.SetQuery("msg", p.Text)
 	modifier.SetQuery("num", "100")
+
 	type responseTy struct {
 		Data []struct {
 			ImageUrl string `json:"img_url"`
@@ -44,11 +44,13 @@ func TryHandleMemeFunc(call llms.ToolCall, msgFuncs OptionFuncs) (string, error)
 	if err != nil || len(result.Data) == 0 {
 		return "", err
 	}
+
 	id := rand.IntN(len(result.Data))
-	ok := msgFuncs.SendImage(result.Data[id].ImageUrl)
-	if ok {
-		return "发送成功", nil
-	} else {
-		return "发送失败", nil
+	_, err = callbacks.SendImage(result.Data[id].ImageUrl)
+	if err != nil {
+		return "发送失败", err
 	}
+	return "发送成功", nil
 }
+
+var ToolExecuteError = errors.New("Function Tool执行错误")

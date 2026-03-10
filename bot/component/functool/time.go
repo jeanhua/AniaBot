@@ -1,25 +1,26 @@
 package functool
 
 import (
+	"context"
 	"log"
 
+	"github.com/jeanhua/AniaBot/bot/component/llmtool"
 	"github.com/jeanhua/AniaBot/bot/utils"
-	"github.com/tmc/langchaingo/llms"
 )
 
-type timeParam struct{}
+type TimeParams struct{}
 
-const (
-	TIME_TOOL_NAME = "time"
-)
+type TimeTool struct {
+	llmtool.BaseTool[TimeParams]
+}
 
-func MakeTimeTool() []llms.Tool {
-	return []llms.Tool{
-		utils.StructToOpenAITool("time", "用于获取当前时间", timeParam{}),
+func NewTimeTool() *TimeTool {
+	return &TimeTool{
+		BaseTool: llmtool.MakeBaseTool("time", "用于获取当前时间", TimeParams{}),
 	}
 }
 
-func TryHandleTimeCall(call llms.ToolCall) (string, error) {
+func (t *TimeTool) Execute(ctx context.Context, params any, callbacks llmtool.CallBackFuncs) (string, error) {
 	log.Println("执行time...")
 	return utils.GetFormattedTime(), nil
 }

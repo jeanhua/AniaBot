@@ -1,0 +1,16 @@
+package llmtool
+
+import "context"
+
+type Tool interface {
+	Name() string
+	Description() string
+	Params() any
+	Execute(ctx context.Context, params any, callbacks CallBackFuncs) (string, error)
+}
+
+type CallBackFuncs struct {
+	SendText  func(text string) (string, error)
+	SendImage func(url string) (string, error)
+	SendFile  func(name, content string) (string, error)
+}
