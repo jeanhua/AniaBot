@@ -29,7 +29,7 @@ func (e *ToolExecuter) Register(tool Tool) {
 func (e *ToolExecuter) Tools() []llms.Tool {
 	tools := make([]llms.Tool, 0, len(e.tools))
 	for _, tool := range e.tools {
-		tools = append(tools, structToOpenAITool(tool.Name(), tool.Description(), tool.Params()))
+		tools = append(tools, structToOpenAITool(tool))
 	}
 	return tools
 }
@@ -39,6 +39,13 @@ func (e *ToolExecuter) Execute(ctx context.Context, call llms.ToolCall, callback
 	if !ok {
 		return "", errors.New("tool not found")
 	}
+
+	// 检查是否是 MCP 工具
+	if mcpTool, ok := tool.(*MCPTool); ok {
+		// MCP 工具直接使用原始 JSON 参数
+		return mcpTool.ExecuteWithArgs(ctx, []byte(call.FunctionCall.Arguments), callbacks)
+	}
+
 	params := reflect.New(reflect.TypeOf(tool.Params()).Elem()).Interface()
 	if err := json.Unmarshal([]byte(call.FunctionCall.Arguments), params); err != nil {
 		return "", err

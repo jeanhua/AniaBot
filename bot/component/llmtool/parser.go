@@ -1,6 +1,8 @@
 package llmtool
 
 import (
+	"encoding/json"
+	"log"
 	"reflect"
 	"strings"
 
@@ -14,7 +16,16 @@ type Property struct {
 	Properties  map[string]Property `json:"properties,omitempty"`
 }
 
-func structToOpenAITool(name, description string, params any) llms.Tool {
+func structToOpenAITool(tool Tool) llms.Tool {
+	name := tool.Name()
+	description := tool.Description()
+	params := tool.Params()
+
+	// 检查是否是 MCP 工具
+	if mcpTool, ok := tool.(*MCPTool); ok {
+		return mcpToolToOpenAITool(name, description, mcpTool.GetParameters())
+	}
+
 	t := reflect.TypeOf(params)
 	if t.Kind() == reflect.Ptr {
 		t = t.Elem()
@@ -30,6 +41,60 @@ func structToOpenAITool(name, description string, params any) llms.Tool {
 				"properties": parseFields(t),
 				"required":   getRequiredFields(t),
 			},
+		},
+	}
+}
+
+// mcpToolToOpenAITool 将 MCP 工具参数转换为 OpenAI 工具格式
+func mcpToolToOpenAITool(name, description string, parameters json.RawMessage) llms.Tool {
+	// MCP 的 parameters 已经是 JSON Schema 格式
+	// 检查参数是否为空
+	if len(parameters) == 0 {
+		// 如果参数为空，返回空的参数定义
+		return llms.Tool{
+			Type: "function",
+			Function: &llms.FunctionDefinition{
+				Name:        name,
+				Description: description,
+				Parameters: map[string]any{
+					"type":       "object",
+					"properties": map[string]any{},
+					"required":   []string{},
+				},
+			},
+		}
+	}
+
+	// 尝试解析并提取 properties 和 required
+	var schema map[string]any
+	if err := json.Unmarshal(parameters, &schema); err != nil {
+		// 如果解析失败，返回空的参数定义
+		log.Printf("[MCP:%s] 解析参数定义失败: %v", name, err)
+		return llms.Tool{
+			Type: "function",
+			Function: &llms.FunctionDefinition{
+				Name:        name,
+				Description: description,
+				Parameters: map[string]any{
+					"type":       "object",
+					"properties": map[string]any{},
+					"required":   []string{},
+				},
+			},
+		}
+	}
+
+	// 确保有 type 字段
+	if _, ok := schema["type"]; !ok {
+		schema["type"] = "object"
+	}
+
+	return llms.Tool{
+		Type: "function",
+		Function: &llms.FunctionDefinition{
+			Name:        name,
+			Description: description,
+			Parameters:  schema,
 		},
 	}
 }
