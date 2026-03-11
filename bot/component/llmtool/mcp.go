@@ -11,11 +11,31 @@ import (
 	"github.com/go-resty/resty/v2"
 )
 
+// MCPTransportType MCP 传输类型
+type MCPTransportType string
+
+const (
+	MCPTransportHTTP       MCPTransportType = "http"
+	MCPTransportStreamable MCPTransportType = "streamable"
+	MCPTransportStdio      MCPTransportType = "stdio"
+)
+
+// MCPClientInterface MCP 客户端通用接口
+type MCPClientInterface interface {
+	Connect(ctx context.Context) error
+	GetTools() []MCPToolDefinition
+	CallTool(ctx context.Context, toolName string, arguments json.RawMessage) (string, error)
+}
+
 // MCPConfig MCP服务器配置
 type MCPConfig struct {
 	Name        string            `json:"name"`        // MCP服务器名称
-	Endpoint    string            `json:"endpoint"`    // MCP服务器端点URL
-	Headers     map[string]string `json:"headers"`     // 自定义请求头
+	Transport   MCPTransportType  `json:"transport"`   // 传输类型: http或streamable或stdio
+	Endpoint    string            `json:"endpoint"`    // MCP服务器端点URL (HTTP模式)
+	Headers     map[string]string `json:"headers"`     // 自定义请求头 (HTTP模式)
+	Command     string            `json:"command"`     // 启动命令 (stdio模式)
+	Args        []string          `json:"args"`        // 命令参数 (stdio模式)
+	Env         map[string]string `json:"env"`         // 环境变量 (stdio模式)
 	Timeout     time.Duration     `json:"timeout"`     // 请求超时时间
 	Description string            `json:"description"` // MCP服务器描述
 }
@@ -141,12 +161,12 @@ func (c *MCPClient) CallTool(ctx context.Context, toolName string, arguments jso
 
 // MCPTool 包装MCP工具为本地Tool接口
 type MCPTool struct {
-	client     *MCPClient
+	client     MCPClientInterface
 	definition MCPToolDefinition
 }
 
 // NewMCPTool 创建新的MCP工具包装器
-func NewMCPTool(client *MCPClient, definition MCPToolDefinition) *MCPTool {
+func NewMCPTool(client MCPClientInterface, definition MCPToolDefinition) *MCPTool {
 	return &MCPTool{
 		client:     client,
 		definition: definition,
@@ -186,7 +206,7 @@ func (t *MCPTool) Execute(ctx context.Context, params any, callbacks CallBackFun
 }
 
 // RegisterMCP 注册MCP服务器中的所有工具到执行器
-func (e *ToolExecuter) RegisterMCP(client *MCPClient) error {
+func (e *ToolExecuter) RegisterMCP(client MCPClientInterface) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
@@ -204,9 +224,30 @@ func (e *ToolExecuter) RegisterMCP(client *MCPClient) error {
 	return nil
 }
 
-// RegisterMCPWithConfig 使用配置直接注册MCP工具
+// RegisterMCPWithConfig 使用配置直接注册MCP工具，自动根据传输类型创建对应客户端
 func (e *ToolExecuter) RegisterMCPWithConfig(config *MCPConfig) error {
-	client := NewMCPClient(config)
+	var client MCPClientInterface
+
+	// 根据传输类型创建对应客户端
+	switch config.Transport {
+	case MCPTransportStdio:
+		stdioConfig := &MCPStdioConfig{
+			Name:        config.Name,
+			Command:     config.Command,
+			Args:        config.Args,
+			Env:         config.Env,
+			Timeout:     config.Timeout,
+			Description: config.Description,
+		}
+		client = NewMCPStdioClient(stdioConfig)
+	case MCPTransportStreamable:
+		client = NewMCPStreamableClient(config)
+	case MCPTransportHTTP, "": // 默认使用 HTTP
+		client = NewMCPClient(config)
+	default:
+		return fmt.Errorf("不支持的 MCP 传输类型: %s", config.Transport)
+	}
+
 	return e.RegisterMCP(client)
 }
 
@@ -220,8 +261,16 @@ func (t *MCPTool) GetMCPToolDefinition() MCPToolDefinition {
 	return t.definition
 }
 
-// GetMCPClient 获取MCP客户端
+// GetMCPClient 获取MCP HTTP客户端（仅HTTP模式）
 func (t *MCPTool) GetMCPClient() *MCPClient {
+	if client, ok := t.client.(*MCPClient); ok {
+		return client
+	}
+	return nil
+}
+
+// GetMCPClientInterface 获取MCP客户端接口
+func (t *MCPTool) GetMCPClientInterface() MCPClientInterface {
 	return t.client
 }
 
