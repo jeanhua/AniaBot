@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"os"
 	"os/exec"
 	"sync"
 	"time"
@@ -65,6 +66,7 @@ func NewMCPStdioClient(config *MCPStdioConfig) *MCPStdioClient {
 	if config.Timeout == 0 {
 		config.Timeout = 120 * time.Second // npx 需要更长时间下载
 	}
+
 	return &MCPStdioClient{
 		config:    config,
 		requestID: 0,
@@ -74,7 +76,7 @@ func NewMCPStdioClient(config *MCPStdioConfig) *MCPStdioClient {
 
 // Connect 启动 MCP stdio 服务器并获取工具列表
 func (c *MCPStdioClient) Connect(ctx context.Context) error {
-	// 给整个 Connect 过程一个独立的超时 context
+	log.Printf("[MCP:%s] 环境变量配置: %v", c.config.Name, c.config.Env)
 	connectCtx, cancel := context.WithTimeout(ctx, c.config.Timeout)
 	defer cancel()
 
@@ -82,9 +84,9 @@ func (c *MCPStdioClient) Connect(ctx context.Context) error {
 
 	c.cmd = exec.CommandContext(connectCtx, c.config.Command, c.config.Args...)
 
-	// 设置环境变量
+	// 设置环境变量（继承系统环境变量并添加自定义环境变量）
 	if len(c.config.Env) > 0 {
-		env := c.cmd.Environ()
+		env := os.Environ()
 		for k, v := range c.config.Env {
 			env = append(env, fmt.Sprintf("%s=%s", k, v))
 		}
@@ -334,6 +336,16 @@ func (c *MCPStdioClient) CallTool(ctx context.Context, toolName string, argument
 		arguments = json.RawMessage("{}")
 	}
 
+	// 调试模式：打印工具输入
+	if c.config.Env != nil {
+		if v, ok := c.config.Env["DEBUG"]; ok {
+			debug := v == "true" || v == "1" || v == "yes"
+			if debug {
+				log.Printf("[MCP:%s:DEBUG] 工具调用输入: name=%s, arguments=%s", c.config.Name, toolName, string(arguments))
+			}
+		}
+	}
+
 	// 构建标准 MCP tools/call 请求参数
 	// arguments 直接嵌入，保留原始字段名和类型
 	type callParams struct {
@@ -372,6 +384,15 @@ func (c *MCPStdioClient) CallTool(ctx context.Context, toolName string, argument
 		IsError bool `json:"isError,omitempty"`
 	}
 	if err := json.Unmarshal(resp.Result, &result); err != nil {
+		// 调试模式：打印原始响应
+		if c.config.Env != nil {
+			if v, ok := c.config.Env["DEBUG"]; ok {
+				debug := v == "true" || v == "1" || v == "yes"
+				if debug {
+					log.Printf("[MCP:%s:DEBUG] 工具调用输出 (原始): %s", c.config.Name, string(resp.Result))
+				}
+			}
+		}
 		return string(resp.Result), nil
 	}
 
@@ -383,6 +404,16 @@ func (c *MCPStdioClient) CallTool(ctx context.Context, toolName string, argument
 	for _, content := range result.Content {
 		if content.Type == "text" {
 			text += content.Text
+		}
+	}
+
+	// 调试模式：打印工具输出
+	if c.config.Env != nil {
+		if v, ok := c.config.Env["DEBUG"]; ok {
+			debug := v == "true" || v == "1" || v == "yes"
+			if debug {
+				log.Printf("[MCP:%s:DEBUG] 工具调用输出: %s", c.config.Name, text)
+			}
 		}
 	}
 
