@@ -404,7 +404,7 @@ func (p *AIChatPlugin) loadMCPConfigs(cfg *viper.Viper) error {
 			mcpConfig.Env = make(map[string]string)
 			for k, v := range env {
 				if str, ok := v.(string); ok {
-					mcpConfig.Env[k] = str
+					mcpConfig.Env[strings.ToUpper(k)] = str
 				}
 			}
 		}
