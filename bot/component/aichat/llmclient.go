@@ -1,0 +1,52 @@
+package aichat
+
+import (
+	"context"
+	"fmt"
+
+	"github.com/tmc/langchaingo/llms"
+	"github.com/tmc/langchaingo/llms/openai"
+)
+
+type LLMClient struct {
+	llm llms.Model
+}
+
+func NewLLMClient(baseURL, apiKey, model string) (*LLMClient, error) {
+	llm, err := openai.New(
+		openai.WithToken(apiKey),
+		openai.WithBaseURL(baseURL),
+		openai.WithModel(model),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create LLM client: %w", err)
+	}
+
+	return &LLMClient{llm: llm}, nil
+}
+
+func (c *LLMClient) Generate(ctx context.Context, messages []llms.MessageContent, opts ...llms.CallOption) (*llms.ContentResponse, error) {
+	resp, err := c.llm.GenerateContent(ctx, messages, opts...)
+	if err != nil {
+		return nil, fmt.Errorf("LLM generation failed: %w", err)
+	}
+
+	if len(resp.Choices) == 0 {
+		return nil, fmt.Errorf("no choices returned from LLM")
+	}
+
+	return resp, nil
+}
+
+func (c *LLMClient) GenerateSingle(ctx context.Context, messages []llms.MessageContent, opts ...llms.CallOption) (string, error) {
+	resp, err := c.Generate(ctx, messages, opts...)
+	if err != nil {
+		return "", err
+	}
+
+	return resp.Choices[0].Content, nil
+}
+
+func (c *LLMClient) Model() llms.Model {
+	return c.llm
+}

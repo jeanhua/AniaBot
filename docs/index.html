@@ -1711,11 +1711,11 @@ GOOS=linux GOARCH=amd64 go build -o build/AniaBot ./cmd/</code></pre>
         </table>
 
         <h2>ShowFor 取值</h2>
-        <div class="code-header">common/plugin/showfor.go</div>
+        <div class="code-header">common/plugininfo/info.go</div>
         <pre><code><span class="kw">const</span> (
-    ShowForNone   ShowFor = <span class="nu">0</span>                <span class="cm">// 不显示</span>
-    ShowForGroup  ShowFor = <span class="nu">1</span> &lt;&lt; <span class="nu">0</span>          <span class="cm">// 仅在群聊中显示</span>
-    ShowForFriend ShowFor = <span class="nu">1</span> &lt;&lt; <span class="nu">1</span>          <span class="cm">// 仅在私聊中显示</span>
+    ShowForNone   ShowFor = <span class="nu">1</span>                <span class="cm">// 不显示</span>
+    ShowForGroup  ShowFor = <span class="nu">1</span> &lt;&lt; <span class="nu">1</span>          <span class="cm">// 仅在群聊中显示</span>
+    ShowForFriend ShowFor = <span class="nu">1</span> &lt;&lt; <span class="nu">2</span>          <span class="cm">// 仅在私聊中显示</span>
 )
 
 <span class="cm">// 组合示例：群聊和私聊都显示</span>

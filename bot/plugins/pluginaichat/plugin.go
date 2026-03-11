@@ -9,7 +9,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/jeanhua/AniaBot/bot/component"
+	"github.com/jeanhua/AniaBot/bot/component/aichat"
+	"github.com/jeanhua/AniaBot/bot/component/functool"
 	"github.com/jeanhua/AniaBot/bot/component/llmtool"
 	"github.com/jeanhua/AniaBot/common/aniaerror"
 	"github.com/jeanhua/AniaBot/common/bot"
@@ -45,7 +46,7 @@ type AIChatPlugin struct {
 	}
 
 	ocrEnable    bool
-	ocrModel     *component.ChatBot
+	ocrModel     *aichat.ChatBot
 	ocrParameter struct {
 		maxToken    int
 		temperature float64
@@ -80,16 +81,17 @@ func (p *AIChatPlugin) unLock(ctx context.Context, id message.QID) {
 	p.lockStorage.Del(ctx, id.String())
 }
 
-func (p *AIChatPlugin) getChat(id message.QID) *component.ChatBot {
+func (p *AIChatPlugin) getChat(id message.QID) *aichat.ChatBot {
 	chat, ok := p.chats.Load(id)
 	if !ok {
-		c, err := component.NewChatBot(
+		toolExecutor := functool.CreateDefaultTools(p.llmParameter.searchToken)
+		c, err := aichat.NewChatBot(
 			p.botConfig.baseURL,
 			p.botConfig.apiKey,
 			p.botConfig.model,
 			p.llmParameter.prompt,
 			30,
-			p.llmParameter.searchToken,
+			toolExecutor,
 		)
 		if err != nil {
 			return nil
@@ -97,7 +99,7 @@ func (p *AIChatPlugin) getChat(id message.QID) *component.ChatBot {
 		p.chats.Store(id, c)
 		return c
 	}
-	return chat.(*component.ChatBot)
+	return chat.(*aichat.ChatBot)
 }
 
 func (p *AIChatPlugin) OnGroupMsg(ctx context.Context, bot bot.Bot, cmd command.Command, msg message.Message) (bool, error) {
@@ -329,7 +331,7 @@ func (p *AIChatPlugin) Start(ctx context.Context, cfg *viper.Viper) error {
 		p.ocrParameter.top_k = cfg.GetInt("plugin.ai_chat_bot.ocr.top_k")
 		p.llmParameter.searchToken = searchToken
 
-		ocrllm, err := component.NewChatBot(ocrBaseUrl, ocrAPIKey, ocrModel, ocrPrompt, 10, searchToken)
+		ocrllm, err := aichat.NewChatBot(ocrBaseUrl, ocrAPIKey, ocrModel, ocrPrompt, 10, nil)
 		if err != nil {
 			p.Logger.Error("无法初始化OCR LLM", "error", err.Error())
 			p.ocrEnable = false
@@ -340,7 +342,7 @@ func (p *AIChatPlugin) Start(ctx context.Context, cfg *viper.Viper) error {
 	return nil
 }
 
-func (p *AIChatPlugin) extraMsg(ctx context.Context, bot bot.Bot, msg message.Message, ocrLLM *component.ChatBot, opt ...llms.CallOption) string {
+func (p *AIChatPlugin) extraMsg(ctx context.Context, bot bot.Bot, msg message.Message, ocrLLM *aichat.ChatBot, opt ...llms.CallOption) string {
 	var str strings.Builder
 	nickname := msg.Sender.Card
 	if nickname == "" {
