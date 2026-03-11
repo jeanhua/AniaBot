@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"strings"
 	"time"
@@ -41,10 +42,20 @@ type MCPConfig struct {
 }
 
 // MCPToolDefinition MCP工具定义
+// MCP 协议标准字段名为 inputSchema，但部分实现使用 parameters，两者都兼容
 type MCPToolDefinition struct {
 	Name        string          `json:"name"`
 	Description string          `json:"description"`
-	Parameters  json.RawMessage `json:"parameters"`
+	InputSchema json.RawMessage `json:"inputSchema"` // MCP 标准字段名 (Notion等标准实现)
+	Parameters  json.RawMessage `json:"parameters"`  // 兼容非标准实现
+}
+
+// GetParameters 返回工具参数定义，优先使用 inputSchema，兼容 parameters
+func (d *MCPToolDefinition) GetParameters() json.RawMessage {
+	if len(d.InputSchema) > 0 && string(d.InputSchema) != "null" {
+		return d.InputSchema
+	}
+	return d.Parameters
 }
 
 // MCPListToolsResponse MCP列出工具响应
@@ -190,9 +201,9 @@ func (t *MCPTool) Params() any {
 	return &struct{}{}
 }
 
-// GetParameters 返回 MCP 工具的原始参数定义
+// GetParameters 返回 MCP 工具的原始参数定义（兼容 inputSchema 和 parameters）
 func (t *MCPTool) GetParameters() json.RawMessage {
-	return t.definition.Parameters
+	return t.definition.GetParameters()
 }
 
 // Execute 执行MCP工具（标准接口）
@@ -227,13 +238,93 @@ func (e *ToolExecuter) RegisterMCP(client MCPClientInterface) error {
 		return err
 	}
 
+	tools := client.GetTools()
+	log.Printf("[MCP] 共发现 %d 个工具，开始注册...", len(tools))
+
 	// 注册所有工具
-	for _, toolDef := range client.GetTools() {
+	for _, toolDef := range tools {
 		tool := NewMCPTool(client, toolDef)
 		e.Register(tool)
+		//logMCPToolRegistered(toolDef)
 	}
 
+	log.Printf("[MCP] 所有工具注册完成")
 	return nil
+}
+
+// logMCPToolRegistered 打印单个MCP工具的注册详情（递归展示嵌套结构）
+func logMCPToolRegistered(toolDef MCPToolDefinition) {
+	params := toolDef.GetParameters()
+
+	// 用 map[string]any 解析，保留完整嵌套结构
+	var schema map[string]any
+	if err := json.Unmarshal(params, &schema); err != nil {
+		log.Printf("[MCP] 注册工具: %-32s | %s | schema解析失败: %v", toolDef.Name, toolDef.Description, err)
+		return
+	}
+
+	props, _ := schema["properties"].(map[string]any)
+	if len(props) == 0 {
+		log.Printf("[MCP] 注册工具: %-32s | %s | 参数: (无)", toolDef.Name, toolDef.Description)
+		return
+	}
+
+	requiredSlice, _ := schema["required"].([]any)
+	requiredSet := make(map[string]bool, len(requiredSlice))
+	for _, r := range requiredSlice {
+		if s, ok := r.(string); ok {
+			requiredSet[s] = true
+		}
+	}
+
+	// log.Printf("[MCP] 注册工具: %-32s | %s", toolDef.Name, toolDef.Description)
+	// logMCPProperties(props, requiredSet, "  ")
+}
+
+// logMCPProperties 递归打印参数属性树
+func logMCPProperties(props map[string]any, requiredSet map[string]bool, indent string) {
+	for paramName, rawProp := range props {
+		prop, ok := rawProp.(map[string]any)
+		if !ok {
+			continue
+		}
+
+		paramType, _ := prop["type"].(string)
+		desc, _ := prop["description"].(string)
+		if desc == "" {
+			desc = "-"
+		}
+		requiredMark := " "
+		if requiredSet[paramName] {
+			requiredMark = "*"
+		}
+
+		switch paramType {
+		case "array":
+			// 展示数组元素结构
+			items, _ := prop["items"].(map[string]any)
+			itemsType, _ := items["type"].(string)
+			if itemsProps, ok := items["properties"].(map[string]any); ok {
+				// 元素是对象，递归展示
+				log.Printf("[MCP] %s%s %-20s (array of object) %s", indent, requiredMark, paramName, desc)
+				logMCPProperties(itemsProps, nil, indent+"    ")
+			} else if itemsType != "" {
+				log.Printf("[MCP] %s%s %-20s (array of %s) %s", indent, requiredMark, paramName, itemsType, desc)
+			} else {
+				log.Printf("[MCP] %s%s %-20s (array) %s", indent, requiredMark, paramName, desc)
+			}
+		case "object":
+			// 展示嵌套对象结构
+			if nestedProps, ok := prop["properties"].(map[string]any); ok {
+				log.Printf("[MCP] %s%s %-20s (object) %s", indent, requiredMark, paramName, desc)
+				logMCPProperties(nestedProps, nil, indent+"    ")
+			} else {
+				log.Printf("[MCP] %s%s %-20s (object) %s", indent, requiredMark, paramName, desc)
+			}
+		default:
+			log.Printf("[MCP] %s%s %-20s (%s) %s", indent, requiredMark, paramName, paramType, desc)
+		}
+	}
 }
 
 // RegisterMCPWithConfig 使用配置直接注册MCP工具，自动根据传输类型创建对应客户端
