@@ -25,10 +25,19 @@ func CreateDefaultTools(searchToken string) *llmtool.ToolExecuter {
 // RegisterMCPFromConfig 从配置注册MCP工具到执行器
 func RegisterMCPFromConfig(executer *llmtool.ToolExecuter, configs []*llmtool.MCPConfig) error {
 	for _, config := range configs {
-		// 规范化端点URL
-		config.Endpoint = llmtool.NormalizeMCPEndpoint(config.Endpoint)
-
-		log.Printf("正在连接MCP服务器: %s (%s)", config.Name, config.Endpoint)
+		// 根据传输类型处理配置
+		switch config.Transport {
+		case llmtool.MCPTransportHTTP, llmtool.MCPTransportStreamable:
+			// 规范化端点URL
+			config.Endpoint = llmtool.NormalizeMCPEndpoint(config.Endpoint)
+			log.Printf("正在连接MCP服务器: %s (%s, transport=%s)", config.Name, config.Endpoint, config.Transport)
+		case llmtool.MCPTransportStdio:
+			log.Printf("正在连接MCP服务器: %s (stdio, command=%s)", config.Name, config.Command)
+		default:
+			// 默认按 HTTP 处理
+			config.Endpoint = llmtool.NormalizeMCPEndpoint(config.Endpoint)
+			log.Printf("正在连接MCP服务器: %s (%s, transport=%s)", config.Name, config.Endpoint, config.Transport)
+		}
 
 		if err := executer.RegisterMCPWithConfig(config); err != nil {
 			log.Printf("注册MCP服务器 %s 失败: %v", config.Name, err)
