@@ -23,7 +23,7 @@ func NewToolOrchestrator(executor ToolExecutor, msgBuilder *MessageBuilder) *Too
 	return &ToolOrchestrator{
 		executor:      executor,
 		msgBuilder:    msgBuilder,
-		maxIterations: 5,
+		maxIterations: 10,
 	}
 }
 
