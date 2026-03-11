@@ -15,8 +15,9 @@ import (
 type MCPTransportType string
 
 const (
-	MCPTransportHTTP  MCPTransportType = "http"
-	MCPTransportStdio MCPTransportType = "stdio"
+	MCPTransportHTTP       MCPTransportType = "http"
+	MCPTransportStreamable MCPTransportType = "streamable"
+	MCPTransportStdio      MCPTransportType = "stdio"
 )
 
 // MCPClientInterface MCP 客户端通用接口
@@ -29,7 +30,7 @@ type MCPClientInterface interface {
 // MCPConfig MCP服务器配置
 type MCPConfig struct {
 	Name        string            `json:"name"`        // MCP服务器名称
-	Transport   MCPTransportType  `json:"transport"`   // 传输类型: http 或 stdio
+	Transport   MCPTransportType  `json:"transport"`   // 传输类型: http或streamable或stdio
 	Endpoint    string            `json:"endpoint"`    // MCP服务器端点URL (HTTP模式)
 	Headers     map[string]string `json:"headers"`     // 自定义请求头 (HTTP模式)
 	Command     string            `json:"command"`     // 启动命令 (stdio模式)
@@ -239,6 +240,8 @@ func (e *ToolExecuter) RegisterMCPWithConfig(config *MCPConfig) error {
 			Description: config.Description,
 		}
 		client = NewMCPStdioClient(stdioConfig)
+	case MCPTransportStreamable:
+		client = NewMCPStreamableClient(config)
 	case MCPTransportHTTP, "": // 默认使用 HTTP
 		client = NewMCPClient(config)
 	default:
