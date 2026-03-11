@@ -54,6 +54,8 @@ type AIChatPlugin struct {
 		top_k       int
 		prompt      string
 	}
+
+	mcpConfigs []*llmtool.MCPConfig
 }
 
 const (
@@ -84,7 +86,7 @@ func (p *AIChatPlugin) unLock(ctx context.Context, id message.QID) {
 func (p *AIChatPlugin) getChat(id message.QID) *aichat.ChatBot {
 	chat, ok := p.chats.Load(id)
 	if !ok {
-		toolExecutor := functool.CreateDefaultTools(p.llmParameter.searchToken)
+		toolExecutor := functool.CreateToolsWithMCP(p.llmParameter.searchToken, p.mcpConfigs)
 		c, err := aichat.NewChatBot(
 			p.botConfig.baseURL,
 			p.botConfig.apiKey,
@@ -339,7 +341,120 @@ func (p *AIChatPlugin) Start(ctx context.Context, cfg *viper.Viper) error {
 			p.ocrModel = ocrllm
 		}
 	}
+
+	// 读取 MCP 服务器配置
+	if err := p.loadMCPConfigs(cfg); err != nil {
+		p.Logger.Warn("加载 MCP 配置失败", "error", err.Error())
+	}
+
 	return nil
+}
+
+// loadMCPConfigs 从配置加载 MCP 服务器配置
+func (p *AIChatPlugin) loadMCPConfigs(cfg *viper.Viper) error {
+	// 检查是否有 MCP 配置
+	mcpServers := cfg.Get("plugin.ai_chat_bot.mcp.servers")
+	if mcpServers == nil {
+		p.Logger.Info("未配置 MCP 服务器")
+		return nil
+	}
+
+	// 解析 MCP 服务器配置
+	serversConfig, ok := mcpServers.([]any)
+	if !ok {
+		return fmt.Errorf("MCP 服务器配置格式错误")
+	}
+
+	for i, server := range serversConfig {
+		serverMap, ok := server.(map[string]any)
+		if !ok {
+			p.Logger.Warn("MCP 服务器配置项格式错误", "index", i)
+			continue
+		}
+
+		mcpConfig := &llmtool.MCPConfig{
+			Name:        getStringFromMap(serverMap, "name"),
+			Transport:   llmtool.MCPTransportType(getStringFromMap(serverMap, "transport")),
+			Endpoint:    getStringFromMap(serverMap, "endpoint"),
+			Command:     getStringFromMap(serverMap, "command"),
+			Description: getStringFromMap(serverMap, "description"),
+		}
+
+		// 读取 headers
+		if headers, ok := serverMap["headers"].(map[string]any); ok {
+			mcpConfig.Headers = make(map[string]string)
+			for k, v := range headers {
+				if str, ok := v.(string); ok {
+					mcpConfig.Headers[k] = str
+				}
+			}
+		}
+
+		// 读取 args
+		if args, ok := serverMap["args"].([]any); ok {
+			for _, arg := range args {
+				if str, ok := arg.(string); ok {
+					mcpConfig.Args = append(mcpConfig.Args, str)
+				}
+			}
+		}
+
+		// 读取 env
+		if env, ok := serverMap["env"].(map[string]any); ok {
+			mcpConfig.Env = make(map[string]string)
+			for k, v := range env {
+				if str, ok := v.(string); ok {
+					mcpConfig.Env[k] = str
+				}
+			}
+		}
+
+		// 读取 timeout
+		if timeout, ok := serverMap["timeout"].(int); ok {
+			mcpConfig.Timeout = time.Duration(timeout) * time.Second
+		}
+
+		// 如果没有指定传输类型，默认为 HTTP
+		if mcpConfig.Transport == "" {
+			mcpConfig.Transport = llmtool.MCPTransportHTTP
+		}
+
+		// 验证配置
+		if mcpConfig.Name == "" {
+			p.Logger.Warn("MCP 服务器配置缺少名称", "index", i)
+			continue
+		}
+
+		// 根据传输类型验证必要字段
+		switch mcpConfig.Transport {
+		case llmtool.MCPTransportHTTP, llmtool.MCPTransportStreamable:
+			if mcpConfig.Endpoint == "" {
+				p.Logger.Warn("MCP HTTP/Streamable 服务器配置缺少 endpoint", "name", mcpConfig.Name)
+				continue
+			}
+		case llmtool.MCPTransportStdio:
+			if mcpConfig.Command == "" {
+				p.Logger.Warn("MCP Stdio 服务器配置缺少 command", "name", mcpConfig.Name)
+				continue
+			}
+		}
+
+		p.mcpConfigs = append(p.mcpConfigs, mcpConfig)
+		p.Logger.Info("已加载 MCP 服务器配置", "name", mcpConfig.Name, "transport", mcpConfig.Transport)
+	}
+
+	p.Logger.Info("MCP 服务器配置加载完成", "count", len(p.mcpConfigs))
+	return nil
+}
+
+// getStringFromMap 从 map 中获取字符串值
+func getStringFromMap(m map[string]any, key string) string {
+	if v, ok := m[key]; ok {
+		if str, ok := v.(string); ok {
+			return str
+		}
+	}
+	return ""
 }
 
 func (p *AIChatPlugin) extraMsg(ctx context.Context, bot bot.Bot, msg message.Message, ocrLLM *aichat.ChatBot, opt ...llms.CallOption) string {

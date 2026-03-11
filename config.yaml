@@ -40,6 +40,34 @@ plugin:
     prompt: |-
       你是一个ai对话机器人，在QQ上和别人聊天，说话不要长篇大论
 
+    mcp:
+      servers:
+        # # HTTP 模式 MCP 服务器
+        # - name: "remote-mcp-server"
+        #   transport: "http"
+        #   endpoint: "http://localhost:3000"
+        #   headers:
+        #     Authorization: "Bearer token123"
+        #   timeout: 30
+        
+        # # Streamable HTTP 模式
+        # - name: "streamable-mcp"
+        #   transport: "streamable"
+        #   endpoint: "http://localhost:3001"
+        #   timeout: 60
+        
+        # # Stdio 模式 MCP 服务器
+        # - name: "local-python-mcp"
+        #   transport: "stdio"
+        #   command: "python"
+        #   args:
+        #     - "-m"
+        #     - "mcp_server"
+        #   env:
+        #     API_KEY: "xxx"
+        #     DEBUG: "true"
+        #   timeout: 30
+
     # OCR 配置，可选，该llm负责将图片转换为文本供上文使用
     ocr:
       enable: false
