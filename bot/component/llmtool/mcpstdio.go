@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -32,7 +33,7 @@ type MCPStdioClient struct {
 	stderr    io.ReadCloser
 	writeMu   sync.Mutex // 只保护 stdin 写入
 	tools     []MCPToolDefinition
-	requestID int
+	requestID atomic.Int64 // 原子操作，支持并发安全
 
 	// 响应分发：后台 goroutine 读取所有响应，按 ID 分发
 	pendingMu sync.Mutex
@@ -68,9 +69,8 @@ func NewMCPStdioClient(config *MCPStdioConfig) *MCPStdioClient {
 	}
 
 	return &MCPStdioClient{
-		config:    config,
-		requestID: 0,
-		pending:   make(map[int]chan *MCPJSONRPCResponse),
+		config:  config,
+		pending: make(map[int]chan *MCPJSONRPCResponse),
 	}
 }
 
@@ -252,10 +252,9 @@ func (c *MCPStdioClient) sendNotification(method string) {
 	c.writeMu.Unlock()
 }
 
-// nextRequestID 生成下一个请求 ID（调用方需在单线程或加锁场景使用）
+// nextRequestID 生成下一个请求 ID（原子操作，并发安全）
 func (c *MCPStdioClient) nextRequestID() int {
-	c.requestID++
-	return c.requestID
+	return int(c.requestID.Add(1))
 }
 
 // initialize 发送初始化请求
