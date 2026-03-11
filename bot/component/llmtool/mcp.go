@@ -185,17 +185,29 @@ func (t *MCPTool) Description() string {
 
 // Params 返回工具参数定义
 func (t *MCPTool) Params() any {
-	return &map[string]any{}
+	// MCP 工具的 Parameters 是 JSON Schema 格式
+	// 返回一个空结构体，实际的参数定义在 structToOpenAITool 中通过 mcpToolToOpenAITool 处理
+	return &struct{}{}
 }
 
-// Execute 执行MCP工具
+// GetParameters 返回 MCP 工具的原始参数定义
+func (t *MCPTool) GetParameters() json.RawMessage {
+	return t.definition.Parameters
+}
+
+// Execute 执行MCP工具（标准接口）
 func (t *MCPTool) Execute(ctx context.Context, params any, callbacks CallBackFuncs) (string, error) {
-	// 将参数序列化为JSON
+	// 这个方法在普通调用时使用，但 MCP 工具应该使用 ExecuteWithArgs
+	// 为了兼容，这里将 params 序列化后调用
 	args, err := json.Marshal(params)
 	if err != nil {
 		return "", fmt.Errorf("序列化参数失败: %w", err)
 	}
+	return t.ExecuteWithArgs(ctx, args, callbacks)
+}
 
+// ExecuteWithArgs 使用原始 JSON 参数执行 MCP 工具
+func (t *MCPTool) ExecuteWithArgs(ctx context.Context, args json.RawMessage, callbacks CallBackFuncs) (string, error) {
 	// 调用远程MCP工具
 	result, err := t.client.CallTool(ctx, t.definition.Name, args)
 	if err != nil {
