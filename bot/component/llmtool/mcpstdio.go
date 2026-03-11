@@ -329,6 +329,8 @@ func (c *MCPStdioClient) GetTools() []MCPToolDefinition {
 
 // CallTool 调用 MCP 工具
 func (c *MCPStdioClient) CallTool(ctx context.Context, toolName string, arguments json.RawMessage) (string, error) {
+	log.Printf("[MCP:%s] 调用工具: %s, arguments=%s", c.config.Name, toolName, string(arguments))
+
 	// 直接使用原始 JSON arguments，避免 map 解析导致字段丢失或类型变化
 	// 如果 arguments 为空或无效，使用空对象
 	if len(arguments) == 0 || !json.Valid(arguments) {
