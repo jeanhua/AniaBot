@@ -53,7 +53,7 @@ func (b *ChatBot) Chat(ctx context.Context, userInput string, callbacks llmtool.
 	}
 
 	// 保存完整的对话上下文，包括工具调用
-	if err := b.saveFullContext(userInput, response, updatedMessages); err != nil {
+	if err := b.saveContext(userInput, response, updatedMessages); err != nil {
 		return "", fmt.Errorf("failed to save context: %w", err)
 	}
 
@@ -86,16 +86,8 @@ func (b *ChatBot) loadHistory() ([]llms.ChatMessage, error) {
 	return nil, nil
 }
 
-func (b *ChatBot) saveContext(userInput, response string) error {
-	return b.memory.SaveContext(
-		context.Background(),
-		map[string]any{"prompt": userInput},
-		map[string]any{"response": response},
-	)
-}
-
-// saveFullContext 保存完整的对话上下文，包括工具调用和结果
-func (b *ChatBot) saveFullContext(userInput, response string, messages []llms.MessageContent) error {
+// saveContext 保存完整的对话上下文，包括工具调用和结果
+func (b *ChatBot) saveContext(userInput, response string, messages []llms.MessageContent) error {
 	// 检查是否有工具调用，并提取工具调用信息
 	var toolCallsSummary string
 	foundUserInput := false
@@ -134,13 +126,13 @@ func (b *ChatBot) saveFullContext(userInput, response string, messages []llms.Me
 			for _, part := range msg.Parts {
 				if toolResp, ok := part.(llms.ToolCallResponse); ok {
 					// 截断过长的结果
-					result := toolResp.Content
-					if len(result) > 500 {
-						result = result[:500] + "... (truncated)"
+					result := []rune(toolResp.Content)
+					if len(result) > 8000 {
+						result = append(result[:8000], []rune("... (truncated)")...)
 					}
 					toolCallsSummary += fmt.Sprintf("\n[Tool %s returned: %s]",
 						toolResp.Name,
-						result)
+						string(result))
 				}
 			}
 		}
@@ -148,7 +140,11 @@ func (b *ChatBot) saveFullContext(userInput, response string, messages []llms.Me
 
 	// 如果没有工具调用，使用简单的保存方式
 	if toolCallsSummary == "" {
-		return b.saveContext(userInput, response)
+		return b.memory.SaveContext(
+			context.Background(),
+			map[string]any{"prompt": userInput},
+			map[string]any{"response": response},
+		)
 	}
 
 	// 将工具调用信息附加到响应中保存

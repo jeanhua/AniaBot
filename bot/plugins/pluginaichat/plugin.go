@@ -55,7 +55,8 @@ type AIChatPlugin struct {
 		prompt      string
 	}
 
-	mcpConfigs []*llmtool.MCPConfig
+	mcpConfigs   []*llmtool.MCPConfig
+	toolExecutor *llmtool.ToolExecuter // 共享的工具执行器
 }
 
 const (
@@ -86,16 +87,17 @@ func (p *AIChatPlugin) unLock(ctx context.Context, id message.QID) {
 func (p *AIChatPlugin) getChat(id message.QID) *aichat.ChatBot {
 	chat, ok := p.chats.Load(id)
 	if !ok {
-		toolExecutor := functool.CreateToolsWithMCP(p.llmParameter.searchToken, p.mcpConfigs)
+		// 使用共享的工具执行器，避免重复创建 MCP 连接
 		c, err := aichat.NewChatBot(
 			p.botConfig.baseURL,
 			p.botConfig.apiKey,
 			p.botConfig.model,
 			p.llmParameter.prompt,
 			30,
-			toolExecutor,
+			p.toolExecutor,
 		)
 		if err != nil {
+			p.Logger.Error("创建 ChatBot 失败", "error", err.Error())
 			return nil
 		}
 		p.chats.Store(id, c)
@@ -346,6 +348,15 @@ func (p *AIChatPlugin) Start(ctx context.Context, cfg *viper.Viper) error {
 	if err := p.loadMCPConfigs(cfg); err != nil {
 		p.Logger.Warn("加载 MCP 配置失败", "error", err.Error())
 	}
+
+	// 创建共享的工具执行器（只创建一次，所有对话共享）
+	p.Logger.Info("初始化工具执行器...")
+	p.toolExecutor = functool.CreateToolsWithMCP(p.llmParameter.searchToken, p.mcpConfigs)
+	if p.toolExecutor == nil {
+		p.Logger.Error("创建工具执行器失败")
+		return aniaerror.ParameterInitializeError
+	}
+	p.Logger.Info("工具执行器初始化完成")
 
 	return nil
 }
