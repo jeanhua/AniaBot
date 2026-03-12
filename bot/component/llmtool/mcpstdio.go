@@ -26,14 +26,15 @@ type MCPStdioConfig struct {
 
 // MCPStdioClient MCP stdio 客户端
 type MCPStdioClient struct {
-	config    *MCPStdioConfig
-	cmd       *exec.Cmd
-	stdin     io.WriteCloser
-	stdout    io.ReadCloser
-	stderr    io.ReadCloser
-	writeMu   sync.Mutex // 只保护 stdin 写入
-	tools     []MCPToolDefinition
-	requestID atomic.Int64 // 原子操作，支持并发安全
+	config        *MCPStdioConfig
+	cmd           *exec.Cmd
+	stdin         io.WriteCloser
+	stdout        io.ReadCloser
+	stderr        io.ReadCloser
+	writeMu       sync.Mutex // 只保护 stdin 写入
+	tools         []MCPToolDefinition
+	requestID     atomic.Int64       // 原子操作，支持并发安全
+	processCancel context.CancelFunc // 控制子进程生命周期
 
 	// 响应分发：后台 goroutine 读取所有响应，按 ID 分发
 	pendingMu sync.Mutex
@@ -77,12 +78,19 @@ func NewMCPStdioClient(config *MCPStdioConfig) *MCPStdioClient {
 // Connect 启动 MCP stdio 服务器并获取工具列表
 func (c *MCPStdioClient) Connect(ctx context.Context) error {
 	log.Printf("[MCP:%s] 环境变量配置: %v", c.config.Name, c.config.Env)
+
+	// connectCtx 仅用于初始化阶段（initialize + listTools）的超时控制
 	connectCtx, cancel := context.WithTimeout(ctx, c.config.Timeout)
 	defer cancel()
 
 	log.Printf("[MCP:%s] 启动 stdio 进程: %s %v", c.config.Name, c.config.Command, c.config.Args)
 
-	c.cmd = exec.CommandContext(connectCtx, c.config.Command, c.config.Args...)
+	// 关键修复：用独立的 processCtx 控制子进程生命周期，不受 connectCtx 超时影响
+	// connectCtx 超时/返回后不会 kill 子进程，子进程持续运行直到 Close() 被调用
+	processCtx, processCancel := context.WithCancel(context.Background())
+	c.processCancel = processCancel
+
+	c.cmd = exec.CommandContext(processCtx, c.config.Command, c.config.Args...)
 
 	// 设置环境变量（继承系统环境变量并添加自定义环境变量）
 	if len(c.config.Env) > 0 {
@@ -96,20 +104,24 @@ func (c *MCPStdioClient) Connect(ctx context.Context) error {
 	var err error
 	c.stdin, err = c.cmd.StdinPipe()
 	if err != nil {
+		processCancel()
 		return fmt.Errorf("无法获取 stdin 管道: %w", err)
 	}
 
 	c.stdout, err = c.cmd.StdoutPipe()
 	if err != nil {
+		processCancel()
 		return fmt.Errorf("无法获取 stdout 管道: %w", err)
 	}
 
 	c.stderr, err = c.cmd.StderrPipe()
 	if err != nil {
+		processCancel()
 		return fmt.Errorf("无法获取 stderr 管道: %w", err)
 	}
 
 	if err := c.cmd.Start(); err != nil {
+		processCancel()
 		return fmt.Errorf("无法启动 MCP 服务器: %w", err)
 	}
 
@@ -121,7 +133,7 @@ func (c *MCPStdioClient) Connect(ctx context.Context) error {
 	// 启动后台响应分发 goroutine（不持任何锁，独立读取 stdout）
 	go c.readLoop()
 
-	// 发送初始化请求
+	// 发送初始化请求（使用 connectCtx，有超时限制）
 	log.Printf("[MCP:%s] 发送初始化请求...", c.config.Name)
 	if err := c.initialize(connectCtx); err != nil {
 		c.Close()
@@ -129,7 +141,7 @@ func (c *MCPStdioClient) Connect(ctx context.Context) error {
 	}
 	log.Printf("[MCP:%s] 初始化成功", c.config.Name)
 
-	// 获取工具列表
+	// 获取工具列表（使用 connectCtx，有超时限制）
 	log.Printf("[MCP:%s] 获取工具列表...", c.config.Name)
 	tools, err := c.listTools(connectCtx)
 	if err != nil {
@@ -337,18 +349,7 @@ func (c *MCPStdioClient) CallTool(ctx context.Context, toolName string, argument
 		arguments = json.RawMessage("{}")
 	}
 
-	// 调试模式：打印工具输入
-	if c.config.Env != nil {
-		if v, ok := c.config.Env["DEBUG"]; ok {
-			debug := v == "true" || v == "1" || v == "yes"
-			if debug {
-				log.Printf("[MCP:%s:DEBUG] 工具调用输入: name=%s, arguments=%s", c.config.Name, toolName, string(arguments))
-			}
-		}
-	}
-
 	// 构建标准 MCP tools/call 请求参数
-	// arguments 直接嵌入，保留原始字段名和类型
 	type callParams struct {
 		Name      string          `json:"name"`
 		Arguments json.RawMessage `json:"arguments"`
@@ -385,14 +386,8 @@ func (c *MCPStdioClient) CallTool(ctx context.Context, toolName string, argument
 		IsError bool `json:"isError,omitempty"`
 	}
 	if err := json.Unmarshal(resp.Result, &result); err != nil {
-		// 调试模式：打印原始响应
-		if c.config.Env != nil {
-			if v, ok := c.config.Env["DEBUG"]; ok {
-				debug := v == "true" || v == "1" || v == "yes"
-				if debug {
-					log.Printf("[MCP:%s:DEBUG] 工具调用输出 (原始): %s", c.config.Name, string(resp.Result))
-				}
-			}
+		if c.isDebug() {
+			log.Printf("[MCP:%s:DEBUG] 工具调用输出 (原始): %s", c.config.Name, string(resp.Result))
 		}
 		return string(resp.Result), nil
 	}
@@ -408,26 +403,31 @@ func (c *MCPStdioClient) CallTool(ctx context.Context, toolName string, argument
 		}
 	}
 
-	// 调试模式：打印工具输出
-	if c.config.Env != nil {
-		if v, ok := c.config.Env["DEBUG"]; ok {
-			debug := v == "true" || v == "1" || v == "yes"
-			if debug {
-				log.Printf("[MCP:%s:DEBUG] 工具调用输出: %s", c.config.Name, text)
-			}
-		}
+	if c.isDebug() {
+		log.Printf("[MCP:%s:DEBUG] 工具调用输出: %s", c.config.Name, text)
 	}
 
 	return text, nil
 }
 
+// isDebug 检查是否开启调试模式
+func (c *MCPStdioClient) isDebug() bool {
+	if c.config.Env == nil {
+		return false
+	}
+	v, ok := c.config.Env["DEBUG"]
+	return ok && (v == "true" || v == "1" || v == "yes")
+}
+
 // Close 关闭 MCP stdio 客户端
 func (c *MCPStdioClient) Close() error {
+	if c.processCancel != nil {
+		c.processCancel()
+	}
 	if c.stdin != nil {
 		c.stdin.Close()
 	}
 	if c.cmd != nil && c.cmd.Process != nil {
-		c.cmd.Process.Kill()
 		c.cmd.Wait()
 	}
 	return nil
