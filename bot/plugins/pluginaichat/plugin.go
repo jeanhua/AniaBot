@@ -30,6 +30,9 @@ type AIChatPlugin struct {
 
 	lockStorage storage.Storage
 
+	// 用于存储活跃的请求上下文，支持取消操作
+	activeContexts sync.Map // map[message.QID]context.CancelFunc
+
 	botConfig struct {
 		baseURL string
 		apiKey  string
@@ -67,7 +70,7 @@ func NewAIChatPlugin() *AIChatPlugin {
 	return &AIChatPlugin{
 		Meta: plugin.Meta{
 			Name:      "AI对话插件",
-			HelpWords: "@我聊天哦，带上 #新对话 标签可以创建新对话",
+			HelpWords: "@我聊天哦，带上 #新对话 标签可以创建新对话，发送 /stop 可以停止 AI 响应",
 			Order:     plugin.LevelPostHandle,
 			ShowFor:   plugininfo.ShowForGroup | plugininfo.ShowForFriend,
 			Author:    "jeanhua",
@@ -82,6 +85,25 @@ func (p *AIChatPlugin) tryLock(ctx context.Context, id message.QID) bool {
 
 func (p *AIChatPlugin) unLock(ctx context.Context, id message.QID) {
 	p.lockStorage.Del(ctx, id.String())
+}
+
+// stopRequest 停止指定 ID 的 AI 请求
+func (p *AIChatPlugin) stopRequest(id message.QID) bool {
+	if cancel, ok := p.activeContexts.LoadAndDelete(id); ok {
+		cancel.(context.CancelFunc)()
+		return true
+	}
+	return false
+}
+
+// setActiveContext 设置活跃的请求上下文
+func (p *AIChatPlugin) setActiveContext(id message.QID, cancel context.CancelFunc) {
+	p.activeContexts.Store(id, cancel)
+}
+
+// clearActiveContext 清除活跃的请求上下文
+func (p *AIChatPlugin) clearActiveContext(id message.QID) {
+	p.activeContexts.Delete(id)
 }
 
 func (p *AIChatPlugin) getChat(id message.QID) *aichat.ChatBot {
@@ -110,6 +132,22 @@ func (p *AIChatPlugin) OnGroupMsg(ctx context.Context, bot bot.Bot, cmd command.
 	if !cmd.Mention {
 		return true, nil
 	}
+
+	// 处理 /stop 命令
+	if cmd.Name == "stop" {
+		if p.stopRequest(msg.GroupId) {
+			builder := msgchain.Builder().Group()
+			builder.Text("已停止 AI 响应")
+			bot.SendGroupMsg(msg.GroupId, builder.Build())
+			p.Logger.Info("用户停止 AI 响应", "group", msg.GroupId, "user", msg.Sender.UserId)
+		} else {
+			builder := msgchain.Builder().Group()
+			builder.Text("当前没有正在进行的 AI 请求")
+			bot.SendGroupMsg(msg.GroupId, builder.Build())
+		}
+		return false, nil
+	}
+
 	if !p.tryLock(ctx, msg.GroupId) {
 		builder := msgchain.Builder().Group()
 		builder.Text("正在等待响应中，不要着急哦~")
@@ -117,6 +155,7 @@ func (p *AIChatPlugin) OnGroupMsg(ctx context.Context, bot bot.Bot, cmd command.
 		return true, nil
 	}
 	defer p.unLock(ctx, msg.GroupId)
+	defer p.clearActiveContext(msg.GroupId)
 	chat := p.getChat(msg.GroupId)
 	if chat == nil {
 		builder := msgchain.Builder().Group()
@@ -124,6 +163,10 @@ func (p *AIChatPlugin) OnGroupMsg(ctx context.Context, bot bot.Bot, cmd command.
 		bot.SendGroupMsg(msg.GroupId, builder.Build())
 		return true, nil
 	}
+
+	// 创建可取消的上下文
+	chatCtx, cancel := context.WithCancel(ctx)
+	p.setActiveContext(msg.GroupId, cancel)
 
 	builder := msgchain.Builder().Group()
 	extraText := p.extraMsg(ctx, bot, msg, p.ocrModel)
@@ -168,13 +211,18 @@ func (p *AIChatPlugin) OnGroupMsg(ctx context.Context, bot bot.Bot, cmd command.
 		},
 	}
 
-	resp, err := chat.Chat(ctx, extraText, msgFuncs,
+	resp, err := chat.Chat(chatCtx, extraText, msgFuncs,
 		llms.WithMaxTokens(p.llmParameter.maxToken),
 		llms.WithTemperature(p.llmParameter.temperature),
 		llms.WithTopP(p.llmParameter.top_p),
 		llms.WithTopK(p.llmParameter.top_k),
 	)
 	if err != nil {
+		if errors.Is(err, context.Canceled) {
+			builder.Text("AI 响应已被停止")
+			bot.SendGroupMsg(msg.GroupId, builder.Build())
+			return true, nil
+		}
 		if errors.Is(err, context.DeadlineExceeded) {
 			builder.Text("请求超时")
 			bot.SendGroupMsg(msg.GroupId, builder.Build())
@@ -200,6 +248,21 @@ func (p *AIChatPlugin) OnGroupMsg(ctx context.Context, bot bot.Bot, cmd command.
 }
 
 func (p *AIChatPlugin) OnFriendMsg(ctx context.Context, bot bot.Bot, cmd command.Command, msg message.Message) (bool, error) {
+	// 处理 /stop 命令
+	if cmd.Name == "stop" {
+		if p.stopRequest(msg.Sender.UserId) {
+			builder := msgchain.Builder().Friend()
+			builder.Text("已停止 AI 响应")
+			bot.SendFriendMsg(msg.Sender.UserId, builder.Build())
+			p.Logger.Info("用户停止 AI 响应", "user", msg.Sender.UserId)
+		} else {
+			builder := msgchain.Builder().Friend()
+			builder.Text("当前没有正在进行的 AI 请求")
+			bot.SendFriendMsg(msg.Sender.UserId, builder.Build())
+		}
+		return false, nil
+	}
+
 	if !p.tryLock(ctx, msg.Sender.UserId) {
 		builder := msgchain.Builder().Friend()
 		builder.Text("正在等待响应中，不要着急哦~")
@@ -207,6 +270,7 @@ func (p *AIChatPlugin) OnFriendMsg(ctx context.Context, bot bot.Bot, cmd command
 		return true, nil
 	}
 	defer p.unLock(ctx, msg.Sender.UserId)
+	defer p.clearActiveContext(msg.Sender.UserId)
 
 	chat := p.getChat(msg.Sender.UserId)
 	if chat == nil {
@@ -215,6 +279,10 @@ func (p *AIChatPlugin) OnFriendMsg(ctx context.Context, bot bot.Bot, cmd command
 		bot.SendFriendMsg(msg.Sender.UserId, builder.Build())
 		return true, nil
 	}
+
+	// 创建可取消的上下文
+	chatCtx, cancel := context.WithCancel(ctx)
+	p.setActiveContext(msg.Sender.UserId, cancel)
 
 	builder := msgchain.Builder().Friend()
 	extraText := p.extraMsg(ctx, bot, msg, p.ocrModel)
@@ -258,7 +326,7 @@ func (p *AIChatPlugin) OnFriendMsg(ctx context.Context, bot bot.Bot, cmd command
 		},
 	}
 
-	resp, err := chat.Chat(ctx, extraText,
+	resp, err := chat.Chat(chatCtx, extraText,
 		msgFuncs,
 		llms.WithMaxTokens(p.llmParameter.maxToken),
 		llms.WithTemperature(p.llmParameter.temperature),
@@ -266,6 +334,11 @@ func (p *AIChatPlugin) OnFriendMsg(ctx context.Context, bot bot.Bot, cmd command
 		llms.WithTopK(p.llmParameter.top_k),
 	)
 	if err != nil {
+		if errors.Is(err, context.Canceled) {
+			builder.Text("AI 响应已被停止")
+			bot.SendFriendMsg(msg.Sender.UserId, builder.Build())
+			return true, nil
+		}
 		if errors.Is(err, context.DeadlineExceeded) {
 			builder.Text("请求超时")
 			bot.SendFriendMsg(msg.Sender.UserId, builder.Build())
