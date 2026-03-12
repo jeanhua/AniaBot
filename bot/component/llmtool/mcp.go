@@ -219,13 +219,106 @@ func (t *MCPTool) Execute(ctx context.Context, params any, callbacks CallBackFun
 
 // ExecuteWithArgs 使用原始 JSON 参数执行 MCP 工具
 func (t *MCPTool) ExecuteWithArgs(ctx context.Context, args json.RawMessage, callbacks CallBackFuncs) (string, error) {
+	// 验证参数是否符合 schema
+	if err := t.validateArguments(args); err != nil {
+		return "", fmt.Errorf("argument validation failed: %w\nProvided: %s\nExpected schema: %s",
+			err, string(args), string(t.GetParameters()))
+	}
+
 	// 调用远程MCP工具
 	result, err := t.client.CallTool(ctx, t.definition.Name, args)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("MCP server error: %w", err)
 	}
 
 	return result, nil
+}
+
+// validateArguments 验证参数是否符合工具的 schema 定义
+func (t *MCPTool) validateArguments(args json.RawMessage) error {
+	// 解析参数
+	var argsMap map[string]any
+	if err := json.Unmarshal(args, &argsMap); err != nil {
+		return fmt.Errorf("invalid JSON: %w", err)
+	}
+
+	// 解析 schema
+	schema := t.GetParameters()
+	if len(schema) == 0 {
+		return nil // 没有参数要求
+	}
+
+	var schemaMap map[string]any
+	if err := json.Unmarshal(schema, &schemaMap); err != nil {
+		return nil // schema 解析失败，跳过验证
+	}
+
+	// 检查必填字段
+	if required, ok := schemaMap["required"].([]any); ok {
+		for _, req := range required {
+			if reqStr, ok := req.(string); ok {
+				if _, exists := argsMap[reqStr]; !exists {
+					return fmt.Errorf("missing required parameter: %s", reqStr)
+				}
+			}
+		}
+	}
+
+	// 检查参数类型（基础验证）
+	if properties, ok := schemaMap["properties"].(map[string]any); ok {
+		for key, value := range argsMap {
+			if propSchema, exists := properties[key]; exists {
+				if err := validateValueType(key, value, propSchema); err != nil {
+					return err
+				}
+			}
+		}
+	}
+
+	return nil
+}
+
+// validateValueType 验证值的类型是否符合 schema
+func validateValueType(key string, value any, propSchema any) error {
+	schemaMap, ok := propSchema.(map[string]any)
+	if !ok {
+		return nil
+	}
+
+	expectedType, ok := schemaMap["type"].(string)
+	if !ok {
+		return nil
+	}
+
+	actualType := getJSONType(value)
+	if actualType != expectedType && !(expectedType == "number" && actualType == "integer") {
+		return fmt.Errorf("parameter '%s' has wrong type: expected %s, got %s",
+			key, expectedType, actualType)
+	}
+
+	return nil
+}
+
+// getJSONType 获取值的 JSON 类型
+func getJSONType(value any) string {
+	switch value.(type) {
+	case string:
+		return "string"
+	case float64:
+		return "number"
+	case int, int64:
+		return "integer"
+	case bool:
+		return "boolean"
+	case []any:
+		return "array"
+	case map[string]any:
+		return "object"
+	case nil:
+		return "null"
+	default:
+		return "unknown"
+	}
 }
 
 // RegisterMCP 注册MCP服务器中的所有工具到执行器
