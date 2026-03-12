@@ -23,7 +23,7 @@ func NewToolOrchestrator(executor ToolExecutor, msgBuilder *MessageBuilder) *Too
 	return &ToolOrchestrator{
 		executor:      executor,
 		msgBuilder:    msgBuilder,
-		maxIterations: 20,
+		maxIterations: 10,
 	}
 }
 
@@ -43,7 +43,9 @@ func (o *ToolOrchestrator) ExecuteWithTools(
 		if err != nil {
 			return "", messages, err
 		}
-		return resp.Choices[0].Content, messages, nil
+		content := resp.Choices[0].Content
+		messages = append(messages, o.msgBuilder.BuildAIMessage(content, nil))
+		return content, messages, nil
 	}
 
 	callOpts := append(opts, llms.WithTools(o.executor.Tools()))
@@ -56,22 +58,28 @@ func (o *ToolOrchestrator) ExecuteWithTools(
 
 		choice := resp.Choices[0]
 
+		// 没有工具调用，返回最终响应
 		if len(choice.ToolCalls) == 0 {
+			messages = append(messages, o.msgBuilder.BuildAIMessage(choice.Content, nil))
 			return choice.Content, messages, nil
 		}
 
+		// 保存 AI 消息（包含工具调用）
 		messages = append(messages, o.msgBuilder.BuildAIMessage(choice.Content, choice.ToolCalls))
 
+		// 发送 AI 的文本内容（如果有）
 		if callbacks.SendText != nil && choice.Content != "" {
 			callbacks.SendText(choice.Content)
 		}
 
+		// 执行工具调用
 		toolResults, err := o.executeToolCalls(ctx, choice.ToolCalls, callbacks)
 		if err != nil {
 			return "", messages, err
 		}
 		messages = append(messages, toolResults...)
 
+		// 达到最大迭代次数，强制生成最终响应
 		if i == o.maxIterations-1 {
 			messages = append(messages, o.msgBuilder.BuildToolLimitMessage())
 			finalResp, err := llmClient.Generate(ctx, messages)
@@ -81,7 +89,9 @@ func (o *ToolOrchestrator) ExecuteWithTools(
 			if len(finalResp.Choices) == 0 {
 				return "", messages, fmt.Errorf("no choices returned from final LLM call")
 			}
-			return finalResp.Choices[0].Content, messages, nil
+			finalContent := finalResp.Choices[0].Content
+			messages = append(messages, o.msgBuilder.BuildAIMessage(finalContent, nil))
+			return finalContent, messages, nil
 		}
 	}
 

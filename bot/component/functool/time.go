@@ -2,6 +2,7 @@ package functool
 
 import (
 	"context"
+	"fmt"
 	"log"
 
 	"github.com/jeanhua/AniaBot/bot/component/llmtool"
@@ -22,5 +23,6 @@ func NewTimeTool() *TimeTool {
 
 func (t *TimeTool) Execute(ctx context.Context, params any, callbacks llmtool.CallBackFuncs) (string, error) {
 	log.Println("执行time...")
-	return utils.GetFormattedTime(), nil
+	currentTime := utils.GetFormattedTime()
+	return fmt.Sprintf("当前时间是: %s", currentTime), nil
 }
