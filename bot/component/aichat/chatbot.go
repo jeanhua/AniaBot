@@ -10,10 +10,10 @@ import (
 )
 
 type ChatBot struct {
-	llmClient         *LLMClient
-	msgBuilder        *MessageBuilder
-	toolOrchestrator  *ToolOrchestrator
-	memory            *memory.ConversationWindowBuffer
+	llmClient        *LLMClient
+	msgBuilder       *MessageBuilder
+	toolOrchestrator *ToolOrchestrator
+	memory           *memory.ConversationWindowBuffer
 }
 
 func NewChatBot(baseURL, apiKey, model, prompt string, windowSize int, toolExecutor ToolExecutor) (*ChatBot, error) {
@@ -46,12 +46,14 @@ func (b *ChatBot) Chat(ctx context.Context, userInput string, callbacks llmtool.
 
 	messages := b.msgBuilder.BuildChatMessages(userInput, history)
 
-	response, _, err := b.toolOrchestrator.ExecuteWithTools(ctx, b.llmClient, messages, callbacks, opts...)
+	// ExecuteWithTools 返回完整的消息历史，包括工具调用和结果
+	response, updatedMessages, err := b.toolOrchestrator.ExecuteWithTools(ctx, b.llmClient, messages, callbacks, opts...)
 	if err != nil {
 		return "", fmt.Errorf("chat execution failed: %w", err)
 	}
 
-	if err := b.saveContext(userInput, response); err != nil {
+	// 保存完整的对话上下文，包括工具调用
+	if err := b.saveFullContext(userInput, response, updatedMessages); err != nil {
 		return "", fmt.Errorf("failed to save context: %w", err)
 	}
 
@@ -89,5 +91,73 @@ func (b *ChatBot) saveContext(userInput, response string) error {
 		context.Background(),
 		map[string]any{"prompt": userInput},
 		map[string]any{"response": response},
+	)
+}
+
+// saveFullContext 保存完整的对话上下文，包括工具调用和结果
+func (b *ChatBot) saveFullContext(userInput, response string, messages []llms.MessageContent) error {
+	// 检查是否有工具调用，并提取工具调用信息
+	var toolCallsSummary string
+	foundUserInput := false
+
+	for _, msg := range messages {
+		// 找到当前用户输入后开始记录
+		if msg.Role == llms.ChatMessageTypeHuman && !foundUserInput {
+			for _, part := range msg.Parts {
+				if textPart, ok := part.(llms.TextContent); ok {
+					if textPart.Text == userInput {
+						foundUserInput = true
+						break
+					}
+				}
+			}
+			continue
+		}
+
+		if !foundUserInput {
+			continue
+		}
+
+		// 提取工具调用信息
+		if msg.Role == llms.ChatMessageTypeAI {
+			for _, part := range msg.Parts {
+				if toolCall, ok := part.(llms.ToolCall); ok {
+					toolCallsSummary += fmt.Sprintf("\n[Called tool: %s with args: %s]",
+						toolCall.FunctionCall.Name,
+						toolCall.FunctionCall.Arguments)
+				}
+			}
+		}
+
+		// 提取工具结果
+		if msg.Role == llms.ChatMessageTypeTool {
+			for _, part := range msg.Parts {
+				if toolResp, ok := part.(llms.ToolCallResponse); ok {
+					// 截断过长的结果
+					result := toolResp.Content
+					if len(result) > 500 {
+						result = result[:500] + "... (truncated)"
+					}
+					toolCallsSummary += fmt.Sprintf("\n[Tool %s returned: %s]",
+						toolResp.Name,
+						result)
+				}
+			}
+		}
+	}
+
+	// 如果没有工具调用，使用简单的保存方式
+	if toolCallsSummary == "" {
+		return b.saveContext(userInput, response)
+	}
+
+	// 将工具调用信息附加到响应中保存
+	// 这样模型在下次对话时能看到之前的工具调用历史
+	enrichedResponse := response + toolCallsSummary
+
+	return b.memory.SaveContext(
+		context.Background(),
+		map[string]any{"prompt": userInput},
+		map[string]any{"response": enrichedResponse},
 	)
 }
