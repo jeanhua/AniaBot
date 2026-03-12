@@ -108,7 +108,6 @@ func mcpToolToOpenAITool(name, description string, parameters json.RawMessage) l
 				required = append(required, k)
 			}
 			schema["required"] = required
-			log.Printf("[MCP:%s] required字段缺失，从properties推断必填参数: %v", name, required)
 		} else {
 			schema["required"] = []string{}
 		}
