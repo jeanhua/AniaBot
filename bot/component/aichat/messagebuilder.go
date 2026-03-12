@@ -2,30 +2,22 @@ package aichat
 
 import (
 	"github.com/tmc/langchaingo/llms"
-	"github.com/tmc/langchaingo/memory"
 )
 
 type MessageBuilder struct {
 	prompt string
-	memory *memory.ConversationWindowBuffer
 }
 
-func NewMessageBuilder(prompt string, memory *memory.ConversationWindowBuffer) *MessageBuilder {
-	return &MessageBuilder{
-		prompt: prompt,
-		memory: memory,
-	}
+func NewMessageBuilder(prompt string) *MessageBuilder {
+	return &MessageBuilder{prompt: prompt}
 }
 
-func (b *MessageBuilder) BuildChatMessages(userInput string, history []llms.ChatMessage) []llms.MessageContent {
-	messages := []llms.MessageContent{
-		llms.TextParts(llms.ChatMessageTypeSystem, b.prompt),
-	}
-
-	for _, msg := range history {
-		messages = append(messages, llms.TextParts(msg.GetType(), msg.GetContent()))
-	}
-
+// BuildChatMessages 构建本轮请求的完整消息列表。
+// history 是 messageWindow 中保存的历史消息（已包含工具调用链，不含 system prompt）
+func (b *MessageBuilder) BuildChatMessages(userInput string, history []llms.MessageContent) []llms.MessageContent {
+	messages := make([]llms.MessageContent, 0, 1+len(history)+1)
+	messages = append(messages, llms.TextParts(llms.ChatMessageTypeSystem, b.prompt))
+	messages = append(messages, history...)
 	messages = append(messages, llms.TextParts(llms.ChatMessageTypeHuman, userInput))
 	return messages
 }
