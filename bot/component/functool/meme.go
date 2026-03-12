@@ -3,6 +3,7 @@ package functool
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log"
 	"math/rand/v2"
 
@@ -48,9 +49,9 @@ func (t *MemeTool) Execute(ctx context.Context, params any, callbacks llmtool.Ca
 	id := rand.IntN(len(result.Data))
 	_, err = callbacks.SendImage(result.Data[id].ImageUrl)
 	if err != nil {
-		return "发送失败", err
+		return fmt.Sprintf("表情包发送失败: %v", err), err
 	}
-	return "发送成功", nil
+	return fmt.Sprintf("已成功发送关于'%s'的表情包图片给用户", p.Text), nil
 }
 
 var ToolExecuteError = errors.New("Function Tool执行错误")

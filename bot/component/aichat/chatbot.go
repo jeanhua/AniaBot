@@ -44,10 +44,9 @@ func (b *ChatBot) Chat(ctx context.Context, userInput string, callbacks llmtool.
 
 	// 从 updatedMessages 中提取本轮新增的消息（去掉 system prompt 和历史部分）
 	// updatedMessages 结构：[system, ...history, human, (ai+tool+tool_result)..., ai_final]
-	// 我们只需要保存 human 消息及其之后的所有消息
+	// 保存本轮完整对话：human 消息 + AI 响应 + 工具调用链
 	historyLen := len(b.window.history())
-	// +1 是 system prompt，+1 是本轮 human 消息
-	newMessagesStart := 1 + historyLen // system prompt 占 1 位
+	newMessagesStart := 1 + historyLen // 跳过 system prompt (1) + 历史消息 (historyLen)
 	if newMessagesStart < len(updatedMessages) {
 		b.window.append(updatedMessages[newMessagesStart:]...)
 	}
