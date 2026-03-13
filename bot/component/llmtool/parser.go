@@ -24,7 +24,9 @@ func structToOpenAITool(tool Tool) llms.Tool {
 
 	// 检查是否是 MCP 工具
 	if mcpTool, ok := tool.(*MCPTool); ok {
-		return mcpToolToOpenAITool(name, description, mcpTool.GetParameters())
+		schema := mcpTool.GetInputSchema()
+		schemaBytes, _ := json.Marshal(schema)
+		return mcpToolToOpenAITool(name, description, schemaBytes)
 	}
 
 	t := reflect.TypeOf(params)
