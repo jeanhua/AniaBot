@@ -64,6 +64,16 @@ func (b *ChatBot) ClearHistory(ctx context.Context) error {
 	return nil
 }
 
+// ClearDynamicTools 清理动态加载的 MCP 工具
+func (b *ChatBot) ClearDynamicTools() int {
+	if b.toolOrchestrator != nil && b.toolOrchestrator.executor != nil {
+		if executer, ok := b.toolOrchestrator.executor.(*llmtool.ToolExecuter); ok {
+			return executer.ClearDynamicMCPTools()
+		}
+	}
+	return 0
+}
+
 func (b *ChatBot) SetToolOrchestrator(orchestrator *ToolOrchestrator) {
 	b.toolOrchestrator = orchestrator
 }

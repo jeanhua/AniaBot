@@ -73,3 +73,37 @@ func (e *ToolExecuter) getToolNames() []string {
 	}
 	return names
 }
+
+// UnregisterTool 注销指定名称的工具
+func (e *ToolExecuter) UnregisterTool(toolName string) bool {
+	if _, ok := e.tools[toolName]; ok {
+		delete(e.tools, toolName)
+		return true
+	}
+	return false
+}
+
+// ClearDynamicMCPTools 清理所有动态加载的 MCP 工具（保留发现和加载工具）
+func (e *ToolExecuter) ClearDynamicMCPTools() int {
+	cleared := 0
+	toDelete := make([]string, 0)
+
+	for name, tool := range e.tools {
+		// 检查是否是 MCP 工具
+		if _, ok := tool.(*MCPTool); ok {
+			// 保留发现和加载工具，删除其他动态加载的工具
+			if _, isDiscovery := tool.(*MCPDiscoveryTool); !isDiscovery {
+				if _, isLoader := tool.(*MCPLoaderTool); !isLoader {
+					toDelete = append(toDelete, name)
+				}
+			}
+		}
+	}
+
+	for _, name := range toDelete {
+		delete(e.tools, name)
+		cleared++
+	}
+
+	return cleared
+}

@@ -178,6 +178,11 @@ func (p *AIChatPlugin) OnGroupMsg(ctx context.Context, bot bot.Bot, cmd command.
 		} else {
 			p.Logger.Info("清理AI对话信息成功")
 		}
+
+		// 清理动态加载的 MCP 工具
+		if cleared := chat.ClearDynamicTools(); cleared > 0 {
+			p.Logger.Info("清理动态加载的 MCP 工具", "count", cleared)
+		}
 	}
 
 	msgFuncs := llmtool.CallBackFuncs{
@@ -293,6 +298,11 @@ func (p *AIChatPlugin) OnFriendMsg(ctx context.Context, bot bot.Bot, cmd command
 			return false, nil
 		} else {
 			p.Logger.Info("清理AI对话信息成功")
+		}
+
+		// 清理动态加载的 MCP 工具
+		if cleared := chat.ClearDynamicTools(); cleared > 0 {
+			p.Logger.Info("清理动态加载的 MCP 工具", "count", cleared)
 		}
 	}
 
