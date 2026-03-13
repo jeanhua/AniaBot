@@ -367,11 +367,16 @@ func (t *MCPDiscoveryTool) Params() any {
 }
 
 func (t *MCPDiscoveryTool) Execute(ctx context.Context, params any, callbacks CallBackFuncs) (string, error) {
+	log.Printf("[MCP:%s] 🔍 模型正在发现可用工具...", t.manager.client.config.Name)
+
 	tools := t.manager.GetToolNames()
 	data, err := json.MarshalIndent(tools, "", "  ")
 	if err != nil {
+		log.Printf("[MCP:%s] ❌ 工具发现失败: %v", t.manager.client.config.Name, err)
 		return "", err
 	}
+
+	log.Printf("[MCP:%s] ✅ 工具发现完成，共 %d 个工具", t.manager.client.config.Name, len(tools))
 	return string(data), nil
 }
 
