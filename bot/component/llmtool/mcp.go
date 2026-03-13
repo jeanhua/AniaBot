@@ -5,179 +5,155 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
-	"net/http"
+	"os/exec"
 	"strings"
 	"time"
 
-	"github.com/go-resty/resty/v2"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
-
-// MCPTransportType MCP 传输类型
-type MCPTransportType string
-
-const (
-	MCPTransportHTTP       MCPTransportType = "http"
-	MCPTransportStreamable MCPTransportType = "streamable"
-	MCPTransportStdio      MCPTransportType = "stdio"
-)
-
-// MCPClientInterface MCP 客户端通用接口
-type MCPClientInterface interface {
-	Connect(ctx context.Context) error
-	GetTools() []MCPToolDefinition
-	CallTool(ctx context.Context, toolName string, arguments json.RawMessage) (string, error)
-}
 
 // MCPConfig MCP服务器配置
 type MCPConfig struct {
 	Name        string            `json:"name"`        // MCP服务器名称
-	Transport   MCPTransportType  `json:"transport"`   // 传输类型: http或streamable或stdio
-	Endpoint    string            `json:"endpoint"`    // MCP服务器端点URL (HTTP模式)
-	Headers     map[string]string `json:"headers"`     // 自定义请求头 (HTTP模式)
-	Command     string            `json:"command"`     // 启动命令 (stdio模式)
-	Args        []string          `json:"args"`        // 命令参数 (stdio模式)
-	Env         map[string]string `json:"env"`         // 环境变量 (stdio模式)
+	Command     string            `json:"command"`     // 启动命令
+	Args        []string          `json:"args"`        // 命令参数
+	Env         map[string]string `json:"env"`         // 环境变量
 	Timeout     time.Duration     `json:"timeout"`     // 请求超时时间
 	Description string            `json:"description"` // MCP服务器描述
 }
 
-// MCPToolDefinition MCP工具定义
-// MCP 协议标准字段名为 inputSchema，但部分实现使用 parameters，两者都兼容
-type MCPToolDefinition struct {
-	Name        string          `json:"name"`
-	Description string          `json:"description"`
-	InputSchema json.RawMessage `json:"inputSchema"` // MCP 标准字段名 (Notion等标准实现)
-	Parameters  json.RawMessage `json:"parameters"`  // 兼容非标准实现
-}
-
-// GetParameters 返回工具参数定义，优先使用 inputSchema，兼容 parameters
-func (d *MCPToolDefinition) GetParameters() json.RawMessage {
-	if len(d.InputSchema) > 0 && string(d.InputSchema) != "null" {
-		return d.InputSchema
-	}
-	return d.Parameters
-}
-
-// MCPListToolsResponse MCP列出工具响应
-type MCPListToolsResponse struct {
-	Tools []MCPToolDefinition `json:"tools"`
-}
-
-// MCPCallToolRequest MCP调用工具请求
-type MCPCallToolRequest struct {
-	Name      string          `json:"name"`
-	Arguments json.RawMessage `json:"arguments"`
-}
-
-// MCPCallToolResponse MCP调用工具响应
-type MCPCallToolResponse struct {
-	Result string `json:"result"`
-	Error  string `json:"error,omitempty"`
-}
-
-// MCPClient MCP客户端
+// MCPClient MCP客户端（基于官方SDK）
 type MCPClient struct {
-	config     *MCPConfig
-	httpClient *resty.Client
-	tools      []MCPToolDefinition
+	config  *MCPConfig
+	client  *mcp.Client
+	session *mcp.ClientSession
+	tools   []*mcp.Tool
 }
 
 // NewMCPClient 创建新的MCP客户端
 func NewMCPClient(config *MCPConfig) *MCPClient {
 	if config.Timeout == 0 {
-		config.Timeout = 30 * time.Second
+		config.Timeout = 120 * time.Second
 	}
 
-	client := resty.New().
-		SetTimeout(config.Timeout).
-		SetHeaders(config.Headers)
+	client := mcp.NewClient(
+		&mcp.Implementation{
+			Name:    "ania-bot-mcp-client",
+			Version: "1.0.0",
+		},
+		nil,
+	)
 
 	return &MCPClient{
-		config:     config,
-		httpClient: client,
+		config: config,
+		client: client,
 	}
 }
 
 // Connect 连接到MCP服务器并获取工具列表
 func (c *MCPClient) Connect(ctx context.Context) error {
-	// 尝试从服务器获取工具列表
-	// MCP协议支持通过 /tools 或 /list-tools 端点获取工具列表
-	endpoints := []string{"/tools", "/list-tools", "/mcp/tools"}
+	connectCtx, cancel := context.WithTimeout(ctx, c.config.Timeout)
+	defer cancel()
 
-	for _, endpoint := range endpoints {
-		url := c.config.Endpoint + endpoint
-		resp, err := c.httpClient.R().
-			SetContext(ctx).
-			Get(url)
+	log.Printf("[MCP:%s] 启动进程: %s %v", c.config.Name, c.config.Command, c.config.Args)
 
-		if err != nil {
-			continue
+	// 创建命令传输
+	cmd := exec.Command(c.config.Command, c.config.Args...)
+
+	// 设置环境变量
+	if len(c.config.Env) > 0 {
+		env := cmd.Environ()
+		for k, v := range c.config.Env {
+			env = append(env, fmt.Sprintf("%s=%s", k, v))
 		}
-
-		if resp.StatusCode() == http.StatusOK {
-			var listResp MCPListToolsResponse
-			if err := json.Unmarshal(resp.Body(), &listResp); err == nil {
-				c.tools = listResp.Tools
-				return nil
-			}
-		}
+		cmd.Env = env
 	}
 
-	// 如果无法自动发现，尝试通过配置文件或返回空列表
-	return fmt.Errorf("无法从MCP服务器 %s 获取工具列表", c.config.Name)
+	transport := &mcp.CommandTransport{Command: cmd}
+
+	// 连接到服务器
+	session, err := c.client.Connect(connectCtx, transport, nil)
+	if err != nil {
+		return fmt.Errorf("连接MCP服务器失败: %w", err)
+	}
+	c.session = session
+
+	log.Printf("[MCP:%s] 连接成功，获取工具列表...", c.config.Name)
+
+	// 获取工具列表
+	toolsResp, err := session.ListTools(connectCtx, &mcp.ListToolsParams{})
+	if err != nil {
+		c.Close()
+		return fmt.Errorf("获取工具列表失败: %w", err)
+	}
+
+	c.tools = toolsResp.Tools
+	log.Printf("[MCP:%s] 获取到 %d 个工具", c.config.Name, len(c.tools))
+
+	return nil
 }
 
 // GetTools 获取MCP服务器提供的所有工具定义
-func (c *MCPClient) GetTools() []MCPToolDefinition {
+func (c *MCPClient) GetTools() []*mcp.Tool {
 	return c.tools
 }
 
 // CallTool 调用MCP工具
 func (c *MCPClient) CallTool(ctx context.Context, toolName string, arguments json.RawMessage) (string, error) {
-	req := MCPCallToolRequest{
+	if c.session == nil {
+		return "", fmt.Errorf("MCP客户端未连接")
+	}
+
+	log.Printf("[MCP:%s] 调用工具: %s", c.config.Name, toolName)
+
+	// 解析参数
+	var args map[string]any
+	if len(arguments) > 0 {
+		if err := json.Unmarshal(arguments, &args); err != nil {
+			return "", fmt.Errorf("解析参数失败: %w", err)
+		}
+	}
+
+	// 调用工具
+	result, err := c.session.CallTool(ctx, &mcp.CallToolParams{
 		Name:      toolName,
-		Arguments: arguments,
+		Arguments: args,
+	})
+	if err != nil {
+		return "", fmt.Errorf("调用工具失败: %w", err)
 	}
 
-	// 尝试不同的调用端点
-	endpoints := []string{"/call", "/invoke", "/mcp/call", "/tools/" + toolName}
+	if result.IsError {
+		return "", fmt.Errorf("工具执行错误")
+	}
 
-	for _, endpoint := range endpoints {
-		url := c.config.Endpoint + endpoint
-		resp, err := c.httpClient.R().
-			SetContext(ctx).
-			SetHeader("Content-Type", "application/json").
-			SetBody(req).
-			Post(url)
-
-		if err != nil {
-			continue
-		}
-
-		if resp.StatusCode() == http.StatusOK {
-			var callResp MCPCallToolResponse
-			if err := json.Unmarshal(resp.Body(), &callResp); err == nil {
-				if callResp.Error != "" {
-					return "", fmt.Errorf("MCP工具调用错误: %s", callResp.Error)
-				}
-				return callResp.Result, nil
-			}
-			// 如果不是标准响应格式，直接返回body
-			return string(resp.Body()), nil
+	// 提取文本内容
+	var textBuilder strings.Builder
+	for _, content := range result.Content {
+		if textContent, ok := content.(*mcp.TextContent); ok {
+			textBuilder.WriteString(textContent.Text)
 		}
 	}
 
-	return "", fmt.Errorf("调用MCP工具 %s 失败", toolName)
+	return textBuilder.String(), nil
+}
+
+// Close 关闭MCP客户端
+func (c *MCPClient) Close() error {
+	if c.session != nil {
+		return c.session.Close()
+	}
+	return nil
 }
 
 // MCPTool 包装MCP工具为本地Tool接口
 type MCPTool struct {
-	client     MCPClientInterface
-	definition MCPToolDefinition
+	client     *MCPClient
+	definition *mcp.Tool
 }
 
 // NewMCPTool 创建新的MCP工具包装器
-func NewMCPTool(client MCPClientInterface, definition MCPToolDefinition) *MCPTool {
+func NewMCPTool(client *MCPClient, definition *mcp.Tool) *MCPTool {
 	return &MCPTool{
 		client:     client,
 		definition: definition,
@@ -196,20 +172,22 @@ func (t *MCPTool) Description() string {
 
 // Params 返回工具参数定义
 func (t *MCPTool) Params() any {
-	// MCP 工具的 Parameters 是 JSON Schema 格式
-	// 返回一个空结构体，实际的参数定义在 structToOpenAITool 中通过 mcpToolToOpenAITool 处理
 	return &struct{}{}
 }
 
-// GetParameters 返回 MCP 工具的原始参数定义（兼容 inputSchema 和 parameters）
-func (t *MCPTool) GetParameters() json.RawMessage {
-	return t.definition.GetParameters()
+// GetInputSchema 返回 MCP 工具的输入 schema
+func (t *MCPTool) GetInputSchema() map[string]any {
+	if t.definition.InputSchema == nil {
+		return nil
+	}
+	if schema, ok := t.definition.InputSchema.(map[string]any); ok {
+		return schema
+	}
+	return nil
 }
 
 // Execute 执行MCP工具（标准接口）
 func (t *MCPTool) Execute(ctx context.Context, params any, callbacks CallBackFuncs) (string, error) {
-	// 这个方法在普通调用时使用，但 MCP 工具应该使用 ExecuteWithArgs
-	// 为了兼容，这里将 params 序列化后调用
 	args, err := json.Marshal(params)
 	if err != nil {
 		return "", fmt.Errorf("序列化参数失败: %w", err)
@@ -219,110 +197,25 @@ func (t *MCPTool) Execute(ctx context.Context, params any, callbacks CallBackFun
 
 // ExecuteWithArgs 使用原始 JSON 参数执行 MCP 工具
 func (t *MCPTool) ExecuteWithArgs(ctx context.Context, args json.RawMessage, callbacks CallBackFuncs) (string, error) {
-	// 验证参数是否符合 schema
-	if err := t.validateArguments(args); err != nil {
-		return "", fmt.Errorf("argument validation failed: %w\nProvided: %s\nExpected schema: %s",
-			err, string(args), string(t.GetParameters()))
-	}
-
-	// 调用远程MCP工具
 	result, err := t.client.CallTool(ctx, t.definition.Name, args)
 	if err != nil {
-		return "", fmt.Errorf("MCP server error: %w", err)
+		return "", fmt.Errorf("MCP工具调用失败: %w", err)
 	}
-
 	return result, nil
 }
 
-// validateArguments 验证参数是否符合工具的 schema 定义
-func (t *MCPTool) validateArguments(args json.RawMessage) error {
-	// 解析参数
-	var argsMap map[string]any
-	if err := json.Unmarshal(args, &argsMap); err != nil {
-		return fmt.Errorf("invalid JSON: %w", err)
-	}
-
-	// 解析 schema
-	schema := t.GetParameters()
-	if len(schema) == 0 {
-		return nil // 没有参数要求
-	}
-
-	var schemaMap map[string]any
-	if err := json.Unmarshal(schema, &schemaMap); err != nil {
-		return nil // schema 解析失败，跳过验证
-	}
-
-	// 检查必填字段
-	if required, ok := schemaMap["required"].([]any); ok {
-		for _, req := range required {
-			if reqStr, ok := req.(string); ok {
-				if _, exists := argsMap[reqStr]; !exists {
-					return fmt.Errorf("missing required parameter: %s", reqStr)
-				}
-			}
-		}
-	}
-
-	// 检查参数类型（基础验证）
-	if properties, ok := schemaMap["properties"].(map[string]any); ok {
-		for key, value := range argsMap {
-			if propSchema, exists := properties[key]; exists {
-				if err := validateValueType(key, value, propSchema); err != nil {
-					return err
-				}
-			}
-		}
-	}
-
-	return nil
+// IsMCPTool 检查工具是否是MCP工具
+func (t *MCPTool) IsMCPTool() bool {
+	return true
 }
 
-// validateValueType 验证值的类型是否符合 schema
-func validateValueType(key string, value any, propSchema any) error {
-	schemaMap, ok := propSchema.(map[string]any)
-	if !ok {
-		return nil
-	}
-
-	expectedType, ok := schemaMap["type"].(string)
-	if !ok {
-		return nil
-	}
-
-	actualType := getJSONType(value)
-	if actualType != expectedType && !(expectedType == "number" && actualType == "integer") {
-		return fmt.Errorf("parameter '%s' has wrong type: expected %s, got %s",
-			key, expectedType, actualType)
-	}
-
-	return nil
-}
-
-// getJSONType 获取值的 JSON 类型
-func getJSONType(value any) string {
-	switch value.(type) {
-	case string:
-		return "string"
-	case float64:
-		return "number"
-	case int, int64:
-		return "integer"
-	case bool:
-		return "boolean"
-	case []any:
-		return "array"
-	case map[string]any:
-		return "object"
-	case nil:
-		return "null"
-	default:
-		return "unknown"
-	}
+// GetMCPToolDefinition 获取MCP工具原始定义
+func (t *MCPTool) GetMCPToolDefinition() *mcp.Tool {
+	return t.definition
 }
 
 // RegisterMCP 注册MCP服务器中的所有工具到执行器
-func (e *ToolExecuter) RegisterMCP(client MCPClientInterface) error {
+func (e *ToolExecuter) RegisterMCP(client *MCPClient) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
@@ -344,61 +237,8 @@ func (e *ToolExecuter) RegisterMCP(client MCPClientInterface) error {
 	return nil
 }
 
-// RegisterMCPWithConfig 使用配置直接注册MCP工具，自动根据传输类型创建对应客户端
+// RegisterMCPWithConfig 使用配置直接注册MCP工具
 func (e *ToolExecuter) RegisterMCPWithConfig(config *MCPConfig) error {
-	var client MCPClientInterface
-
-	// 根据传输类型创建对应客户端
-	switch config.Transport {
-	case MCPTransportStdio:
-		stdioConfig := &MCPStdioConfig{
-			Name:        config.Name,
-			Command:     config.Command,
-			Args:        config.Args,
-			Env:         config.Env,
-			Timeout:     config.Timeout,
-			Description: config.Description,
-		}
-		client = NewMCPStdioClient(stdioConfig)
-	case MCPTransportStreamable:
-		client = NewMCPStreamableClient(config)
-	case MCPTransportHTTP, "": // 默认使用 HTTP
-		client = NewMCPClient(config)
-	default:
-		return fmt.Errorf("不支持的 MCP 传输类型: %s", config.Transport)
-	}
-
+	client := NewMCPClient(config)
 	return e.RegisterMCP(client)
-}
-
-// IsMCPTool 检查工具是否是MCP工具
-func (t *MCPTool) IsMCPTool() bool {
-	return true
-}
-
-// GetMCPToolDefinition 获取MCP工具原始定义
-func (t *MCPTool) GetMCPToolDefinition() MCPToolDefinition {
-	return t.definition
-}
-
-// GetMCPClient 获取MCP HTTP客户端（仅HTTP模式）
-func (t *MCPTool) GetMCPClient() *MCPClient {
-	if client, ok := t.client.(*MCPClient); ok {
-		return client
-	}
-	return nil
-}
-
-// GetMCPClientInterface 获取MCP客户端接口
-func (t *MCPTool) GetMCPClientInterface() MCPClientInterface {
-	return t.client
-}
-
-// NormalizeMCPEndpoint 规范化MCP端点URL
-func NormalizeMCPEndpoint(endpoint string) string {
-	endpoint = strings.TrimSpace(endpoint)
-	if !strings.HasPrefix(endpoint, "http://") && !strings.HasPrefix(endpoint, "https://") {
-		endpoint = "http://" + endpoint
-	}
-	return strings.TrimSuffix(endpoint, "/")
 }
