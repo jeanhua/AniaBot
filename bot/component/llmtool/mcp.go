@@ -20,7 +20,11 @@ type MCPConfig struct {
 	Env         map[string]string `json:"env"`         // 环境变量
 	Timeout     time.Duration     `json:"timeout"`     // 请求超时时间
 	Description string            `json:"description"` // MCP服务器描述
+	ToolFilter  ToolFilterFunc    `json:"-"`           // 工具过滤器（可选）
 }
+
+// ToolFilterFunc 工具过滤函数，返回 true 表示保留该工具
+type ToolFilterFunc func(tool *mcp.Tool) bool
 
 // MCPClient MCP客户端（基于官方SDK）
 type MCPClient struct {
@@ -87,8 +91,21 @@ func (c *MCPClient) Connect(ctx context.Context) error {
 		return fmt.Errorf("获取工具列表失败: %w", err)
 	}
 
-	c.tools = toolsResp.Tools
-	log.Printf("[MCP:%s] 获取到 %d 个工具", c.config.Name, len(c.tools))
+	// 应用工具过滤器
+	if c.config.ToolFilter != nil {
+		filtered := make([]*mcp.Tool, 0)
+		for _, tool := range toolsResp.Tools {
+			if c.config.ToolFilter(tool) {
+				filtered = append(filtered, tool)
+			}
+		}
+		c.tools = filtered
+		log.Printf("[MCP:%s] 过滤后获取到 %d 个工具（原始 %d 个）",
+			c.config.Name, len(c.tools), len(toolsResp.Tools))
+	} else {
+		c.tools = toolsResp.Tools
+		log.Printf("[MCP:%s] 获取到 %d 个工具", c.config.Name, len(c.tools))
+	}
 
 	return nil
 }
@@ -214,7 +231,64 @@ func (t *MCPTool) GetMCPToolDefinition() *mcp.Tool {
 	return t.definition
 }
 
-// RegisterMCP 注册MCP服务器中的所有工具到执行器
+// MCPToolManager 管理 MCP 工具的延迟加载
+type MCPToolManager struct {
+	client          *MCPClient
+	toolCache       map[string]*MCPTool
+	toolDefinitions []*mcp.Tool
+}
+
+// NewMCPToolManager 创建 MCP 工具管理器
+func NewMCPToolManager(client *MCPClient) *MCPToolManager {
+	return &MCPToolManager{
+		client:    client,
+		toolCache: make(map[string]*MCPTool),
+	}
+}
+
+// Initialize 初始化管理器，连接并获取工具列表
+func (m *MCPToolManager) Initialize(ctx context.Context) error {
+	if err := m.client.Connect(ctx); err != nil {
+		return err
+	}
+	m.toolDefinitions = m.client.GetTools()
+	log.Printf("[MCP:%s] 发现 %d 个工具（延迟加载模式）", m.client.config.Name, len(m.toolDefinitions))
+	return nil
+}
+
+// GetToolNames 获取所有工具名称和简短描述
+func (m *MCPToolManager) GetToolNames() []map[string]string {
+	result := make([]map[string]string, 0, len(m.toolDefinitions))
+	for _, tool := range m.toolDefinitions {
+		result = append(result, map[string]string{
+			"name":        tool.Name,
+			"description": tool.Description,
+		})
+	}
+	return result
+}
+
+// LoadTool 按需加载具体工具
+func (m *MCPToolManager) LoadTool(toolName string) (*MCPTool, error) {
+	// 检查缓存
+	if tool, ok := m.toolCache[toolName]; ok {
+		return tool, nil
+	}
+
+	// 查找工具定义
+	for _, toolDef := range m.toolDefinitions {
+		if toolDef.Name == toolName {
+			tool := NewMCPTool(m.client, toolDef)
+			m.toolCache[toolName] = tool
+			log.Printf("[MCP:%s] 加载工具: %s", m.client.config.Name, toolName)
+			return tool, nil
+		}
+	}
+
+	return nil, fmt.Errorf("工具 '%s' 不存在", toolName)
+}
+
+// RegisterMCP 注册MCP服务器中的所有工具到执行器（传统方式，会导致上下文爆炸）
 func (e *ToolExecuter) RegisterMCP(client *MCPClient) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -237,8 +311,170 @@ func (e *ToolExecuter) RegisterMCP(client *MCPClient) error {
 	return nil
 }
 
+// RegisterMCPWithDiscovery 使用工具发现模式注册 MCP（推荐方式，避免上下文爆炸）
+func (e *ToolExecuter) RegisterMCPWithDiscovery(client *MCPClient) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	manager := NewMCPToolManager(client)
+	if err := manager.Initialize(ctx); err != nil {
+		return err
+	}
+
+	// 注册工具发现工具
+	discoveryTool := NewMCPDiscoveryTool(manager)
+	e.Register(discoveryTool)
+
+	// 注册工具加载器
+	loaderTool := NewMCPLoaderTool(manager, e)
+	e.Register(loaderTool)
+
+	log.Printf("[MCP:%s] 工具发现模式注册完成", client.config.Name)
+	return nil
+}
+
 // RegisterMCPWithConfig 使用配置直接注册MCP工具
 func (e *ToolExecuter) RegisterMCPWithConfig(config *MCPConfig) error {
 	client := NewMCPClient(config)
 	return e.RegisterMCP(client)
+}
+
+// RegisterMCPWithConfigDiscovery 使用配置和工具发现模式注册 MCP（推荐）
+func (e *ToolExecuter) RegisterMCPWithConfigDiscovery(config *MCPConfig) error {
+	client := NewMCPClient(config)
+	return e.RegisterMCPWithDiscovery(client)
+}
+
+// MCPDiscoveryTool 工具发现工具
+type MCPDiscoveryTool struct {
+	manager *MCPToolManager
+}
+
+func NewMCPDiscoveryTool(manager *MCPToolManager) *MCPDiscoveryTool {
+	return &MCPDiscoveryTool{manager: manager}
+}
+
+func (t *MCPDiscoveryTool) Name() string {
+	return fmt.Sprintf("mcp_discover_%s", t.manager.client.config.Name)
+}
+
+func (t *MCPDiscoveryTool) Description() string {
+	return fmt.Sprintf("发现 %s MCP 服务器提供的所有可用工具。返回工具名称和简短描述列表。使用此工具了解有哪些工具可用，然后使用 mcp_load 工具加载具体工具。", t.manager.client.config.Description)
+}
+
+func (t *MCPDiscoveryTool) Params() any {
+	return &struct{}{}
+}
+
+func (t *MCPDiscoveryTool) Execute(ctx context.Context, params any, callbacks CallBackFuncs) (string, error) {
+	tools := t.manager.GetToolNames()
+	data, err := json.MarshalIndent(tools, "", "  ")
+	if err != nil {
+		return "", err
+	}
+	return string(data), nil
+}
+
+// MCPLoaderTool 工具加载工具
+type MCPLoaderTool struct {
+	manager  *MCPToolManager
+	executer *ToolExecuter
+}
+
+type MCPLoaderParams struct {
+	ToolName string `json:"tool_name" desc:"要加载的工具名称"`
+}
+
+func NewMCPLoaderTool(manager *MCPToolManager, executer *ToolExecuter) *MCPLoaderTool {
+	return &MCPLoaderTool{
+		manager:  manager,
+		executer: executer,
+	}
+}
+
+func (t *MCPLoaderTool) Name() string {
+	return fmt.Sprintf("mcp_load_%s", t.manager.client.config.Name)
+}
+
+func (t *MCPLoaderTool) Description() string {
+	return fmt.Sprintf("加载 %s MCP 服务器的指定工具。加载后该工具将可用于后续调用。参数: tool_name - 要加载的工具名称（从 mcp_discover 获取）", t.manager.client.config.Description)
+}
+
+func (t *MCPLoaderTool) Params() any {
+	return &MCPLoaderParams{}
+}
+
+func (t *MCPLoaderTool) Execute(ctx context.Context, params any, callbacks CallBackFuncs) (string, error) {
+	p := params.(*MCPLoaderParams)
+
+	tool, err := t.manager.LoadTool(p.ToolName)
+	if err != nil {
+		return "", err
+	}
+
+	// 动态注册工具到执行器
+	t.executer.Register(tool)
+
+	schema := tool.GetInputSchema()
+	schemaJSON, _ := json.MarshalIndent(schema, "", "  ")
+
+	return fmt.Sprintf("工具 '%s' 已加载成功。\n描述: %s\n参数定义:\n%s",
+		tool.Name(), tool.Description(), string(schemaJSON)), nil
+}
+
+// 常用工具过滤器
+
+// FilterByPrefix 创建按名称前缀过滤的过滤器
+func FilterByPrefix(prefix string) ToolFilterFunc {
+	return func(tool *mcp.Tool) bool {
+		return strings.HasPrefix(tool.Name, prefix)
+	}
+}
+
+// FilterByNames 创建按名称列表过滤的过滤器
+func FilterByNames(names ...string) ToolFilterFunc {
+	nameSet := make(map[string]bool)
+	for _, name := range names {
+		nameSet[name] = true
+	}
+	return func(tool *mcp.Tool) bool {
+		return nameSet[tool.Name]
+	}
+}
+
+// FilterByKeywords 创建按描述关键词过滤的过滤器
+func FilterByKeywords(keywords ...string) ToolFilterFunc {
+	return func(tool *mcp.Tool) bool {
+		desc := strings.ToLower(tool.Description)
+		for _, keyword := range keywords {
+			if strings.Contains(desc, strings.ToLower(keyword)) {
+				return true
+			}
+		}
+		return false
+	}
+}
+
+// CombineFilters 组合多个过滤器（AND 逻辑）
+func CombineFilters(filters ...ToolFilterFunc) ToolFilterFunc {
+	return func(tool *mcp.Tool) bool {
+		for _, filter := range filters {
+			if !filter(tool) {
+				return false
+			}
+		}
+		return true
+	}
+}
+
+// AnyFilter 组合多个过滤器（OR 逻辑）
+func AnyFilter(filters ...ToolFilterFunc) ToolFilterFunc {
+	return func(tool *mcp.Tool) bool {
+		for _, filter := range filters {
+			if filter(tool) {
+				return true
+			}
+		}
+		return false
+	}
 }
