@@ -60,6 +60,8 @@ type AIChatPlugin struct {
 
 	mcpConfigs   []*llmtool.MCPConfig
 	toolExecutor *llmtool.ToolExecuter // 共享的工具执行器
+
+	skillManager *llmtool.SkillManager
 }
 
 const (
@@ -109,7 +111,6 @@ func (p *AIChatPlugin) clearActiveContext(id message.QID) {
 func (p *AIChatPlugin) getChat(id message.QID) *aichat.ChatBot {
 	chat, ok := p.chats.Load(id)
 	if !ok {
-		// 使用共享的工具执行器，避免重复创建 MCP 连接
 		c, err := aichat.NewChatBot(
 			p.botConfig.baseURL,
 			p.botConfig.apiKey,
@@ -121,6 +122,10 @@ func (p *AIChatPlugin) getChat(id message.QID) *aichat.ChatBot {
 		if err != nil {
 			p.Logger.Error("创建 ChatBot 失败", "error", err.Error())
 			return nil
+		}
+		// 注入 SkillManager，让 system prompt 包含 available_skills
+		if p.skillManager != nil {
+			c.SetSkillManager(p.skillManager)
 		}
 		p.chats.Store(id, c)
 		return c
@@ -434,7 +439,15 @@ func (p *AIChatPlugin) Start(ctx context.Context, cfg *viper.Viper) error {
 
 	// 创建共享的工具执行器（只创建一次，所有对话共享）
 	p.Logger.Info("初始化工具执行器...")
-	p.toolExecutor = functool.CreateToolsWithMCP(p.llmParameter.searchToken, p.mcpConfigs)
+	skillsDir := cfg.GetString("plugin.ai_chat_bot.skills_dir") // 配置项，默认 "./skills"
+	if skillsDir == "" {
+		skillsDir = "./skills"
+	}
+	p.toolExecutor, p.skillManager = functool.CreateToolsWithSkill(
+		p.llmParameter.searchToken,
+		p.mcpConfigs,
+		skillsDir,
+	)
 	if p.toolExecutor == nil {
 		p.Logger.Error("创建工具执行器失败")
 		return aniaerror.ParameterInitializeError

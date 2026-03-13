@@ -1,0 +1,236 @@
+package llmtool
+
+import (
+	"context"
+	"fmt"
+	"log"
+	"os"
+	"path/filepath"
+	"strings"
+
+	"gopkg.in/yaml.v3"
+)
+
+// SkillMeta 是从 SKILL.md frontmatter 中解析的元数据
+type SkillMeta struct {
+	Name        string `yaml:"name"`
+	Description string `yaml:"description"`
+}
+
+// Skill 代表一个已加载的 skill
+type Skill struct {
+	Meta    SkillMeta
+	Content string // SKILL.md 的完整内容（含 frontmatter）
+	Path    string // SKILL.md 文件路径
+}
+
+// SkillManager 管理所有可用的 Skill
+type SkillManager struct {
+	skills map[string]*Skill // key: skill name
+}
+
+// NewSkillManager 创建一个新的 SkillManager
+func NewSkillManager() *SkillManager {
+	return &SkillManager{
+		skills: make(map[string]*Skill),
+	}
+}
+
+// LoadFromDir 从指定目录扫描并加载所有 skill
+// 支持两种目录结构：
+//   - skillsDir/skill-name/SKILL.md
+//   - skillsDir/SKILL.md （单文件模式）
+func (m *SkillManager) LoadFromDir(skillsDir string) error {
+	entries, err := os.ReadDir(skillsDir)
+	if err != nil {
+		return fmt.Errorf("读取 skills 目录失败: %w", err)
+	}
+
+	for _, entry := range entries {
+		var skillPath string
+
+		if entry.IsDir() {
+			// 子目录模式：skillsDir/skill-name/SKILL.md
+			skillPath = filepath.Join(skillsDir, entry.Name(), "SKILL.md")
+		} else if strings.ToUpper(entry.Name()) == "SKILL.MD" {
+			// 单文件模式：skillsDir/SKILL.md
+			skillPath = filepath.Join(skillsDir, entry.Name())
+		} else {
+			continue
+		}
+
+		if _, err := os.Stat(skillPath); os.IsNotExist(err) {
+			continue
+		}
+
+		skill, err := loadSkillFromFile(skillPath)
+		if err != nil {
+			return fmt.Errorf("加载 skill 失败 [%s]: %w", skillPath, err)
+		}
+
+		m.skills[skill.Meta.Name] = skill
+	}
+
+	return nil
+}
+
+// Register 手动注册一个 Skill（直接传入路径）
+func (m *SkillManager) Register(skillPath string) error {
+	skill, err := loadSkillFromFile(skillPath)
+	if err != nil {
+		return err
+	}
+	m.skills[skill.Meta.Name] = skill
+	return nil
+}
+
+// Get 获取指定名称的 skill
+func (m *SkillManager) Get(name string) (*Skill, bool) {
+	s, ok := m.skills[name]
+	return s, ok
+}
+
+// List 返回所有 skill 的元数据列表
+func (m *SkillManager) List() []*SkillMeta {
+	result := make([]*SkillMeta, 0, len(m.skills))
+	for _, s := range m.skills {
+		meta := s.Meta // 复制，避免外部修改
+		result = append(result, &meta)
+	}
+	return result
+}
+
+// BuildAvailableSkillsPrompt 生成注入 system prompt 的 <available_skills> 块
+func (m *SkillManager) BuildAvailableSkillsPrompt() string {
+	if len(m.skills) == 0 {
+		return ""
+	}
+
+	var sb strings.Builder
+	sb.WriteString("### 注意：当用户让你完成一个任务时，如果下表存在对应的SKILL，请先查看该SKILL后再执行，不要盲目行动，SKILL列表如下")
+	sb.WriteString("<available_skills>\n")
+	for _, s := range m.skills {
+		sb.WriteString("<skill>\n")
+		sb.WriteString(fmt.Sprintf("  <name>%s</name>\n", s.Meta.Name))
+		sb.WriteString(fmt.Sprintf("  <description>%s</description>\n", s.Meta.Description))
+		sb.WriteString("</skill>\n")
+	}
+	sb.WriteString("</available_skills>")
+	return sb.String()
+}
+
+// RegisterToExecuter 将 skill 读取工具注册到 ToolExecuter
+// 调用此方法后，Agent 就拥有了读取 SKILL.md 的能力
+func (m *SkillManager) RegisterToExecuter(executer *ToolExecuter) {
+	executer.Register(NewSkillReadTool(m))
+}
+
+// loadSkillFromFile 从 SKILL.md 文件路径解析 Skill
+func loadSkillFromFile(path string) (*Skill, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("读取文件失败: %w", err)
+	}
+
+	content := string(data)
+	meta, err := parseSkillFrontmatter(content)
+	if err != nil {
+		return nil, fmt.Errorf("解析 frontmatter 失败: %w", err)
+	}
+
+	if meta.Name == "" {
+		// 回退：使用目录名作为 skill name
+		meta.Name = filepath.Base(filepath.Dir(path))
+	}
+
+	return &Skill{
+		Meta:    *meta,
+		Content: content,
+		Path:    path,
+	}, nil
+}
+
+// parseSkillFrontmatter 解析 SKILL.md 中的 YAML frontmatter（--- 块）
+func parseSkillFrontmatter(content string) (*SkillMeta, error) {
+	// 检查是否以 --- 开头
+	if !strings.HasPrefix(strings.TrimSpace(content), "---") {
+		return &SkillMeta{}, nil
+	}
+
+	// 找到 frontmatter 结束位置
+	trimmed := strings.TrimSpace(content)
+	// 跳过第一个 ---
+	rest := trimmed[3:]
+	end := strings.Index(rest, "---")
+	if end < 0 {
+		return &SkillMeta{}, nil
+	}
+
+	yamlContent := rest[:end]
+	var meta SkillMeta
+	if err := yaml.Unmarshal([]byte(yamlContent), &meta); err != nil {
+		return nil, err
+	}
+
+	return &meta, nil
+}
+
+// ─────────────────────────────────────────────
+// SkillReadTool：让 Agent 调用来读取 SKILL.md
+// ─────────────────────────────────────────────
+
+// SkillReadParams 是调用 skill_read 工具时的参数
+type SkillReadParams struct {
+	SkillName string `json:"skill_name" desc:"要读取的 skill 名称，从 available_skills 列表中选择"`
+}
+
+// SkillReadTool 工具：读取指定 skill 的完整 SKILL.md 内容
+type SkillReadTool struct {
+	BaseTool[SkillReadParams]
+	manager *SkillManager
+}
+
+// NewSkillReadTool 创建 SkillReadTool
+func NewSkillReadTool(manager *SkillManager) *SkillReadTool {
+	return &SkillReadTool{
+		BaseTool: MakeBaseTool(
+			"skill_read",
+			"读取指定 skill 的详细指令内容（SKILL.md）。当你需要使用某个 skill 时，先调用此工具获取其完整指令，再按照指令执行任务。参数 skill_name 从 <available_skills> 列表中选择。",
+			SkillReadParams{},
+		),
+		manager: manager,
+	}
+}
+
+func (t *SkillReadTool) Execute(ctx context.Context, params any, callbacks CallBackFuncs) (string, error) {
+	p := params.(*SkillReadParams)
+
+	if p.SkillName == "" {
+		// 没有指定名称时，返回所有可用 skill 列表
+		metas := t.manager.List()
+		if len(metas) == 0 {
+			return "当前没有可用的 skill。", nil
+		}
+		var sb strings.Builder
+		sb.WriteString("可用的 skill 列表：\n")
+		for _, m := range metas {
+			sb.WriteString(fmt.Sprintf("- %s: %s\n", m.Name, m.Description))
+		}
+		return sb.String(), nil
+	}
+
+	log.Println("正在查询Skill", p.SkillName)
+	skill, ok := t.manager.Get(p.SkillName)
+	if !ok {
+		// 返回可用列表，便于 Agent 纠正
+		metas := t.manager.List()
+		names := make([]string, 0, len(metas))
+		for _, m := range metas {
+			names = append(names, m.Name)
+		}
+		return "", fmt.Errorf("skill '%s' 不存在，可用的 skill: [%s]",
+			p.SkillName, strings.Join(names, ", "))
+	}
+
+	return skill.Content, nil
+}
