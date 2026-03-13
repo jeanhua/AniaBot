@@ -77,3 +77,7 @@ func (b *ChatBot) ClearDynamicTools() int {
 func (b *ChatBot) SetToolOrchestrator(orchestrator *ToolOrchestrator) {
 	b.toolOrchestrator = orchestrator
 }
+
+func (b *ChatBot) SetSkillManager(manager *llmtool.SkillManager) {
+	b.msgBuilder.WithSkillManager(manager)
+}

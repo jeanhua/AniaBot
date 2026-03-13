@@ -40,6 +40,8 @@ plugin:
     prompt: |-
       你是一个ai对话机器人，在QQ上和别人聊天，说话不要长篇大论
 
+    skills_dir: "./skills"
+
     mcp:
       servers:
         # # HTTP 模式 MCP 服务器
