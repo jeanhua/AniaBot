@@ -44,18 +44,20 @@ plugin:
 
     mcp:
       servers:
-        # # HTTP 模式 MCP 服务器
+        # # SSE 模式 MCP 服务器
         # - name: "remote-mcp-server"
-        #   transport: "http"
+        #   transport: "sse"
         #   endpoint: "http://localhost:3000"
         #   headers:
         #     Authorization: "Bearer token123"
         #   timeout: 30
         
-        # # Streamable HTTP 模式
+        # # Streamable 模式
         # - name: "streamable-mcp"
         #   transport: "streamable"
         #   endpoint: "http://localhost:3001"
+        #   headers:
+        #    Authorization: "Bearer token123"
         #   timeout: 60
         
         # # Stdio 模式 MCP 服务器

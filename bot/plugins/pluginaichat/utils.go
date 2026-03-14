@@ -80,7 +80,9 @@ func (p *AIChatPlugin) loadMCPConfigs(cfg *viper.Viper) error {
 
 		mcpConfig := &llmtool.MCPConfig{
 			Name:        getStringFromMap(serverMap, "name"),
+			Transport:   getStringFromMap(serverMap, "transport"),
 			Command:     getStringFromMap(serverMap, "command"),
+			Endpoint:    getStringFromMap(serverMap, "endpoint"),
 			Description: getStringFromMap(serverMap, "description"),
 		}
 
@@ -103,6 +105,16 @@ func (p *AIChatPlugin) loadMCPConfigs(cfg *viper.Viper) error {
 			}
 		}
 
+		// 读取 headers
+		if headers, ok := serverMap["headers"].(map[string]any); ok {
+			mcpConfig.Headers = make(map[string]string)
+			for k, v := range headers {
+				if str, ok := v.(string); ok {
+					mcpConfig.Headers[k] = str
+				}
+			}
+		}
+
 		// 读取 timeout
 		if timeout, ok := serverMap["timeout"].(int); ok {
 			mcpConfig.Timeout = time.Duration(timeout) * time.Second
@@ -114,13 +126,27 @@ func (p *AIChatPlugin) loadMCPConfigs(cfg *viper.Viper) error {
 			continue
 		}
 
-		if mcpConfig.Command == "" {
-			p.Logger.Warn("MCP 服务器配置缺少 command", "name", mcpConfig.Name)
-			continue
+		transport := strings.ToLower(mcpConfig.Transport)
+		isHTTP := transport == "streamable" || transport == "streamable-http" || transport == "sse"
+
+		if isHTTP {
+			if mcpConfig.Endpoint == "" {
+				p.Logger.Warn("MCP 服务器配置缺少 endpoint", "name", mcpConfig.Name)
+				continue
+			}
+		} else {
+			if mcpConfig.Command == "" {
+				p.Logger.Warn("MCP 服务器配置缺少 command", "name", mcpConfig.Name)
+				continue
+			}
 		}
 
 		p.mcpConfigs = append(p.mcpConfigs, mcpConfig)
-		p.Logger.Info("已加载 MCP 服务器配置", "name", mcpConfig.Name, "command", mcpConfig.Command)
+		if isHTTP {
+			p.Logger.Info("已加载 MCP 服务器配置", "name", mcpConfig.Name, "transport", mcpConfig.Transport, "endpoint", mcpConfig.Endpoint)
+		} else {
+			p.Logger.Info("已加载 MCP 服务器配置", "name", mcpConfig.Name, "command", mcpConfig.Command)
+		}
 	}
 
 	p.Logger.Info("MCP 服务器配置加载完成", "count", len(p.mcpConfigs))

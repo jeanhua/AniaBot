@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"net/http"
 	"os/exec"
 	"strings"
 	"time"
@@ -15,9 +16,12 @@ import (
 // MCPConfig MCP服务器配置
 type MCPConfig struct {
 	Name        string            `json:"name"`        // MCP服务器名称
-	Command     string            `json:"command"`     // 启动命令
-	Args        []string          `json:"args"`        // 命令参数
-	Env         map[string]string `json:"env"`         // 环境变量
+	Transport   string            `json:"transport"`   // 传输类型: stdio(默认), streamable, sse
+	Command     string            `json:"command"`     // 启动命令 (stdio)
+	Args        []string          `json:"args"`        // 命令参数 (stdio)
+	Env         map[string]string `json:"env"`         // 环境变量 (stdio)
+	Endpoint    string            `json:"endpoint"`    // HTTP 端点 URL (streamable/sse)
+	Headers     map[string]string `json:"headers"`     // HTTP 请求头 (streamable/sse)
 	Timeout     time.Duration     `json:"timeout"`     // 请求超时时间
 	Description string            `json:"description"` // MCP服务器描述
 	ToolFilter  ToolFilterFunc    `json:"-"`           // 工具过滤器（可选）
@@ -59,21 +63,47 @@ func (c *MCPClient) Connect(ctx context.Context) error {
 	connectCtx, cancel := context.WithTimeout(ctx, c.config.Timeout)
 	defer cancel()
 
-	log.Printf("[MCP:%s] 启动进程: %s %v", c.config.Name, c.config.Command, c.config.Args)
+	var transport mcp.Transport
 
-	// 创建命令传输
-	cmd := exec.Command(c.config.Command, c.config.Args...)
-
-	// 设置环境变量
-	if len(c.config.Env) > 0 {
-		env := cmd.Environ()
-		for k, v := range c.config.Env {
-			env = append(env, fmt.Sprintf("%s=%s", k, v))
+	switch strings.ToLower(c.config.Transport) {
+	case "streamable", "streamable-http":
+		log.Printf("[MCP:%s] 连接 Streamable HTTP: %s", c.config.Name, c.config.Endpoint)
+		httpClient := &http.Client{Timeout: c.config.Timeout}
+		if len(c.config.Headers) > 0 {
+			httpClient.Transport = &headerTransport{
+				base:    http.DefaultTransport,
+				headers: c.config.Headers,
+			}
 		}
-		cmd.Env = env
+		transport = &mcp.StreamableClientTransport{
+			Endpoint:   c.config.Endpoint,
+			HTTPClient: httpClient,
+		}
+	case "sse":
+		log.Printf("[MCP:%s] 连接 SSE: %s", c.config.Name, c.config.Endpoint)
+		httpClient := &http.Client{Timeout: c.config.Timeout}
+		if len(c.config.Headers) > 0 {
+			httpClient.Transport = &headerTransport{
+				base:    http.DefaultTransport,
+				headers: c.config.Headers,
+			}
+		}
+		transport = &mcp.SSEClientTransport{
+			Endpoint:   c.config.Endpoint,
+			HTTPClient: httpClient,
+		}
+	default:
+		log.Printf("[MCP:%s] 启动进程: %s %v", c.config.Name, c.config.Command, c.config.Args)
+		cmd := exec.Command(c.config.Command, c.config.Args...)
+		if len(c.config.Env) > 0 {
+			env := cmd.Environ()
+			for k, v := range c.config.Env {
+				env = append(env, fmt.Sprintf("%s=%s", k, v))
+			}
+			cmd.Env = env
+		}
+		transport = &mcp.CommandTransport{Command: cmd}
 	}
-
-	transport := &mcp.CommandTransport{Command: cmd}
 
 	// 连接到服务器
 	session, err := c.client.Connect(connectCtx, transport, nil)
@@ -482,4 +512,19 @@ func AnyFilter(filters ...ToolFilterFunc) ToolFilterFunc {
 		}
 		return false
 	}
+}
+
+// headerTransport 为 HTTP 请求注入自定义 headers
+type headerTransport struct {
+	base    http.RoundTripper
+	headers map[string]string
+}
+
+func (t *headerTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	// 克隆请求避免修改原始对象
+	r := req.Clone(req.Context())
+	for k, v := range t.headers {
+		r.Header.Set(k, v)
+	}
+	return t.base.RoundTrip(r)
 }
