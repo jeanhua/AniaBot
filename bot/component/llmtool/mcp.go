@@ -446,8 +446,10 @@ func (t *MCPLoaderTool) Execute(ctx context.Context, params any, callbacks CallB
 		return "", err
 	}
 
-	// 动态注册工具到执行器
-	t.executer.Register(tool)
+	// 动态注册工具到执行器（已注册则跳过）
+	if _, exists := t.executer.tools[tool.Name()]; !exists {
+		t.executer.Register(tool)
+	}
 
 	schema := tool.GetInputSchema()
 	schemaJSON, _ := json.MarshalIndent(schema, "", "  ")

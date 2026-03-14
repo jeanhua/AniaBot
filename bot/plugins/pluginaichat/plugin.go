@@ -39,10 +39,10 @@ type AIChatPlugin struct {
 	}
 
 	llmParameter struct {
-		maxToken       int
-		temperature    float64
-		top_p          float64
-		top_k          int
+		maxToken       *int
+		temperature    *float64
+		top_p          *float64
+		top_k          *int
 		prompt         string
 		searchToken    string
 		enableThinking bool
@@ -170,12 +170,19 @@ func (p *AIChatPlugin) OnGroupMsg(ctx context.Context, bot bot.Bot, cmd command.
 		},
 	}
 
-	chatOpts := append([]llms.CallOption{
-		llms.WithMaxTokens(p.llmParameter.maxToken),
-		llms.WithTemperature(p.llmParameter.temperature),
-		llms.WithTopP(p.llmParameter.top_p),
-		llms.WithTopK(p.llmParameter.top_k),
-	}, p.thinkingOpts()...)
+	chatOpts := p.thinkingOpts()
+	if p.llmParameter.maxToken != nil {
+		chatOpts = append(chatOpts, llms.WithMaxTokens(*p.llmParameter.maxToken))
+	}
+	if p.llmParameter.temperature != nil {
+		chatOpts = append(chatOpts, llms.WithTemperature(*p.llmParameter.temperature))
+	}
+	if p.llmParameter.top_p != nil {
+		chatOpts = append(chatOpts, llms.WithTopP(*p.llmParameter.top_p))
+	}
+	if p.llmParameter.top_k != nil {
+		chatOpts = append(chatOpts, llms.WithTopK(*p.llmParameter.top_k))
+	}
 	resp, usage, err := chat.Chat(chatCtx, extraText, msgFuncs, chatOpts...)
 	if err != nil {
 		if errors.Is(err, context.Canceled) {
@@ -292,12 +299,19 @@ func (p *AIChatPlugin) OnFriendMsg(ctx context.Context, bot bot.Bot, cmd command
 		},
 	}
 
-	friendOpts := append([]llms.CallOption{
-		llms.WithMaxTokens(p.llmParameter.maxToken),
-		llms.WithTemperature(p.llmParameter.temperature),
-		llms.WithTopP(p.llmParameter.top_p),
-		llms.WithTopK(p.llmParameter.top_k),
-	}, p.thinkingOpts()...)
+	friendOpts := p.thinkingOpts()
+	if p.llmParameter.maxToken != nil {
+		friendOpts = append(friendOpts, llms.WithMaxTokens(*p.llmParameter.maxToken))
+	}
+	if p.llmParameter.temperature != nil {
+		friendOpts = append(friendOpts, llms.WithTemperature(*p.llmParameter.temperature))
+	}
+	if p.llmParameter.top_p != nil {
+		friendOpts = append(friendOpts, llms.WithTopP(*p.llmParameter.top_p))
+	}
+	if p.llmParameter.top_k != nil {
+		friendOpts = append(friendOpts, llms.WithTopK(*p.llmParameter.top_k))
+	}
 	resp, usage, err := chat.Chat(chatCtx, extraText,
 		msgFuncs, friendOpts...)
 	if err != nil {
@@ -356,10 +370,22 @@ func (p *AIChatPlugin) Start(ctx context.Context, cfg *viper.Viper) error {
 		p.llmParameter.prompt = "你是一个ai对话机器人，在QQ上和别人聊天，说话不要长篇大论"
 	}
 
-	p.llmParameter.maxToken = cfg.GetInt("plugin.ai_chat_bot.max_token")
-	p.llmParameter.temperature = cfg.GetFloat64("plugin.ai_chat_bot.temperature")
-	p.llmParameter.top_p = cfg.GetFloat64("plugin.ai_chat_bot.top_p")
-	p.llmParameter.top_k = cfg.GetInt("plugin.ai_chat_bot.top_k")
+	if cfg.IsSet("plugin.ai_chat_bot.max_token") {
+		v := cfg.GetInt("plugin.ai_chat_bot.max_token")
+		p.llmParameter.maxToken = &v
+	}
+	if cfg.IsSet("plugin.ai_chat_bot.temperature") {
+		v := cfg.GetFloat64("plugin.ai_chat_bot.temperature")
+		p.llmParameter.temperature = &v
+	}
+	if cfg.IsSet("plugin.ai_chat_bot.top_p") {
+		v := cfg.GetFloat64("plugin.ai_chat_bot.top_p")
+		p.llmParameter.top_p = &v
+	}
+	if cfg.IsSet("plugin.ai_chat_bot.top_k") {
+		v := cfg.GetInt("plugin.ai_chat_bot.top_k")
+		p.llmParameter.top_k = &v
+	}
 	p.llmParameter.enableThinking = cfg.GetBool("plugin.ai_chat_bot.thinking.enable")
 	p.llmParameter.thinkingMode = cfg.GetString("plugin.ai_chat_bot.thinking.mode")
 	if p.llmParameter.thinkingMode == "" {
