@@ -90,12 +90,10 @@ func (t *WebExploreTool) explore(ctx context.Context, params *WebExploreParams) 
 	resp, err := client.R().
 		SetContext(ctx).
 		SetHeader("Authorization", "Bearer "+t.searchToken).
-		SetHeader("X-Base", "final").
-		SetHeader("X-Locale", "zh-CN").
 		SetHeader("X-Referer", "https://www.google.com/").
 		SetHeader("X-User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36").
 		SetHeader("X-Retain-Images", "none").
-		SetHeader("X-Return-Format", "markdown").
+		SetHeader("X-With-Links-Summary", "true").
 		SetHeader("X-Engine", "cf-browser-rendering").
 		Get(link)
 
