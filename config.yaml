@@ -37,6 +37,10 @@ plugin:
     top_p: 0.9
     top_k: 100
     max_token: 8192
+    # 深度思考配置
+    thinking:
+      enable: false  # 是否启用深度思考
+      mode: "auto"   # 思考模式：none / low / medium / high / auto
     prompt: |-
       你是一个ai对话机器人，在QQ上和别人聊天，说话不要长篇大论
 

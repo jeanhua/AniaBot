@@ -152,3 +152,22 @@ func (p *AIChatPlugin) loadMCPConfigs(cfg *viper.Viper) error {
 	p.Logger.Info("MCP 服务器配置加载完成", "count", len(p.mcpConfigs))
 	return nil
 }
+
+// thinkingOpts 根据配置返回思考模式的 CallOption 列表
+func (p *AIChatPlugin) thinkingOpts() []llms.CallOption {
+	if !p.llmParameter.enableThinking {
+		return nil
+	}
+	modeMap := map[string]llms.ThinkingMode{
+		"none":   llms.ThinkingModeNone,
+		"low":    llms.ThinkingModeLow,
+		"medium": llms.ThinkingModeMedium,
+		"high":   llms.ThinkingModeHigh,
+		"auto":   llms.ThinkingModeAuto,
+	}
+	mode, ok := modeMap[p.llmParameter.thinkingMode]
+	if !ok {
+		mode = llms.ThinkingModeAuto
+	}
+	return []llms.CallOption{llms.WithThinkingMode(mode)}
+}

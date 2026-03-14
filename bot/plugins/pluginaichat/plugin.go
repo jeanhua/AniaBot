@@ -39,12 +39,14 @@ type AIChatPlugin struct {
 	}
 
 	llmParameter struct {
-		maxToken    int
-		temperature float64
-		top_p       float64
-		top_k       int
-		prompt      string
-		searchToken string
+		maxToken       int
+		temperature    float64
+		top_p          float64
+		top_k          int
+		prompt         string
+		searchToken    string
+		enableThinking bool
+		thinkingMode   string
 	}
 
 	ocrEnable    bool
@@ -168,12 +170,13 @@ func (p *AIChatPlugin) OnGroupMsg(ctx context.Context, bot bot.Bot, cmd command.
 		},
 	}
 
-	resp, usage, err := chat.Chat(chatCtx, extraText, msgFuncs,
+	chatOpts := append([]llms.CallOption{
 		llms.WithMaxTokens(p.llmParameter.maxToken),
 		llms.WithTemperature(p.llmParameter.temperature),
 		llms.WithTopP(p.llmParameter.top_p),
 		llms.WithTopK(p.llmParameter.top_k),
-	)
+	}, p.thinkingOpts()...)
+	resp, usage, err := chat.Chat(chatCtx, extraText, msgFuncs, chatOpts...)
 	if err != nil {
 		if errors.Is(err, context.Canceled) {
 			builder.Text("AI 响应已被停止")
@@ -289,13 +292,14 @@ func (p *AIChatPlugin) OnFriendMsg(ctx context.Context, bot bot.Bot, cmd command
 		},
 	}
 
-	resp, usage, err := chat.Chat(chatCtx, extraText,
-		msgFuncs,
+	friendOpts := append([]llms.CallOption{
 		llms.WithMaxTokens(p.llmParameter.maxToken),
 		llms.WithTemperature(p.llmParameter.temperature),
 		llms.WithTopP(p.llmParameter.top_p),
 		llms.WithTopK(p.llmParameter.top_k),
-	)
+	}, p.thinkingOpts()...)
+	resp, usage, err := chat.Chat(chatCtx, extraText,
+		msgFuncs, friendOpts...)
 	if err != nil {
 		if errors.Is(err, context.Canceled) {
 			builder.Text("AI 响应已被停止")
@@ -356,6 +360,14 @@ func (p *AIChatPlugin) Start(ctx context.Context, cfg *viper.Viper) error {
 	p.llmParameter.temperature = cfg.GetFloat64("plugin.ai_chat_bot.temperature")
 	p.llmParameter.top_p = cfg.GetFloat64("plugin.ai_chat_bot.top_p")
 	p.llmParameter.top_k = cfg.GetInt("plugin.ai_chat_bot.top_k")
+	p.llmParameter.enableThinking = cfg.GetBool("plugin.ai_chat_bot.thinking.enable")
+	p.llmParameter.thinkingMode = cfg.GetString("plugin.ai_chat_bot.thinking.mode")
+	if p.llmParameter.thinkingMode == "" {
+		p.llmParameter.thinkingMode = "auto"
+	}
+	if p.llmParameter.enableThinking {
+		p.Logger.Info("已启用深度思考模式", "mode", p.llmParameter.thinkingMode)
+	}
 
 	p.ocrEnable = cfg.GetBool("plugin.ai_chat_bot.ocr.enable")
 	if p.ocrEnable {
