@@ -19,6 +19,7 @@ import (
 
 type napcatHttpAdapter struct {
 	baseUrl    string
+	token      *string
 	httpClient *resty.Client
 	trigger    adapter.TriggerWrapper
 }
@@ -40,6 +41,10 @@ func (n *napcatHttpAdapter) postAndCheck(url string, body any, result any) bool 
 	if result != nil {
 		req = req.SetResult(result)
 	}
+	targetUrl := url
+	if n.token != nil {
+		targetUrl += "?access_token=" + *n.token
+	}
 	resp, err := req.Post(url)
 	if err != nil {
 		log.Printf("HTTP请求失败: %v", err)
@@ -60,6 +65,10 @@ func (n *napcatHttpAdapter) Serve(v *viper.Viper) {
 	n.httpClient = resty.New()
 	n.baseUrl = strings.TrimRight(v.GetString("bot.adapter.http.target_url"), "/")
 	http.HandleFunc("/", n.handler)
+	if v.IsSet("bot.adapter.token") {
+		token := v.GetString("bot.adapter.token")
+		n.token = &token
+	}
 	port := v.GetInt("bot.adapter.http.listen_port")
 	log.Println("已启用napcat http adapter")
 	log.Printf("本地HTTP服务器已启动 http://localhost:%d...\n", port)

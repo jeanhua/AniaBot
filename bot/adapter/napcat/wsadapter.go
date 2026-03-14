@@ -277,7 +277,12 @@ func (n *napcatWebSocketAdapter) Serve(v *viper.Viper) {
 		var conn *websocket.Conn
 		var err error
 		for i := 0; i < maxRetries; i++ {
-			conn, _, err = websocket.DefaultDialer.Dial(url, nil)
+			if v.IsSet("bot.adapter.token") {
+				token := v.GetString("bot.adapter.token")
+				conn, _, err = websocket.DefaultDialer.Dial(url+"?access_token="+token, nil)
+			} else {
+				conn, _, err = websocket.DefaultDialer.Dial(url, nil)
+			}
 			if err == nil {
 				break
 			}

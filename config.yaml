@@ -5,6 +5,7 @@ bot:
 
   # napcat网络交换适配器，websocket/http二选一
   adapter:
+    # token: 如果设置token，请设置该字段
     ws:
       address: ws://localhost:4455 # websocket 地址，napcat的ws server地址
       max_retries: 5 # 连接失败时最大重连次数
