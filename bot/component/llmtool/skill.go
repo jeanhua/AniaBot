@@ -105,17 +105,13 @@ func (m *SkillManager) BuildAvailableSkillsPrompt() string {
 	if len(m.skills) == 0 {
 		return ""
 	}
-
 	var sb strings.Builder
-	sb.WriteString("### 注意：当用户让你完成一个任务时，如果下表存在对应的SKILL，请先查看该SKILL后再执行，不要盲目行动，SKILL列表如下")
-	sb.WriteString("<available_skills>\n")
+	sb.WriteString("# 注意：当用户让你完成一个任务时，如果下表存在对应的SKILL，请先使用工具查看该SKILL后再执行，SKILL列表如下，**不要盲目行动，否则你将会为你的鲁莽承担危险的后果**")
+	sb.WriteString("<skills>")
 	for _, s := range m.skills {
-		sb.WriteString("<skill>\n")
-		sb.WriteString(fmt.Sprintf("  <name>%s</name>\n", s.Meta.Name))
-		sb.WriteString(fmt.Sprintf("  <description>%s</description>\n", s.Meta.Description))
-		sb.WriteString("</skill>\n")
+		sb.WriteString(fmt.Sprintf("[%s: %s]", s.Meta.Name, s.Meta.Description))
 	}
-	sb.WriteString("</available_skills>")
+	sb.WriteString("</skills>")
 	return sb.String()
 }
 
@@ -219,7 +215,7 @@ func (t *SkillReadTool) Execute(ctx context.Context, params any, callbacks CallB
 		return sb.String(), nil
 	}
 
-	log.Println("正在查询Skill", p.SkillName)
+	log.Println("[SKILL查询] 正在查询", p.SkillName)
 	skill, ok := t.manager.Get(p.SkillName)
 	if !ok {
 		// 返回可用列表，便于 Agent 纠正
