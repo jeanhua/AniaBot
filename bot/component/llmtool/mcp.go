@@ -121,7 +121,7 @@ func (c *MCPClient) CallTool(ctx context.Context, toolName string, arguments jso
 		return "", fmt.Errorf("MCP客户端未连接")
 	}
 
-	log.Printf("[MCP:%s] 调用工具: %s", c.config.Name, toolName)
+	log.Printf("[MCP] 调用工具: %s/%s", c.config.Name, toolName)
 
 	// 解析参数
 	var args map[string]any
@@ -280,7 +280,6 @@ func (m *MCPToolManager) LoadTool(toolName string) (*MCPTool, error) {
 		if toolDef.Name == toolName {
 			tool := NewMCPTool(m.client, toolDef)
 			m.toolCache[toolName] = tool
-			log.Printf("[MCP:%s] 加载工具: %s", m.client.config.Name, toolName)
 			return tool, nil
 		}
 	}
@@ -422,6 +421,7 @@ func (t *MCPLoaderTool) Execute(ctx context.Context, params any, callbacks CallB
 
 	schema := tool.GetInputSchema()
 	schemaJSON, _ := json.MarshalIndent(schema, "", "  ")
+	log.Printf("[MCP] 加载工具: %s", tool.Name())
 
 	return fmt.Sprintf("工具 '%s' 已加载成功。\n描述: %s\n参数定义:\n%s",
 		tool.Name(), tool.Description(), string(schemaJSON)), nil
