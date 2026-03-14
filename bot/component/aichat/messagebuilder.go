@@ -1,6 +1,8 @@
 package aichat
 
 import (
+	"log"
+
 	"github.com/jeanhua/AniaBot/bot/component/llmtool"
 	"github.com/tmc/langchaingo/llms"
 )
@@ -30,13 +32,15 @@ func (b *MessageBuilder) WithSkillManager(manager *llmtool.SkillManager) {
 // buildSystemPrompt 构建最终的 system prompt（基础 prompt + skill 列表块）
 func (b *MessageBuilder) buildSystemPrompt() string {
 	if b.skillManager == nil {
+		log.Println("skillManager is nil, skip build skill block")
 		return b.prompt
 	}
 	skillBlock := b.skillManager.BuildAvailableSkillsPrompt()
 	if skillBlock == "" {
+		log.Println("skillBlock is empty, skip build skill block")
 		return b.prompt
 	}
-	return b.prompt + "\n\n" + skillBlock
+	return skillBlock + "\n\n" + b.prompt
 }
 
 // BuildChatMessages 构建本轮请求的完整消息列表。
