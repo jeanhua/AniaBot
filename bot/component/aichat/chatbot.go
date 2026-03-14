@@ -33,13 +33,13 @@ func NewChatBot(baseURL, apiKey, model, prompt string, windowSize int, toolExecu
 	}, nil
 }
 
-func (b *ChatBot) Chat(ctx context.Context, userInput string, callbacks llmtool.CallBackFuncs, opts ...llms.CallOption) (string, error) {
+func (b *ChatBot) Chat(ctx context.Context, userInput string, callbacks llmtool.CallBackFuncs, opts ...llms.CallOption) (string, TokenUsage, error) {
 	// 构建本轮消息：system prompt + 历史消息 + 本次 human 消息
 	messages := b.msgBuilder.BuildChatMessages(userInput, b.window.history())
 
-	response, updatedMessages, err := b.toolOrchestrator.ExecuteWithTools(ctx, b.llmClient, messages, callbacks, opts...)
+	response, updatedMessages, usage, err := b.toolOrchestrator.ExecuteWithTools(ctx, b.llmClient, messages, callbacks, opts...)
 	if err != nil {
-		return "", fmt.Errorf("chat execution failed: %w", err)
+		return "", usage, fmt.Errorf("chat execution failed: %w", err)
 	}
 
 	// 从 updatedMessages 中提取本轮新增的消息（去掉 system prompt 和历史部分）
@@ -51,7 +51,7 @@ func (b *ChatBot) Chat(ctx context.Context, userInput string, callbacks llmtool.
 		b.window.append(updatedMessages[newMessagesStart:]...)
 	}
 
-	return response, nil
+	return response, usage, nil
 }
 
 func (b *ChatBot) GetSingleImageDesc(ctx context.Context, userInput string, imageURL string, opts ...llms.CallOption) (string, error) {

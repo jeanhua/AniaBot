@@ -168,7 +168,7 @@ func (p *AIChatPlugin) OnGroupMsg(ctx context.Context, bot bot.Bot, cmd command.
 		},
 	}
 
-	resp, err := chat.Chat(chatCtx, extraText, msgFuncs,
+	resp, usage, err := chat.Chat(chatCtx, extraText, msgFuncs,
 		llms.WithMaxTokens(p.llmParameter.maxToken),
 		llms.WithTemperature(p.llmParameter.temperature),
 		llms.WithTopP(p.llmParameter.top_p),
@@ -196,6 +196,7 @@ func (p *AIChatPlugin) OnGroupMsg(ctx context.Context, bot bot.Bot, cmd command.
 		return true, nil
 	}
 
+	p.Logger.Info("AI请求token消耗", "group", msg.GroupId, "prompt_tokens", usage.PromptTokens, "completion_tokens", usage.CompletionTokens, "total_tokens", usage.TotalTokens)
 	builder.Mention(msg.Sender.UserId)
 	builder.Text(" " + resp)
 	if _, success := bot.SendGroupMsg(msg.GroupId, builder.Build()); success {
@@ -288,7 +289,7 @@ func (p *AIChatPlugin) OnFriendMsg(ctx context.Context, bot bot.Bot, cmd command
 		},
 	}
 
-	resp, err := chat.Chat(chatCtx, extraText,
+	resp, usage, err := chat.Chat(chatCtx, extraText,
 		msgFuncs,
 		llms.WithMaxTokens(p.llmParameter.maxToken),
 		llms.WithTemperature(p.llmParameter.temperature),
@@ -317,6 +318,7 @@ func (p *AIChatPlugin) OnFriendMsg(ctx context.Context, bot bot.Bot, cmd command
 		return true, nil
 	}
 
+	p.Logger.Info("AI请求token消耗", "user", msg.Sender.UserId, "prompt_tokens", usage.PromptTokens, "completion_tokens", usage.CompletionTokens, "total_tokens", usage.TotalTokens)
 	builder.Text(resp)
 	if _, success := bot.SendFriendMsg(msg.Sender.UserId, builder.Build()); success {
 		p.Logger.Info("发送文本", "user", msg.Sender.UserId, "text", resp)

@@ -31,21 +31,56 @@ func (o *ToolOrchestrator) SetMaxIterations(max int) {
 	o.maxIterations = max
 }
 
+// TokenUsage 记录本次请求的 token 消耗
+type TokenUsage struct {
+	PromptTokens     int // 发给模型的输入 token 数，包括 system prompt、历史消息、本次用户消息
+	CompletionTokens int // CompletionTokens：模型生成的输出 token 数
+	TotalTokens      int // TotalTokens：两者之和，也就是本次请求实际计费的 token 总量
+}
+
+func extractTokenUsage(resp *llms.ContentResponse) TokenUsage {
+	if len(resp.Choices) == 0 {
+		return TokenUsage{}
+	}
+	info := resp.Choices[0].GenerationInfo
+	get := func(key string) int {
+		if v, ok := info[key]; ok {
+			switch n := v.(type) {
+			case int:
+				return n
+			case int64:
+				return int(n)
+			case float64:
+				return int(n)
+			}
+		}
+		return 0
+	}
+	return TokenUsage{
+		PromptTokens:     get("PromptTokens"),
+		CompletionTokens: get("CompletionTokens"),
+		TotalTokens:      get("TotalTokens"),
+	}
+}
+
 func (o *ToolOrchestrator) ExecuteWithTools(
 	ctx context.Context,
 	llmClient *LLMClient,
 	messages []llms.MessageContent,
 	callbacks llmtool.CallBackFuncs,
 	opts ...llms.CallOption,
-) (string, []llms.MessageContent, error) {
+) (string, []llms.MessageContent, TokenUsage, error) {
+	var totalUsage TokenUsage
+
 	if o.executor == nil || len(o.executor.Tools()) == 0 {
 		resp, err := llmClient.Generate(ctx, messages, opts...)
 		if err != nil {
-			return "", messages, err
+			return "", messages, totalUsage, err
 		}
+		totalUsage = extractTokenUsage(resp)
 		content := resp.Choices[0].Content
 		messages = append(messages, o.msgBuilder.BuildAIMessage(content, nil))
-		return content, messages, nil
+		return content, messages, totalUsage, nil
 	}
 
 	callOpts := append(opts, llms.WithTools(o.executor.Tools()))
@@ -53,15 +88,20 @@ func (o *ToolOrchestrator) ExecuteWithTools(
 	for i := 0; i < o.maxIterations; i++ {
 		resp, err := llmClient.Generate(ctx, messages, callOpts...)
 		if err != nil {
-			return "", messages, err
+			return "", messages, totalUsage, err
 		}
+
+		u := extractTokenUsage(resp)
+		totalUsage.PromptTokens += u.PromptTokens
+		totalUsage.CompletionTokens += u.CompletionTokens
+		totalUsage.TotalTokens += u.TotalTokens
 
 		choice := resp.Choices[0]
 
 		// 没有工具调用，返回最终响应
 		if len(choice.ToolCalls) == 0 {
 			messages = append(messages, o.msgBuilder.BuildAIMessage(choice.Content, nil))
-			return choice.Content, messages, nil
+			return choice.Content, messages, totalUsage, nil
 		}
 
 		// 保存 AI 消息（包含工具调用）
@@ -75,7 +115,7 @@ func (o *ToolOrchestrator) ExecuteWithTools(
 		// 执行工具调用
 		toolResults, err := o.executeToolCalls(ctx, choice.ToolCalls, callbacks)
 		if err != nil {
-			return "", messages, err
+			return "", messages, totalUsage, err
 		}
 		messages = append(messages, toolResults...)
 
@@ -84,18 +124,22 @@ func (o *ToolOrchestrator) ExecuteWithTools(
 			messages = append(messages, o.msgBuilder.BuildToolLimitMessage())
 			finalResp, err := llmClient.Generate(ctx, messages)
 			if err != nil {
-				return "", messages, err
+				return "", messages, totalUsage, err
 			}
 			if len(finalResp.Choices) == 0 {
-				return "", messages, fmt.Errorf("no choices returned from final LLM call")
+				return "", messages, totalUsage, fmt.Errorf("no choices returned from final LLM call")
 			}
+			fu := extractTokenUsage(finalResp)
+			totalUsage.PromptTokens += fu.PromptTokens
+			totalUsage.CompletionTokens += fu.CompletionTokens
+			totalUsage.TotalTokens += fu.TotalTokens
 			finalContent := finalResp.Choices[0].Content
 			messages = append(messages, o.msgBuilder.BuildAIMessage(finalContent, nil))
-			return finalContent, messages, nil
+			return finalContent, messages, totalUsage, nil
 		}
 	}
 
-	return "", messages, fmt.Errorf("exceeded maximum iterations")
+	return "", messages, totalUsage, fmt.Errorf("exceeded maximum iterations")
 }
 
 func (o *ToolOrchestrator) executeToolCalls(
