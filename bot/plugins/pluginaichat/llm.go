@@ -29,13 +29,15 @@ func (p *AIChatPlugin) clearActiveContext(id message.QID) {
 func (p *AIChatPlugin) getChat(id message.QID) *aichat.ChatBot {
 	chat, ok := p.chats.Load(id)
 	if !ok {
+		// 每个会话创建独立的 SessionToolExecutor，动态加载的工具互不影响
+		sessionExecutor := p.toolExecutor.NewSessionExecutor()
 		c, err := aichat.NewChatBot(
 			p.botConfig.baseURL,
 			p.botConfig.apiKey,
 			p.botConfig.model,
 			p.llmParameter.prompt,
 			30,
-			p.toolExecutor,
+			sessionExecutor,
 		)
 		if err != nil {
 			p.Logger.Error("创建 ChatBot 失败", "error", err.Error())

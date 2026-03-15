@@ -83,9 +83,9 @@ func (o *ToolOrchestrator) ExecuteWithTools(
 		return content, messages, totalUsage, nil
 	}
 
-	callOpts := append(opts, llms.WithTools(o.executor.Tools()))
-
 	for i := 0; i < o.maxIterations; i++ {
+		// 每次迭代重新获取工具列表，支持动态加载（如 MCP 工具加载后立即生效）
+		callOpts := append(opts, llms.WithTools(o.executor.Tools()))
 		resp, err := llmClient.Generate(ctx, messages, callOpts...)
 		if err != nil {
 			return "", messages, totalUsage, err

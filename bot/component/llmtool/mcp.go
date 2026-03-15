@@ -341,6 +341,7 @@ func (e *ToolExecuter) RegisterMCP(client *MCPClient) error {
 }
 
 // RegisterMCPWithDiscovery 使用工具发现模式注册 MCP（推荐方式，避免上下文爆炸）
+// DiscoveryTool 注册到共享层，LoaderTool 在 NewSessionExecutor 时自动注入到会话层
 func (e *ToolExecuter) RegisterMCPWithDiscovery(client *MCPClient) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -350,13 +351,12 @@ func (e *ToolExecuter) RegisterMCPWithDiscovery(client *MCPClient) error {
 		return err
 	}
 
-	// 注册工具发现工具
+	// 发现工具注册到共享层（只读，无副作用）
 	discoveryTool := NewMCPDiscoveryTool(manager)
 	e.Register(discoveryTool)
 
-	// 注册工具加载器
-	loaderTool := NewMCPLoaderTool(manager, e)
-	e.Register(loaderTool)
+	// 保存 manager，session 创建时自动注入对应的 LoaderTool
+	e.mcpManagers = append(e.mcpManagers, manager)
 
 	log.Printf("[MCP:%s] 工具发现模式注册完成", client.config.Name)
 	return nil
@@ -411,18 +411,18 @@ func (t *MCPDiscoveryTool) Execute(ctx context.Context, params any, callbacks Ca
 
 // MCPLoaderTool 工具加载工具
 type MCPLoaderTool struct {
-	manager  *MCPToolManager
-	executer *ToolExecuter
+	manager         *MCPToolManager
+	sessionExecutor *SessionToolExecutor
 }
 
 type MCPLoaderParams struct {
 	ToolName string `json:"tool_name" desc:"要加载的工具名称"`
 }
 
-func NewMCPLoaderTool(manager *MCPToolManager, executer *ToolExecuter) *MCPLoaderTool {
+func NewMCPLoaderTool(manager *MCPToolManager, sessionExecutor *SessionToolExecutor) *MCPLoaderTool {
 	return &MCPLoaderTool{
-		manager:  manager,
-		executer: executer,
+		manager:         manager,
+		sessionExecutor: sessionExecutor,
 	}
 }
 
@@ -446,17 +446,12 @@ func (t *MCPLoaderTool) Execute(ctx context.Context, params any, callbacks CallB
 		return "", err
 	}
 
-	// 动态注册工具到执行器（已注册则跳过）
-	if _, exists := t.executer.tools[tool.Name()]; !exists {
-		t.executer.Register(tool)
-	}
+	// 注册到会话级执行器，不影响其他用户的会话
+	t.sessionExecutor.RegisterSession(tool)
+	log.Printf("[MCP] 加载工具到会话: %s", tool.Name())
 
-	schema := tool.GetInputSchema()
-	schemaJSON, _ := json.MarshalIndent(schema, "", "  ")
-	log.Printf("[MCP] 加载工具: %s", tool.Name())
-
-	return fmt.Sprintf("工具 '%s' 已加载成功。\n描述: %s\n参数定义:\n%s",
-		tool.Name(), tool.Description(), string(schemaJSON)), nil
+	// 只返回加载成功的简短确认，工具定义通过 tools 字段传递给模型
+	return fmt.Sprintf("工具 '%s' 已加载成功，现在可以直接调用该工具。", tool.Name()), nil
 }
 
 // 常用工具过滤器
