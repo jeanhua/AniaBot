@@ -2,7 +2,6 @@ package functool
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"log"
 	"math/rand/v2"
@@ -53,5 +52,3 @@ func (t *MemeTool) Execute(ctx context.Context, params any, callbacks llmtool.Ca
 	}
 	return fmt.Sprintf("已成功发送关于'%s'的表情包图片给用户", p.Text), nil
 }
-
-var ToolExecuteError = errors.New("Function Tool执行错误")

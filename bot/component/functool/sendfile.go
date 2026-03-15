@@ -2,10 +2,13 @@ package functool
 
 import (
 	"context"
+	"errors"
 	"log"
 
 	"github.com/jeanhua/AniaBot/bot/component/llmtool"
 )
+
+var errToolExecute = errors.New("function tool执行错误")
 
 type SendFileParams struct {
 	Name    string `json:"name" desc:"要发送的文件名(包括后缀)"`
@@ -28,7 +31,7 @@ func (t *SendFileTool) Execute(ctx context.Context, params any, callbacks llmtoo
 
 	_, err := callbacks.SendFile(p.Name, p.Content)
 	if err != nil {
-		return "发送失败", ToolExecuteError
+		return "发送失败", errToolExecute
 	}
 	return "发送成功", nil
 }
