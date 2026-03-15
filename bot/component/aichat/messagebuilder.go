@@ -1,10 +1,6 @@
 package aichat
 
 import (
-	"bytes"
-	"log"
-	"text/template"
-
 	"github.com/jeanhua/AniaBot/bot/component/llmtool"
 	"github.com/tmc/langchaingo/llms"
 )
@@ -36,28 +32,11 @@ func (b *MessageBuilder) buildSystemPrompt() string {
 	if b.skillManager == nil {
 		return b.prompt
 	}
-
 	skillBlock := b.skillManager.BuildAvailableSkillsPrompt()
 	if skillBlock == "" {
 		return b.prompt
 	}
-
-	data := map[string]interface{}{
-		"AgentSkillsPrompt": skillBlock,
-	}
-
-	tmpl, err := template.New("prompt").Parse(b.prompt)
-	if err != nil {
-		log.Printf("Parse prompt template failed: %v", err)
-		return b.prompt
-	}
-
-	var buf bytes.Buffer
-	if err := tmpl.Execute(&buf, data); err != nil {
-		log.Printf("Execute prompt template failed: %v", err)
-		return b.prompt + "\n\n" + skillBlock
-	}
-	return buf.String()
+	return b.prompt + "\n\n" + skillBlock
 }
 
 // BuildChatMessages 构建本轮请求的完整消息列表。

@@ -100,17 +100,26 @@ func (m *SkillManager) List() []*SkillMeta {
 	return result
 }
 
-// BuildAvailableSkillsPrompt 生成注入 system prompt 的 <available_skills> 块
+// BuildAvailableSkillsPrompt 生成注入 system prompt 的 <skills_registry> 块
 func (m *SkillManager) BuildAvailableSkillsPrompt() string {
 	if len(m.skills) == 0 {
 		return ""
 	}
 	var sb strings.Builder
-	sb.WriteString("<skills>")
+	sb.WriteString("\n<agent_skills_registry>\n")
+	sb.WriteString("  <instruction>\n")
+	sb.WriteString("    The following skills define your operational logic and constraints.\n")
+	sb.WriteString("    BEFORE invoking any tool, you MUST match the intent against these skills first.\n")
+	sb.WriteString("  </instruction>\n\n")
+
 	for _, s := range m.skills {
-		sb.WriteString(fmt.Sprintf("[%s: %s]", s.Meta.Name, s.Meta.Description))
+		sb.WriteString("  <skill>\n")
+		sb.WriteString(fmt.Sprintf("    <name>%s</name>\n", s.Meta.Name))
+		sb.WriteString(fmt.Sprintf("    <description>%s</description>\n", s.Meta.Description))
+		sb.WriteString("  </skill>\n")
 	}
-	sb.WriteString("</skills>")
+
+	sb.WriteString("</agent_skills_registry>\n")
 	return sb.String()
 }
 
