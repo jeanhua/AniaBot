@@ -395,6 +395,12 @@ func (p *AIChatPlugin) Start(ctx context.Context, cfg *viper.Viper) error {
 		p.Logger.Info("已启用深度思考模式", "mode", p.llmParameter.thinkingMode)
 	}
 
+	if cfg.IsSet("plugin.ai_chat_bot.search.token") {
+		p.llmParameter.searchToken = cfg.GetString("plugin.ai_chat_bot.search.token")
+	} else {
+		p.Logger.Warn("Jina AI Token 未设置，将无法使用网页浏览和搜索功能")
+	}
+
 	p.ocrEnable = cfg.GetBool("plugin.ai_chat_bot.ocr.enable")
 	if p.ocrEnable {
 		p.Logger.Info("已启用OCR LLM")
@@ -402,13 +408,11 @@ func (p *AIChatPlugin) Start(ctx context.Context, cfg *viper.Viper) error {
 		ocrAPIKey := cfg.GetString("plugin.ai_chat_bot.ocr.api_key")
 		ocrModel := cfg.GetString("plugin.ai_chat_bot.ocr.model")
 		ocrPrompt := cfg.GetString("plugin.ai_chat_bot.ocr.prompt")
-		searchToken := cfg.GetString("plugin.ai_chat_bot.search.token")
 
 		p.ocrParameter.maxToken = cfg.GetInt("plugin.ai_chat_bot.ocr.max_token")
 		p.ocrParameter.temperature = cfg.GetFloat64("plugin.ai_chat_bot.ocr.temperature")
 		p.ocrParameter.top_p = cfg.GetFloat64("plugin.ai_chat_bot.ocr.top_p")
 		p.ocrParameter.top_k = cfg.GetInt("plugin.ai_chat_bot.ocr.top_k")
-		p.llmParameter.searchToken = searchToken
 
 		ocrllm, err := aichat.NewChatBot(ocrBaseUrl, ocrAPIKey, ocrModel, ocrPrompt, 10, nil)
 		if err != nil {
