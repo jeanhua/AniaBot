@@ -106,7 +106,6 @@ func (m *SkillManager) BuildAvailableSkillsPrompt() string {
 		return ""
 	}
 	var sb strings.Builder
-	sb.WriteString("# 注意：当用户让你完成一个任务时，如果下表存在对应的SKILL，请先使用工具查看该SKILL后再执行，SKILL列表如下，**不要盲目行动，否则你将会为你的鲁莽承担危险的后果**")
 	sb.WriteString("<skills>")
 	for _, s := range m.skills {
 		sb.WriteString(fmt.Sprintf("[%s: %s]", s.Meta.Name, s.Meta.Description))
