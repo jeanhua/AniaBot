@@ -102,13 +102,13 @@ func (p *AIChatPlugin) OnGroupMsg(ctx context.Context, bot bot.Bot, cmd command.
 		return false, nil
 	}
 
-	if !p.tryLock(ctx, msg.GroupId) {
+	if !p.tryLock(msg.GroupId) {
 		builder := msgchain.Builder().Group()
 		builder.Text("正在等待响应中，不要着急哦~")
 		bot.SendGroupMsg(msg.GroupId, builder.Build())
 		return true, nil
 	}
-	defer p.unLock(ctx, msg.GroupId)
+	defer p.unLock(msg.GroupId)
 	defer p.clearActiveContext(msg.GroupId)
 	chat := p.getChat(msg.GroupId)
 	if chat == nil {
@@ -231,13 +231,13 @@ func (p *AIChatPlugin) OnFriendMsg(ctx context.Context, bot bot.Bot, cmd command
 		return false, nil
 	}
 
-	if !p.tryLock(ctx, msg.Sender.UserId) {
+	if !p.tryLock(msg.Sender.UserId) {
 		builder := msgchain.Builder().Friend()
 		builder.Text("正在等待响应中，不要着急哦~")
 		bot.SendFriendMsg(msg.Sender.UserId, builder.Build())
 		return true, nil
 	}
-	defer p.unLock(ctx, msg.Sender.UserId)
+	defer p.unLock(msg.Sender.UserId)
 	defer p.clearActiveContext(msg.Sender.UserId)
 
 	chat := p.getChat(msg.Sender.UserId)
