@@ -30,6 +30,8 @@ plugin:
     base_url: "https://api.deepseek.com" # 示例deepseek，支持所有兼容OpenAI规范的厂商
     api_key: "" # 这里填写apikey
     model: "deepseek-chat" # 选择的模型
+    rate_limit: 2 # 速率限制，每秒最多调用次数
+
     # 工具调用
     search:
       token: "xxx" # jina ai token

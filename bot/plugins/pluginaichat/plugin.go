@@ -28,6 +28,8 @@ type AIChatPlugin struct {
 	chats sync.Map
 
 	lockStorage storage.Storage
+	rateLimit   int
+	rateCh      chan struct{}
 
 	// 用于存储活跃的请求上下文，支持取消操作
 	activeContexts sync.Map // map[message.QID]context.CancelFunc
@@ -352,6 +354,12 @@ func (p *AIChatPlugin) Start(ctx context.Context, cfg *viper.Viper) error {
 	p.botConfig.model = cfg.GetString("plugin.ai_chat_bot.model")
 	p.botConfig.apiKey = cfg.GetString("plugin.ai_chat_bot.api_key")
 	p.llmParameter.prompt = cfg.GetString("plugin.ai_chat_bot.prompt")
+
+	p.rateLimit = cfg.GetInt("plugin.ai_chat_bot.rate_limit")
+	if p.rateLimit <= 0 {
+		p.rateLimit = 2
+	}
+	p.rateCh = make(chan struct{}, p.rateLimit)
 
 	if p.botConfig.baseURL == "" {
 		p.Logger.Error("初始化失败：未配置 Base Url")
