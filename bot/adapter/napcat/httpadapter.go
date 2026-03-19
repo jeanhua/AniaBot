@@ -276,11 +276,11 @@ func (n *napcatHttpAdapter) SendGroupSign(groupId message.QID) bool {
 	return n.postAndCheck(n.baseUrl+"/send_group_sign", data, &resp)
 }
 
-func (n *napcatHttpAdapter) GetGroupMsgHistory(groupId message.QID, count int) (*[]message.Message, bool) {
+func (n *napcatHttpAdapter) GetGroupMsgHistory(groupId message.QID, count int, message_seq int) (*[]message.Message, bool) {
 	data := map[string]any{
 		"group_id":    groupId,
 		"count":       count,
-		"message_seq": 0,
+		"message_seq": message_seq,
 	}
 	resp := struct {
 		Messages []message.Message `json:"messages"`
@@ -291,11 +291,11 @@ func (n *napcatHttpAdapter) GetGroupMsgHistory(groupId message.QID, count int) (
 	return &resp.Messages, true
 }
 
-func (n *napcatHttpAdapter) GetFriendMsgHistory(userId message.QID, count int) (*[]message.Message, bool) {
+func (n *napcatHttpAdapter) GetFriendMsgHistory(userId message.QID, count int, message_seq int) (*[]message.Message, bool) {
 	data := map[string]any{
 		"user_id":     userId,
 		"count":       count,
-		"message_seq": 0,
+		"message_seq": message_seq,
 	}
 	resp := struct {
 		Messages []message.Message `json:"messages"`

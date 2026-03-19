@@ -54,9 +54,9 @@ type botGetMsgItf interface {
 	GetGroupDetail(groupId message.QID) (info *message.GroupInfo, success bool)
 
 	// GetGroupMsgHistory 获取群聊消息历史记录
-	GetGroupMsgHistory(groupId message.QID, count int) (*[]message.Message, bool)
+	GetGroupMsgHistory(groupId message.QID, count int, message_seq int) (*[]message.Message, bool)
 	// GetFriendMsgHistory 获取好友消息历史记录
-	GetFriendMsgHistory(userId message.QID, count int) (*[]message.Message, bool)
+	GetFriendMsgHistory(userId message.QID, count int, message_seq int) (*[]message.Message, bool)
 
 	// GetAIChatacter 获取AI角色列表
 	GetAIChatacter() (*[]message.AIChatacter, bool)

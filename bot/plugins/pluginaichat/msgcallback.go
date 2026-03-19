@@ -42,8 +42,8 @@ func MakeGroupCallback(bot bot.Bot, groupId, userId message.QID, logger *slog.Lo
 			}
 			return "发送成功", nil
 		},
-		GetMsgHistory: func(count int) (string, error) {
-			msgs, ok := bot.GetGroupMsgHistory(groupId, count)
+		GetMsgHistory: func(count int, message_seq int) (string, error) {
+			msgs, ok := bot.GetGroupMsgHistory(groupId, count, message_seq)
 			if !ok || msgs == nil {
 				return "", fmt.Errorf("获取群聊历史消息失败")
 			}
@@ -54,7 +54,7 @@ func MakeGroupCallback(bot bot.Bot, groupId, userId message.QID, logger *slog.Lo
 				if nickname == "" {
 					nickname = msg.Sender.Nickname
 				}
-				str.WriteString(fmt.Sprintf("[nickname:%s id:%d]:", nickname, msg.Sender.UserId))
+				str.WriteString(fmt.Sprintf("[nickname:%s | id:%d | message_seq:%d]: ", nickname, msg.Sender.UserId, msg.MessageSeq))
 				for _, seg := range msg.Message {
 					str.WriteString(
 						seg.FriendlyText(
@@ -65,6 +65,7 @@ func MakeGroupCallback(bot bot.Bot, groupId, userId message.QID, logger *slog.Lo
 					)
 				}
 				sb.WriteString(str.String())
+				sb.WriteString("\n")
 			}
 			return sb.String(), nil
 		},
@@ -102,8 +103,8 @@ func MakeFriendCallback(bot bot.Bot, userId message.QID, logger *slog.Logger) ll
 			}
 			return "发送成功", nil
 		},
-		GetMsgHistory: func(count int) (string, error) {
-			msgs, ok := bot.GetFriendMsgHistory(userId, count)
+		GetMsgHistory: func(count int, message_seq int) (string, error) {
+			msgs, ok := bot.GetFriendMsgHistory(userId, count, message_seq)
 			if !ok || msgs == nil {
 				return "", fmt.Errorf("获取好友历史消息失败")
 			}
@@ -114,7 +115,7 @@ func MakeFriendCallback(bot bot.Bot, userId message.QID, logger *slog.Logger) ll
 				if nickname == "" {
 					nickname = msg.Sender.Nickname
 				}
-				str.WriteString(fmt.Sprintf("[nickname:%s id:%d]:", nickname, msg.Sender.UserId))
+				str.WriteString(fmt.Sprintf("[nickname:%s | id:%d | message_seq:%d]: ", nickname, msg.Sender.UserId, msg.MessageSeq))
 				for _, seg := range msg.Message {
 					str.WriteString(
 						seg.FriendlyText(
@@ -124,6 +125,7 @@ func MakeFriendCallback(bot bot.Bot, userId message.QID, logger *slog.Logger) ll
 					)
 				}
 				sb.WriteString(str.String())
+				sb.WriteString("\n")
 			}
 			return sb.String(), nil
 		},

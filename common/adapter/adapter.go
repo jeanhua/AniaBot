@@ -84,9 +84,9 @@ type GetMsg interface {
 	// GetGroupDetail 获取群详情
 	GetGroupDetail(groupId message.QID) (info *message.GroupInfo, success bool)
 	// GetGroupMsgHistory 获取群消息历史
-	GetGroupMsgHistory(groupId message.QID, count int) (*[]message.Message, bool)
+	GetGroupMsgHistory(groupId message.QID, count int, message_seq int) (*[]message.Message, bool)
 	// GetFriendMsgHistory 获取好友消息历史
-	GetFriendMsgHistory(userId message.QID, count int) (*[]message.Message, bool)
+	GetFriendMsgHistory(userId message.QID, count int, message_seq int) (*[]message.Message, bool)
 	// GetAIChatacter 获取AI聊天角色
 	GetAIChatacter() (*[]message.AIChatacter, bool)
 }

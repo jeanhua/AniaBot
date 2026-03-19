@@ -205,11 +205,11 @@ func (n *napcatWebSocketAdapter) SendGroupSign(groupId message.QID) (success boo
 	return true
 }
 
-func (n *napcatWebSocketAdapter) GetGroupMsgHistory(groupId message.QID, count int) (*[]message.Message, bool) {
+func (n *napcatWebSocketAdapter) GetGroupMsgHistory(groupId message.QID, count int, message_seq int) (*[]message.Message, bool) {
 	params := map[string]any{
 		"group_id":    groupId,
 		"count":       count,
-		"message_seq": 0,
+		"message_seq": message_seq,
 	}
 	type fwData struct {
 		Messages []message.Message `json:"messages"`
@@ -221,11 +221,11 @@ func (n *napcatWebSocketAdapter) GetGroupMsgHistory(groupId message.QID, count i
 	return &res.Messages, true
 }
 
-func (n *napcatWebSocketAdapter) GetFriendMsgHistory(userId message.QID, count int) (*[]message.Message, bool) {
+func (n *napcatWebSocketAdapter) GetFriendMsgHistory(userId message.QID, count int, message_seq int) (*[]message.Message, bool) {
 	params := map[string]any{
 		"user_id":     userId,
 		"count":       count,
-		"message_seq": 0,
+		"message_seq": message_seq,
 	}
 	type fwData struct {
 		Messages []message.Message `json:"messages"`

@@ -353,12 +353,12 @@ func (ania *AniaBot) SendGroupSign(groupId message.QID) (success bool) {
 	return ania.adapter.SendGroupSign(groupId)
 }
 
-func (ania *AniaBot) GetGroupMsgHistory(groupId message.QID, count int) (*[]message.Message, bool) {
-	return ania.adapter.GetGroupMsgHistory(groupId, count)
+func (ania *AniaBot) GetGroupMsgHistory(groupId message.QID, count int, message_seq int) (*[]message.Message, bool) {
+	return ania.adapter.GetGroupMsgHistory(groupId, count, message_seq)
 }
 
-func (ania *AniaBot) GetFriendMsgHistory(userId message.QID, count int) (*[]message.Message, bool) {
-	return ania.adapter.GetFriendMsgHistory(userId, count)
+func (ania *AniaBot) GetFriendMsgHistory(userId message.QID, count int, message_seq int) (*[]message.Message, bool) {
+	return ania.adapter.GetFriendMsgHistory(userId, count, message_seq)
 }
 
 func (ania *AniaBot) GetAIChatacter() (*[]message.AIChatacter, bool) {

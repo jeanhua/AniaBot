@@ -8,6 +8,7 @@ type Message struct {
 	MessageType string        `json:"message_type"`
 	SubType     string        `json:"sub_type"`
 	MessageId   QID           `json:"message_id"`
+	MessageSeq  int           `json:"message_seq"`
 	UserId      QID           `json:"user_id"`
 	GroupId     QID           `json:"group_id"`
 	Message     []OB11Segment `json:"message"`
