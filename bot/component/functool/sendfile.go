@@ -12,7 +12,7 @@ var errToolExecute = errors.New("function tool执行错误")
 
 type SendFileParams struct {
 	Name    string `json:"name" desc:"要发送的文件名(包括后缀)"`
-	Content string `json:"content" desc:"文件的内容"`
+	Content string `json:"content" desc:"文件的文本内容"`
 }
 
 type SendFileTool struct {
