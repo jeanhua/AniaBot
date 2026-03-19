@@ -10,7 +10,8 @@ type Tool interface {
 }
 
 type CallBackFuncs struct {
-	SendText  func(text string) (string, error)
-	SendImage func(url string) (string, error)
-	SendFile  func(name, content string) (string, error)
+	SendText      func(text string) (string, error)
+	SendImage     func(url string) (string, error)
+	SendFile      func(name, content string) (string, error)
+	GetMsgHistory func(count int) (string, error)
 }

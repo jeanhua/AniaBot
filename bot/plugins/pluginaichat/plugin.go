@@ -2,7 +2,6 @@ package pluginaichat
 
 import (
 	"context"
-	"encoding/base64"
 	"errors"
 	"strings"
 	"sync"
@@ -141,36 +140,7 @@ func (p *AIChatPlugin) OnGroupMsg(ctx context.Context, bot bot.Bot, cmd command.
 		}
 	}
 
-	msgFuncs := llmtool.CallBackFuncs{
-		SendText: func(s string) (string, error) {
-			builder := msgchain.Builder().Group()
-			builder.Mention(msg.Sender.UserId)
-			builder.Text(" " + s)
-			_, success := bot.SendGroupMsg(msg.GroupId, builder.Build())
-			if success {
-				p.Logger.Info("发送文本", "group", msg.GroupId, "user", msg.Sender.UserId, "text", s)
-			}
-			return "发送成功", nil
-		},
-		SendImage: func(url string) (string, error) {
-			builder := msgchain.Builder().Group()
-			builder.ImageUrl(url)
-			_, success := bot.SendGroupMsg(msg.GroupId, builder.Build())
-			if success {
-				p.Logger.Info("发送图片", "group", msg.GroupId, "user", msg.Sender.UserId, "image", url)
-			}
-			return "发送成功", nil
-		},
-		SendFile: func(fileName, content string) (string, error) {
-			builder := msgchain.Builder().Group()
-			builder.FileBase64(fileName, base64.StdEncoding.EncodeToString([]byte(content)))
-			_, success := bot.SendGroupMsg(msg.GroupId, builder.Build())
-			if success {
-				p.Logger.Info("发送文件", "group", msg.GroupId, "user", msg.Sender.UserId, "file", fileName)
-			}
-			return "发送成功", nil
-		},
-	}
+	msgFuncs := MakeGroupCallback(bot, msg.GroupId, msg.Sender.UserId, p.Logger)
 
 	chatOpts := p.thinkingOpts()
 	if p.llmParameter.maxToken != nil {
@@ -270,35 +240,7 @@ func (p *AIChatPlugin) OnFriendMsg(ctx context.Context, bot bot.Bot, cmd command
 		}
 	}
 
-	msgFuncs := llmtool.CallBackFuncs{
-		SendText: func(s string) (string, error) {
-			builder := msgchain.Builder().Friend()
-			builder.Text(s)
-			_, success := bot.SendFriendMsg(msg.Sender.UserId, builder.Build())
-			if success {
-				p.Logger.Info("发送文本", "user", msg.Sender.UserId, "text", s)
-			}
-			return "发送成功", nil
-		},
-		SendImage: func(url string) (string, error) {
-			builder := msgchain.Builder().Friend()
-			builder.ImageUrl(url)
-			_, success := bot.SendFriendMsg(msg.Sender.UserId, builder.Build())
-			if success {
-				p.Logger.Info("发送图片", "user", msg.Sender.UserId, "image", url)
-			}
-			return "发送成功", nil
-		},
-		SendFile: func(fileName, content string) (string, error) {
-			builder := msgchain.Builder().Friend()
-			builder.FileBase64(fileName, base64.StdEncoding.EncodeToString([]byte(content)))
-			_, success := bot.SendFriendMsg(msg.Sender.UserId, builder.Build())
-			if success {
-				p.Logger.Info("发送文件", "user", msg.Sender.UserId, "file", fileName)
-			}
-			return "发送成功", nil
-		},
-	}
+	msgFuncs := MakeFriendCallback(bot, msg.Sender.UserId, p.Logger)
 
 	friendOpts := p.thinkingOpts()
 	if p.llmParameter.maxToken != nil {

@@ -14,6 +14,7 @@ func CreateDefaultTools(searchToken string) *llmtool.ToolExecuter {
 	executer.Register(NewWebExploreTool(searchToken))
 	executer.Register(NewMemeTool())
 	executer.Register(NewSendFileTool())
+	executer.Register(NewMsgHistoryTool())
 	return executer
 }
 
