@@ -93,7 +93,7 @@ func (p *AIChatPlugin) OnGroupMsg(ctx context.Context, bot bot.Bot, cmd command.
 	if cmd.Name == "stop" {
 		if p.stopRequest(msg.GroupId) {
 			builder := msgchain.Builder().Group()
-			builder.Text("已停止 AI 响应")
+			builder.Text("用户停止AI响应")
 			bot.SendGroupMsg(msg.GroupId, builder.Build())
 			p.Logger.Info("用户停止 AI 响应", "group", msg.GroupId, "user", msg.Sender.UserId)
 		} else {
@@ -190,17 +190,16 @@ func (p *AIChatPlugin) OnGroupMsg(ctx context.Context, bot bot.Bot, cmd command.
 		if errors.Is(err, context.Canceled) {
 			builder.Text("AI 响应已被停止")
 			bot.SendGroupMsg(msg.GroupId, builder.Build())
-			return true, nil
-		}
-		if errors.Is(err, context.DeadlineExceeded) {
+			return false, nil
+		} else if errors.Is(err, context.DeadlineExceeded) {
 			builder.Text("请求超时")
 			bot.SendGroupMsg(msg.GroupId, builder.Build())
-			return true, nil
+			return false, nil
 		}
 		builder.Text("无法解析的错误信息，请查看日志")
 		p.Logger.Error("AI请求错误", "error", err.Error())
 		bot.SendGroupMsg(msg.GroupId, builder.Build())
-		return true, nil
+		return false, nil
 	}
 
 	if resp == "" {
@@ -222,7 +221,7 @@ func (p *AIChatPlugin) OnFriendMsg(ctx context.Context, bot bot.Bot, cmd command
 	if cmd.Name == "stop" {
 		if p.stopRequest(msg.Sender.UserId) {
 			builder := msgchain.Builder().Friend()
-			builder.Text("已停止 AI 响应")
+			builder.Text("用户停止AI响应")
 			bot.SendFriendMsg(msg.Sender.UserId, builder.Build())
 			p.Logger.Info("用户停止 AI 响应", "user", msg.Sender.UserId)
 		} else {
@@ -320,17 +319,16 @@ func (p *AIChatPlugin) OnFriendMsg(ctx context.Context, bot bot.Bot, cmd command
 		if errors.Is(err, context.Canceled) {
 			builder.Text("AI 响应已被停止")
 			bot.SendFriendMsg(msg.Sender.UserId, builder.Build())
-			return true, nil
-		}
-		if errors.Is(err, context.DeadlineExceeded) {
+			return false, nil
+		} else if errors.Is(err, context.DeadlineExceeded) {
 			builder.Text("请求超时")
 			bot.SendFriendMsg(msg.Sender.UserId, builder.Build())
-			return true, nil
+			return false, nil
 		}
 		builder.Text("无法解析的错误信息，请查看日志")
 		p.Logger.Error("AI请求错误", "error", err.Error())
 		bot.SendFriendMsg(msg.Sender.UserId, builder.Build())
-		return true, nil
+		return false, nil
 	}
 
 	if resp == "" {

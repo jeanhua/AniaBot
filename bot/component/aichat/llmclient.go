@@ -28,6 +28,9 @@ func NewLLMClient(baseURL, apiKey, model string) (*LLMClient, error) {
 func (c *LLMClient) Generate(ctx context.Context, messages []llms.MessageContent, opts ...llms.CallOption) (*llms.ContentResponse, error) {
 	resp, err := c.llm.GenerateContent(ctx, messages, opts...)
 	if err != nil {
+		if ctx.Err() != nil {
+			return nil, ctx.Err()
+		}
 		return nil, fmt.Errorf("LLM generation failed: %w", err)
 	}
 

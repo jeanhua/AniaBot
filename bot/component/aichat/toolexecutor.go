@@ -152,6 +152,9 @@ func (o *ToolOrchestrator) executeToolCalls(
 	for _, call := range toolCalls {
 		result, err := o.executor.Execute(ctx, call, callbacks)
 		if err != nil {
+			if ctx.Err() != nil {
+				return nil, ctx.Err()
+			}
 			result = fmt.Sprintf("Error executing tool: %v", err)
 		}
 		results = append(results, o.msgBuilder.BuildToolMessage(call.ID, call.FunctionCall.Name, result))
