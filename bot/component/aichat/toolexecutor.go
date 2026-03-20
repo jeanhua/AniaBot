@@ -3,7 +3,6 @@ package aichat
 import (
 	"context"
 	"fmt"
-	"strings"
 
 	"github.com/jeanhua/AniaBot/bot/component/llmtool"
 	"github.com/tmc/langchaingo/llms"
@@ -109,8 +108,9 @@ func (o *ToolOrchestrator) ExecuteWithTools(
 		messages = append(messages, o.msgBuilder.BuildAIMessage(choice.Content, choice.ToolCalls))
 
 		// 发送 AI 的文本内容（如果有）
-		if callbacks.SendText != nil && len(strings.TrimSpace(choice.Content)) > 0 {
-			callbacks.SendText(choice.Content)
+		content := removeThinkContent(choice.Content)
+		if callbacks.SendText != nil && len(content) > 0 {
+			callbacks.SendText(content)
 		}
 
 		// 执行工具调用

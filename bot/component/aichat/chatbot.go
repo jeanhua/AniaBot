@@ -51,6 +51,9 @@ func (b *ChatBot) Chat(ctx context.Context, userInput string, callbacks llmtool.
 		b.window.append(updatedMessages[newMessagesStart:]...)
 	}
 
+	// 移除 response 中的 thinkthink> 标签
+	response = removeThinkContent(response)
+
 	return response, usage, nil
 }
 
