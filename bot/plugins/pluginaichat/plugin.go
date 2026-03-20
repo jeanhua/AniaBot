@@ -172,7 +172,7 @@ func (p *AIChatPlugin) OnGroupMsg(ctx context.Context, bot bot.Bot, cmd command.
 		return false, nil
 	}
 
-	if resp == "" {
+	if len(strings.TrimSpace(resp)) == 0 {
 		p.Logger.Info("AI请求没有返回什么东西")
 		return true, nil
 	}
@@ -273,7 +273,7 @@ func (p *AIChatPlugin) OnFriendMsg(ctx context.Context, bot bot.Bot, cmd command
 		return false, nil
 	}
 
-	if resp == "" {
+	if len(strings.TrimSpace(resp)) == 0 {
 		p.Logger.Info("AI请求没有返回什么东西")
 		return true, nil
 	}
