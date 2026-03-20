@@ -3,6 +3,7 @@ package pluginsys
 import (
 	"context"
 	"fmt"
+	"os"
 	"strings"
 	"time"
 
@@ -67,6 +68,16 @@ func (p *PluginSys) OnFriendMsg(ctx context.Context, bot bot.Bot, cmd command.Co
 		if !ok {
 			p.Logger.Error("Bot消息发送失败，无法响应 /help")
 		}
+		return false, nil
+	} else if cmd.Name == "exit" && msg.Sender.UserId == p.SystemConfig.AdminId {
+		builder := msgchain.Builder().Friend()
+		builder.Text("AniaBot已退出")
+		_, ok := bot.SendFriendMsg(msg.Sender.UserId, builder.Build())
+		if !ok {
+			p.Logger.Error("Bot消息发送失败，无法响应 /exit")
+		}
+		bot.Stop()
+		os.Exit(0)
 		return false, nil
 	}
 	return true, nil
