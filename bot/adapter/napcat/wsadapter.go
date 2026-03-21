@@ -339,13 +339,11 @@ func (n *napcatWebSocketAdapter) startWorkerPool(count, qsize int) {
 	}
 	n.msgCh = make(chan []byte, qsize)
 	for i := 0; i < count; i++ {
-		n.workerWg.Add(1)
-		go func() {
-			defer n.workerWg.Done()
+		n.workerWg.Go(func() {
 			for data := range n.msgCh {
 				n.onMsg(data)
 			}
-		}()
+		})
 	}
 	log.Printf("启动 napcat websocket worker pool: workers=%d queue=%d", count, qsize)
 }

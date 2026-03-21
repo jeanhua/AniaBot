@@ -66,10 +66,7 @@ func (q *MessageQueue[T]) Get(limit int) []T {
 		currentCount = (q.tail - q.head + q.size) % q.size
 	}
 
-	count := limit
-	if count > currentCount {
-		count = currentCount
-	}
+	count := min(limit, currentCount)
 
 	if count <= 0 {
 		return make([]T, 0)

@@ -115,7 +115,7 @@ func (c *friendChainBuilder) GetFriendMsg() []message.OB11Segment {
 func (c *chainBuilder) Mention(userId message.QID) {
 	c.message = append(c.message, message.OB11Segment{
 		Type: "at",
-		Data: map[string]interface{}{
+		Data: map[string]any{
 			"qq": userId.String(),
 		},
 	})
@@ -124,7 +124,7 @@ func (c *chainBuilder) Mention(userId message.QID) {
 func (c *chainBuilder) Text(text string) {
 	c.message = append(c.message, message.OB11Segment{
 		Type: "text",
-		Data: map[string]interface{}{
+		Data: map[string]any{
 			"text": text,
 		},
 	})
@@ -133,7 +133,7 @@ func (c *chainBuilder) Text(text string) {
 func (c *chainBuilder) Face(faceId int) {
 	c.message = append(c.message, message.OB11Segment{
 		Type: "face",
-		Data: map[string]interface{}{
+		Data: map[string]any{
 			"id": faceId,
 		},
 	})
@@ -142,7 +142,7 @@ func (c *chainBuilder) Face(faceId int) {
 func (c *chainBuilder) ImageUrl(url string) {
 	c.message = append(c.message, message.OB11Segment{
 		Type: "image",
-		Data: map[string]interface{}{
+		Data: map[string]any{
 			"file":    url,
 			"summary": "[图片]",
 		},
@@ -152,7 +152,7 @@ func (c *chainBuilder) ImageUrl(url string) {
 func (c *chainBuilder) ImageBase64(bs64code string) {
 	c.message = append(c.message, message.OB11Segment{
 		Type: "image",
-		Data: map[string]interface{}{
+		Data: map[string]any{
 			"file":    "base64://" + bs64code,
 			"summary": "[图片]",
 		},
@@ -162,7 +162,7 @@ func (c *chainBuilder) ImageBase64(bs64code string) {
 func (c *chainBuilder) ImageLocal(path string) {
 	c.message = append(c.message, message.OB11Segment{
 		Type: "image",
-		Data: map[string]interface{}{
+		Data: map[string]any{
 			"file":    "file://" + path,
 			"summary": "[图片]",
 		},
@@ -172,7 +172,7 @@ func (c *chainBuilder) ImageLocal(path string) {
 func (c *chainBuilder) VideoUrl(url string) {
 	c.message = append(c.message, message.OB11Segment{
 		Type: "video",
-		Data: map[string]interface{}{
+		Data: map[string]any{
 			"file": url,
 		},
 	})
@@ -181,7 +181,7 @@ func (c *chainBuilder) VideoUrl(url string) {
 func (c *chainBuilder) VideoLocal(path string) {
 	c.message = append(c.message, message.OB11Segment{
 		Type: "video",
-		Data: map[string]interface{}{
+		Data: map[string]any{
 			"file": "file://" + path,
 		},
 	})
@@ -190,7 +190,7 @@ func (c *chainBuilder) VideoLocal(path string) {
 func (c *chainBuilder) VideoBase64(bs64code string) {
 	c.message = append(c.message, message.OB11Segment{
 		Type: "video",
-		Data: map[string]interface{}{
+		Data: map[string]any{
 			"file": "base64://" + bs64code,
 		},
 	})
@@ -199,7 +199,7 @@ func (c *chainBuilder) VideoBase64(bs64code string) {
 func (c *chainBuilder) FileUrl(name, url string) {
 	c.message = append(c.message, message.OB11Segment{
 		Type: "file",
-		Data: map[string]interface{}{
+		Data: map[string]any{
 			"file": url,
 			"name": name,
 		},
@@ -209,7 +209,7 @@ func (c *chainBuilder) FileUrl(name, url string) {
 func (c *chainBuilder) FileLocal(name, path string) {
 	c.message = append(c.message, message.OB11Segment{
 		Type: "file",
-		Data: map[string]interface{}{
+		Data: map[string]any{
 			"file": "file://" + path,
 			"name": name,
 		},
@@ -219,7 +219,7 @@ func (c *chainBuilder) FileLocal(name, path string) {
 func (c *chainBuilder) FileBase64(name, bs64code string) {
 	c.message = append(c.message, message.OB11Segment{
 		Type: "file",
-		Data: map[string]interface{}{
+		Data: map[string]any{
 			"file": "base64://" + bs64code,
 			"name": name,
 		},
@@ -229,7 +229,7 @@ func (c *chainBuilder) FileBase64(name, bs64code string) {
 func (c *chainBuilder) Reply(msgId message.QID) {
 	c.message = append(c.message, message.OB11Segment{
 		Type: "reply",
-		Data: map[string]interface{}{
+		Data: map[string]any{
 			"id": msgId.String(),
 		},
 	})
@@ -238,7 +238,7 @@ func (c *chainBuilder) Reply(msgId message.QID) {
 func (c *chainBuilder) RecordUrl(url string) {
 	c.message = append(c.message, message.OB11Segment{
 		Type: "record",
-		Data: map[string]interface{}{
+		Data: map[string]any{
 			"file": url,
 		},
 	})
@@ -247,7 +247,7 @@ func (c *chainBuilder) RecordUrl(url string) {
 func (c *chainBuilder) RecordLocal(path string) {
 	c.message = append(c.message, message.OB11Segment{
 		Type: "record",
-		Data: map[string]interface{}{
+		Data: map[string]any{
 			"file": "file://" + path,
 		},
 	})
@@ -256,7 +256,7 @@ func (c *chainBuilder) RecordLocal(path string) {
 func (c *chainBuilder) RecordBase64(bs64code string) {
 	c.message = append(c.message, message.OB11Segment{
 		Type: "record",
-		Data: map[string]interface{}{
+		Data: map[string]any{
 			"file": "base64://" + bs64code,
 		},
 	})

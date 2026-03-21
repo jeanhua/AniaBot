@@ -18,11 +18,11 @@ type Message struct {
 }
 
 type ForwardMessageSegment struct {
-	Messages []NodeMsg                `json:"messages"`
-	News     []map[string]interface{} `json:"news"`
-	Prompt   string                   `json:"prompt"`
-	Summary  string                   `json:"summary"`
-	Source   string                   `json:"source"`
+	Messages []NodeMsg        `json:"messages"`
+	News     []map[string]any `json:"news"`
+	Prompt   string           `json:"prompt"`
+	Summary  string           `json:"summary"`
+	Source   string           `json:"source"`
 }
 
 type GroupForwardMessage struct {
@@ -45,8 +45,8 @@ type NodeMsg struct {
 }
 
 type OB11Segment struct {
-	Type string                 `json:"type"`
-	Data map[string]interface{} `json:"data"`
+	Type string         `json:"type"`
+	Data map[string]any `json:"data"`
 }
 
 type MessageSender struct {

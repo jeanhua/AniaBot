@@ -165,12 +165,12 @@ func parseSkillFrontmatter(content string) (*SkillMeta, error) {
 	trimmed := strings.TrimSpace(content)
 	// 跳过第一个 ---
 	rest := trimmed[3:]
-	end := strings.Index(rest, "---")
-	if end < 0 {
+	before, _, ok := strings.Cut(rest, "---")
+	if !ok {
 		return &SkillMeta{}, nil
 	}
 
-	yamlContent := rest[:end]
+	yamlContent := before
 	var meta SkillMeta
 	if err := yaml.Unmarshal([]byte(yamlContent), &meta); err != nil {
 		return nil, err
