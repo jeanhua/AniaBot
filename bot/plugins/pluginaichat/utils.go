@@ -2,7 +2,9 @@ package pluginaichat
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"os"
 	"strings"
 	"time"
 
@@ -13,16 +15,6 @@ import (
 	"github.com/spf13/viper"
 	"github.com/tmc/langchaingo/llms"
 )
-
-// getStringFromMap 从 map 中获取字符串值
-func getStringFromMap(m map[string]any, key string) string {
-	if v, ok := m[key]; ok {
-		if str, ok := v.(string); ok {
-			return str
-		}
-	}
-	return ""
-}
 
 func (p *AIChatPlugin) extraMsg(ctx context.Context, bot bot.Bot, msg message.Message, ocrLLM *aichat.ChatBot, opt ...llms.CallOption) string {
 	var str strings.Builder
@@ -56,74 +48,65 @@ func (p *AIChatPlugin) extraMsg(ctx context.Context, bot bot.Bot, msg message.Me
 	return str.String()
 }
 
-// loadMCPConfigs 从配置加载 MCP 服务器配置
-func (p *AIChatPlugin) loadMCPConfigs(cfg *viper.Viper) error {
-	// 检查是否有 MCP 配置
-	mcpServers := cfg.Get("plugin.ai_chat_bot.mcp.servers")
-	if mcpServers == nil {
-		p.Logger.Info("未配置 MCP 服务器")
+// mcpFileConfig aniabot.mcp.json 文件结构
+type mcpFileConfig struct {
+	Servers []*mcpServerEntry `json:"servers"`
+}
+
+// mcpServerEntry JSON 文件中单个服务器配置（timeout 用秒数表示）
+type mcpServerEntry struct {
+	Name        string            `json:"name"`
+	Transport   string            `json:"transport"`
+	Command     string            `json:"command"`
+	Args        []string          `json:"args"`
+	Env         map[string]string `json:"env"`
+	Endpoint    string            `json:"endpoint"`
+	Headers     map[string]string `json:"headers"`
+	TimeoutSecs int               `json:"timeout"`
+	Description string            `json:"description"`
+}
+
+const mcpConfigFile = "aniabot.mcp.json"
+
+// loadMCPConfigs 从 aniabot.mcp.json 加载 MCP 服务器配置
+func (p *AIChatPlugin) loadMCPConfigs(_ *viper.Viper) error {
+	data, err := os.ReadFile(mcpConfigFile)
+	if err != nil {
+		if os.IsNotExist(err) {
+			p.Logger.Info("未找到 MCP 配置文件，跳过 MCP 加载", "file", mcpConfigFile)
+			return nil
+		}
+		return fmt.Errorf("读取 MCP 配置文件失败: %w", err)
+	}
+
+	var fileCfg mcpFileConfig
+	if err := json.Unmarshal(data, &fileCfg); err != nil {
+		return fmt.Errorf("解析 MCP 配置文件失败: %w", err)
+	}
+
+	if len(fileCfg.Servers) == 0 {
+		p.Logger.Info("MCP 配置文件中未配置任何服务器")
 		return nil
 	}
 
-	// 解析 MCP 服务器配置
-	serversConfig, ok := mcpServers.([]any)
-	if !ok {
-		return fmt.Errorf("MCP 服务器配置格式错误")
-	}
-
-	for i, server := range serversConfig {
-		serverMap, ok := server.(map[string]any)
-		if !ok {
-			p.Logger.Warn("MCP 服务器配置项格式错误", "index", i)
+	for i, entry := range fileCfg.Servers {
+		if entry.Name == "" {
+			p.Logger.Warn("MCP 服务器配置缺少名称", "index", i)
 			continue
 		}
 
 		mcpConfig := &llmtool.MCPConfig{
-			Name:        getStringFromMap(serverMap, "name"),
-			Transport:   getStringFromMap(serverMap, "transport"),
-			Command:     getStringFromMap(serverMap, "command"),
-			Endpoint:    getStringFromMap(serverMap, "endpoint"),
-			Description: getStringFromMap(serverMap, "description"),
+			Name:        entry.Name,
+			Transport:   entry.Transport,
+			Command:     entry.Command,
+			Args:        entry.Args,
+			Env:         entry.Env,
+			Endpoint:    entry.Endpoint,
+			Headers:     entry.Headers,
+			Description: entry.Description,
 		}
-
-		// 读取 args
-		if args, ok := serverMap["args"].([]any); ok {
-			for _, arg := range args {
-				if str, ok := arg.(string); ok {
-					mcpConfig.Args = append(mcpConfig.Args, str)
-				}
-			}
-		}
-
-		// 读取 env
-		if env, ok := serverMap["env"].(map[string]any); ok {
-			mcpConfig.Env = make(map[string]string)
-			for k, v := range env {
-				if str, ok := v.(string); ok {
-					mcpConfig.Env[strings.ToUpper(k)] = str
-				}
-			}
-		}
-
-		// 读取 headers
-		if headers, ok := serverMap["headers"].(map[string]any); ok {
-			mcpConfig.Headers = make(map[string]string)
-			for k, v := range headers {
-				if str, ok := v.(string); ok {
-					mcpConfig.Headers[k] = str
-				}
-			}
-		}
-
-		// 读取 timeout
-		if timeout, ok := serverMap["timeout"].(int); ok {
-			mcpConfig.Timeout = time.Duration(timeout) * time.Second
-		}
-
-		// 验证配置
-		if mcpConfig.Name == "" {
-			p.Logger.Warn("MCP 服务器配置缺少名称", "index", i)
-			continue
+		if entry.TimeoutSecs > 0 {
+			mcpConfig.Timeout = time.Duration(entry.TimeoutSecs) * time.Second
 		}
 
 		transport := strings.ToLower(mcpConfig.Transport)

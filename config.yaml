@@ -49,36 +49,6 @@ plugin:
 
     skills_dir: "./skills"
 
-    mcp:
-      servers:
-        # # SSE 模式 MCP 服务器
-        # - name: "remote-mcp-server"
-        #   transport: "sse"
-        #   endpoint: "http://localhost:3000"
-        #   headers:
-        #     Authorization: "Bearer token123"
-        #   timeout: 30
-        
-        # # Streamable 模式
-        # - name: "streamable-mcp"
-        #   transport: "streamable"
-        #   endpoint: "http://localhost:3001"
-        #   headers:
-        #    Authorization: "Bearer token123"
-        #   timeout: 60
-        
-        # # Stdio 模式 MCP 服务器
-        # - name: "local-python-mcp"
-        #   transport: "stdio"
-        #   command: "python"
-        #   args:
-        #     - "-m"
-        #     - "mcp_server"
-        #   env:
-        #     API_KEY: "xxx"
-        #     DEBUG: "true"
-        #   timeout: 30
-
     # OCR 配置，可选，该llm负责将图片转换为文本供上文使用
     ocr:
       enable: false

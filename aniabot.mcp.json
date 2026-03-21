@@ -1,0 +1,31 @@
+{
+    "servers": [],
+
+    
+    "// example": {
+        "servers": [
+            {
+                "name": "my-server",
+                "transport": "stdio",
+                "command": "python",
+                "args": [
+                    "-m",
+                    "mcp_server"
+                ],
+                "env": {
+                    "API_KEY": "xxx"
+                },
+                "timeout": 30
+            },
+            {
+                "name": "remote-server",
+                "transport": "sse",
+                "endpoint": "http://localhost:3000",
+                "headers": {
+                    "Authorization": "Bearer token123"
+                },
+                "timeout": 30
+            }
+        ]
+    }
+}
