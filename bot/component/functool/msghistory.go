@@ -29,6 +29,7 @@ func (t *MsgHistoryTool) Execute(ctx context.Context, params any, callbacks llmt
 	if count <= 0 {
 		count = 10
 	}
+	p.MessageSeq = max(p.MessageSeq, 0)
 	log.Printf("执行get_msg_history, count=%d, seq=%d", count, p.MessageSeq)
 
 	if callbacks.GetMsgHistory == nil {
