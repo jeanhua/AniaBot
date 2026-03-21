@@ -39,21 +39,17 @@ func (p *LogPlugin) Start(ctx context.Context, cfg *viper.Viper) error {
 }
 
 func (p *LogPlugin) OnGroupMsg(ctx context.Context, bot bot.Bot, cmd command.Command, msg message.Message) (bool, error) {
-	str := utils.ExtraMessage(bot, msg)
-	name := msg.Sender.Card
-	if name == "" {
-		name = msg.Sender.Nickname
-	}
-	p.Logger.Info("[收<-群]", "groupId", msg.GroupId, "nickname", name, "message", str)
+	p.Logger.Info("[收<-群]", "groupId", msg.GroupId, "userId", msg.Sender.UserId, "message", msg.FriendlyText(false,
+		message.WithGetMsgFunc(bot.GetMsgDetail),
+		message.WithGetForwardMsgFunc(bot.GetForwardMsg),
+	))
 	return true, nil
 }
 
 func (p *LogPlugin) OnFriendMsg(ctx context.Context, bot bot.Bot, cmd command.Command, msg message.Message) (bool, error) {
-	str := utils.ExtraMessage(bot, msg)
-	name := msg.Sender.Card
-	if name == "" {
-		name = msg.Sender.Nickname
-	}
-	p.Logger.Info("[收<-好友]", "userId", msg.Sender.UserId, "nickname", name, "message", str)
+	p.Logger.Info("[收<-好友]", "userId", msg.Sender.UserId, "message", msg.FriendlyText(false,
+		message.WithGetMsgFunc(bot.GetMsgDetail),
+		message.WithGetForwardMsgFunc(bot.GetForwardMsg),
+	))
 	return true, nil
 }

@@ -18,33 +18,22 @@ import (
 
 func (p *AIChatPlugin) extraMsg(ctx context.Context, bot bot.Bot, msg message.Message, ocrLLM *aichat.ChatBot, opt ...llms.CallOption) string {
 	var str strings.Builder
-	nickname := msg.Sender.Card
-	if nickname == "" {
-		nickname = msg.Sender.Nickname
-	}
-	str.WriteString(fmt.Sprintf("[nickname:%s id:%d]:", nickname, msg.Sender.UserId))
-	for _, m := range msg.Message {
-		str.WriteString(
-			m.FriendlyText(
-				message.WithIgnoreMentionId(msg.SelfId),
-				message.WithGetMsgFunc(bot.GetMsgDetail),
-				message.WithGetGroupUserInfo(msg.GroupId, bot.GetGroupUserInfo),
-				message.WithGetForwardMsgFunc(bot.GetForwardMsg),
-				message.WithGetImageOCRFunc(func(url string) string {
-					if ocrLLM == nil {
-						return "OCR服务未开启，无法解析图片"
-					}
-					resp, err := ocrLLM.GetSingleImageDesc(ctx, "描述图片内容", url, opt...)
-					if err != nil {
-						p.Logger.Error("OCR请求失败:", "error", err.Error())
-						return "OCR请求失败，无法解析的图片内容"
-					} else {
-						return resp
-					}
-				}),
-			),
-		)
-	}
+	str.WriteString(msg.FriendlyText(true,
+		message.WithGetMsgFunc(bot.GetMsgDetail),
+		message.WithGetForwardMsgFunc(bot.GetForwardMsg),
+		message.WithGetImageOCRFunc(func(url string) string {
+			if ocrLLM == nil {
+				return "OCR服务未开启，无法解析图片"
+			}
+			resp, err := ocrLLM.GetSingleImageDesc(ctx, "描述图片内容", url, opt...)
+			if err != nil {
+				p.Logger.Error("OCR请求失败:", "error", err.Error())
+				return "OCR请求失败，无法解析的图片内容"
+			} else {
+				return resp
+			}
+		}),
+	))
 	return str.String()
 }
 

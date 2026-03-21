@@ -49,22 +49,11 @@ func MakeGroupCallback(bot bot.Bot, groupId, userId message.QID, logger *slog.Lo
 			}
 			var sb strings.Builder
 			for _, msg := range *msgs {
-				var str = strings.Builder{}
-				nickname := msg.Sender.Card
-				if nickname == "" {
-					nickname = msg.Sender.Nickname
-				}
-				str.WriteString(fmt.Sprintf("[nickname:%s | id:%d | message_seq:%d]: ", nickname, msg.Sender.UserId, msg.MessageSeq))
-				for _, seg := range msg.Message {
-					str.WriteString(
-						seg.FriendlyText(
-							message.WithGetMsgFunc(bot.GetMsgDetail),
-							message.WithGetGroupUserInfo(msg.GroupId, bot.GetGroupUserInfo),
-							message.WithGetForwardMsgFunc(bot.GetForwardMsg),
-						),
-					)
-				}
-				sb.WriteString(str.String())
+				sb.WriteString(fmt.Sprintf("[message_seq:%d]\n", msg.MessageSeq))
+				sb.WriteString(msg.FriendlyText(true,
+					message.WithGetMsgFunc(bot.GetMsgDetail),
+					message.WithGetForwardMsgFunc(bot.GetForwardMsg),
+				))
 				sb.WriteString("\n")
 			}
 			return sb.String(), nil
@@ -110,21 +99,11 @@ func MakeFriendCallback(bot bot.Bot, userId message.QID, logger *slog.Logger) ll
 			}
 			var sb strings.Builder
 			for _, msg := range *msgs {
-				var str = strings.Builder{}
-				nickname := msg.Sender.Card
-				if nickname == "" {
-					nickname = msg.Sender.Nickname
-				}
-				str.WriteString(fmt.Sprintf("[nickname:%s | id:%d | message_seq:%d]: ", nickname, msg.Sender.UserId, msg.MessageSeq))
-				for _, seg := range msg.Message {
-					str.WriteString(
-						seg.FriendlyText(
-							message.WithGetMsgFunc(bot.GetMsgDetail),
-							message.WithGetForwardMsgFunc(bot.GetForwardMsg),
-						),
-					)
-				}
-				sb.WriteString(str.String())
+				sb.WriteString(fmt.Sprintf("[message_seq:%d]\n", msg.MessageSeq))
+				sb.WriteString(msg.FriendlyText(true,
+					message.WithGetMsgFunc(bot.GetMsgDetail),
+					message.WithGetForwardMsgFunc(bot.GetForwardMsg),
+				))
 				sb.WriteString("\n")
 			}
 			return sb.String(), nil
