@@ -98,8 +98,12 @@ func (p *AIChatPlugin) OnGroupMsg(ctx context.Context, bot bot.Bot, cmd command.
 		p.noMentionCount.Store(msg.GroupId, cnt)
 		if cnt > 30 {
 			if c, ok := p.chats.Load(msg.GroupId); ok && c != nil {
-				_ = c.(*aichat.ChatBot).ClearHistory(ctx)
+				chat := c.(*aichat.ChatBot)
+				chat.ClearHistory(ctx)
 				p.Logger.Info("自动清理AI对话信息", "group", msg.GroupId, "reason", "超过30条未@消息")
+				if cleared := chat.ClearDynamicTools(); cleared > 0 {
+					p.Logger.Info("清理动态加载的 MCP 工具", "count", cleared)
+				}
 			}
 			p.noMentionCount.Store(msg.GroupId, 0)
 		}
