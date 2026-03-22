@@ -3,5 +3,5 @@ setlocal
 set GOOS=linux
 set GOARCH=amd64
 cd cmd/
-go build -o ../build/AniaBot
+go build -ldflags="-s -w" -o ../build/AniaBot
 endlocal
