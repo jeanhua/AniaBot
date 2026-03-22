@@ -33,6 +33,9 @@ type AIChatPlugin struct {
 	// 用于存储活跃的请求上下文，支持取消操作
 	activeContexts sync.Map // map[message.QID]context.CancelFunc
 
+	// 统计群聊未@次数
+	noMentionCount sync.Map
+
 	botConfig struct {
 		baseURL string
 		apiKey  string
@@ -85,6 +88,21 @@ func NewAIChatPlugin() *AIChatPlugin {
 
 func (p *AIChatPlugin) OnGroupMsg(ctx context.Context, bot bot.Bot, cmd command.Command, msg message.Message) (bool, error) {
 	if !cmd.Mention {
+		cnt := 0
+		if v, ok := p.noMentionCount.Load(msg.GroupId); ok {
+			if iv, ok2 := v.(int); ok2 {
+				cnt = iv
+			}
+		}
+		cnt++
+		p.noMentionCount.Store(msg.GroupId, cnt)
+		if cnt > 30 {
+			if c, ok := p.chats.Load(msg.GroupId); ok && c != nil {
+				_ = c.(*aichat.ChatBot).ClearHistory(ctx)
+				p.Logger.Info("自动清理AI对话信息", "group", msg.GroupId, "reason", "超过30条未@消息")
+			}
+			p.noMentionCount.Store(msg.GroupId, 0)
+		}
 		return true, nil
 	}
 
@@ -111,6 +129,7 @@ func (p *AIChatPlugin) OnGroupMsg(ctx context.Context, bot bot.Bot, cmd command.
 	}
 	defer p.unLock(msg.GroupId)
 	defer p.clearActiveContext(msg.GroupId)
+	p.noMentionCount.Store(msg.GroupId, 0)
 	chat := p.getChat(msg.GroupId)
 	if chat == nil {
 		builder := msgchain.Builder().Group()
