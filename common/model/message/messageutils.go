@@ -52,15 +52,15 @@ func (raw Message) FriendlyText(showUrl bool, opts ...MsgOptFunc) string {
 			if ok := ParseText(s, &msg); ok {
 				result.WriteString(msg.Text)
 			}
-			result.WriteString("\n")
 		case SegmentFace:
 			var msg FaceMessage
 			if ok := ParseFace(s, &msg); ok {
 				if dsc, ok2 := emojiMap[msg.Id]; ok2 {
 					result.WriteString(fmt.Sprintf("[QQ表情:%s]", dsc))
+				} else {
+					result.WriteString(fmt.Sprintf("[QQ表情: id %d]", msg.Id))
 				}
 			}
-			result.WriteString("\n")
 		case SegmentImage:
 			var msg ImageMessage
 			if ok := ParseImage(s, &msg); ok {
@@ -69,10 +69,12 @@ func (raw Message) FriendlyText(showUrl bool, opts ...MsgOptFunc) string {
 					result.WriteString(msgFuncs.getImageOCRFunc(msg.Url))
 					result.WriteString("\n</图片消息>\n")
 				} else {
-					result.WriteString("\n")
+					if showUrl {
+						result.WriteString(fmt.Sprintf("[图片:%s]", msg.Url))
+					} else {
+						result.WriteString("[图片]")
+					}
 				}
-			} else {
-				result.WriteString("\n")
 			}
 		case SegmentRecord:
 			var msg RecordMessage
@@ -83,7 +85,6 @@ func (raw Message) FriendlyText(showUrl bool, opts ...MsgOptFunc) string {
 					result.WriteString("[录音]")
 				}
 			}
-			result.WriteString("\n")
 		case SegmentVideo:
 			var msg VideoMessage
 			if ok := ParseVideo(s, &msg); ok {
@@ -93,7 +94,6 @@ func (raw Message) FriendlyText(showUrl bool, opts ...MsgOptFunc) string {
 					result.WriteString("[视频]")
 				}
 			}
-			result.WriteString("\n")
 		case SegmentMention:
 			var msg MentionMessage
 			if ok := ParseMention(s, &msg); ok {
@@ -107,13 +107,11 @@ func (raw Message) FriendlyText(showUrl bool, opts ...MsgOptFunc) string {
 					result.WriteString(fmt.Sprintf("[at:%s id:%d]", nickname, msg.QQ))
 				}
 			}
-			result.WriteString("\n")
 		case SegmentMusic:
 			var msg MusicMessage
 			if ok := ParseMusic(s, &msg); ok {
 				result.WriteString(fmt.Sprintf("[音乐:%s]", msg.Title))
 			}
-			result.WriteString("\n")
 		case SegmentReply:
 			var msg ReplyMessage
 			if ok := ParseReply(s, &msg); ok {
@@ -132,7 +130,6 @@ func (raw Message) FriendlyText(showUrl bool, opts ...MsgOptFunc) string {
 					}
 				}
 			}
-			result.WriteString("\n")
 		case SegmentForward:
 			if msgFuncs.getForwardMsgFunc != nil {
 				var msg ForwardMessage
@@ -148,18 +145,18 @@ func (raw Message) FriendlyText(showUrl bool, opts ...MsgOptFunc) string {
 						}
 						result.WriteString("</合并转发消息>\n")
 					} else {
-						result.WriteString("[转发消息, 无法获取详情]\n")
+						result.WriteString("[转发消息, 无法获取详情]")
 					}
 				}
 			} else {
-				result.WriteString("[转发消息]\n")
+				result.WriteString("[转发消息]")
 			}
 		case SegmentFile:
 			var msg FileMessage
 			if ok := ParseFile(s, &msg); ok {
-				result.WriteString(fmt.Sprintf("[文件:%s]\n", msg.File))
+				result.WriteString(fmt.Sprintf("[文件:%s]", msg.File))
 			} else {
-				result.WriteString("[文件消息]\n")
+				result.WriteString("[文件消息]")
 			}
 		case SegmentJson:
 			var jsonMap JsonMessage
@@ -168,23 +165,23 @@ func (raw Message) FriendlyText(showUrl bool, opts ...MsgOptFunc) string {
 				case "news":
 					news := JsonNews{}
 					if err := json.Unmarshal(jsonMap.Meta, &news); err != nil {
-						result.WriteString("[分享卡片: 无法获取内容]\n")
+						result.WriteString("[分享卡片: 无法获取内容]")
 					} else {
-						result.WriteString(fmt.Sprintf("[分享卡片,标题: %s,描述: %s,链接: (%s)]\n", news.News.Title, news.News.Desc, news.News.JumpUrl))
+						result.WriteString(fmt.Sprintf("[分享卡片,标题: %s,描述: %s,链接: (%s)]", news.News.Title, news.News.Desc, news.News.JumpUrl))
 					}
 				default:
 					detail := JsonDetailMeta{}
 					if err := json.Unmarshal(jsonMap.Meta, &detail); err != nil {
-						result.WriteString("[分享卡片: 无法获取内容]\n")
+						result.WriteString("[分享卡片: 无法获取内容]")
 					} else {
-						result.WriteString(fmt.Sprintf("[分享卡片,标题: %s,描述: %s]\n", detail.Detail.Title, detail.Detail.Desc))
+						result.WriteString(fmt.Sprintf("[分享卡片,标题: %s,描述: %s]", detail.Detail.Title, detail.Detail.Desc))
 					}
 				}
 			} else {
-				result.WriteString("[分享卡片: 无法获取内容]\n")
+				result.WriteString("[分享卡片: 无法获取内容]")
 			}
 		default:
-			result.WriteString(fmt.Sprintf("[%s]\n", s.Type))
+			result.WriteString(fmt.Sprintf("[%s]", s.Type))
 		}
 	}
 	return result.String()
