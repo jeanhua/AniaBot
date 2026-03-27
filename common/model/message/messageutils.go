@@ -97,6 +97,9 @@ func (raw Message) FriendlyText(showUrl bool, opts ...MsgOptFunc) string {
 		case SegmentMention:
 			var msg MentionMessage
 			if ok := ParseMention(s, &msg); ok {
+				if msg.QQ == raw.Sender.UserId {
+					continue
+				}
 				if msg.IsAll {
 					result.WriteString("[at:全体成员]")
 				} else {
