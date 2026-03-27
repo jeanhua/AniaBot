@@ -98,7 +98,7 @@ func (b *MessageBuilder) BuildAIMessage(content string, toolCalls []llms.ToolCal
 
 func (b *MessageBuilder) BuildToolLimitMessage() llms.MessageContent {
 	return llms.TextParts(
-		llms.ChatMessageTypeSystem,
-		"你的Tool Call连续调用已经达到限制，请先基于当前获取结果回答用户问题，如果需要更多Tool Call，请先向用户发送请求，得到用户允许后重新刷新限额",
+		llms.ChatMessageTypeHuman,
+		"<system>你的Tool Call连续调用已经达到限制，请先基于当前获取结果回答用户问题，如果需要更多Tool Call，请先向用户发送请求，得到用户允许后重新刷新限额</system>",
 	)
 }
