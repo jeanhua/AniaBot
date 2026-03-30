@@ -1,6 +1,9 @@
 package aichat
 
 import (
+	"fmt"
+	"time"
+
 	"github.com/jeanhua/AniaBot/bot/component/llmtool"
 	"github.com/tmc/langchaingo/llms"
 )
@@ -36,7 +39,16 @@ func (b *MessageBuilder) buildSystemPrompt() string {
 	if skillBlock == "" {
 		return b.prompt
 	}
-	return b.prompt + "\n\n" + skillBlock
+	return b.prompt + "\n\n" + buildMetaInfo() + skillBlock
+}
+
+func buildMetaInfo() string {
+	currentTime := time.Now().Format("2006-01-02 15:04:05")
+	return fmt.Sprintf(`
+	<meta_info>
+		<current_time>%s</current_time>
+	</meta_info>
+	`, currentTime)
 }
 
 // BuildChatMessages 构建本轮请求的完整消息列表。
