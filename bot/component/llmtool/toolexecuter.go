@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"reflect"
 
 	"github.com/tmc/langchaingo/llms"
@@ -59,6 +60,7 @@ func (e *ToolExecuter) Execute(ctx context.Context, call llms.ToolCall, callback
 }
 
 func (e *ToolExecuter) executeWithSession(ctx context.Context, call llms.ToolCall, callbacks CallBackFuncs, sessionTools map[string]Tool) (string, error) {
+	log.Printf("[ToolExecuter] 尝试执行工具: name=%s, available=%v", call.FunctionCall.Name, e.getToolNames())
 	tool, ok := e.resolveTool(call.FunctionCall.Name, sessionTools)
 	if !ok {
 		return "", fmt.Errorf("tool '%s' not found. Available tools: %v",

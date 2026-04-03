@@ -3,6 +3,7 @@ package aichat
 import (
 	"context"
 	"fmt"
+	"log"
 
 	"github.com/jeanhua/AniaBot/bot/component/llmtool"
 	"github.com/tmc/langchaingo/llms"
@@ -85,7 +86,15 @@ func (o *ToolOrchestrator) ExecuteWithTools(
 
 	for i := 0; i < o.maxIterations; i++ {
 		// 每次迭代重新获取工具列表，支持动态加载（如 MCP 工具加载后立即生效）
-		callOpts := append(opts, llms.WithTools(o.executor.Tools()))
+		tools := o.executor.Tools()
+		log.Printf("[ToolOrchestrator] 迭代 %d, 工具数量: %d", i+1, len(tools))
+		for _, tool := range tools {
+			if tool.Function != nil {
+				log.Printf("[ToolOrchestrator] 工具定义: name=%s, desc=%s, params=%+v",
+					tool.Function.Name, tool.Function.Description, tool.Function.Parameters)
+			}
+		}
+		callOpts := append(opts, llms.WithTools(tools))
 		resp, err := llmClient.Generate(ctx, messages, callOpts...)
 		if err != nil {
 			return "", messages, totalUsage, err
@@ -97,6 +106,13 @@ func (o *ToolOrchestrator) ExecuteWithTools(
 		totalUsage.TotalTokens += u.TotalTokens
 
 		choice := resp.Choices[0]
+		log.Printf("[ToolOrchestrator] 模型响应: content=%q, toolCalls=%d", choice.Content, len(choice.ToolCalls))
+		for _, tc := range choice.ToolCalls {
+			if tc.FunctionCall != nil {
+				log.Printf("[ToolOrchestrator] 工具调用: id=%s, name=%s, args=%s",
+					tc.ID, tc.FunctionCall.Name, tc.FunctionCall.Arguments)
+			}
+		}
 
 		// 没有工具调用，返回最终响应
 		if len(choice.ToolCalls) == 0 {
