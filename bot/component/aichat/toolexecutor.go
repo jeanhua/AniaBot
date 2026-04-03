@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"os"
+	"strconv"
 
 	"github.com/jeanhua/AniaBot/bot/component/llmtool"
 	"github.com/tmc/langchaingo/llms"
@@ -21,10 +23,17 @@ type ToolOrchestrator struct {
 }
 
 func NewToolOrchestrator(executor ToolExecutor, msgBuilder *MessageBuilder) *ToolOrchestrator {
+	maxIterationsStr := os.Getenv("MAX_ITERATIONS")
+	maxIterations := 10
+	if maxIterationsStr != "" {
+		if it, err := strconv.Atoi(maxIterationsStr); err != nil {
+			maxIterations = max(it, maxIterations)
+		}
+	}
 	return &ToolOrchestrator{
 		executor:      executor,
 		msgBuilder:    msgBuilder,
-		maxIterations: 10,
+		maxIterations: maxIterations,
 	}
 }
 
