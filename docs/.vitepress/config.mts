@@ -11,7 +11,7 @@ export default defineConfig({
   ],
 
   themeConfig: {
-    logo: '/logo.png',
+    logo: '/AniaBot/logo.png',
     siteTitle: 'AniaBot',
 
     nav: [
