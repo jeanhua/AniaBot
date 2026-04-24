@@ -34,6 +34,9 @@ type Message struct {
 	Parts      []ContentPart
 	ToolCallID string             // tool 结果消息使用
 	ToolCalls  []llmtool.ToolCall // assistant 消息使用
+	// ReasoningContent 保存 API 返回的推理过程内容（如 DeepSeek 的 reasoning_content），
+	// 在多轮对话（特别是 tool calling）中需要原样传回，否则 API 会报错。
+	ReasoningContent string
 }
 
 // ChatOptions LLM 调用参数

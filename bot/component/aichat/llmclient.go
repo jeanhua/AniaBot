@@ -2,6 +2,7 @@ package aichat
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 
 	"github.com/jeanhua/AniaBot/bot/component/llmtool"
@@ -26,6 +27,9 @@ func NewLLMClient(baseURL, apiKey, model string) (*LLMClient, error) {
 type GenerateResponse struct {
 	Content   string
 	ToolCalls []llmtool.ToolCall
+	// ReasoningContent 保存 API 返回的推理过程内容（如 DeepSeek 的 reasoning_content），
+	// 在 tool calling 多轮对话中需要原样传回。
+	ReasoningContent string
 }
 
 func (c *LLMClient) Generate(ctx context.Context, messages []Message, opts ChatOptions) (GenerateResponse, TokenUsage, error) {
@@ -155,7 +159,15 @@ func (c *LLMClient) convertMessage(msg Message) (openai.ChatCompletionMessagePar
 		}
 
 		if len(msg.ToolCalls) == 0 {
-			return openai.AssistantMessage(text), nil
+			msgUnion := openai.AssistantMessage(text)
+			if msg.ReasoningContent != "" {
+				if asst := msgUnion.OfAssistant; asst != nil {
+					asst.SetExtraFields(map[string]any{
+						"reasoning_content": msg.ReasoningContent,
+					})
+				}
+			}
+			return msgUnion, nil
 		}
 
 		// Assistant message with tool calls
@@ -177,6 +189,11 @@ func (c *LLMClient) convertMessage(msg Message) (openai.ChatCompletionMessagePar
 			assistant.Content.OfString = openai.String(text)
 		}
 		assistant.ToolCalls = toolCalls
+		if msg.ReasoningContent != "" {
+			assistant.SetExtraFields(map[string]any{
+				"reasoning_content": msg.ReasoningContent,
+			})
+		}
 		return openai.ChatCompletionMessageParamUnion{OfAssistant: &assistant}, nil
 
 	case RoleTool:
@@ -208,6 +225,16 @@ func (c *LLMClient) parseResponse(completion *openai.ChatCompletion) (GenerateRe
 
 	resp := GenerateResponse{
 		Content: choice.Message.Content,
+	}
+
+	// 从原始响应 JSON 中提取 reasoning_content（DeepSeek 等 API 的推理过程字段）
+	if raw := choice.Message.RawJSON(); raw != "" {
+		var rawMap map[string]any
+		if err := json.Unmarshal([]byte(raw), &rawMap); err == nil {
+			if rc, ok := rawMap["reasoning_content"].(string); ok && rc != "" {
+				resp.ReasoningContent = rc
+			}
+		}
 	}
 
 	for _, tc := range choice.Message.ToolCalls {

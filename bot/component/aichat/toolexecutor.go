@@ -62,7 +62,7 @@ func (o *ToolOrchestrator) ExecuteWithTools(
 		}
 		totalUsage = usage
 		content := resp.Content
-		messages = append(messages, o.msgBuilder.BuildAIMessage(content, nil))
+		messages = append(messages, o.msgBuilder.BuildAIMessageWithReasoning(content, nil, resp.ReasoningContent))
 		return content, messages, totalUsage, nil
 	}
 
@@ -91,11 +91,11 @@ func (o *ToolOrchestrator) ExecuteWithTools(
 		}
 
 		if len(resp.ToolCalls) == 0 {
-			messages = append(messages, o.msgBuilder.BuildAIMessage(resp.Content, nil))
+			messages = append(messages, o.msgBuilder.BuildAIMessageWithReasoning(resp.Content, nil, resp.ReasoningContent))
 			return resp.Content, messages, totalUsage, nil
 		}
 
-		messages = append(messages, o.msgBuilder.BuildAIMessage(resp.Content, resp.ToolCalls))
+		messages = append(messages, o.msgBuilder.BuildAIMessageWithReasoning(resp.Content, resp.ToolCalls, resp.ReasoningContent))
 
 		content := removeThinkContent(resp.Content)
 		if callbacks.SendText != nil && len(content) > 0 {
@@ -118,7 +118,7 @@ func (o *ToolOrchestrator) ExecuteWithTools(
 			totalUsage.CompletionTokens += finalUsage.CompletionTokens
 			totalUsage.TotalTokens += finalUsage.TotalTokens
 			finalContent := finalResp.Content
-			messages = append(messages, o.msgBuilder.BuildAIMessage(finalContent, nil))
+			messages = append(messages, o.msgBuilder.BuildAIMessageWithReasoning(finalContent, nil, finalResp.ReasoningContent))
 			return finalContent, messages, totalUsage, nil
 		}
 	}

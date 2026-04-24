@@ -95,6 +95,12 @@ func (b *MessageBuilder) BuildAIMessage(content string, toolCalls []llmtool.Tool
 	return msg
 }
 
+func (b *MessageBuilder) BuildAIMessageWithReasoning(content string, toolCalls []llmtool.ToolCall, reasoningContent string) Message {
+	msg := b.BuildAIMessage(content, toolCalls)
+	msg.ReasoningContent = reasoningContent
+	return msg
+}
+
 func (b *MessageBuilder) BuildToolLimitMessage() Message {
 	return TextMessage(
 		RoleUser,
