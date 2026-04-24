@@ -6,8 +6,6 @@ import (
 	"log"
 	"reflect"
 	"strings"
-
-	"github.com/tmc/langchaingo/llms"
 )
 
 type Property struct {
@@ -17,7 +15,26 @@ type Property struct {
 	Properties  map[string]Property `json:"properties,omitempty"`
 }
 
-func structToOpenAITool(tool Tool) llms.Tool {
+// ToolDef 工具定义，对应 OpenAI tool 格式
+type ToolDef struct {
+	Type     string         `json:"type"`
+	Function FunctionDef    `json:"function"`
+}
+
+type FunctionDef struct {
+	Name        string         `json:"name"`
+	Description string         `json:"description"`
+	Parameters  map[string]any `json:"parameters"`
+}
+
+// ToolCall LLM 返回的工具调用信息
+type ToolCall struct {
+	ID       string
+	Name     string
+	Arguments string
+}
+
+func structToOpenAITool(tool Tool) ToolDef {
 	name := tool.Name()
 	description := tool.Description()
 	params := tool.Params()
@@ -33,9 +50,9 @@ func structToOpenAITool(tool Tool) llms.Tool {
 		t = t.Elem()
 	}
 
-	return llms.Tool{
+	return ToolDef{
 		Type: "function",
-		Function: &llms.FunctionDefinition{
+		Function: FunctionDef{
 			Name:        name,
 			Description: description,
 			Parameters: map[string]any{
@@ -47,11 +64,11 @@ func structToOpenAITool(tool Tool) llms.Tool {
 	}
 }
 
-func mcpToolToOpenAITool(name, description string, parameters json.RawMessage) llms.Tool {
-	emptyTool := func() llms.Tool {
-		return llms.Tool{
+func mcpToolToOpenAITool(name, description string, parameters json.RawMessage) ToolDef {
+	emptyTool := func() ToolDef {
+		return ToolDef{
 			Type: "function",
-			Function: &llms.FunctionDefinition{
+			Function: FunctionDef{
 				Name:        name,
 				Description: description,
 				Parameters: map[string]any{
@@ -93,9 +110,9 @@ func mcpToolToOpenAITool(name, description string, parameters json.RawMessage) l
 		enhancePropertyDescriptions(props)
 	}
 
-	return llms.Tool{
+	return ToolDef{
 		Type: "function",
-		Function: &llms.FunctionDefinition{
+		Function: FunctionDef{
 			Name:        name,
 			Description: description,
 			Parameters:  schema,

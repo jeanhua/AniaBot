@@ -5,10 +5,8 @@ import (
 	"fmt"
 
 	"github.com/jeanhua/AniaBot/bot/component/llmtool"
-	"github.com/tmc/langchaingo/llms"
 )
 
-// ChatBot 聊天机器人
 type ChatBot struct {
 	llmClient        *LLMClient
 	msgBuilder       *MessageBuilder
@@ -33,33 +31,28 @@ func NewChatBot(baseURL, apiKey, model, prompt string, windowSize int, toolExecu
 	}, nil
 }
 
-func (b *ChatBot) Chat(ctx context.Context, userInput string, callbacks llmtool.CallBackFuncs, opts ...llms.CallOption) (string, TokenUsage, error) {
-	// 构建本轮消息：system prompt + 历史消息 + 本次 human 消息
+func (b *ChatBot) Chat(ctx context.Context, userInput string, callbacks llmtool.CallBackFuncs, opts ChatOptions) (string, TokenUsage, error) {
 	messages := b.msgBuilder.BuildChatMessages(userInput, b.window.history())
 
-	response, updatedMessages, usage, err := b.toolOrchestrator.ExecuteWithTools(ctx, b.llmClient, messages, callbacks, opts...)
+	response, updatedMessages, usage, err := b.toolOrchestrator.ExecuteWithTools(ctx, b.llmClient, messages, callbacks, opts)
 	if err != nil {
 		return "", usage, fmt.Errorf("chat execution failed: %w", err)
 	}
 
-	// 从 updatedMessages 中提取本轮新增的消息（去掉 system prompt 和历史部分）
-	// updatedMessages 结构：[system, ...history, human, (ai+tool+tool_result)..., ai_final]
-	// 保存本轮完整对话：human 消息 + AI 响应 + 工具调用链
 	historyLen := len(b.window.history())
-	newMessagesStart := 1 + historyLen // 跳过 system prompt (1) + 历史消息 (historyLen)
+	newMessagesStart := 1 + historyLen
 	if newMessagesStart < len(updatedMessages) {
 		b.window.append(updatedMessages[newMessagesStart:]...)
 	}
 
-	// 移除 response 中的 thinkthink> 标签
 	response = removeThinkContent(response)
 
 	return response, usage, nil
 }
 
-func (b *ChatBot) GetSingleImageDesc(ctx context.Context, userInput string, imageURL string, opts ...llms.CallOption) (string, error) {
+func (b *ChatBot) GetSingleImageDesc(ctx context.Context, userInput string, imageURL string, opts ChatOptions) (string, error) {
 	messages := b.msgBuilder.BuildVisionMessages(userInput, imageURL)
-	return b.llmClient.GenerateSingle(ctx, messages, opts...)
+	return b.llmClient.GenerateSingle(ctx, messages, opts)
 }
 
 func (b *ChatBot) ClearHistory(ctx context.Context) error {
@@ -67,7 +60,6 @@ func (b *ChatBot) ClearHistory(ctx context.Context) error {
 	return nil
 }
 
-// ClearDynamicTools 清理动态加载的 MCP 工具
 func (b *ChatBot) ClearDynamicTools() int {
 	if b.toolOrchestrator != nil && b.toolOrchestrator.executor != nil {
 		if session, ok := b.toolOrchestrator.executor.(*llmtool.SessionToolExecutor); ok {

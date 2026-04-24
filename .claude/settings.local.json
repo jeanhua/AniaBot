@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(go env *)",
+      "Bash(grep -n \"^type FunctionDefinitionParam\\\\b\" \"$\\(go env GOMODCACHE\\)/github.com/openai/openai-go/v3@v3.30.0/shared/\")",
+      "Bash(head -30 \"$\\(go env GOMODCACHE\\)/github.com/openai/openai-go/v3@v3.30.0/shared/type.go\")",
+      "Bash(head -30 \"$\\(go env GOMODCACHE\\)/github.com/openai/openai-go/v3@v3.30.0/shared/\"*.go)"
+    ]
+  }
+}

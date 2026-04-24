@@ -18,7 +18,7 @@ component/
 | 文件 | 职责 |
 |------|------|
 | `chatbot.go` | 入口，组装各子组件，暴露 `Chat()` / `GetSingleImageDesc()` 等方法 |
-| `llmclient.go` | 封装 langchaingo OpenAI 客户端，提供 `Generate()` / `GenerateSingle()` |
+| `llmclient.go` | 封装 openai-go SDK，提供 `Generate()` / `GenerateSingle()` |
 | `messagebuilder.go` | 构建每轮请求的消息列表（system prompt + 历史 + 用户输入），支持 Skill 注入 |
 | `memorywindow.go` | 滑动窗口对话历史，按轮次裁剪，完整保留工具调用链 |
 | `toolexecutor.go` | Agent 循环：LLM → 工具调用 → 结果 → LLM，追踪 `TokenUsage` |

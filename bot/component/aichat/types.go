@@ -1,0 +1,63 @@
+package aichat
+
+import "github.com/jeanhua/AniaBot/bot/component/llmtool"
+
+// MessageRole 消息角色
+type MessageRole string
+
+const (
+	RoleSystem    MessageRole = "system"
+	RoleDeveloper MessageRole = "developer"
+	RoleUser      MessageRole = "user"
+	RoleAssistant MessageRole = "assistant"
+	RoleTool      MessageRole = "tool"
+)
+
+// ContentPartType 内容片段类型
+type ContentPartType int
+
+const (
+	ContentPartText     ContentPartType = iota
+	ContentPartImageURL
+)
+
+// ContentPart 消息内容片段（文本或图片）
+type ContentPart struct {
+	Type     ContentPartType
+	Text     string
+	ImageURL string
+}
+
+// Message 对话消息
+type Message struct {
+	Role       MessageRole
+	Parts      []ContentPart
+	ToolCallID string             // tool 结果消息使用
+	ToolCalls  []llmtool.ToolCall // assistant 消息使用
+}
+
+// ChatOptions LLM 调用参数
+type ChatOptions struct {
+	MaxToken         *int
+	MaxCompletionToken *int
+	Temperature      *float64
+	TopP             *float64
+	TopK             *int // 非标准参数，部分兼容 API 使用
+	Tools            []llmtool.ToolDef
+	ReasoningEffort  *string // "low", "medium", "high"
+}
+
+func TextPart(text string) ContentPart {
+	return ContentPart{Type: ContentPartText, Text: text}
+}
+
+func ImageURLPart(url string) ContentPart {
+	return ContentPart{Type: ContentPartImageURL, ImageURL: url}
+}
+
+func TextMessage(role MessageRole, text string) Message {
+	return Message{
+		Role:  role,
+		Parts: []ContentPart{TextPart(text)},
+	}
+}

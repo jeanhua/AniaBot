@@ -2047,7 +2047,7 @@ bot.<span class="fn">SendGroupForwardMsg</span>(groupId, fbuilder.<span class="f
       <div class="section" id="section-pluginaichat">
         <h1>🤖 AI 对话插件</h1>
         <span class="tag blue">LevelPostHandle = 1000</span>
-        <p style="margin-top:16px;">基于 <code>langchaingo</code> 构建的多轮对话插件，支持 Function Calling、联网搜索、图片 OCR 等高级功能。</p>
+        <p style="margin-top:16px;">基于 OpenAI 官方 SDK（<code>openai-go</code>）构建的多轮对话插件，支持 Function Calling、联网搜索、图片 OCR 等高级功能。</p>
         <h2>使用方式</h2>
         <div class="cmd-row"><span class="cmd-name">@Bot 你好</span><span class="cmd-desc">与 Bot 开始对话（群聊）</span></div>
         <div class="cmd-row"><span class="cmd-name">@Bot #新对话 开始新话题</span><span class="cmd-desc">清除历史，开启新对话</span></div>
@@ -2687,7 +2687,7 @@ page = <span class="nu">2</span></code></pre>
         <ul>
           <li><strong>异步处理</strong>：使用 channel 作为任务队列，<code>workLoop</code> 协程异步处理</li>
           <li><strong>并发控制</strong>：channel 带缓冲大小（100），防止任务堆积</li>
-          <li><strong>LLM 集成</strong>：基于 langchaingo 的 OpenAI LLM，灵活切换模型和 API</li>
+          <li><strong>LLM 集成</strong>：基于 OpenAI 官方 SDK（<code>openai-go</code>），灵活切换模型和 API</li>
         </ul>
       </div>
 

@@ -19,7 +19,6 @@ import (
 	"github.com/jeanhua/AniaBot/common/plugininfo"
 	"github.com/jeanhua/AniaBot/common/storage"
 	"github.com/spf13/viper"
-	"github.com/tmc/langchaingo/llms"
 )
 
 type AIChatPlugin struct {
@@ -30,10 +29,8 @@ type AIChatPlugin struct {
 	rateLimit   int
 	rateCh      chan struct{}
 
-	// 用于存储活跃的请求上下文，支持取消操作
-	activeContexts sync.Map // map[message.QID]context.CancelFunc
+	activeContexts sync.Map
 
-	// 统计群聊未@次数
 	noMentionCount sync.Map
 
 	botConfig struct {
@@ -64,7 +61,7 @@ type AIChatPlugin struct {
 	}
 
 	mcpConfigs   []*llmtool.MCPConfig
-	toolExecutor *llmtool.ToolExecuter // 共享的工具执行器
+	toolExecutor *llmtool.ToolExecuter
 
 	skillManager *llmtool.SkillManager
 }
@@ -110,7 +107,6 @@ func (p *AIChatPlugin) OnGroupMsg(ctx context.Context, bot bot.Bot, cmd command.
 		return true, nil
 	}
 
-	// 处理 /stop 命令
 	if cmd.Name == "stop" {
 		if p.stopRequest(msg.GroupId) {
 			builder := msgchain.Builder().Group()
@@ -142,7 +138,6 @@ func (p *AIChatPlugin) OnGroupMsg(ctx context.Context, bot bot.Bot, cmd command.
 		return true, nil
 	}
 
-	// 创建可取消的上下文
 	chatCtx, cancel := context.WithCancel(ctx)
 	p.setActiveContext(msg.GroupId, cancel)
 
@@ -157,7 +152,6 @@ func (p *AIChatPlugin) OnGroupMsg(ctx context.Context, bot bot.Bot, cmd command.
 			p.Logger.Info("清理AI对话信息成功")
 		}
 
-		// 清理动态加载的 MCP 工具
 		if cleared := chat.ClearDynamicTools(); cleared > 0 {
 			p.Logger.Info("清理动态加载的 MCP 工具", "count", cleared)
 		}
@@ -165,20 +159,8 @@ func (p *AIChatPlugin) OnGroupMsg(ctx context.Context, bot bot.Bot, cmd command.
 
 	msgFuncs := MakeGroupCallback(bot, msg.GroupId, msg.Sender.UserId, p.Logger)
 
-	chatOpts := p.thinkingOpts()
-	if p.llmParameter.maxToken != nil {
-		chatOpts = append(chatOpts, llms.WithMaxTokens(*p.llmParameter.maxToken))
-	}
-	if p.llmParameter.temperature != nil {
-		chatOpts = append(chatOpts, llms.WithTemperature(*p.llmParameter.temperature))
-	}
-	if p.llmParameter.top_p != nil {
-		chatOpts = append(chatOpts, llms.WithTopP(*p.llmParameter.top_p))
-	}
-	if p.llmParameter.top_k != nil {
-		chatOpts = append(chatOpts, llms.WithTopK(*p.llmParameter.top_k))
-	}
-	resp, usage, err := chat.Chat(chatCtx, extraText, msgFuncs, chatOpts...)
+	chatOpts := p.buildChatOptions()
+	resp, usage, err := chat.Chat(chatCtx, extraText, msgFuncs, chatOpts)
 	if err != nil {
 		if errors.Is(err, context.Canceled) {
 			builder.Text("AI 响应已被停止")
@@ -210,7 +192,6 @@ func (p *AIChatPlugin) OnGroupMsg(ctx context.Context, bot bot.Bot, cmd command.
 }
 
 func (p *AIChatPlugin) OnFriendMsg(ctx context.Context, bot bot.Bot, cmd command.Command, msg message.Message) (bool, error) {
-	// 处理 /stop 命令
 	if cmd.Name == "stop" {
 		if p.stopRequest(msg.Sender.UserId) {
 			builder := msgchain.Builder().Friend()
@@ -242,7 +223,6 @@ func (p *AIChatPlugin) OnFriendMsg(ctx context.Context, bot bot.Bot, cmd command
 		return true, nil
 	}
 
-	// 创建可取消的上下文
 	chatCtx, cancel := context.WithCancel(ctx)
 	p.setActiveContext(msg.Sender.UserId, cancel)
 
@@ -257,7 +237,6 @@ func (p *AIChatPlugin) OnFriendMsg(ctx context.Context, bot bot.Bot, cmd command
 			p.Logger.Info("清理AI对话信息成功")
 		}
 
-		// 清理动态加载的 MCP 工具
 		if cleared := chat.ClearDynamicTools(); cleared > 0 {
 			p.Logger.Info("清理动态加载的 MCP 工具", "count", cleared)
 		}
@@ -265,21 +244,8 @@ func (p *AIChatPlugin) OnFriendMsg(ctx context.Context, bot bot.Bot, cmd command
 
 	msgFuncs := MakeFriendCallback(bot, msg.Sender.UserId, p.Logger)
 
-	friendOpts := p.thinkingOpts()
-	if p.llmParameter.maxToken != nil {
-		friendOpts = append(friendOpts, llms.WithMaxTokens(*p.llmParameter.maxToken))
-	}
-	if p.llmParameter.temperature != nil {
-		friendOpts = append(friendOpts, llms.WithTemperature(*p.llmParameter.temperature))
-	}
-	if p.llmParameter.top_p != nil {
-		friendOpts = append(friendOpts, llms.WithTopP(*p.llmParameter.top_p))
-	}
-	if p.llmParameter.top_k != nil {
-		friendOpts = append(friendOpts, llms.WithTopK(*p.llmParameter.top_k))
-	}
-	resp, usage, err := chat.Chat(chatCtx, extraText,
-		msgFuncs, friendOpts...)
+	chatOpts := p.buildChatOptions()
+	resp, usage, err := chat.Chat(chatCtx, extraText, msgFuncs, chatOpts)
 	if err != nil {
 		if errors.Is(err, context.Canceled) {
 			builder.Text("AI 响应已被停止")
@@ -307,6 +273,23 @@ func (p *AIChatPlugin) OnFriendMsg(ctx context.Context, bot bot.Bot, cmd command
 		p.Logger.Info("发送文本", "user", msg.Sender.UserId, "text", resp)
 	}
 	return true, nil
+}
+
+func (p *AIChatPlugin) buildChatOptions() aichat.ChatOptions {
+	opts := p.thinkingOpts()
+	if p.llmParameter.maxToken != nil {
+		opts.MaxToken = p.llmParameter.maxToken
+	}
+	if p.llmParameter.temperature != nil {
+		opts.Temperature = p.llmParameter.temperature
+	}
+	if p.llmParameter.top_p != nil {
+		opts.TopP = p.llmParameter.top_p
+	}
+	if p.llmParameter.top_k != nil {
+		opts.TopK = p.llmParameter.top_k
+	}
+	return opts
 }
 
 func (p *AIChatPlugin) Start(ctx context.Context, cfg *viper.Viper) error {
@@ -394,14 +377,12 @@ func (p *AIChatPlugin) Start(ctx context.Context, cfg *viper.Viper) error {
 		}
 	}
 
-	// 读取 MCP 服务器配置
 	if err := p.loadMCPConfigs(cfg); err != nil {
 		p.Logger.Warn("加载 MCP 配置失败", "error", err.Error())
 	}
 
-	// 创建共享的工具执行器（只创建一次，所有对话共享）
 	p.Logger.Info("初始化工具执行器...")
-	skillsDir := cfg.GetString("plugin.ai_chat_bot.skills_dir") // 配置项，默认 "./skills"
+	skillsDir := cfg.GetString("plugin.ai_chat_bot.skills_dir")
 	if skillsDir == "" {
 		skillsDir = "./skills"
 	}

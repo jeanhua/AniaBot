@@ -13,10 +13,14 @@ import (
 	"github.com/jeanhua/AniaBot/common/bot"
 	"github.com/jeanhua/AniaBot/common/model/message"
 	"github.com/spf13/viper"
-	"github.com/tmc/langchaingo/llms"
 )
 
-func (p *AIChatPlugin) extraMsg(ctx context.Context, bot bot.Bot, msg message.Message, ocrLLM *aichat.ChatBot, opt ...llms.CallOption) string {
+func (p *AIChatPlugin) extraMsg(ctx context.Context, bot bot.Bot, msg message.Message, ocrLLM *aichat.ChatBot, opts ...aichat.ChatOptions) string {
+	var chatOpts aichat.ChatOptions
+	if len(opts) > 0 {
+		chatOpts = opts[0]
+	}
+
 	var str strings.Builder
 	str.WriteString(msg.FriendlyText(true,
 		message.WithGetMsgFunc(bot.GetMsgDetail),
@@ -25,7 +29,7 @@ func (p *AIChatPlugin) extraMsg(ctx context.Context, bot bot.Bot, msg message.Me
 			if ocrLLM == nil {
 				return "OCR服务未开启，无法解析图片"
 			}
-			resp, err := ocrLLM.GetSingleImageDesc(ctx, "描述图片内容", url, opt...)
+			resp, err := ocrLLM.GetSingleImageDesc(ctx, "描述图片内容", url, chatOpts)
 			if err != nil {
 				p.Logger.Error("OCR请求失败:", "error", err.Error())
 				return "OCR请求失败，无法解析的图片内容"
@@ -37,12 +41,10 @@ func (p *AIChatPlugin) extraMsg(ctx context.Context, bot bot.Bot, msg message.Me
 	return str.String()
 }
 
-// mcpFileConfig aniabot.mcp.json 文件结构
 type mcpFileConfig struct {
 	Servers []*mcpServerEntry `json:"servers"`
 }
 
-// mcpServerEntry JSON 文件中单个服务器配置（timeout 用秒数表示）
 type mcpServerEntry struct {
 	Name        string            `json:"name"`
 	Transport   string            `json:"transport"`
@@ -57,7 +59,6 @@ type mcpServerEntry struct {
 
 const mcpConfigFile = "aniabot.mcp.json"
 
-// loadMCPConfigs 从 aniabot.mcp.json 加载 MCP 服务器配置
 func (p *AIChatPlugin) loadMCPConfigs(_ *viper.Viper) error {
 	data, err := os.ReadFile(mcpConfigFile)
 	if err != nil {
@@ -125,21 +126,22 @@ func (p *AIChatPlugin) loadMCPConfigs(_ *viper.Viper) error {
 	return nil
 }
 
-// thinkingOpts 根据配置返回思考模式的 CallOption 列表
-func (p *AIChatPlugin) thinkingOpts() []llms.CallOption {
+func (p *AIChatPlugin) thinkingOpts() aichat.ChatOptions {
 	if !p.llmParameter.enableThinking {
-		return nil
+		return aichat.ChatOptions{}
 	}
-	modeMap := map[string]llms.ThinkingMode{
-		"none":   llms.ThinkingModeNone,
-		"low":    llms.ThinkingModeLow,
-		"medium": llms.ThinkingModeMedium,
-		"high":   llms.ThinkingModeHigh,
-		"auto":   llms.ThinkingModeAuto,
+
+	effort := p.llmParameter.thinkingMode
+	if effort == "" || effort == "auto" {
+		return aichat.ChatOptions{}
 	}
-	mode, ok := modeMap[p.llmParameter.thinkingMode]
-	if !ok {
-		mode = llms.ThinkingModeAuto
+
+	validEfforts := map[string]bool{"low": true, "medium": true, "high": true}
+	if !validEfforts[effort] {
+		effort = "low"
 	}
-	return []llms.CallOption{llms.WithThinkingMode(mode)}
+
+	return aichat.ChatOptions{
+		ReasoningEffort: &effort,
+	}
 }

@@ -5,19 +5,17 @@ import (
 	"time"
 
 	"github.com/jeanhua/AniaBot/bot/component/llmtool"
-	"github.com/tmc/langchaingo/llms"
 )
 
 type MessageBuilder struct {
 	prompt       string
-	skillManager *llmtool.SkillManager // 可选，注入后会在 system prompt 中附加 <available_skills>
+	skillManager *llmtool.SkillManager
 }
 
 func NewMessageBuilder(prompt string) *MessageBuilder {
 	return &MessageBuilder{prompt: prompt}
 }
 
-// NewMessageBuilderWithSkill 创建带 skill 支持的 MessageBuilder
 func NewMessageBuilderWithSkill(prompt string, manager *llmtool.SkillManager) *MessageBuilder {
 	return &MessageBuilder{
 		prompt:       prompt,
@@ -25,12 +23,10 @@ func NewMessageBuilderWithSkill(prompt string, manager *llmtool.SkillManager) *M
 	}
 }
 
-// WithSkillManager 为已有的 MessageBuilder 注入 SkillManager
 func (b *MessageBuilder) WithSkillManager(manager *llmtool.SkillManager) {
 	b.skillManager = manager
 }
 
-// buildSystemPrompt 构建最终的 system prompt（基础 prompt + skill 列表块）
 func (b *MessageBuilder) buildSystemPrompt() string {
 	if b.skillManager == nil {
 		return b.prompt
@@ -45,72 +41,63 @@ func (b *MessageBuilder) buildSystemPrompt() string {
 func buildMetaInfo() string {
 	currentTime := time.Now().Format("2006-01-02 15:04:05")
 	return fmt.Sprintf(`
-	<meta_info>
-		<current_time>%s</current_time>
-	</meta_info>
-	`, currentTime)
+		<meta_info>
+			<current_time>%s</current_time>
+		</meta_info>
+		`, currentTime)
 }
 
-// BuildChatMessages 构建本轮请求的完整消息列表。
-// history 是 messageWindow 中保存的历史消息（已包含工具调用链，不含 system prompt）
-func (b *MessageBuilder) BuildChatMessages(userInput string, history []llms.MessageContent) []llms.MessageContent {
-	messages := make([]llms.MessageContent, 0, 1+len(history)+1)
-	messages = append(messages, llms.TextParts(llms.ChatMessageTypeSystem, b.buildSystemPrompt()))
+func (b *MessageBuilder) BuildChatMessages(userInput string, history []Message) []Message {
+	messages := make([]Message, 0, 1+len(history)+1)
+	messages = append(messages, TextMessage(RoleSystem, b.buildSystemPrompt()))
 	messages = append(messages, history...)
-	messages = append(messages, llms.TextParts(llms.ChatMessageTypeHuman, userInput))
+	messages = append(messages, TextMessage(RoleUser, userInput))
 	return messages
 }
 
-func (b *MessageBuilder) BuildVisionMessages(userInput, imageURL string) []llms.MessageContent {
-	parts := []llms.ContentPart{
-		llms.TextPart(userInput),
-		llms.ImageURLPart(imageURL),
+func (b *MessageBuilder) BuildVisionMessages(userInput, imageURL string) []Message {
+	parts := []ContentPart{
+		TextPart(userInput),
+		ImageURLPart(imageURL),
 	}
 
-	return []llms.MessageContent{
+	return []Message{
 		{
-			Role:  llms.ChatMessageTypeSystem,
-			Parts: []llms.ContentPart{llms.TextPart(b.buildSystemPrompt())},
+			Role:  RoleSystem,
+			Parts: []ContentPart{TextPart(b.buildSystemPrompt())},
 		},
 		{
-			Role:  llms.ChatMessageTypeHuman,
+			Role:  RoleUser,
 			Parts: parts,
 		},
 	}
 }
 
-func (b *MessageBuilder) BuildToolMessage(toolCallID, name, result string) llms.MessageContent {
-	return llms.MessageContent{
-		Role: llms.ChatMessageTypeTool,
-		Parts: []llms.ContentPart{
-			llms.ToolCallResponse{
-				ToolCallID: toolCallID,
-				Name:       name,
-				Content:    result,
-			},
-		},
+func (b *MessageBuilder) BuildToolMessage(toolCallID, name, result string) Message {
+	return Message{
+		Role:       RoleTool,
+		ToolCallID: toolCallID,
+		Parts:      []ContentPart{TextPart(result)},
 	}
 }
 
-func (b *MessageBuilder) BuildAIMessage(content string, toolCalls []llms.ToolCall) llms.MessageContent {
-	msg := llms.MessageContent{
-		Role: llms.ChatMessageTypeAI,
+func (b *MessageBuilder) BuildAIMessage(content string, toolCalls []llmtool.ToolCall) Message {
+	msg := Message{
+		Role: RoleAssistant,
 	}
 
 	if content != "" {
-		msg.Parts = append(msg.Parts, llms.TextPart(content))
+		msg.Parts = append(msg.Parts, TextPart(content))
 	}
 
-	for _, call := range toolCalls {
-		msg.Parts = append(msg.Parts, call)
-	}
+	msg.ToolCalls = toolCalls
 
 	return msg
 }
 
-func (b *MessageBuilder) BuildToolLimitMessage() llms.MessageContent {
-	return llms.TextParts(
-		llms.ChatMessageTypeHuman,
+func (b *MessageBuilder) BuildToolLimitMessage() Message {
+	return TextMessage(
+		RoleUser,
 		"<system>你的Tool Call连续调用已经达到限制，请先基于当前获取结果回答用户问题，如果需要更多Tool Call，请先向用户发送请求，得到用户允许后重新刷新限额</system>",
 	)
 }
