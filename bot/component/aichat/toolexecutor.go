@@ -3,7 +3,6 @@ package aichat
 import (
 	"context"
 	"fmt"
-	"log"
 	"os"
 	"strconv"
 
@@ -68,11 +67,6 @@ func (o *ToolOrchestrator) ExecuteWithTools(
 
 	for i := 0; i < o.maxIterations; i++ {
 		tools := o.executor.Tools()
-		log.Printf("[ToolOrchestrator] 迭代 %d, 工具数量: %d", i+1, len(tools))
-		for _, tool := range tools {
-			log.Printf("[ToolOrchestrator] 工具定义: name=%s, desc=%s, params=%+v",
-				tool.Function.Name, tool.Function.Description, tool.Function.Parameters)
-		}
 
 		opts.Tools = tools
 		resp, usage, err := llmClient.Generate(ctx, messages, opts)
@@ -83,12 +77,6 @@ func (o *ToolOrchestrator) ExecuteWithTools(
 		totalUsage.PromptTokens += usage.PromptTokens
 		totalUsage.CompletionTokens += usage.CompletionTokens
 		totalUsage.TotalTokens += usage.TotalTokens
-
-		log.Printf("[ToolOrchestrator] 模型响应: content=%q, toolCalls=%d", resp.Content, len(resp.ToolCalls))
-		for _, tc := range resp.ToolCalls {
-			log.Printf("[ToolOrchestrator] 工具调用: id=%s, name=%s, args=%s",
-				tc.ID, tc.Name, tc.Arguments)
-		}
 
 		if len(resp.ToolCalls) == 0 {
 			messages = append(messages, o.msgBuilder.BuildAIMessageWithReasoning(resp.Content, nil, resp.ReasoningContent))
