@@ -17,8 +17,8 @@ type Property struct {
 
 // ToolDef 工具定义，对应 OpenAI tool 格式
 type ToolDef struct {
-	Type     string         `json:"type"`
-	Function FunctionDef    `json:"function"`
+	Type     string      `json:"type"`
+	Function FunctionDef `json:"function"`
 }
 
 type FunctionDef struct {
@@ -29,8 +29,8 @@ type FunctionDef struct {
 
 // ToolCall LLM 返回的工具调用信息
 type ToolCall struct {
-	ID       string
-	Name     string
+	ID        string
+	Name      string
 	Arguments string
 }
 

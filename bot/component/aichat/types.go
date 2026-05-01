@@ -17,7 +17,7 @@ const (
 type ContentPartType int
 
 const (
-	ContentPartText     ContentPartType = iota
+	ContentPartText ContentPartType = iota
 	ContentPartImageURL
 )
 
@@ -41,13 +41,13 @@ type Message struct {
 
 // ChatOptions LLM 调用参数
 type ChatOptions struct {
-	MaxToken         *int
+	MaxToken           *int
 	MaxCompletionToken *int
-	Temperature      *float64
-	TopP             *float64
-	TopK             *int // 非标准参数，部分兼容 API 使用
-	Tools            []llmtool.ToolDef
-	ReasoningEffort  *string // "low", "medium", "high"
+	Temperature        *float64
+	TopP               *float64
+	TopK               *int // 非标准参数，部分兼容 API 使用
+	Tools              []llmtool.ToolDef
+	ReasoningEffort    *string // "low", "medium", "high"
 }
 
 func TextPart(text string) ContentPart {

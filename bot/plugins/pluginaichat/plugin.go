@@ -76,8 +76,8 @@ type AIChatPlugin struct {
 }
 
 const (
-	LockExpTime       = time.Minute * 10
-	promptConfigFile  = "aniabot.prompt.json"
+	LockExpTime      = time.Minute * 10
+	promptConfigFile = "aniabot.prompt.json"
 )
 
 type promptOverrideConfig struct {
