@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"log/slog"
 	"strings"
+	"time"
 
 	"github.com/jeanhua/AniaBot/common/storage"
 	"github.com/redis/go-redis/v9"
@@ -288,4 +289,14 @@ func (store *AniaRedisStorage) LTrim(ctx context.Context, key string, start, sto
 		return false
 	}
 	return true
+}
+
+func (store *AniaRedisStorage) Expire(ctx context.Context, key string, ttl time.Duration) bool {
+	fullKey := store.prefix + key
+	ok, err := store.rdb.Expire(ctx, fullKey, ttl).Result()
+	if err != nil {
+		store.logger.Error("Redis Expire failed", "key", fullKey, "error", err)
+		return false
+	}
+	return ok
 }

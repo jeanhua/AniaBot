@@ -68,4 +68,7 @@ type Storage interface {
 	LIndex(ctx context.Context, key string, index int64) (any, bool)
 	// LTrim 修剪列表，保留指定范围内的值
 	LTrim(ctx context.Context, key string, start, stop int64) bool
+
+	// Expire 设置键的过期时间
+	Expire(ctx context.Context, key string, ttl time.Duration) bool
 }

@@ -481,6 +481,22 @@ func (store *AniaMemoryStorage) LTrim(ctx context.Context, key string, start, st
 	return true
 }
 
+func (store *AniaMemoryStorage) Expire(ctx context.Context, key string, ttl time.Duration) bool {
+	store.mu.Lock()
+	defer store.mu.Unlock()
+
+	fullKey := store.fullKey(key)
+	if item, ok := store.data[fullKey]; ok {
+		item.expireAt = time.Now().Add(ttl)
+		return true
+	}
+	if list, ok := store.lists[fullKey]; ok {
+		list.expireAt = time.Now().Add(ttl)
+		return true
+	}
+	return false
+}
+
 func matchPattern(s, pattern string) (bool, error) {
 	if pattern == "*" {
 		return true, nil
