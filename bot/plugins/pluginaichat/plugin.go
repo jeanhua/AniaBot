@@ -2,7 +2,10 @@ package pluginaichat
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"os"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -50,6 +53,12 @@ type AIChatPlugin struct {
 		thinkingMode   string
 	}
 
+	// 按群聊/好友独立的 prompt 覆盖配置
+	promptOverrides struct {
+		groups  map[message.QID]string
+		friends map[message.QID]string
+	}
+
 	ocrEnable    bool
 	ocrModel     *aichat.ChatBot
 	ocrParameter struct {
@@ -67,8 +76,14 @@ type AIChatPlugin struct {
 }
 
 const (
-	LockExpTime = time.Minute * 10
+	LockExpTime       = time.Minute * 10
+	promptConfigFile  = "aniabot.prompt.json"
 )
+
+type promptOverrideConfig struct {
+	Groups  map[string]string `json:"groups"`
+	Friends map[string]string `json:"friends"`
+}
 
 func NewAIChatPlugin() *AIChatPlugin {
 	return &AIChatPlugin{
@@ -130,7 +145,7 @@ func (p *AIChatPlugin) OnGroupMsg(ctx context.Context, bot bot.Bot, cmd command.
 	defer p.unLock(msg.GroupId)
 	defer p.clearActiveContext(msg.GroupId)
 	p.noMentionCount.Store(msg.GroupId, 0)
-	chat := p.getChat(msg.GroupId)
+	chat := p.getChat(msg.GroupId, p.getPromptForID(msg.GroupId, true))
 	if chat == nil {
 		builder := msgchain.Builder().Group()
 		builder.Text("无法创建对话，请检查日志信息哦")
@@ -215,7 +230,7 @@ func (p *AIChatPlugin) OnFriendMsg(ctx context.Context, bot bot.Bot, cmd command
 	defer p.unLock(msg.Sender.UserId)
 	defer p.clearActiveContext(msg.Sender.UserId)
 
-	chat := p.getChat(msg.Sender.UserId)
+	chat := p.getChat(msg.Sender.UserId, p.getPromptForID(msg.Sender.UserId, false))
 	if chat == nil {
 		builder := msgchain.Builder().Friend()
 		builder.Text("无法创建对话，请检查日志信息哦")
@@ -324,6 +339,9 @@ func (p *AIChatPlugin) Start(ctx context.Context, cfg *viper.Viper) error {
 		p.llmParameter.prompt = "你是一个ai对话机器人，在QQ上和别人聊天，说话不要长篇大论"
 	}
 
+	// 加载群聊/好友独立 prompt 覆盖配置
+	p.loadPromptOverrides()
+
 	if cfg.IsSet("plugin.ai_chat_bot.max_token") {
 		v := cfg.GetInt("plugin.ai_chat_bot.max_token")
 		p.llmParameter.maxToken = &v
@@ -398,4 +416,60 @@ func (p *AIChatPlugin) Start(ctx context.Context, cfg *viper.Viper) error {
 	p.Logger.Info("工具执行器初始化完成")
 
 	return nil
+}
+
+func (p *AIChatPlugin) loadPromptOverrides() {
+	p.promptOverrides.groups = make(map[message.QID]string)
+	p.promptOverrides.friends = make(map[message.QID]string)
+
+	data, err := os.ReadFile(promptConfigFile)
+	if err != nil {
+		if os.IsNotExist(err) {
+			p.Logger.Info("未找到 Prompt 覆盖配置文件，跳过加载", "file", promptConfigFile)
+			return
+		}
+		p.Logger.Warn("读取 Prompt 覆盖配置文件失败", "error", err.Error())
+		return
+	}
+
+	var cfg promptOverrideConfig
+	if err := json.Unmarshal(data, &cfg); err != nil {
+		p.Logger.Warn("解析 Prompt 覆盖配置文件失败", "error", err.Error())
+		return
+	}
+
+	for k, v := range cfg.Groups {
+		id, err := strconv.ParseUint(k, 10, 64)
+		if err != nil {
+			p.Logger.Warn("Prompt 覆盖配置: 无效的群聊ID", "id", k, "error", err.Error())
+			continue
+		}
+		p.promptOverrides.groups[message.QID(id)] = v
+	}
+	for k, v := range cfg.Friends {
+		id, err := strconv.ParseUint(k, 10, 64)
+		if err != nil {
+			p.Logger.Warn("Prompt 覆盖配置: 无效的好友ID", "id", k, "error", err.Error())
+			continue
+		}
+		p.promptOverrides.friends[message.QID(id)] = v
+	}
+
+	count := len(p.promptOverrides.groups) + len(p.promptOverrides.friends)
+	if count > 0 {
+		p.Logger.Info("已加载 Prompt 覆盖配置", "groups", len(p.promptOverrides.groups), "friends", len(p.promptOverrides.friends))
+	}
+}
+
+func (p *AIChatPlugin) getPromptForID(id message.QID, isGroup bool) string {
+	if isGroup {
+		if prompt, ok := p.promptOverrides.groups[id]; ok {
+			return prompt
+		}
+	} else {
+		if prompt, ok := p.promptOverrides.friends[id]; ok {
+			return prompt
+		}
+	}
+	return p.llmParameter.prompt
 }

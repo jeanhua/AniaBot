@@ -26,7 +26,7 @@ func (p *AIChatPlugin) clearActiveContext(id message.QID) {
 	p.activeContexts.Delete(id)
 }
 
-func (p *AIChatPlugin) getChat(id message.QID) *aichat.ChatBot {
+func (p *AIChatPlugin) getChat(id message.QID, prompt string) *aichat.ChatBot {
 	chat, ok := p.chats.Load(id)
 	if !ok {
 		// 每个会话创建独立的 SessionToolExecutor，动态加载的工具互不影响
@@ -35,7 +35,7 @@ func (p *AIChatPlugin) getChat(id message.QID) *aichat.ChatBot {
 			p.botConfig.baseURL,
 			p.botConfig.apiKey,
 			p.botConfig.model,
-			p.llmParameter.prompt,
+			prompt,
 			30,
 			sessionExecutor,
 		)
