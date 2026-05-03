@@ -404,10 +404,20 @@ func (p *AIChatPlugin) Start(ctx context.Context, cfg *viper.Viper) error {
 	if skillsDir == "" {
 		skillsDir = "./skills"
 	}
+	var bashConfig functool.BashConfig
+	if cfg.IsSet("plugin.ai_chat_bot.bash") {
+		if err := cfg.UnmarshalKey("plugin.ai_chat_bot.bash", &bashConfig); err != nil {
+			p.Logger.Warn("解析 bash 工具配置失败", "error", err.Error())
+		}
+	}
+	if bashConfig.Enable {
+		p.Logger.Info("已启用bash工具", "whitelist", bashConfig.Whitelist, "blacklist", bashConfig.Blacklist)
+	}
 	p.toolExecutor, p.skillManager = functool.CreateToolsWithSkill(
 		p.llmParameter.searchToken,
 		p.mcpConfigs,
 		skillsDir,
+		bashConfig,
 	)
 	if p.toolExecutor == nil {
 		p.Logger.Error("创建工具执行器失败")

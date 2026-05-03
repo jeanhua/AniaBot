@@ -7,7 +7,7 @@ import (
 )
 
 // CreateDefaultTools 创建默认的工具执行器并注册所有内置工具
-func CreateDefaultTools(searchToken string) *llmtool.ToolExecuter {
+func CreateDefaultTools(searchToken string, bashConfig BashConfig) *llmtool.ToolExecuter {
 	executer := llmtool.NewToolExecuter()
 	executer.Register(NewTimeTool())
 	executer.Register(NewWebSearchTool(searchToken))
@@ -15,12 +15,15 @@ func CreateDefaultTools(searchToken string) *llmtool.ToolExecuter {
 	executer.Register(NewMemeTool())
 	executer.Register(NewSendFileTool())
 	executer.Register(NewMsgHistoryTool())
+	if bashConfig.Enable {
+		executer.Register(NewBashTool(bashConfig))
+	}
 	return executer
 }
 
 // CreateToolsWithMCP 创建工具执行器，注册内置工具和 MCP 工具（工具发现模式）
-func CreateToolsWithMCP(searchToken string, mcpConfigs []*llmtool.MCPConfig) *llmtool.ToolExecuter {
-	executer := CreateDefaultTools(searchToken)
+func CreateToolsWithMCP(searchToken string, mcpConfigs []*llmtool.MCPConfig, bashConfig BashConfig) *llmtool.ToolExecuter {
+	executer := CreateDefaultTools(searchToken, bashConfig)
 	for _, config := range mcpConfigs {
 		log.Printf("正在连接MCP服务器: %s (command=%s)", config.Name, config.Command)
 		if err := executer.RegisterMCPWithConfigDiscovery(config); err != nil {
@@ -34,8 +37,8 @@ func CreateToolsWithMCP(searchToken string, mcpConfigs []*llmtool.MCPConfig) *ll
 
 // CreateToolsWithSkill 创建工具执行器，注册内置工具、MCP 工具和 Skill 工具
 // skillsDir 为空时跳过 skill 加载
-func CreateToolsWithSkill(searchToken string, mcpConfigs []*llmtool.MCPConfig, skillsDir string) (*llmtool.ToolExecuter, *llmtool.SkillManager) {
-	executer := CreateToolsWithMCP(searchToken, mcpConfigs)
+func CreateToolsWithSkill(searchToken string, mcpConfigs []*llmtool.MCPConfig, skillsDir string, bashConfig BashConfig) (*llmtool.ToolExecuter, *llmtool.SkillManager) {
+	executer := CreateToolsWithMCP(searchToken, mcpConfigs, bashConfig)
 
 	skillManager := llmtool.NewSkillManager()
 	if skillsDir != "" {

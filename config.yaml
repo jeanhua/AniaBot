@@ -52,6 +52,24 @@ plugin:
 
     skills_dir: "./skills"
 
+    # bash 工具配置
+    bash:
+      enable: false           # 是否启用bash工具
+      whitelist: []           # 非空时只允许这些命令前缀，如 ["ls", "cat", "echo"]
+      blacklist:              # 这些命令前缀被禁止
+        - "rm"
+        - "dd"
+        - "mkfs"
+        - "shutdown"
+        - "reboot"
+        - "kill"
+        - "pkill"
+        - "chmod"
+        - "chown"
+        - "wget"
+        - "curl"
+        - "nc"
+
     # OCR 配置，可选，该llm负责将图片转换为文本供上文使用
     ocr:
       enable: false
