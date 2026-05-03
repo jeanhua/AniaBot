@@ -19,8 +19,9 @@ else
     docker run -dt \
         --name "$CONTAINER_NAME" \
         --memory "$MEM_LIMIT" \
+        --network host \
         --cpus "$CPU_LIMIT" \
-        "$IMAGE" /bin/sh
+        "$IMAGE" /bin/sh -c "sed -i 's/dl-cdn.alpinelinux.org/mirrors.aliyun.com/g' /etc/apk/repositories && apk update && /bin/sh"
     echo "资源配额已锁定: CPU: $CPU_LIMIT | MEM: $MEM_LIMIT"
 fi
 
