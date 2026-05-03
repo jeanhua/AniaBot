@@ -52,9 +52,10 @@ plugin:
 
     skills_dir: "./skills"
 
-    # bash 工具配置
+    # bash 工具配置（通过Docker容器执行命令）
     bash:
       enable: false           # 是否启用bash工具
+      container_id: ""        # Docker 容器 ID 或名称，用户需提前创建
       whitelist: []           # 非空时只允许这些命令前缀，如 ["ls", "cat", "echo"]
       blacklist:              # 这些命令前缀被禁止
         - "rm"

@@ -411,16 +411,17 @@ func (p *AIChatPlugin) Start(ctx context.Context, cfg *viper.Viper) error {
 		}
 	}
 	if bashConfig.Enable {
-		p.Logger.Info("已启用bash工具", "whitelist", bashConfig.Whitelist, "blacklist", bashConfig.Blacklist)
+		p.Logger.Info("已启用bash工具", "container_id", bashConfig.ContainerID, "whitelist", bashConfig.Whitelist, "blacklist", bashConfig.Blacklist)
 	}
-	p.toolExecutor, p.skillManager = functool.CreateToolsWithSkill(
+	var err error
+	p.toolExecutor, p.skillManager, err = functool.CreateToolsWithSkill(
 		p.llmParameter.searchToken,
 		p.mcpConfigs,
 		skillsDir,
 		bashConfig,
 	)
-	if p.toolExecutor == nil {
-		p.Logger.Error("创建工具执行器失败")
+	if err != nil {
+		p.Logger.Error("创建工具执行器失败", "error", err.Error())
 		return aniaerror.ParameterInitializeError
 	}
 	p.Logger.Info("工具执行器初始化完成")
