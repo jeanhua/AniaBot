@@ -23,6 +23,7 @@ type BashConfig struct {
 	Enable      bool     `json:"enable" mapstructure:"enable"`
 	ContainerID string   `json:"container_id" mapstructure:"container_id"` // Docker 容器 ID 或名称
 	Shell       string   `json:"shell" mapstructure:"shell"`               // 容器内的shell，如 bash、ash、sh
+	Env         []string `json:"env" mapstructure:"env"`                   // 注入容器的环境变量，格式 KEY=VALUE
 	Whitelist   []string `json:"whitelist" mapstructure:"whitelist"`       // 非空时只允许这些命令前缀
 	Blacklist   []string `json:"blacklist" mapstructure:"blacklist"`       // 这些命令前缀被禁止
 }
@@ -36,6 +37,7 @@ type BashTool struct {
 	dockerClient *client.Client
 	containerID  string
 	shell        string
+	env          []string
 	whitelist    []string
 	blacklist    []string
 }
@@ -56,6 +58,7 @@ func NewBashTool(config BashConfig) (*BashTool, error) {
 		dockerClient: cli,
 		containerID:  config.ContainerID,
 		shell:        shell,
+		env:          config.Env,
 		whitelist:    config.Whitelist,
 		blacklist:    config.Blacklist,
 	}, nil
@@ -105,6 +108,7 @@ func (t *BashTool) Execute(_ context.Context, params any, _ llmtool.CallBackFunc
 	// 创建 exec 实例
 	execConfig := container.ExecOptions{
 		Cmd:          []string{t.shell, "-c", p.Command},
+		Env:          t.env,
 		AttachStdout: true,
 		AttachStderr: true,
 	}
