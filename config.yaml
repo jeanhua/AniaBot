@@ -56,6 +56,7 @@ plugin:
     bash:
       enable: false           # 是否启用bash工具
       container_id: ""        # Docker 容器 ID 或名称，用户需提前创建
+      shell: "bash"           # 容器内的shell，alpine用ash，ubuntu用bash
       whitelist: []           # 非空时只允许这些命令前缀，如 ["ls", "cat", "echo"]
       blacklist:              # 这些命令前缀被禁止
         - "rm"
