@@ -22,7 +22,7 @@ type ToolOrchestrator struct {
 
 func NewToolOrchestrator(executor ToolExecutor, msgBuilder *MessageBuilder) *ToolOrchestrator {
 	maxIterationsStr := os.Getenv("MAX_ITERATIONS")
-	maxIterations := 10
+	maxIterations := 20
 	if maxIterationsStr != "" {
 		if it, err := strconv.Atoi(maxIterationsStr); err == nil {
 			maxIterations = it
