@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"log"
 	"strings"
 	"time"
 
@@ -14,7 +15,7 @@ import (
 )
 
 const (
-	bashTimeout   = 30 * time.Second
+	bashTimeout   = 2 * time.Minute
 	bashMaxOutput = 4096
 )
 
@@ -98,6 +99,8 @@ func (t *BashTool) Execute(_ context.Context, params any, _ llmtool.CallBackFunc
 		return "", fmt.Errorf("bash: 命令不能为空")
 	}
 
+	log.Println("执行bash... 参数: ", p.Command)
+
 	if err := t.checkCommand(p.Command); err != nil {
 		return "", err
 	}
@@ -150,7 +153,7 @@ func (t *BashTool) Execute(_ context.Context, params any, _ llmtool.CallBackFunc
 	}
 
 	if ctx.Err() == context.DeadlineExceeded {
-		return result + "\n命令执行超时(30秒)", nil
+		return result + "\n命令执行超时(2分钟)", nil
 	}
 
 	if inspectResp.ExitCode != 0 {
