@@ -60,18 +60,9 @@ plugin:
       env: []                 # 注入容器的环境变量，格式 KEY=VALUE，如 ["HOME=/root", "LANG=zh_CN.UTF-8"]
       whitelist: []           # 非空时只允许这些命令前缀，如 ["ls", "cat", "echo"]
       blacklist:              # 这些命令前缀被禁止
-        - "rm"
-        - "dd"
         - "mkfs"
         - "shutdown"
         - "reboot"
-        - "kill"
-        - "pkill"
-        - "chmod"
-        - "chown"
-        - "wget"
-        - "curl"
-        - "nc"
 
     # OCR 配置，可选，该llm负责将图片转换为文本供上文使用
     ocr:
