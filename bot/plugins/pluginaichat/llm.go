@@ -36,7 +36,7 @@ func (p *AIChatPlugin) getChat(id message.QID, prompt string) *aichat.ChatBot {
 			p.botConfig.apiKey,
 			p.botConfig.model,
 			prompt,
-			30,
+			p.botConfig.maxContextTokens,
 			sessionExecutor,
 		)
 		if err != nil {

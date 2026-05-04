@@ -37,9 +37,10 @@ type AIChatPlugin struct {
 	noMentionCount sync.Map
 
 	botConfig struct {
-		baseURL string
-		apiKey  string
-		model   string
+		baseURL          string
+		apiKey           string
+		model            string
+		maxContextTokens int
 	}
 
 	llmParameter struct {
@@ -316,6 +317,12 @@ func (p *AIChatPlugin) Start(ctx context.Context, cfg *viper.Viper) error {
 	p.botConfig.apiKey = cfg.GetString("plugin.ai_chat_bot.api_key")
 	p.llmParameter.prompt = cfg.GetString("plugin.ai_chat_bot.prompt")
 
+	if cfg.IsSet("plugin.ai_chat_bot.max_context_tokens") {
+		p.botConfig.maxContextTokens = cfg.GetInt("plugin.ai_chat_bot.max_context_tokens")
+	} else {
+		p.botConfig.maxContextTokens = 128000
+	}
+
 	p.rateLimit = cfg.GetInt("plugin.ai_chat_bot.rate_limit")
 	if p.rateLimit <= 0 {
 		p.rateLimit = 2
@@ -386,7 +393,7 @@ func (p *AIChatPlugin) Start(ctx context.Context, cfg *viper.Viper) error {
 		p.ocrParameter.top_p = cfg.GetFloat64("plugin.ai_chat_bot.ocr.top_p")
 		p.ocrParameter.top_k = cfg.GetInt("plugin.ai_chat_bot.ocr.top_k")
 
-		ocrllm, err := aichat.NewChatBot(ocrBaseUrl, ocrAPIKey, ocrModel, ocrPrompt, 10, nil)
+		ocrllm, err := aichat.NewChatBot(ocrBaseUrl, ocrAPIKey, ocrModel, ocrPrompt, 0, nil)
 		if err != nil {
 			p.Logger.Error("无法初始化OCR LLM", "error", err.Error())
 			p.ocrEnable = false

@@ -36,6 +36,7 @@ plugin:
     search:
       token: "xxx" # jina ai token
     # 模型参数
+    max_context_tokens: 128000
     temperature: 1.2
     top_p: 0.9
     top_k: 100

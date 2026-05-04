@@ -14,7 +14,7 @@ type ChatBot struct {
 	window           *messageWindow
 }
 
-func NewChatBot(baseURL, apiKey, model, prompt string, windowSize int, toolExecutor ToolExecutor) (*ChatBot, error) {
+func NewChatBot(baseURL, apiKey, model, prompt string, maxContextTokens int, toolExecutor ToolExecutor) (*ChatBot, error) {
 	llmClient, err := NewLLMClient(baseURL, apiKey, model)
 	if err != nil {
 		return nil, err
@@ -23,21 +23,31 @@ func NewChatBot(baseURL, apiKey, model, prompt string, windowSize int, toolExecu
 	msgBuilder := NewMessageBuilder(prompt)
 	toolOrchestrator := NewToolOrchestrator(toolExecutor, msgBuilder)
 
+	compressor := NewContextCompressor(prompt)
+	window := newMessageWindow(maxContextTokens, llmClient, compressor)
+
 	return &ChatBot{
 		llmClient:        llmClient,
 		msgBuilder:       msgBuilder,
 		toolOrchestrator: toolOrchestrator,
-		window:           newMessageWindow(windowSize),
+		window:           window,
 	}, nil
 }
 
 func (b *ChatBot) Chat(ctx context.Context, userInput string, callbacks llmtool.CallBackFuncs, opts ChatOptions) (string, TokenUsage, error) {
+	// 压缩检查：在构建消息之前，确保上下文不超限
+	if err := b.window.MaybeCompress(ctx); err != nil {
+		return "", TokenUsage{}, err
+	}
+
 	messages := b.msgBuilder.BuildChatMessages(userInput, b.window.history())
 
 	response, updatedMessages, usage, err := b.toolOrchestrator.ExecuteWithTools(ctx, b.llmClient, messages, callbacks, opts)
 	if err != nil {
 		return "", usage, fmt.Errorf("chat execution failed: %w", err)
 	}
+
+	b.window.RecordUsage(usage)
 
 	historyLen := len(b.window.history())
 	newMessagesStart := 1 + historyLen
