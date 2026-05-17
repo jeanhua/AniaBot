@@ -418,7 +418,7 @@ func (p *AIChatPlugin) Start(ctx context.Context, cfg *viper.Viper) error {
 		}
 	}
 	if bashConfig.Enable {
-		p.Logger.Info("已启用bash工具", "container_id", bashConfig.ContainerID, "whitelist", bashConfig.Whitelist, "blacklist", bashConfig.Blacklist)
+		p.Logger.Info("已启用bash工具", "shell", bashConfig.Shell, "whitelist", bashConfig.Whitelist, "blacklist", bashConfig.Blacklist)
 	}
 	var err error
 	p.toolExecutor, p.skillManager, err = functool.CreateToolsWithSkill(

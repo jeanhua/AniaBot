@@ -19,9 +19,10 @@ type SkillMeta struct {
 
 // Skill 代表一个已加载的 skill
 type Skill struct {
-	Meta    SkillMeta
-	Content string // SKILL.md 的完整内容（含 frontmatter）
-	Path    string // SKILL.md 文件路径
+	Meta       SkillMeta
+	Content    string            // SKILL.md 的完整内容（含 frontmatter）
+	Path       string            // SKILL.md 文件路径
+	ExtraFiles map[string]string // 附属文件：文件名 -> 内容（如 reference.md、script.sh 等）
 }
 
 // SkillManager 管理所有可用的 Skill
@@ -38,7 +39,7 @@ func NewSkillManager() *SkillManager {
 
 // LoadFromDir 从指定目录扫描并加载所有 skill
 // 支持两种目录结构：
-//   - skillsDir/skill-name/SKILL.md
+//   - skillsDir/skill-name/SKILL.md （可包含附属文件如 reference.md、script.sh 等）
 //   - skillsDir/SKILL.md （单文件模式）
 func (m *SkillManager) LoadFromDir(skillsDir string) error {
 	entries, err := os.ReadDir(skillsDir)
@@ -47,28 +48,32 @@ func (m *SkillManager) LoadFromDir(skillsDir string) error {
 	}
 
 	for _, entry := range entries {
-		var skillPath string
-
 		if entry.IsDir() {
-			// 子目录模式：skillsDir/skill-name/SKILL.md
-			skillPath = filepath.Join(skillsDir, entry.Name(), "SKILL.md")
+			// 子目录模式：加载 SKILL.md 和附属文件
+			skillDir := filepath.Join(skillsDir, entry.Name())
+			skillPath := filepath.Join(skillDir, "SKILL.md")
+
+			if _, err := os.Stat(skillPath); os.IsNotExist(err) {
+				continue
+			}
+
+			skill, err := loadSkillFromDir(skillPath, skillDir)
+			if err != nil {
+				return fmt.Errorf("加载 skill 失败 [%s]: %w", skillPath, err)
+			}
+
+			m.skills[skill.Meta.Name] = skill
 		} else if strings.ToUpper(entry.Name()) == "SKILL.MD" {
 			// 单文件模式：skillsDir/SKILL.md
-			skillPath = filepath.Join(skillsDir, entry.Name())
-		} else {
-			continue
-		}
+			skillPath := filepath.Join(skillsDir, entry.Name())
 
-		if _, err := os.Stat(skillPath); os.IsNotExist(err) {
-			continue
-		}
+			skill, err := loadSkillFromFile(skillPath)
+			if err != nil {
+				return fmt.Errorf("加载 skill 失败 [%s]: %w", skillPath, err)
+			}
 
-		skill, err := loadSkillFromFile(skillPath)
-		if err != nil {
-			return fmt.Errorf("加载 skill 失败 [%s]: %w", skillPath, err)
+			m.skills[skill.Meta.Name] = skill
 		}
-
-		m.skills[skill.Meta.Name] = skill
 	}
 
 	return nil
@@ -129,7 +134,7 @@ func (m *SkillManager) RegisterToExecuter(executer *ToolExecuter) {
 	executer.Register(NewSkillReadTool(m))
 }
 
-// loadSkillFromFile 从 SKILL.md 文件路径解析 Skill
+// loadSkillFromFile 从 SKILL.md 文件路径解析 Skill（单文件模式，无附属文件）
 func loadSkillFromFile(path string) (*Skill, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -148,10 +153,43 @@ func loadSkillFromFile(path string) (*Skill, error) {
 	}
 
 	return &Skill{
-		Meta:    *meta,
-		Content: content,
-		Path:    path,
+		Meta:       *meta,
+		Content:    content,
+		Path:       path,
+		ExtraFiles: make(map[string]string),
 	}, nil
+}
+
+// loadSkillFromDir 从子目录加载 SKILL.md 和所有附属文件
+func loadSkillFromDir(skillPath, skillDir string) (*Skill, error) {
+	skill, err := loadSkillFromFile(skillPath)
+	if err != nil {
+		return nil, err
+	}
+
+	// 扫描目录下的附属文件（跳过 SKILL.md 本身）
+	dirEntries, err := os.ReadDir(skillDir)
+	if err != nil {
+		return skill, nil // 目录读取失败仍返回主文件
+	}
+
+	for _, de := range dirEntries {
+		if de.IsDir() {
+			continue
+		}
+		if strings.EqualFold(de.Name(), "SKILL.MD") {
+			continue
+		}
+
+		filePath := filepath.Join(skillDir, de.Name())
+		data, err := os.ReadFile(filePath)
+		if err != nil {
+			continue // 跳过读取失败的文件
+		}
+		skill.ExtraFiles[de.Name()] = string(data)
+	}
+
+	return skill, nil
 }
 
 // parseSkillFrontmatter 解析 SKILL.md 中的 YAML frontmatter（--- 块）
@@ -186,6 +224,7 @@ func parseSkillFrontmatter(content string) (*SkillMeta, error) {
 // SkillReadParams 是调用 skill_read 工具时的参数
 type SkillReadParams struct {
 	SkillName string `json:"skill_name" desc:"要读取的 skill 名称，从 available_skills 列表中选择"`
+	FileName  string `json:"file_name,omitempty" desc:"可选，skill 目录下的附属文件名（如 reference.md）。不填则返回 SKILL.md 主文件及其附属文件列表"`
 }
 
 // SkillReadTool 工具：读取指定 skill 的完整 SKILL.md 内容
@@ -199,7 +238,7 @@ func NewSkillReadTool(manager *SkillManager) *SkillReadTool {
 	return &SkillReadTool{
 		BaseTool: MakeBaseTool(
 			"skill_read",
-			"读取指定 skill 的详细指令内容（SKILL.md）。当你需要使用某个 skill 时，先调用此工具获取其完整指令，再按照指令执行任务。参数 skill_name 从 <available_skills> 列表中选择。",
+			"读取指定 skill 的详细指令内容。当你需要使用某个 skill 时，先调用此工具获取其完整指令，再按照指令执行任务。参数 skill_name 从 <available_skills> 列表中选择。如需读取 skill 的附属文件（如 reference.md），传入 file_name 参数。",
 			SkillReadParams{},
 		),
 		manager: manager,
@@ -236,5 +275,36 @@ func (t *SkillReadTool) Execute(ctx context.Context, params any, callbacks CallB
 			p.SkillName, strings.Join(names, ", "))
 	}
 
-	return skill.Content, nil
+	// 请求特定附属文件
+	if p.FileName != "" {
+		content, exists := skill.ExtraFiles[p.FileName]
+		if !exists {
+			available := make([]string, 0, len(skill.ExtraFiles))
+			for name := range skill.ExtraFiles {
+				available = append(available, name)
+			}
+			if len(available) == 0 {
+				return "", fmt.Errorf("skill '%s' 没有附属文件", p.SkillName)
+			}
+			return "", fmt.Errorf("skill '%s' 中不存在文件 '%s'，可用文件: [%s]",
+				p.SkillName, p.FileName, strings.Join(available, ", "))
+		}
+		return content, nil
+	}
+
+	// 返回 SKILL.md 内容，如果有附属文件则附带文件列表
+	result := skill.Content
+	if len(skill.ExtraFiles) > 0 {
+		var sb strings.Builder
+		sb.WriteString(result)
+		sb.WriteString("\n\n---\n\n")
+		sb.WriteString("## [可用附属文件]\n\n")
+		sb.WriteString("以下文件可通过 skill_read 的 file_name 参数按需读取：\n")
+		for name := range skill.ExtraFiles {
+			sb.WriteString(fmt.Sprintf("- %s\n", name))
+		}
+		result = sb.String()
+	}
+
+	return result, nil
 }
