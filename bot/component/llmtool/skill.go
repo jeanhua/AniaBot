@@ -22,7 +22,9 @@ type Skill struct {
 	Meta       SkillMeta
 	Content    string            // SKILL.md 的完整内容（含 frontmatter）
 	Path       string            // SKILL.md 文件路径
-	ExtraFiles map[string]string // 附属文件：文件名 -> 内容（如 reference.md、script.sh 等）
+	DirPath    string            // skill 所在目录路径
+	ExtraFiles map[string]string // 可读取的附属文档：文件名 -> 内容（如 reference.md）
+	Scripts    map[string]string // 可执行的脚本：文件名 -> 绝对路径（如 script.sh）
 }
 
 // SkillManager 管理所有可用的 Skill
@@ -156,7 +158,9 @@ func loadSkillFromFile(path string) (*Skill, error) {
 		Meta:       *meta,
 		Content:    content,
 		Path:       path,
+		DirPath:    filepath.Dir(path),
 		ExtraFiles: make(map[string]string),
+		Scripts:    make(map[string]string),
 	}, nil
 }
 
@@ -181,15 +185,30 @@ func loadSkillFromDir(skillPath, skillDir string) (*Skill, error) {
 			continue
 		}
 
-		filePath := filepath.Join(skillDir, de.Name())
-		data, err := os.ReadFile(filePath)
-		if err != nil {
-			continue // 跳过读取失败的文件
+		absPath, _ := filepath.Abs(filepath.Join(skillDir, de.Name()))
+		if isScriptFile(de.Name()) {
+			skill.Scripts[de.Name()] = absPath
+		} else {
+			data, err := os.ReadFile(absPath)
+			if err != nil {
+				continue
+			}
+			skill.ExtraFiles[de.Name()] = string(data)
 		}
-		skill.ExtraFiles[de.Name()] = string(data)
 	}
 
 	return skill, nil
+}
+
+// isScriptFile 根据扩展名判断是否为可执行脚本
+func isScriptFile(name string) bool {
+	ext := strings.ToLower(filepath.Ext(name))
+	switch ext {
+	case ".sh", ".bash", ".py", ".rb", ".pl", ".js", ".ts", ".lua", ".go":
+		return true
+	default:
+		return false
+	}
 }
 
 // parseSkillFrontmatter 解析 SKILL.md 中的 YAML frontmatter（--- 块）
@@ -238,7 +257,7 @@ func NewSkillReadTool(manager *SkillManager) *SkillReadTool {
 	return &SkillReadTool{
 		BaseTool: MakeBaseTool(
 			"skill_read",
-			"读取指定 skill 的详细指令内容。当你需要使用某个 skill 时，先调用此工具获取其完整指令，再按照指令执行任务。参数 skill_name 从 <available_skills> 列表中选择。如需读取 skill 的附属文件（如 reference.md），传入 file_name 参数。",
+			"读取指定 skill 的详细指令内容。当你需要使用某个 skill 时，先调用此工具获取其完整指令，再按照指令执行任务。参数 skill_name 从 <available_skills> 列表中选择。如需读取附属文档（如 reference.md），传入 file_name 参数。skill 中的脚本文件（.sh/.py等）可直接通过 bash 工具执行，无需先读取。",
 			SkillReadParams{},
 		),
 		manager: manager,
@@ -292,16 +311,25 @@ func (t *SkillReadTool) Execute(ctx context.Context, params any, callbacks CallB
 		return content, nil
 	}
 
-	// 返回 SKILL.md 内容，如果有附属文件则附带文件列表
+	// 返回 SKILL.md 内容，附带附属文件/脚本列表
 	result := skill.Content
-	if len(skill.ExtraFiles) > 0 {
+	if len(skill.ExtraFiles) > 0 || len(skill.Scripts) > 0 {
 		var sb strings.Builder
 		sb.WriteString(result)
 		sb.WriteString("\n\n---\n\n")
-		sb.WriteString("## [可用附属文件]\n\n")
-		sb.WriteString("以下文件可通过 skill_read 的 file_name 参数按需读取：\n")
-		for name := range skill.ExtraFiles {
-			sb.WriteString(fmt.Sprintf("- %s\n", name))
+		if len(skill.ExtraFiles) > 0 {
+			sb.WriteString("## [可读取的附属文件]\n\n")
+			sb.WriteString("通过 skill_read 的 file_name 参数按需读取：\n")
+			for name := range skill.ExtraFiles {
+				sb.WriteString(fmt.Sprintf("- %s\n", name))
+			}
+		}
+		if len(skill.Scripts) > 0 {
+			sb.WriteString("\n## [可执行的脚本]\n\n")
+			sb.WriteString("通过 bash 工具直接执行：\n")
+			for name, path := range skill.Scripts {
+				sb.WriteString(fmt.Sprintf("- %s → %s\n", name, path))
+			}
 		}
 		result = sb.String()
 	}
