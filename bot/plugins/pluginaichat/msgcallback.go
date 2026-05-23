@@ -1,7 +1,6 @@
 package pluginaichat
 
 import (
-	"encoding/base64"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -24,27 +23,18 @@ func MakeGroupCallback(bot bot.Bot, groupId, userId message.QID, logger *slog.Lo
 			}
 			return "发送成功", nil
 		},
-		SendImageURL: func(url string) (string, error) {
+		SendFileURL: func(url string) (string, error) {
 			builder := msgchain.Builder().Group()
 			builder.ImageUrl(url)
 			_, success := bot.SendGroupMsg(groupId, builder.Build())
 			if success {
-				logger.Info("发送图片", "group", groupId, "user", userId, "image", url)
+				logger.Info("发送URL文件", "group", groupId, "user", userId, "url", url)
 			}
 			return "发送成功", nil
 		},
-		SendImage: func(data []byte) (string, error) {
+		SendFile: func(fileName, bs64content string) (string, error) {
 			builder := msgchain.Builder().Group()
-			builder.ImageBase64(base64.StdEncoding.EncodeToString(data))
-			_, success := bot.SendGroupMsg(groupId, builder.Build())
-			if success {
-				logger.Info("发送图片", "group", groupId, "user", userId)
-			}
-			return "发送成功", nil
-		},
-		SendFile: func(fileName, content string) (string, error) {
-			builder := msgchain.Builder().Group()
-			builder.FileBase64(fileName, base64.StdEncoding.EncodeToString([]byte(content)))
+			builder.FileBase64(fileName, bs64content)
 			_, success := bot.SendGroupMsg(groupId, builder.Build())
 			if success {
 				logger.Info("发送文件", "group", groupId, "user", userId, "file", fileName)
@@ -83,27 +73,18 @@ func MakeFriendCallback(bot bot.Bot, userId message.QID, logger *slog.Logger) ll
 			}
 			return "发送成功", nil
 		},
-		SendImageURL: func(url string) (string, error) {
+		SendFileURL: func(url string) (string, error) {
 			builder := msgchain.Builder().Friend()
 			builder.ImageUrl(url)
 			_, success := bot.SendFriendMsg(userId, builder.Build())
 			if success {
-				logger.Info("发送图片", "user", userId, "image", url)
+				logger.Info("发送URL文件", "user", userId, "url", url)
 			}
 			return "发送成功", nil
 		},
-		SendImage: func(data []byte) (string, error) {
+		SendFile: func(fileName, bs64content string) (string, error) {
 			builder := msgchain.Builder().Friend()
-			builder.ImageBase64(base64.StdEncoding.EncodeToString(data))
-			_, success := bot.SendFriendMsg(userId, builder.Build())
-			if success {
-				logger.Info("发送图片", "user", userId)
-			}
-			return "发送成功", nil
-		},
-		SendFile: func(fileName, content string) (string, error) {
-			builder := msgchain.Builder().Friend()
-			builder.FileBase64(fileName, base64.StdEncoding.EncodeToString([]byte(content)))
+			builder.FileBase64(fileName, bs64content)
 			_, success := bot.SendFriendMsg(userId, builder.Build())
 			if success {
 				logger.Info("发送文件", "user", userId, "file", fileName)
