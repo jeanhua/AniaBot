@@ -46,7 +46,7 @@ func (t *MemeTool) Execute(ctx context.Context, params any, callbacks llmtool.Ca
 	}
 
 	id := rand.IntN(len(result.Data))
-	_, err = callbacks.SendImage(result.Data[id].ImageUrl)
+	_, err = callbacks.SendImageURL(result.Data[id].ImageUrl)
 	if err != nil {
 		return fmt.Sprintf("表情包发送失败: %v", err), err
 	}

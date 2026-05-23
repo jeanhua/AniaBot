@@ -24,12 +24,21 @@ func MakeGroupCallback(bot bot.Bot, groupId, userId message.QID, logger *slog.Lo
 			}
 			return "发送成功", nil
 		},
-		SendImage: func(url string) (string, error) {
+		SendImageURL: func(url string) (string, error) {
 			builder := msgchain.Builder().Group()
 			builder.ImageUrl(url)
 			_, success := bot.SendGroupMsg(groupId, builder.Build())
 			if success {
 				logger.Info("发送图片", "group", groupId, "user", userId, "image", url)
+			}
+			return "发送成功", nil
+		},
+		SendImage: func(data []byte) (string, error) {
+			builder := msgchain.Builder().Group()
+			builder.ImageBase64(base64.StdEncoding.EncodeToString(data))
+			_, success := bot.SendGroupMsg(groupId, builder.Build())
+			if success {
+				logger.Info("发送图片", "group", groupId, "user", userId)
 			}
 			return "发送成功", nil
 		},
@@ -74,12 +83,21 @@ func MakeFriendCallback(bot bot.Bot, userId message.QID, logger *slog.Logger) ll
 			}
 			return "发送成功", nil
 		},
-		SendImage: func(url string) (string, error) {
+		SendImageURL: func(url string) (string, error) {
 			builder := msgchain.Builder().Friend()
 			builder.ImageUrl(url)
 			_, success := bot.SendFriendMsg(userId, builder.Build())
 			if success {
 				logger.Info("发送图片", "user", userId, "image", url)
+			}
+			return "发送成功", nil
+		},
+		SendImage: func(data []byte) (string, error) {
+			builder := msgchain.Builder().Friend()
+			builder.ImageBase64(base64.StdEncoding.EncodeToString(data))
+			_, success := bot.SendFriendMsg(userId, builder.Build())
+			if success {
+				logger.Info("发送图片", "user", userId)
 			}
 			return "发送成功", nil
 		},
