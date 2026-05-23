@@ -44,7 +44,8 @@ func CreateToolsWithMCP(searchToken string, mcpConfigs []*llmtool.MCPConfig, bas
 
 // CreateToolsWithSkill 创建工具执行器，注册内置工具、MCP 工具和 Skill 工具
 // skillsDir 为空时跳过 skill 加载
-func CreateToolsWithSkill(searchToken string, mcpConfigs []*llmtool.MCPConfig, skillsDir string, bashConfig BashConfig) (*llmtool.ToolExecuter, *llmtool.SkillManager, error) {
+// skills 非空时只加载指定名称的 skill，为空时加载全部
+func CreateToolsWithSkill(searchToken string, mcpConfigs []*llmtool.MCPConfig, skillsDir string, bashConfig BashConfig, skills []string) (*llmtool.ToolExecuter, *llmtool.SkillManager, error) {
 	executer, err := CreateToolsWithMCP(searchToken, mcpConfigs, bashConfig)
 	if err != nil {
 		return nil, nil, err
@@ -52,7 +53,7 @@ func CreateToolsWithSkill(searchToken string, mcpConfigs []*llmtool.MCPConfig, s
 
 	skillManager := llmtool.NewSkillManager()
 	if skillsDir != "" {
-		if err := skillManager.LoadFromDir(skillsDir); err != nil {
+		if err := skillManager.LoadFromDirWithFilter(skillsDir, skills); err != nil {
 			log.Printf("加载 skill 目录失败 [%s]: %v", skillsDir, err)
 		} else {
 			for _, m := range skillManager.List() {

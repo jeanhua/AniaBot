@@ -411,6 +411,10 @@ func (p *AIChatPlugin) Start(ctx context.Context, cfg *viper.Viper) error {
 	if skillsDir == "" {
 		skillsDir = "./skills"
 	}
+	var skills []string
+	if cfg.IsSet("plugin.ai_chat_bot.skills") {
+		skills = cfg.GetStringSlice("plugin.ai_chat_bot.skills")
+	}
 	var bashConfig functool.BashConfig
 	if cfg.IsSet("plugin.ai_chat_bot.bash") {
 		if err := cfg.UnmarshalKey("plugin.ai_chat_bot.bash", &bashConfig); err != nil {
@@ -426,6 +430,7 @@ func (p *AIChatPlugin) Start(ctx context.Context, cfg *viper.Viper) error {
 		p.mcpConfigs,
 		skillsDir,
 		bashConfig,
+		skills,
 	)
 	if err != nil {
 		p.Logger.Error("创建工具执行器失败", "error", err.Error())

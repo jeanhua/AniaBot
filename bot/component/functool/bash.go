@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"log"
 	"os/exec"
-	"strings"
+	"regexp"
 	"time"
 
 	"github.com/jeanhua/AniaBot/bot/component/llmtool"
@@ -22,8 +22,8 @@ type BashConfig struct {
 	Enable    bool     `json:"enable" mapstructure:"enable"`
 	Shell     string   `json:"shell" mapstructure:"shell"`         // shell 路径，默认 /bin/bash
 	Env       []string `json:"env" mapstructure:"env"`             // 环境变量，格式 KEY=VALUE
-	Whitelist []string `json:"whitelist" mapstructure:"whitelist"` // 非空时只允许这些命令前缀
-	Blacklist []string `json:"blacklist" mapstructure:"blacklist"` // 这些命令前缀被禁止
+	Whitelist []string `json:"whitelist" mapstructure:"whitelist"` // 非空时只允许匹配这些正则的命令
+	Blacklist []string `json:"blacklist" mapstructure:"blacklist"` // 匹配这些正则的命令被禁止
 }
 
 type BashParams struct {
@@ -34,8 +34,8 @@ type BashTool struct {
 	llmtool.BaseTool[BashParams]
 	shell     string
 	env       []string
-	whitelist []string
-	blacklist []string
+	whitelist []*regexp.Regexp
+	blacklist []*regexp.Regexp
 }
 
 func NewBashTool(config BashConfig) (*BashTool, error) {
@@ -44,34 +44,53 @@ func NewBashTool(config BashConfig) (*BashTool, error) {
 		shell = "/bin/bash"
 	}
 
+	compile := func(patterns []string) ([]*regexp.Regexp, error) {
+		regs := make([]*regexp.Regexp, 0, len(patterns))
+		for _, p := range patterns {
+			r, err := regexp.Compile(p)
+			if err != nil {
+				return nil, fmt.Errorf("编译正则 %q 失败: %w", p, err)
+			}
+			regs = append(regs, r)
+		}
+		return regs, nil
+	}
+
+	whitelist, err := compile(config.Whitelist)
+	if err != nil {
+		return nil, err
+	}
+	blacklist, err := compile(config.Blacklist)
+	if err != nil {
+		return nil, err
+	}
+
 	return &BashTool{
 		BaseTool:  llmtool.MakeBaseTool("bash", "在宿主机上执行bash命令，超时2分钟，输出最大4096字符", BashParams{}),
 		shell:     shell,
 		env:       config.Env,
-		whitelist: config.Whitelist,
-		blacklist: config.Blacklist,
+		whitelist: whitelist,
+		blacklist: blacklist,
 	}, nil
 }
 
 func (t *BashTool) checkCommand(cmd string) error {
-	firstWord := strings.Fields(cmd)[0]
-
 	for _, blocked := range t.blacklist {
-		if firstWord == blocked {
-			return fmt.Errorf("bash: 命令 '%s' 被禁止", firstWord)
+		if blocked.MatchString(cmd) {
+			return fmt.Errorf("bash: 命令被规则 %q 禁止", blocked.String())
 		}
 	}
 
 	if len(t.whitelist) > 0 {
 		allowed := false
 		for _, w := range t.whitelist {
-			if firstWord == w {
+			if w.MatchString(cmd) {
 				allowed = true
 				break
 			}
 		}
 		if !allowed {
-			return fmt.Errorf("bash: 命令 '%s' 不在白名单中", firstWord)
+			return fmt.Errorf("bash: 命令不匹配任何白名单规则")
 		}
 	}
 

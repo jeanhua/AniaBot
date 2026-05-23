@@ -81,6 +81,57 @@ func (m *SkillManager) LoadFromDir(skillsDir string) error {
 	return nil
 }
 
+// LoadFromDirWithFilter 从指定目录加载 skill，只加载 names 中指定的 skill
+// names 为空时等同于 LoadFromDir（加载全部）
+func (m *SkillManager) LoadFromDirWithFilter(skillsDir string, names []string) error {
+	if len(names) == 0 {
+		return m.LoadFromDir(skillsDir)
+	}
+
+	filter := make(map[string]struct{}, len(names))
+	for _, n := range names {
+		filter[n] = struct{}{}
+	}
+
+	entries, err := os.ReadDir(skillsDir)
+	if err != nil {
+		return fmt.Errorf("读取 skills 目录失败: %w", err)
+	}
+
+	for _, entry := range entries {
+		if entry.IsDir() {
+			skillDir := filepath.Join(skillsDir, entry.Name())
+			skillPath := filepath.Join(skillDir, "SKILL.md")
+
+			if _, err := os.Stat(skillPath); os.IsNotExist(err) {
+				continue
+			}
+
+			skill, err := loadSkillFromDir(skillPath, skillDir)
+			if err != nil {
+				return fmt.Errorf("加载 skill 失败 [%s]: %w", skillPath, err)
+			}
+
+			if _, ok := filter[skill.Meta.Name]; ok {
+				m.skills[skill.Meta.Name] = skill
+			}
+		} else if strings.ToUpper(entry.Name()) == "SKILL.MD" {
+			skillPath := filepath.Join(skillsDir, entry.Name())
+
+			skill, err := loadSkillFromFile(skillPath)
+			if err != nil {
+				return fmt.Errorf("加载 skill 失败 [%s]: %w", skillPath, err)
+			}
+
+			if _, ok := filter[skill.Meta.Name]; ok {
+				m.skills[skill.Meta.Name] = skill
+			}
+		}
+	}
+
+	return nil
+}
+
 // Register 手动注册一个 Skill（直接传入路径）
 func (m *SkillManager) Register(skillPath string) error {
 	skill, err := loadSkillFromFile(skillPath)

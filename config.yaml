@@ -52,17 +52,18 @@ plugin:
       - 当你不理解用户的问题时，要先获取用户最近的历史消息，再根据历史消息回答用户的问题
 
     skills_dir: "./skills"
+    skills: []           # 指定加载的 skill 名称列表，为空则加载全部
 
     # bash 工具配置（直接在宿主机执行bash命令）
     bash:
       enable: false           # 是否启用bash工具
       shell: "/bin/bash"      # shell 路径
       env: []                 # 环境变量，格式 KEY=VALUE，如 ["HOME=/root", "LANG=zh_CN.UTF-8"]
-      whitelist: []           # 非空时只允许这些命令前缀，如 ["ls", "cat", "echo"]
-      blacklist:              # 这些命令前缀被禁止
-        - "mkfs"
-        - "shutdown"
-        - "reboot"
+      whitelist: []           # 非空时只允许匹配这些正则的命令，如 ["^ls", "^cat"]
+      blacklist:              # 匹配这些正则的命令被禁止
+        - "^mkfs"
+        - "^shutdown"
+        - "^reboot"
 
     # OCR 配置，可选，该llm负责将图片转换为文本供上文使用
     ocr:
