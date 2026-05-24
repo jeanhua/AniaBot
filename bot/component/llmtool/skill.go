@@ -247,7 +247,7 @@ func loadSkillFromDir(skillPath, skillDir string) (*Skill, error) {
 		absPath, _ := filepath.Abs(path)
 		if isScriptFile(info.Name()) {
 			skill.Scripts[relPath] = absPath
-		} else {
+		} else if isMarkdownFile(info.Name()) {
 			data, err := os.ReadFile(absPath)
 			if err != nil {
 				return nil
@@ -273,6 +273,12 @@ func isScriptFile(name string) bool {
 	default:
 		return false
 	}
+}
+
+// isMarkdownFile 根据扩展名判断是否为 Markdown 文件
+func isMarkdownFile(name string) bool {
+	ext := strings.ToLower(filepath.Ext(name))
+	return ext == ".md" || ext == ".markdown"
 }
 
 // parseSkillFrontmatter 解析 SKILL.md 中的 YAML frontmatter（--- 块）
