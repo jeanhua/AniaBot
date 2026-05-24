@@ -1,6 +1,7 @@
 import { defineConfig } from 'vitepress'
+import { withMermaid } from 'vitepress-plugin-mermaid'
 
-export default defineConfig({
+export default withMermaid(defineConfig({
   title: 'AniaBot',
   description: '一个插件驱动型 QQ 机器人框架',
   lang: 'zh-CN',
@@ -38,6 +39,7 @@ export default defineConfig({
             { text: '配置说明', link: '/guide/configuration' },
             { text: '内置插件', link: '/guide/builtin-plugins' },
             { text: '部署分支插件', link: '/guide/deploy-plugins' },
+            { text: '常见问题', link: '/guide/faq' },
           ],
         },
       ],
@@ -52,6 +54,7 @@ export default defineConfig({
             { text: '数据存储', link: '/plugin/storage' },
             { text: '定时任务', link: '/plugin/cron' },
             { text: '完整示例', link: '/plugin/examples' },
+            { text: '常见模式', link: '/plugin/patterns' },
           ],
         },
       ],
@@ -104,4 +107,4 @@ export default defineConfig({
     sidebarMenuLabel: '菜单',
     returnToTopLabel: '返回顶部',
   },
-})
+}))
