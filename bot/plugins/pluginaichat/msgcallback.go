@@ -24,12 +24,12 @@ func MakeGroupCallback(bot bot.Bot, groupId, userId message.QID, logger *slog.Lo
 			}
 			return "", fmt.Errorf("发送失败")
 		},
-		SendImage: func(url string) (string, error) {
+		SendImage: func(bs64content string) (string, error) {
 			builder := msgchain.Builder().Group()
-			builder.ImageUrl(url)
+			builder.ImageBase64(bs64content)
 			_, success := bot.SendGroupMsg(groupId, builder.Build())
 			if success {
-				logger.Info("发送URL文件", "group", groupId, "user", userId, "url", url)
+				logger.Info("发送图片", "group", groupId, "user", userId)
 				return "发送成功", nil
 			}
 			return "", fmt.Errorf("发送失败")
@@ -77,12 +77,12 @@ func MakeFriendCallback(bot bot.Bot, userId message.QID, logger *slog.Logger) ll
 			}
 			return "", fmt.Errorf("发送失败")
 		},
-		SendImage: func(url string) (string, error) {
+		SendImage: func(bs64content string) (string, error) {
 			builder := msgchain.Builder().Friend()
-			builder.ImageUrl(url)
+			builder.ImageBase64(bs64content)
 			_, success := bot.SendFriendMsg(userId, builder.Build())
 			if success {
-				logger.Info("发送URL文件", "user", userId, "url", url)
+				logger.Info("发送图片", "user", userId)
 				return "发送成功", nil
 			}
 			return "", fmt.Errorf("发送失败")
