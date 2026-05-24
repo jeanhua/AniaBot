@@ -24,7 +24,7 @@ func MakeGroupCallback(bot bot.Bot, groupId, userId message.QID, logger *slog.Lo
 			}
 			return "", fmt.Errorf("发送失败")
 		},
-		SendFileURL: func(url string) (string, error) {
+		SendImage: func(url string) (string, error) {
 			builder := msgchain.Builder().Group()
 			builder.ImageUrl(url)
 			_, success := bot.SendGroupMsg(groupId, builder.Build())
@@ -34,12 +34,12 @@ func MakeGroupCallback(bot bot.Bot, groupId, userId message.QID, logger *slog.Lo
 			}
 			return "", fmt.Errorf("发送失败")
 		},
-		SendFile: func(fileName, bs64content string) (string, error) {
+		SendFile: func(name, bs64content string) (string, error) {
 			builder := msgchain.Builder().Group()
-			builder.FileBase64(fileName, bs64content)
+			builder.FileBase64(name, bs64content)
 			_, success := bot.SendGroupMsg(groupId, builder.Build())
 			if success {
-				logger.Info("发送文件", "group", groupId, "user", userId, "file", fileName)
+				logger.Info("发送文件", "group", groupId, "user", userId, "file", name)
 				return "发送成功", nil
 			}
 			return "", fmt.Errorf("发送失败")
@@ -77,7 +77,7 @@ func MakeFriendCallback(bot bot.Bot, userId message.QID, logger *slog.Logger) ll
 			}
 			return "", fmt.Errorf("发送失败")
 		},
-		SendFileURL: func(url string) (string, error) {
+		SendImage: func(url string) (string, error) {
 			builder := msgchain.Builder().Friend()
 			builder.ImageUrl(url)
 			_, success := bot.SendFriendMsg(userId, builder.Build())
@@ -86,14 +86,13 @@ func MakeFriendCallback(bot bot.Bot, userId message.QID, logger *slog.Logger) ll
 				return "发送成功", nil
 			}
 			return "", fmt.Errorf("发送失败")
-
 		},
-		SendFile: func(fileName, bs64content string) (string, error) {
+		SendFile: func(name, bs64content string) (string, error) {
 			builder := msgchain.Builder().Friend()
-			builder.FileBase64(fileName, bs64content)
+			builder.FileBase64(name, bs64content)
 			_, success := bot.SendFriendMsg(userId, builder.Build())
 			if success {
-				logger.Info("发送文件", "user", userId, "file", fileName)
+				logger.Info("发送文件", "user", userId, "file", name)
 				return "发送成功", nil
 			}
 			return "", fmt.Errorf("发送失败")

@@ -14,7 +14,6 @@ func CreateDefaultTools(searchToken string, bashConfig BashConfig) (*llmtool.Too
 	executer.Register(NewWebExploreTool(searchToken))
 	executer.Register(NewMemeTool())
 	executer.Register(NewSendFileTool())
-	executer.Register(NewSendURLFileTool())
 	executer.Register(NewMsgHistoryTool())
 	if bashConfig.Enable {
 		bashTool, err := NewBashTool(bashConfig)

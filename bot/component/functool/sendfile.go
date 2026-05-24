@@ -48,29 +48,3 @@ func (t *SendFileTool) Execute(ctx context.Context, params any, callbacks llmtoo
 	}
 	return "发送成功", nil
 }
-
-// SendURLFileTool 从 URL 发送文件（直接传递 URL，由框架处理）
-type SendURLFileParams struct {
-	URL string `json:"url" desc:"文件的URL地址"`
-}
-
-type SendURLFileTool struct {
-	llmtool.BaseTool[SendURLFileParams]
-}
-
-func NewSendURLFileTool() *SendURLFileTool {
-	return &SendURLFileTool{
-		BaseTool: llmtool.MakeBaseTool("urlfile", "用于通过URL发送文件给用户", SendURLFileParams{}),
-	}
-}
-
-func (t *SendURLFileTool) Execute(ctx context.Context, params any, callbacks llmtool.CallBackFuncs) (string, error) {
-	p := params.(*SendURLFileParams)
-	log.Println("执行urlfile... 参数:", p)
-
-	_, err := callbacks.SendFileURL(p.URL)
-	if err != nil {
-		return "发送失败", errToolExecute
-	}
-	return "发送成功", nil
-}
