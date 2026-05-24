@@ -2,9 +2,12 @@ package functool
 
 import (
 	"context"
+	"encoding/base64"
 	"fmt"
 	"log"
 	"math/rand/v2"
+	"path"
+	"strings"
 
 	"github.com/go-resty/resty/v2"
 	"github.com/jeanhua/AniaBot/bot/component/llmtool"
@@ -46,7 +49,28 @@ func (t *MemeTool) Execute(ctx context.Context, params any, callbacks llmtool.Ca
 	}
 
 	id := rand.IntN(len(result.Data))
-	_, err = callbacks.SendImage(result.Data[id].ImageUrl)
+	imageUrl := result.Data[id].ImageUrl
+
+	// 下载图片
+	downloadClient := resty.New()
+	resp2, err := downloadClient.R().Get(imageUrl)
+	if err != nil {
+		return fmt.Sprintf("下载表情包失败: %v", err), err
+	}
+	if resp2.StatusCode() != 200 {
+		return fmt.Sprintf("下载表情包失败: HTTP %d", resp2.StatusCode()), fmt.Errorf("HTTP %d", resp2.StatusCode())
+	}
+
+	// 转为base64
+	base64Data := base64.StdEncoding.EncodeToString(resp2.Body())
+
+	// 从URL提取文件名，没有则用默认名
+	fileName := path.Base(imageUrl)
+	if fileName == "" || fileName == "." || strings.Contains(fileName, "?") {
+		fileName = "meme.jpg"
+	}
+
+	_, err = callbacks.SendFile(fileName, base64Data)
 	if err != nil {
 		return fmt.Sprintf("表情包发送失败: %v", err), err
 	}
