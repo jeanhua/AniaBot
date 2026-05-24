@@ -215,37 +215,50 @@ func loadSkillFromFile(path string) (*Skill, error) {
 	}, nil
 }
 
-// loadSkillFromDir 从子目录加载 SKILL.md 和所有附属文件
+// loadSkillFromDir 从子目录加载 SKILL.md 和所有附属文件（递归扫描子目录）
 func loadSkillFromDir(skillPath, skillDir string) (*Skill, error) {
 	skill, err := loadSkillFromFile(skillPath)
 	if err != nil {
 		return nil, err
 	}
 
-	// 扫描目录下的附属文件（跳过 SKILL.md 本身）
-	dirEntries, err := os.ReadDir(skillDir)
-	if err != nil {
-		return skill, nil // 目录读取失败仍返回主文件
-	}
-
-	for _, de := range dirEntries {
-		if de.IsDir() {
-			continue
-		}
-		if strings.EqualFold(de.Name(), "SKILL.MD") {
-			continue
+	// 递归扫描目录下的附属文件（跳过 SKILL.md 本身）
+	err = filepath.Walk(skillDir, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return nil // 跳过无法访问的路径
 		}
 
-		absPath, _ := filepath.Abs(filepath.Join(skillDir, de.Name()))
-		if isScriptFile(de.Name()) {
-			skill.Scripts[de.Name()] = absPath
+		// 跳过目录本身和 SKILL.md
+		if info.IsDir() {
+			return nil
+		}
+		if strings.EqualFold(info.Name(), "SKILL.MD") && filepath.Dir(path) == skillDir {
+			return nil
+		}
+
+		// 计算相对于 skillDir 的路径作为 key
+		relPath, err := filepath.Rel(skillDir, path)
+		if err != nil {
+			return nil
+		}
+		// 统一使用正斜杠
+		relPath = filepath.ToSlash(relPath)
+
+		absPath, _ := filepath.Abs(path)
+		if isScriptFile(info.Name()) {
+			skill.Scripts[relPath] = absPath
 		} else {
 			data, err := os.ReadFile(absPath)
 			if err != nil {
-				continue
+				return nil
 			}
-			skill.ExtraFiles[de.Name()] = string(data)
+			skill.ExtraFiles[relPath] = string(data)
 		}
+
+		return nil
+	})
+	if err != nil {
+		return skill, nil // 遍历失败仍返回已加载的主文件
 	}
 
 	return skill, nil
