@@ -20,8 +20,9 @@ func MakeGroupCallback(bot bot.Bot, groupId, userId message.QID, logger *slog.Lo
 			_, success := bot.SendGroupMsg(groupId, builder.Build())
 			if success {
 				logger.Info("发送文本", "group", groupId, "user", userId, "text", s)
+				return "发送成功", nil
 			}
-			return "发送成功", nil
+			return "", fmt.Errorf("发送失败")
 		},
 		SendFileURL: func(url string) (string, error) {
 			builder := msgchain.Builder().Group()
@@ -29,8 +30,9 @@ func MakeGroupCallback(bot bot.Bot, groupId, userId message.QID, logger *slog.Lo
 			_, success := bot.SendGroupMsg(groupId, builder.Build())
 			if success {
 				logger.Info("发送URL文件", "group", groupId, "user", userId, "url", url)
+				return "发送成功", nil
 			}
-			return "发送成功", nil
+			return "", fmt.Errorf("发送失败")
 		},
 		SendFile: func(fileName, bs64content string) (string, error) {
 			builder := msgchain.Builder().Group()
@@ -38,8 +40,9 @@ func MakeGroupCallback(bot bot.Bot, groupId, userId message.QID, logger *slog.Lo
 			_, success := bot.SendGroupMsg(groupId, builder.Build())
 			if success {
 				logger.Info("发送文件", "group", groupId, "user", userId, "file", fileName)
+				return "发送成功", nil
 			}
-			return "发送成功", nil
+			return "", fmt.Errorf("发送失败")
 		},
 		GetMsgHistory: func(count int, message_seq int) (string, error) {
 			msgs, ok := bot.GetGroupMsgHistory(groupId, count, message_seq)
@@ -70,8 +73,9 @@ func MakeFriendCallback(bot bot.Bot, userId message.QID, logger *slog.Logger) ll
 			_, success := bot.SendFriendMsg(userId, builder.Build())
 			if success {
 				logger.Info("发送文本", "user", userId, "text", s)
+				return "发送成功", nil
 			}
-			return "发送成功", nil
+			return "", fmt.Errorf("发送失败")
 		},
 		SendFileURL: func(url string) (string, error) {
 			builder := msgchain.Builder().Friend()
@@ -79,8 +83,10 @@ func MakeFriendCallback(bot bot.Bot, userId message.QID, logger *slog.Logger) ll
 			_, success := bot.SendFriendMsg(userId, builder.Build())
 			if success {
 				logger.Info("发送URL文件", "user", userId, "url", url)
+				return "发送成功", nil
 			}
-			return "发送成功", nil
+			return "", fmt.Errorf("发送失败")
+
 		},
 		SendFile: func(fileName, bs64content string) (string, error) {
 			builder := msgchain.Builder().Friend()
@@ -88,8 +94,10 @@ func MakeFriendCallback(bot bot.Bot, userId message.QID, logger *slog.Logger) ll
 			_, success := bot.SendFriendMsg(userId, builder.Build())
 			if success {
 				logger.Info("发送文件", "user", userId, "file", fileName)
+				return "发送成功", nil
 			}
-			return "发送成功", nil
+			return "", fmt.Errorf("发送失败")
+
 		},
 		GetMsgHistory: func(count int, message_seq int) (string, error) {
 			msgs, ok := bot.GetFriendMsgHistory(userId, count, message_seq)
