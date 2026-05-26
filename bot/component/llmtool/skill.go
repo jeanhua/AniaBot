@@ -23,8 +23,8 @@ type Skill struct {
 	Content    string            // SKILL.md 的完整内容（含 frontmatter）
 	Path       string            // SKILL.md 文件路径
 	DirPath    string            // skill 所在目录路径
-	ExtraFiles map[string]string // 可读取的附属文档：文件名 -> 内容（如 reference.md）
-	Scripts    map[string]string // 可执行的脚本：文件名 -> 绝对路径（如 script.sh）
+	References map[string]string // 引用文档：文件名 -> 内容（如 reference.md）
+	ExtraFiles map[string]string // 附带文件：文件名 -> 绝对路径（如 script.sh）
 }
 
 // SkillManager 管理所有可用的 Skill
@@ -210,8 +210,8 @@ func loadSkillFromFile(path string) (*Skill, error) {
 		Content:    content,
 		Path:       path,
 		DirPath:    filepath.Dir(path),
+		References: make(map[string]string),
 		ExtraFiles: make(map[string]string),
-		Scripts:    make(map[string]string),
 	}, nil
 }
 
@@ -245,14 +245,15 @@ func loadSkillFromDir(skillPath, skillDir string) (*Skill, error) {
 		relPath = filepath.ToSlash(relPath)
 
 		absPath, _ := filepath.Abs(path)
-		if isScriptFile(info.Name()) {
-			skill.Scripts[relPath] = absPath
-		} else if isMarkdownFile(info.Name()) {
+		if isMarkdownFile(info.Name()) {
 			data, err := os.ReadFile(absPath)
 			if err != nil {
+				log.Println("读取Skill附属md文件失败: ", absPath)
 				return nil
 			}
-			skill.ExtraFiles[relPath] = string(data)
+			skill.References[relPath] = string(data)
+		} else {
+			skill.ExtraFiles[relPath] = absPath
 		}
 
 		return nil
@@ -262,17 +263,6 @@ func loadSkillFromDir(skillPath, skillDir string) (*Skill, error) {
 	}
 
 	return skill, nil
-}
-
-// isScriptFile 根据扩展名判断是否为可执行脚本
-func isScriptFile(name string) bool {
-	ext := strings.ToLower(filepath.Ext(name))
-	switch ext {
-	case ".sh", ".bash", ".py", ".rb", ".pl", ".js", ".ts", ".lua", ".go":
-		return true
-	default:
-		return false
-	}
 }
 
 // isMarkdownFile 根据扩展名判断是否为 Markdown 文件
@@ -366,10 +356,10 @@ func (t *SkillReadTool) Execute(ctx context.Context, params any, callbacks CallB
 
 	// 请求特定附属文件
 	if p.FileName != "" {
-		content, exists := skill.ExtraFiles[p.FileName]
+		content, exists := skill.References[p.FileName]
 		if !exists {
-			available := make([]string, 0, len(skill.ExtraFiles))
-			for name := range skill.ExtraFiles {
+			available := make([]string, 0, len(skill.References))
+			for name := range skill.References {
 				available = append(available, name)
 			}
 			if len(available) == 0 {
@@ -383,21 +373,21 @@ func (t *SkillReadTool) Execute(ctx context.Context, params any, callbacks CallB
 
 	// 返回 SKILL.md 内容，附带附属文件/脚本列表
 	result := skill.Content
-	if len(skill.ExtraFiles) > 0 || len(skill.Scripts) > 0 {
+	if len(skill.References) > 0 || len(skill.ExtraFiles) > 0 {
 		var sb strings.Builder
 		sb.WriteString(result)
 		sb.WriteString("\n\n---\n\n")
-		if len(skill.ExtraFiles) > 0 {
-			sb.WriteString("## [可读取的附属文件]\n\n")
+		if len(skill.References) > 0 {
+			sb.WriteString("## [reference文档]\n\n")
 			sb.WriteString("通过 skill_read 的 file_name 参数按需读取：\n")
-			for name := range skill.ExtraFiles {
+			for name := range skill.References {
 				sb.WriteString(fmt.Sprintf("- %s\n", name))
 			}
 		}
-		if len(skill.Scripts) > 0 {
-			sb.WriteString("\n## [可执行的脚本]\n\n")
-			sb.WriteString("通过 bash 工具直接执行：\n")
-			for name, path := range skill.Scripts {
+		if len(skill.ExtraFiles) > 0 {
+			sb.WriteString("\n## [附带文件]\n\n")
+			sb.WriteString("无需读取，可直接通过 bash 工具直接执行：\n")
+			for name, path := range skill.ExtraFiles {
 				sb.WriteString(fmt.Sprintf("- %s → %s\n", name, path))
 			}
 		}
