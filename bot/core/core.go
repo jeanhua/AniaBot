@@ -365,6 +365,10 @@ func (ania *AniaBot) GetAIChatacter() (*[]message.AIChatacter, bool) {
 	return ania.adapter.GetAIChatacter()
 }
 
+func (ania *AniaBot) GetPrivateFileURL(userId message.QID, fileId string) (string, bool) {
+	return ania.adapter.GetPrivateFileURL(userId, fileId)
+}
+
 func (ania *AniaBot) GetGroupList() (*[]message.GroupInfo, bool) {
 	return ania.adapter.GetGroupList()
 }

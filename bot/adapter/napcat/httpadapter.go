@@ -314,6 +314,21 @@ func (n *napcatHttpAdapter) GetAIChatacter() (*[]message.AIChatacter, bool) {
 	return &resp.Data.Characters, true
 }
 
+func (n *napcatHttpAdapter) GetPrivateFileURL(userId message.QID, fileId string) (string, bool) {
+	data := map[string]any{
+		"user_id": userId,
+		"file_id": fileId,
+	}
+	type privateFileData struct {
+		URL string `json:"url"`
+	}
+	var resp message.Response[privateFileData]
+	if !n.postAndCheck(n.baseUrl+"/get_private_file_url", data, &resp) {
+		return "", false
+	}
+	return resp.Data.URL, true
+}
+
 func (n *napcatHttpAdapter) GetGroupList() (*[]message.GroupInfo, bool) {
 	resp := message.Response[[]message.GroupInfo]{}
 	if !n.postAndCheck(n.baseUrl+"/get_group_list", nil, &resp) {

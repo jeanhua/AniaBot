@@ -41,7 +41,8 @@ type ReplyMessage struct {
 }
 
 type FileMessage struct {
-	File string
+	File   string
+	FileId string
 	dataMessage
 }
 

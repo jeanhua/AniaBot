@@ -245,6 +245,21 @@ func (n *napcatWebSocketAdapter) GetAIChatacter() (*[]message.AIChatacter, bool)
 	return &res.Characters, true
 }
 
+func (n *napcatWebSocketAdapter) GetPrivateFileURL(userId message.QID, fileId string) (string, bool) {
+	params := map[string]any{
+		"user_id": userId,
+		"file_id": fileId,
+	}
+	type privateFileData struct {
+		URL string `json:"url"`
+	}
+	res, ok := request[privateFileData](n, "get_private_file_url", params, "pfu")
+	if !ok || res == nil {
+		return "", false
+	}
+	return res.URL, true
+}
+
 func (n *napcatWebSocketAdapter) GetGroupList() (*[]message.GroupInfo, bool) {
 	res, ok := request[[]message.GroupInfo](n, "get_group_list", struct{}{}, "group_list")
 	if !ok || res == nil {

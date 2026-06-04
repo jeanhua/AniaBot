@@ -173,7 +173,13 @@ func ParseFile(s OB11Segment, f *FileMessage) bool {
 		f.URL = url
 	}
 
+	fileId, ok := s.Data["file_id"].(string)
+	if ok {
+		f.FileId = fileId
+	}
+
 	f.File = file
+	f.FileId = fileId
 	f.URL = url
 	return true
 }

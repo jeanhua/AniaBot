@@ -89,4 +89,6 @@ type GetMsg interface {
 	GetFriendMsgHistory(userId message.QID, count int, message_seq int) (*[]message.Message, bool)
 	// GetAIChatacter 获取AI聊天角色
 	GetAIChatacter() (*[]message.AIChatacter, bool)
+	// GetPrivateFileURL 获取私聊文件URL
+	GetPrivateFileURL(userId message.QID, fileId string) (string, bool)
 }

@@ -157,7 +157,7 @@ func (raw Message) FriendlyText(showUrl bool, opts ...MsgOptFunc) string {
 		case SegmentFile:
 			var msg FileMessage
 			if ok := ParseFile(s, &msg); ok {
-				result.WriteString(fmt.Sprintf("[文件:%s url:%s]", msg.File, msg.URL))
+				result.WriteString(fmt.Sprintf("[文件:%s fileId:%s url:%s]", msg.File, msg.FileId, msg.URL))
 			} else {
 				result.WriteString("[文件消息]")
 			}

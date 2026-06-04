@@ -15,6 +15,7 @@ func CreateDefaultTools(searchToken string, bashConfig BashConfig) (*llmtool.Too
 	executer.Register(NewMemeTool())
 	executer.Register(NewSendFileTool())
 	executer.Register(NewMsgHistoryTool())
+	executer.Register(NewPrivateFileTool())
 	if bashConfig.Enable {
 		bashTool, err := NewBashTool(bashConfig)
 		if err != nil {

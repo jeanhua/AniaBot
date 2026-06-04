@@ -60,6 +60,13 @@ func MakeGroupCallback(bot bot.Bot, groupId, userId message.QID, logger *slog.Lo
 			}
 			return sb.String(), nil
 		},
+		GetPrivateFileURL: func(fileId string) (string, error) {
+			url, ok := bot.GetPrivateFileURL(userId, fileId)
+			if !ok {
+				return "", fmt.Errorf("获取私聊文件URL失败")
+			}
+			return url, nil
+		},
 	}
 
 	return msgFuncs
@@ -113,6 +120,13 @@ func MakeFriendCallback(bot bot.Bot, userId message.QID, logger *slog.Logger) ll
 				sb.WriteString("\n")
 			}
 			return sb.String(), nil
+		},
+		GetPrivateFileURL: func(fileId string) (string, error) {
+			url, ok := bot.GetPrivateFileURL(userId, fileId)
+			if !ok {
+				return "", fmt.Errorf("获取私聊文件URL失败")
+			}
+			return url, nil
 		},
 	}
 	return msgFuncs
