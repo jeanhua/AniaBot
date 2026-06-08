@@ -1,9 +1,6 @@
 package aichat
 
 import (
-	"fmt"
-	"time"
-
 	"github.com/jeanhua/AniaBot/bot/component/llmtool"
 )
 
@@ -35,16 +32,7 @@ func (b *MessageBuilder) buildSystemPrompt() string {
 	if skillBlock == "" {
 		return b.prompt
 	}
-	return b.prompt + "\n\n" + buildMetaInfo() + skillBlock
-}
-
-func buildMetaInfo() string {
-	currentTime := time.Now().Format("2006-01-02 15:04:05")
-	return fmt.Sprintf(`
-		<meta_info>
-			<current_time>%s</current_time>
-		</meta_info>
-		`, currentTime)
+	return b.prompt + "\n\n" + skillBlock
 }
 
 func (b *MessageBuilder) BuildChatMessages(userInput string, history []Message) []Message {
