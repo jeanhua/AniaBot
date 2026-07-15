@@ -7,13 +7,15 @@ import (
 )
 
 // CreateDefaultTools 创建默认的工具执行器并注册所有内置工具
-func CreateDefaultTools(searchToken string, bashConfig BashConfig) (*llmtool.ToolExecuter, error) {
+func CreateDefaultTools(searchToken string, bashConfig BashConfig, fileConfig FileConfig) (*llmtool.ToolExecuter, error) {
 	executer := llmtool.NewToolExecuter()
 	executer.Register(NewTimeTool())
 	executer.Register(NewWebSearchTool(searchToken))
 	executer.Register(NewWebExploreTool(searchToken))
 	executer.Register(NewMemeTool())
-	executer.Register(NewSendFileTool())
+	if fileConfig.Enable {
+		executer.Register(NewSendFileTool())
+	}
 	executer.Register(NewMsgHistoryTool())
 	executer.Register(NewPrivateFileTool())
 	if bashConfig.Enable {
@@ -27,8 +29,8 @@ func CreateDefaultTools(searchToken string, bashConfig BashConfig) (*llmtool.Too
 }
 
 // CreateToolsWithMCP 创建工具执行器，注册内置工具和 MCP 工具（工具发现模式）
-func CreateToolsWithMCP(searchToken string, mcpConfigs []*llmtool.MCPConfig, bashConfig BashConfig) (*llmtool.ToolExecuter, error) {
-	executer, err := CreateDefaultTools(searchToken, bashConfig)
+func CreateToolsWithMCP(searchToken string, mcpConfigs []*llmtool.MCPConfig, bashConfig BashConfig, fileConfig FileConfig) (*llmtool.ToolExecuter, error) {
+	executer, err := CreateDefaultTools(searchToken, bashConfig, fileConfig)
 	if err != nil {
 		return nil, err
 	}
@@ -46,8 +48,8 @@ func CreateToolsWithMCP(searchToken string, mcpConfigs []*llmtool.MCPConfig, bas
 // CreateToolsWithSkill 创建工具执行器，注册内置工具、MCP 工具和 Skill 工具
 // skillsDir 为空时跳过 skill 加载
 // skills 非空时只加载指定名称的 skill，为空时加载全部
-func CreateToolsWithSkill(searchToken string, mcpConfigs []*llmtool.MCPConfig, skillsDir string, bashConfig BashConfig, skills []string) (*llmtool.ToolExecuter, *llmtool.SkillManager, error) {
-	executer, err := CreateToolsWithMCP(searchToken, mcpConfigs, bashConfig)
+func CreateToolsWithSkill(searchToken string, mcpConfigs []*llmtool.MCPConfig, skillsDir string, bashConfig BashConfig, fileConfig FileConfig, skills []string) (*llmtool.ToolExecuter, *llmtool.SkillManager, error) {
+	executer, err := CreateToolsWithMCP(searchToken, mcpConfigs, bashConfig, fileConfig)
 	if err != nil {
 		return nil, nil, err
 	}

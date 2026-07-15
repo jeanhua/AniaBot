@@ -430,12 +430,22 @@ func (p *AIChatPlugin) Start(ctx context.Context, cfg *viper.Viper) error {
 	if bashConfig.Enable {
 		p.Logger.Info("已启用bash工具", "shell", bashConfig.Shell, "whitelist", bashConfig.Whitelist, "blacklist", bashConfig.Blacklist)
 	}
+	var fileConfig functool.FileConfig
+	if cfg.IsSet("plugin.ai_chat_bot.file") {
+		if err := cfg.UnmarshalKey("plugin.ai_chat_bot.file", &fileConfig); err != nil {
+			p.Logger.Warn("解析 file 工具配置失败", "error", err.Error())
+		}
+	}
+	if fileConfig.Enable {
+		p.Logger.Info("已启用file工具（可读取宿主机本地文件并发送，请注意安全风险）")
+	}
 	var err error
 	p.toolExecutor, p.skillManager, err = functool.CreateToolsWithSkill(
 		p.llmParameter.searchToken,
 		p.mcpConfigs,
 		skillsDir,
 		bashConfig,
+		fileConfig,
 		skills,
 	)
 	if err != nil {
