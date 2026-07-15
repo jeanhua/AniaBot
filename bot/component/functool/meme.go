@@ -42,8 +42,13 @@ func (t *MemeTool) Execute(ctx context.Context, params any, callbacks llmtool.Ca
 	result := responseTy{}
 	client := resty.New()
 	_, err := client.R().SetResult(&result).Get(modifier.String())
-	if err != nil || len(result.Data) == 0 {
+	if err != nil {
 		return "", err
+	}
+	if len(result.Data) == 0 {
+		// 接口返回空数据时必须提前返回，否则 rand.IntN(0) 会 panic；
+		// 同时给出明确错误，避免 orchestrator 把空字符串当作成功结果反馈给 LLM
+		return "", fmt.Errorf("未找到相关表情包")
 	}
 
 	id := rand.IntN(len(result.Data))
