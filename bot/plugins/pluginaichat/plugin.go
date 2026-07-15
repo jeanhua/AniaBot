@@ -63,10 +63,10 @@ type AIChatPlugin struct {
 	ocrEnable    bool
 	ocrModel     *aichat.ChatBot
 	ocrParameter struct {
-		maxToken    int
-		temperature float64
-		top_p       float64
-		top_k       int
+		maxToken    *int
+		temperature *float64
+		top_p       *float64
+		top_k       *int
 		prompt      string
 	}
 
@@ -164,7 +164,7 @@ func (p *AIChatPlugin) OnGroupMsg(ctx context.Context, bot bot.Bot, cmd command.
 	p.setActiveContext(msg.GroupId, cancel)
 
 	builder := msgchain.Builder().Group()
-	extraText := p.extraMsg(ctx, bot, msg, p.ocrModel)
+	extraText := p.extraMsg(ctx, bot, msg, p.ocrModel, p.buildOCRChatOptions())
 	if strings.Contains(extraText, "#新对话") {
 		err := chat.ClearHistory(ctx)
 		if err != nil {
@@ -249,7 +249,7 @@ func (p *AIChatPlugin) OnFriendMsg(ctx context.Context, bot bot.Bot, cmd command
 	p.setActiveContext(msg.Sender.UserId, cancel)
 
 	builder := msgchain.Builder().Friend()
-	extraText := p.extraMsg(ctx, bot, msg, p.ocrModel)
+	extraText := p.extraMsg(ctx, bot, msg, p.ocrModel, p.buildOCRChatOptions())
 	if strings.Contains(extraText, "#新对话") {
 		err := chat.ClearHistory(ctx)
 		if err != nil {
@@ -310,6 +310,23 @@ func (p *AIChatPlugin) buildChatOptions() aichat.ChatOptions {
 	}
 	if p.llmParameter.top_k != nil {
 		opts.TopK = p.llmParameter.top_k
+	}
+	return opts
+}
+
+func (p *AIChatPlugin) buildOCRChatOptions() aichat.ChatOptions {
+	opts := aichat.ChatOptions{}
+	if p.ocrParameter.maxToken != nil {
+		opts.MaxToken = p.ocrParameter.maxToken
+	}
+	if p.ocrParameter.temperature != nil {
+		opts.Temperature = p.ocrParameter.temperature
+	}
+	if p.ocrParameter.top_p != nil {
+		opts.TopP = p.ocrParameter.top_p
+	}
+	if p.ocrParameter.top_k != nil {
+		opts.TopK = p.ocrParameter.top_k
 	}
 	return opts
 }
@@ -394,10 +411,22 @@ func (p *AIChatPlugin) Start(ctx context.Context, cfg *viper.Viper) error {
 		ocrModel := cfg.GetString("plugin.ai_chat_bot.ocr.model")
 		ocrPrompt := cfg.GetString("plugin.ai_chat_bot.ocr.prompt")
 
-		p.ocrParameter.maxToken = cfg.GetInt("plugin.ai_chat_bot.ocr.max_token")
-		p.ocrParameter.temperature = cfg.GetFloat64("plugin.ai_chat_bot.ocr.temperature")
-		p.ocrParameter.top_p = cfg.GetFloat64("plugin.ai_chat_bot.ocr.top_p")
-		p.ocrParameter.top_k = cfg.GetInt("plugin.ai_chat_bot.ocr.top_k")
+		if cfg.IsSet("plugin.ai_chat_bot.ocr.max_token") {
+			v := cfg.GetInt("plugin.ai_chat_bot.ocr.max_token")
+			p.ocrParameter.maxToken = &v
+		}
+		if cfg.IsSet("plugin.ai_chat_bot.ocr.temperature") {
+			v := cfg.GetFloat64("plugin.ai_chat_bot.ocr.temperature")
+			p.ocrParameter.temperature = &v
+		}
+		if cfg.IsSet("plugin.ai_chat_bot.ocr.top_p") {
+			v := cfg.GetFloat64("plugin.ai_chat_bot.ocr.top_p")
+			p.ocrParameter.top_p = &v
+		}
+		if cfg.IsSet("plugin.ai_chat_bot.ocr.top_k") {
+			v := cfg.GetInt("plugin.ai_chat_bot.ocr.top_k")
+			p.ocrParameter.top_k = &v
+		}
 
 		ocrllm, err := aichat.NewChatBot(ocrBaseUrl, ocrAPIKey, ocrModel, ocrPrompt, 0, nil)
 		if err != nil {
