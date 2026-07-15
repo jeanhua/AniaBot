@@ -30,6 +30,7 @@ plugin:
     base_url: "https://api.deepseek.com" # 示例deepseek，支持所有兼容OpenAI规范的厂商
     api_key: "" # 这里填写apikey
     model: "deepseek-chat" # 选择的模型
+    multimodal: false # 主对话模型是否支持图片输入；开启后由模型按需调用工具直接加载图片
     rate_limit: 2 # 速率限制，每秒最多调用次数
 
     # 工具调用
@@ -66,7 +67,7 @@ plugin:
         - "^shutdown"
         - "^reboot"
 
-    # OCR 配置，可选，该llm负责将图片转换为文本供上文使用
+    # 备用图片识别模型。主模型不支持多模态时，按需将图片转换为文字；不配置则明确告知模型无法加载图片
     ocr:
       enable: false
       base_url: "https://api.siliconflow.cn/v1" # 示例deepseek，支持所有兼容OpenAI规范的厂商

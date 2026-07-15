@@ -43,6 +43,15 @@ func (b *MessageBuilder) BuildChatMessages(userInput string, history []Message) 
 	return messages
 }
 
+func (b *MessageBuilder) BuildImageContextMessage(imageURLs []string) Message {
+	parts := make([]ContentPart, 0, len(imageURLs)+1)
+	parts = append(parts, TextPart("以下是用户要求加载的图片，请结合图片内容继续回答。"))
+	for _, imageURL := range imageURLs {
+		parts = append(parts, ImageURLPart(imageURL))
+	}
+	return Message{Role: RoleUser, Parts: parts}
+}
+
 func (b *MessageBuilder) BuildVisionMessages(userInput, imageURL string) []Message {
 	parts := []ContentPart{
 		TextPart(userInput),

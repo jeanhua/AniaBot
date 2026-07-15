@@ -15,30 +15,92 @@ import (
 	"github.com/spf13/viper"
 )
 
-func (p *AIChatPlugin) extraMsg(ctx context.Context, bot bot.Bot, msg message.Message, ocrLLM *aichat.ChatBot, opts ...aichat.ChatOptions) string {
-	var chatOpts aichat.ChatOptions
-	if len(opts) > 0 {
-		chatOpts = opts[0]
-	}
-
-	var str strings.Builder
-	str.WriteString(msg.FriendlyText(true,
+func (p *AIChatPlugin) extraMsg(bot bot.Bot, msg message.Message) string {
+	return msg.FriendlyText(false,
 		message.WithGetMsgFunc(bot.GetMsgDetail),
 		message.WithGetForwardMsgFunc(bot.GetForwardMsg),
-		message.WithGetImageOCRFunc(func(url string) string {
-			if ocrLLM == nil {
-				return "OCR服务未开启，无法解析图片"
+	)
+}
+
+func collectImageURLs(bot bot.Bot, msg message.Message) []string {
+	urls := make([]string, 0)
+	seenURLs := make(map[string]struct{})
+	seenMessages := make(map[message.QID]struct{})
+
+	var collect func(message.Message)
+	collect = func(current message.Message) {
+		if current.MessageId != 0 {
+			if _, ok := seenMessages[current.MessageId]; ok {
+				return
 			}
-			resp, err := ocrLLM.GetSingleImageDesc(ctx, "描述图片内容", url, chatOpts)
+			seenMessages[current.MessageId] = struct{}{}
+		}
+		for _, segment := range current.Message {
+			switch segment.Type {
+			case message.SegmentImage:
+				var image message.ImageMessage
+				if message.ParseImage(segment, &image) && image.Url != "" {
+					if _, ok := seenURLs[image.Url]; !ok {
+						seenURLs[image.Url] = struct{}{}
+						urls = append(urls, image.Url)
+					}
+				}
+			case message.SegmentReply:
+				var reply message.ReplyMessage
+				if message.ParseReply(segment, &reply) {
+					if detail, ok := bot.GetMsgDetail(reply.Id); ok && detail != nil {
+						collect(*detail)
+					}
+				}
+			}
+		}
+	}
+
+	collect(msg)
+	return urls
+}
+
+func (p *AIChatPlugin) configureImageCallbacks(ctx context.Context, bot bot.Bot, msg message.Message, callbacks *llmtool.CallBackFuncs) {
+	imageURLs := collectImageURLs(bot, msg)
+	var loadedImages []string
+	loaded := false
+
+	callbacks.LoadImages = func() (string, error) {
+		if loaded {
+			return "当前消息中的图片已经加载，无需重复调用", nil
+		}
+		loaded = true
+		if len(imageURLs) == 0 {
+			return "当前消息及其引用消息中没有可加载的图片", nil
+		}
+
+		if p.multimodal {
+			loadedImages = append(loadedImages, imageURLs...)
+			return fmt.Sprintf("已加载 %d 张图片，图片将在下一轮上下文中提供，请直接查看图片后回答", len(imageURLs)), nil
+		}
+
+		if p.ocrModel == nil {
+			return "当前主模型不支持加载图片，且未配置备用图片识别模型，无法查看图片内容", nil
+		}
+
+		var result strings.Builder
+		result.WriteString("主模型不支持多模态，以下是备用图片识别模型返回的图片描述：")
+		for i, imageURL := range imageURLs {
+			description, err := p.ocrModel.GetSingleImageDesc(ctx, "描述图片内容", imageURL, p.buildOCRChatOptions())
 			if err != nil {
-				p.Logger.Error("OCR请求失败:", "error", err.Error())
-				return "OCR请求失败，无法解析的图片内容"
-			} else {
-				return resp
+				p.Logger.Error("备用图片识别请求失败", "index", i+1, "error", err.Error())
+				result.WriteString(fmt.Sprintf("\n<图片 %d>识别失败：%s</图片 %d>", i+1, err.Error(), i+1))
+				continue
 			}
-		}),
-	))
-	return str.String()
+			result.WriteString(fmt.Sprintf("\n<图片 %d>\n%s\n</图片 %d>", i+1, description, i+1))
+		}
+		return result.String(), nil
+	}
+	callbacks.TakeLoadedImages = func() []string {
+		images := loadedImages
+		loadedImages = nil
+		return images
+	}
 }
 
 type mcpFileConfig struct {

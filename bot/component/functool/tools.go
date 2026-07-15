@@ -18,6 +18,7 @@ func CreateDefaultTools(searchToken string, bashConfig BashConfig, fileConfig Fi
 	}
 	executer.Register(NewMsgHistoryTool())
 	executer.Register(NewPrivateFileTool())
+	executer.Register(NewLoadImagesTool())
 	if bashConfig.Enable {
 		bashTool, err := NewBashTool(bashConfig)
 		if err != nil {

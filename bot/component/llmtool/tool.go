@@ -15,4 +15,6 @@ type CallBackFuncs struct {
 	SendFile          func(name, bs64content string) (string, error)
 	GetMsgHistory     func(count int, message_seq int) (string, error)
 	GetPrivateFileURL func(fileId string) (string, error)
+	LoadImages        func() (string, error)
+	TakeLoadedImages  func() []string
 }

@@ -60,6 +60,7 @@ type AIChatPlugin struct {
 		friends map[message.QID]string
 	}
 
+	multimodal   bool
 	ocrEnable    bool
 	ocrModel     *aichat.ChatBot
 	ocrParameter struct {
@@ -164,7 +165,7 @@ func (p *AIChatPlugin) OnGroupMsg(ctx context.Context, bot bot.Bot, cmd command.
 	p.setActiveContext(msg.GroupId, cancel)
 
 	builder := msgchain.Builder().Group()
-	extraText := p.extraMsg(ctx, bot, msg, p.ocrModel, p.buildOCRChatOptions())
+	extraText := p.extraMsg(bot, msg)
 	if strings.Contains(extraText, "#新对话") {
 		err := chat.ClearHistory(ctx)
 		if err != nil {
@@ -180,6 +181,7 @@ func (p *AIChatPlugin) OnGroupMsg(ctx context.Context, bot bot.Bot, cmd command.
 	}
 
 	msgFuncs := MakeGroupCallback(bot, msg.GroupId, msg.Sender.UserId, p.Logger)
+	p.configureImageCallbacks(chatCtx, bot, msg, &msgFuncs)
 
 	chatOpts := p.buildChatOptions()
 	resp, usage, err := chat.Chat(chatCtx, extraText, msgFuncs, chatOpts)
@@ -249,7 +251,7 @@ func (p *AIChatPlugin) OnFriendMsg(ctx context.Context, bot bot.Bot, cmd command
 	p.setActiveContext(msg.Sender.UserId, cancel)
 
 	builder := msgchain.Builder().Friend()
-	extraText := p.extraMsg(ctx, bot, msg, p.ocrModel, p.buildOCRChatOptions())
+	extraText := p.extraMsg(bot, msg)
 	if strings.Contains(extraText, "#新对话") {
 		err := chat.ClearHistory(ctx)
 		if err != nil {
@@ -265,6 +267,7 @@ func (p *AIChatPlugin) OnFriendMsg(ctx context.Context, bot bot.Bot, cmd command
 	}
 
 	msgFuncs := MakeFriendCallback(bot, msg.Sender.UserId, p.Logger)
+	p.configureImageCallbacks(chatCtx, bot, msg, &msgFuncs)
 
 	chatOpts := p.buildChatOptions()
 	resp, usage, err := chat.Chat(chatCtx, extraText, msgFuncs, chatOpts)
@@ -403,9 +406,14 @@ func (p *AIChatPlugin) Start(ctx context.Context, cfg *viper.Viper) error {
 		p.Logger.Warn("Jina AI Token 未设置，将无法使用网页浏览和搜索功能")
 	}
 
+	p.multimodal = cfg.GetBool("plugin.ai_chat_bot.multimodal")
+	if p.multimodal {
+		p.Logger.Info("主对话模型已配置为支持多模态，将按需直接加载图片")
+	}
+
 	p.ocrEnable = cfg.GetBool("plugin.ai_chat_bot.ocr.enable")
 	if p.ocrEnable {
-		p.Logger.Info("已启用OCR LLM")
+		p.Logger.Info("已启用备用图片识别 LLM")
 		ocrBaseUrl := cfg.GetString("plugin.ai_chat_bot.ocr.base_url")
 		ocrAPIKey := cfg.GetString("plugin.ai_chat_bot.ocr.api_key")
 		ocrModel := cfg.GetString("plugin.ai_chat_bot.ocr.model")
@@ -430,7 +438,7 @@ func (p *AIChatPlugin) Start(ctx context.Context, cfg *viper.Viper) error {
 
 		ocrllm, err := aichat.NewChatBot(ocrBaseUrl, ocrAPIKey, ocrModel, ocrPrompt, 0, nil)
 		if err != nil {
-			p.Logger.Error("无法初始化OCR LLM", "error", err.Error())
+			p.Logger.Error("无法初始化备用图片识别 LLM", "error", err.Error())
 			p.ocrEnable = false
 		} else {
 			p.ocrModel = ocrllm

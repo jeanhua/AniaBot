@@ -95,6 +95,11 @@ func (o *ToolOrchestrator) ExecuteWithTools(
 			return "", messages, totalUsage, err
 		}
 		messages = append(messages, toolResults...)
+		if callbacks.TakeLoadedImages != nil {
+			if imageURLs := callbacks.TakeLoadedImages(); len(imageURLs) > 0 {
+				messages = append(messages, o.msgBuilder.BuildImageContextMessage(imageURLs))
+			}
+		}
 
 		if i == o.maxIterations-1 {
 			messages = append(messages, o.msgBuilder.BuildToolLimitMessage())
