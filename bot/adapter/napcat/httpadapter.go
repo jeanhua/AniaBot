@@ -41,9 +41,8 @@ func (n *napcatHttpAdapter) postAndCheck(url string, body any, result any) bool 
 	if result != nil {
 		req = req.SetResult(result)
 	}
-	targetUrl := url
 	if n.token != nil {
-		targetUrl += "?access_token=" + *n.token
+		req = req.SetQueryParam("access_token", *n.token)
 	}
 	resp, err := req.Post(url)
 	if err != nil {
