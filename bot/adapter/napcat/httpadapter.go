@@ -114,7 +114,7 @@ func (n *napcatHttpAdapter) onMsg(data []byte) {
 			}
 		}
 	case "notice":
-		noticeType := callBack["notice_type"].(string)
+		noticeType, _ := callBack["notice_type"].(string)
 		httpSpreadNotice(n, noticeType, data)
 	}
 }
