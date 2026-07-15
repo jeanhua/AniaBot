@@ -239,13 +239,16 @@ func (ania *AniaBot) onGroupEvent(msg message.Message) {
 	cmd := utils.ParseCommand(msg)
 
 	for _, p := range ania.plugins {
-		next := safeExecuteWithReturn("群聊消息事件", p, func(p plugin.Plugin) bool {
+		next, panicked := safeExecuteWithReturn("群聊消息事件", p, func(p plugin.Plugin) bool {
 			msgCtx, cancel := context.WithTimeout(ania.ctx, MsgEventTimeout)
 			next, err := p.OnGroupMsg(msgCtx, ania, cmd, msg)
 			logError(err, p, "群聊消息事件")
 			cancel()
 			return next
 		})
+		if panicked {
+			next = true // 插件 panic 不应阻断后续插件，继续传播（与通知事件一致）
+		}
 		if !next {
 			break
 		}
@@ -265,13 +268,16 @@ func (ania *AniaBot) onFriendEvent(msg message.Message) {
 	cmd := utils.ParseCommand(msg)
 
 	for _, p := range ania.plugins {
-		next := safeExecuteWithReturn("私聊消息事件", p, func(p plugin.Plugin) bool {
+		next, panicked := safeExecuteWithReturn("私聊消息事件", p, func(p plugin.Plugin) bool {
 			msgCtx, cancel := context.WithTimeout(ania.ctx, MsgEventTimeout)
 			next, err := p.OnFriendMsg(msgCtx, ania, cmd, msg)
 			logError(err, p, "私聊消息事件")
 			cancel()
 			return next
 		})
+		if panicked {
+			next = true // 插件 panic 不应阻断后续插件，继续传播（与通知事件一致）
+		}
 		if !next {
 			break
 		}
