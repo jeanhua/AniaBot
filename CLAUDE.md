@@ -13,10 +13,13 @@ AniaBot is a plugin-driven QQ bot framework built with Go. It connects to QQ via
 go run cmd/main.go
 ```
 
-### Build (cross-compile for Linux)
+### Build (cross-compile)
+Requires Go 1.26+ (see `go.mod`).
+
 ```bash
-# Windows
-scripts/build_linux.bat
+make linux     # → build/AniaBot     (GOOS=linux GOARCH=amd64)
+make windows   # → build/AniaBot.exe
+make clean     # remove build/
 
 # Manual
 cd cmd && GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -o ../build/AniaBot
@@ -92,7 +95,7 @@ Plugins implement `common/plugin.Plugin` by embedding `plugin.Meta` and overridi
 Tools are defined as structs embedding `llmtool.BaseTool[ParamsType]`. Parameter structs use `json` tags for names and `desc` tags for descriptions. The `parser.go` reflection engine auto-generates OpenAI-compatible function schemas from these structs — no manual JSON schema needed.
 
 Registration hierarchy:
-1. `functool.CreateDefaultTools()` — 6 built-in tools
+1. `functool.CreateDefaultTools()` — registers built-in tools. Always on: `time`, `web_search`, `web_explore` (both via Jina), `meme`, `msg_history`, `private_file`. Opt-in (gated behind config flags for safety): `bash` (executes on the host with whitelist/blacklist regex) and `file`/`send_file`.
 2. `functool.CreateToolsWithMCP()` — adds MCP discovery tools
 3. `functool.CreateToolsWithSkill()` — adds `skill_read` tool
 
