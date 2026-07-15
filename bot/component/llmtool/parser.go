@@ -89,6 +89,11 @@ func mcpToolToOpenAITool(name, description string, parameters json.RawMessage) T
 		log.Printf("[MCP:%s] 解析参数定义失败: %v", name, err)
 		return emptyTool()
 	}
+	if schema == nil {
+		// inputSchema 为 null 或缺失时，json.Unmarshal("null", &map) 得到 nil map，
+		// 后续对 schema["type"]/schema["properties"] 的赋值会 panic（assignment to entry in nil map）
+		return emptyTool()
+	}
 
 	if _, ok := schema["type"]; !ok {
 		schema["type"] = "object"
