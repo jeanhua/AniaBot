@@ -79,29 +79,26 @@ func (p *AntiWithdrawalPlugin) OnGroupMsg(ctx context.Context, bot bot.Bot, cmd 
 						}
 					} else {
 						key_20 := ""
-						key_10 := ""
 						for _, k := range ncrkey {
 							switch k.Type {
 							case 20:
 								key_20 = strings.TrimPrefix(k.Rkey, "&rkey=")
-							case 10:
-								key_10 = strings.TrimPrefix(k.Rkey, "&rkey=")
 							}
 						}
-						if key_20 == "" || key_10 == "" {
+						if key_20 == "" {
 							switch seg.Type {
 							case "image":
 								p.Logger.Error("无法解析图片URL")
 							case "file":
 								p.Logger.Error("无法解析文件URL")
 							}
-							return true, nil
+							continue
 						}
 						link, _ := m.Message[i].Data["url"].(string)
 						if link != "" {
 							if modifyer, err := utils.NewURLModifier(link); err != nil {
 								p.Logger.Error("无法解析图片URL", "error", err)
-								return true, nil
+								continue
 							} else {
 								newLink := modifyer.SetQuery("rkey", key_20).String()
 								switch seg.Type {
@@ -213,29 +210,26 @@ func (p *AntiWithdrawalPlugin) OnFriendMsg(ctx context.Context, bot bot.Bot, cmd
 							}
 						} else {
 							key_20 := ""
-							key_10 := ""
 							for _, k := range ncrkey {
 								switch k.Type {
 								case 20:
 									key_20 = strings.TrimPrefix(k.Rkey, "&rkey=")
-								case 10:
-									key_10 = strings.TrimPrefix(k.Rkey, "&rkey=")
 								}
 							}
-							if key_20 == "" || key_10 == "" {
+							if key_20 == "" {
 								switch seg.Type {
 								case "image":
 									p.Logger.Error("无法解析图片URL")
 								case "file":
 									p.Logger.Error("无法解析文件URL")
 								}
-								return true, nil
+								continue
 							}
 							link, _ := m.Message[i].Data["url"].(string)
 							if link != "" {
 								if modifyer, err := utils.NewURLModifier(link); err != nil {
 									p.Logger.Error("无法解析图片URL", "error", err)
-									return true, nil
+									continue
 								} else {
 									newLink := modifyer.SetQuery("rkey", key_20).String()
 									switch seg.Type {
