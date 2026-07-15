@@ -112,10 +112,16 @@ func (p *AIChatPlugin) OnGroupMsg(ctx context.Context, bot bot.Bot, cmd command.
 		if cnt > 30 {
 			if c, ok := p.chats.Load(msg.GroupId); ok && c != nil {
 				chat := c.(*aichat.ChatBot)
-				chat.ClearHistory(ctx)
-				p.Logger.Info("自动清理AI对话信息", "group", msg.GroupId, "reason", "超过30条未@消息")
-				if cleared := chat.ClearDynamicTools(); cleared > 0 {
-					p.Logger.Info("清理动态加载的 MCP 工具", "count", cleared)
+				// 与 mention 路径的 chat.Chat 共用 per-group 锁，避免自动清理与进行中的对话
+				// 并发访问 messageWindow.messages 及 SessionToolExecutor.sessionTools
+				// （并发 map 读写会触发不可恢复的 fatal error 导致整个进程崩溃）
+				if p.tryLock(msg.GroupId) {
+					chat.ClearHistory(ctx)
+					p.Logger.Info("自动清理AI对话信息", "group", msg.GroupId, "reason", "超过30条未@消息")
+					if cleared := chat.ClearDynamicTools(); cleared > 0 {
+						p.Logger.Info("清理动态加载的 MCP 工具", "count", cleared)
+					}
+					p.unLock(msg.GroupId)
 				}
 			}
 			p.noMentionCount.Store(msg.GroupId, 0)
