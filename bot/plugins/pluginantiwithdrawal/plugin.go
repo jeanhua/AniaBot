@@ -141,8 +141,14 @@ func (p *AntiWithdrawalPlugin) OnGroupMsg(ctx context.Context, bot bot.Bot, cmd 
 }
 
 func isTimeout(timestamp uint) bool {
-	now := uint(time.Now().Unix())
-	return now-timestamp > ResourceTimeout
+	ts := int64(timestamp)
+	now := time.Now().Unix()
+	if ts > now {
+		// 时钟偏差使消息时间戳落在未来（或时间戳为 0/异常）：视为未过期，
+		// 避免无符号减法溢出成巨大值而误判为已过期
+		return false
+	}
+	return now-ts > int64(ResourceTimeout)
 }
 
 func (p *AntiWithdrawalPlugin) OnFriendMsg(ctx context.Context, bot bot.Bot, cmd command.Command, msg message.Message) (bool, error) {
