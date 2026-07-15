@@ -98,7 +98,11 @@ func (o *ToolOrchestrator) ExecuteWithTools(
 
 		if i == o.maxIterations-1 {
 			messages = append(messages, o.msgBuilder.BuildToolLimitMessage())
-			finalResp, finalUsage, err := llmClient.Generate(ctx, messages, opts)
+			// 最后一轮要求模型直接给出文本回答，故不再附带工具定义；
+			// 否则模型可能继续发起工具调用而被静默丢弃（仅取 Content），导致空响应
+			finalOpts := opts
+			finalOpts.Tools = nil
+			finalResp, finalUsage, err := llmClient.Generate(ctx, messages, finalOpts)
 			if err != nil {
 				return "", messages, totalUsage, err
 			}
