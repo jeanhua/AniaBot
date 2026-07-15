@@ -39,7 +39,7 @@ type AniaMemoryStorage struct {
 	prefix string
 	data   map[string]*memItem
 	lists  map[string]*memList
-	mu     sync.RWMutex
+	mu     *sync.RWMutex
 	logger *slog.Logger
 }
 
@@ -47,6 +47,7 @@ func NewAniaMemoryStorage(logger *slog.Logger) *AniaMemoryStorage {
 	return &AniaMemoryStorage{
 		data:   make(map[string]*memItem),
 		lists:  make(map[string]*memList),
+		mu:     &sync.RWMutex{},
 		logger: logger,
 	}
 }
@@ -56,6 +57,7 @@ func (store *AniaMemoryStorage) Clone(prefix string) storage.Storage {
 		prefix: store.prefix + prefix + ":",
 		data:   store.data,
 		lists:  store.lists,
+		mu:     store.mu, // 共享同一把锁，避免各 clone 持有独立锁而对共享 map 产生并发竞争
 		logger: store.logger,
 	}
 }

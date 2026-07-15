@@ -63,10 +63,10 @@ type AIChatPlugin struct {
 	ocrEnable    bool
 	ocrModel     *aichat.ChatBot
 	ocrParameter struct {
-		maxToken    int
-		temperature float64
-		top_p       float64
-		top_k       int
+		maxToken    *int
+		temperature *float64
+		top_p       *float64
+		top_k       *int
 		prompt      string
 	}
 
@@ -112,10 +112,16 @@ func (p *AIChatPlugin) OnGroupMsg(ctx context.Context, bot bot.Bot, cmd command.
 		if cnt > 30 {
 			if c, ok := p.chats.Load(msg.GroupId); ok && c != nil {
 				chat := c.(*aichat.ChatBot)
-				chat.ClearHistory(ctx)
-				p.Logger.Info("自动清理AI对话信息", "group", msg.GroupId, "reason", "超过30条未@消息")
-				if cleared := chat.ClearDynamicTools(); cleared > 0 {
-					p.Logger.Info("清理动态加载的 MCP 工具", "count", cleared)
+				// 与 mention 路径的 chat.Chat 共用 per-group 锁，避免自动清理与进行中的对话
+				// 并发访问 messageWindow.messages 及 SessionToolExecutor.sessionTools
+				// （并发 map 读写会触发不可恢复的 fatal error 导致整个进程崩溃）
+				if p.tryLock(msg.GroupId) {
+					defer p.unLock(msg.GroupId)
+					chat.ClearHistory(ctx)
+					p.Logger.Info("自动清理AI对话信息", "group", msg.GroupId, "reason", "超过30条未@消息")
+					if cleared := chat.ClearDynamicTools(); cleared > 0 {
+						p.Logger.Info("清理动态加载的 MCP 工具", "count", cleared)
+					}
 				}
 			}
 			p.noMentionCount.Store(msg.GroupId, 0)
@@ -158,7 +164,7 @@ func (p *AIChatPlugin) OnGroupMsg(ctx context.Context, bot bot.Bot, cmd command.
 	p.setActiveContext(msg.GroupId, cancel)
 
 	builder := msgchain.Builder().Group()
-	extraText := p.extraMsg(ctx, bot, msg, p.ocrModel)
+	extraText := p.extraMsg(ctx, bot, msg, p.ocrModel, p.buildOCRChatOptions())
 	if strings.Contains(extraText, "#新对话") {
 		err := chat.ClearHistory(ctx)
 		if err != nil {
@@ -243,7 +249,7 @@ func (p *AIChatPlugin) OnFriendMsg(ctx context.Context, bot bot.Bot, cmd command
 	p.setActiveContext(msg.Sender.UserId, cancel)
 
 	builder := msgchain.Builder().Friend()
-	extraText := p.extraMsg(ctx, bot, msg, p.ocrModel)
+	extraText := p.extraMsg(ctx, bot, msg, p.ocrModel, p.buildOCRChatOptions())
 	if strings.Contains(extraText, "#新对话") {
 		err := chat.ClearHistory(ctx)
 		if err != nil {
@@ -304,6 +310,23 @@ func (p *AIChatPlugin) buildChatOptions() aichat.ChatOptions {
 	}
 	if p.llmParameter.top_k != nil {
 		opts.TopK = p.llmParameter.top_k
+	}
+	return opts
+}
+
+func (p *AIChatPlugin) buildOCRChatOptions() aichat.ChatOptions {
+	opts := aichat.ChatOptions{}
+	if p.ocrParameter.maxToken != nil {
+		opts.MaxToken = p.ocrParameter.maxToken
+	}
+	if p.ocrParameter.temperature != nil {
+		opts.Temperature = p.ocrParameter.temperature
+	}
+	if p.ocrParameter.top_p != nil {
+		opts.TopP = p.ocrParameter.top_p
+	}
+	if p.ocrParameter.top_k != nil {
+		opts.TopK = p.ocrParameter.top_k
 	}
 	return opts
 }
@@ -388,10 +411,22 @@ func (p *AIChatPlugin) Start(ctx context.Context, cfg *viper.Viper) error {
 		ocrModel := cfg.GetString("plugin.ai_chat_bot.ocr.model")
 		ocrPrompt := cfg.GetString("plugin.ai_chat_bot.ocr.prompt")
 
-		p.ocrParameter.maxToken = cfg.GetInt("plugin.ai_chat_bot.ocr.max_token")
-		p.ocrParameter.temperature = cfg.GetFloat64("plugin.ai_chat_bot.ocr.temperature")
-		p.ocrParameter.top_p = cfg.GetFloat64("plugin.ai_chat_bot.ocr.top_p")
-		p.ocrParameter.top_k = cfg.GetInt("plugin.ai_chat_bot.ocr.top_k")
+		if cfg.IsSet("plugin.ai_chat_bot.ocr.max_token") {
+			v := cfg.GetInt("plugin.ai_chat_bot.ocr.max_token")
+			p.ocrParameter.maxToken = &v
+		}
+		if cfg.IsSet("plugin.ai_chat_bot.ocr.temperature") {
+			v := cfg.GetFloat64("plugin.ai_chat_bot.ocr.temperature")
+			p.ocrParameter.temperature = &v
+		}
+		if cfg.IsSet("plugin.ai_chat_bot.ocr.top_p") {
+			v := cfg.GetFloat64("plugin.ai_chat_bot.ocr.top_p")
+			p.ocrParameter.top_p = &v
+		}
+		if cfg.IsSet("plugin.ai_chat_bot.ocr.top_k") {
+			v := cfg.GetInt("plugin.ai_chat_bot.ocr.top_k")
+			p.ocrParameter.top_k = &v
+		}
 
 		ocrllm, err := aichat.NewChatBot(ocrBaseUrl, ocrAPIKey, ocrModel, ocrPrompt, 0, nil)
 		if err != nil {
@@ -424,12 +459,22 @@ func (p *AIChatPlugin) Start(ctx context.Context, cfg *viper.Viper) error {
 	if bashConfig.Enable {
 		p.Logger.Info("已启用bash工具", "shell", bashConfig.Shell, "whitelist", bashConfig.Whitelist, "blacklist", bashConfig.Blacklist)
 	}
+	var fileConfig functool.FileConfig
+	if cfg.IsSet("plugin.ai_chat_bot.file") {
+		if err := cfg.UnmarshalKey("plugin.ai_chat_bot.file", &fileConfig); err != nil {
+			p.Logger.Warn("解析 file 工具配置失败", "error", err.Error())
+		}
+	}
+	if fileConfig.Enable {
+		p.Logger.Info("已启用file工具（可读取宿主机本地文件并发送，请注意安全风险）")
+	}
 	var err error
 	p.toolExecutor, p.skillManager, err = functool.CreateToolsWithSkill(
 		p.llmParameter.searchToken,
 		p.mcpConfigs,
 		skillsDir,
 		bashConfig,
+		fileConfig,
 		skills,
 	)
 	if err != nil {

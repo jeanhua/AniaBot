@@ -57,6 +57,11 @@ func request[T any](n *napcatWebSocketAdapter, action string, params any, prefix
 	defer n.ackMng.pendingAcks.Delete(echo)
 
 	n.mu.Lock()
+	if n.wsConn == nil {
+		n.mu.Unlock()
+		log.Printf("[%s] 连接未就绪（重连中），跳过发送", action)
+		return nil, false
+	}
 	err = n.wsConn.WriteMessage(websocket.TextMessage, b)
 	n.mu.Unlock()
 	if err != nil {
@@ -310,11 +315,15 @@ func (n *napcatWebSocketAdapter) Serve(v *viper.Viper) {
 			break
 		}
 		log.Println("WebSocket 连接成功！")
+		n.mu.Lock()
 		n.wsConn = conn
+		n.mu.Unlock()
 		n.startWorkerPool(n.workerCount, n.queueSize)
 		n.readLoop(conn)
 		n.stopWorkerPool()
+		n.mu.Lock()
 		n.wsConn = nil
+		n.mu.Unlock()
 		log.Println("连接断开，准备重连...")
 	}
 

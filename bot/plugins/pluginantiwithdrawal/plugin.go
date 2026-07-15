@@ -79,29 +79,26 @@ func (p *AntiWithdrawalPlugin) OnGroupMsg(ctx context.Context, bot bot.Bot, cmd 
 						}
 					} else {
 						key_20 := ""
-						key_10 := ""
 						for _, k := range ncrkey {
 							switch k.Type {
 							case 20:
 								key_20 = strings.TrimPrefix(k.Rkey, "&rkey=")
-							case 10:
-								key_10 = strings.TrimPrefix(k.Rkey, "&rkey=")
 							}
 						}
-						if key_20 == "" || key_10 == "" {
+						if key_20 == "" {
 							switch seg.Type {
 							case "image":
 								p.Logger.Error("无法解析图片URL")
 							case "file":
 								p.Logger.Error("无法解析文件URL")
 							}
-							return true, nil
+							continue
 						}
 						link, _ := m.Message[i].Data["url"].(string)
 						if link != "" {
 							if modifyer, err := utils.NewURLModifier(link); err != nil {
 								p.Logger.Error("无法解析图片URL", "error", err)
-								return true, nil
+								continue
 							} else {
 								newLink := modifyer.SetQuery("rkey", key_20).String()
 								switch seg.Type {
@@ -141,8 +138,14 @@ func (p *AntiWithdrawalPlugin) OnGroupMsg(ctx context.Context, bot bot.Bot, cmd 
 }
 
 func isTimeout(timestamp uint) bool {
-	now := uint(time.Now().Unix())
-	return now-timestamp > ResourceTimeout
+	ts := int64(timestamp)
+	now := time.Now().Unix()
+	if ts > now {
+		// 时钟偏差使消息时间戳落在未来（或时间戳为 0/异常）：视为未过期，
+		// 避免无符号减法溢出成巨大值而误判为已过期
+		return false
+	}
+	return now-ts > int64(ResourceTimeout)
 }
 
 func (p *AntiWithdrawalPlugin) OnFriendMsg(ctx context.Context, bot bot.Bot, cmd command.Command, msg message.Message) (bool, error) {
@@ -207,29 +210,26 @@ func (p *AntiWithdrawalPlugin) OnFriendMsg(ctx context.Context, bot bot.Bot, cmd
 							}
 						} else {
 							key_20 := ""
-							key_10 := ""
 							for _, k := range ncrkey {
 								switch k.Type {
 								case 20:
 									key_20 = strings.TrimPrefix(k.Rkey, "&rkey=")
-								case 10:
-									key_10 = strings.TrimPrefix(k.Rkey, "&rkey=")
 								}
 							}
-							if key_20 == "" || key_10 == "" {
+							if key_20 == "" {
 								switch seg.Type {
 								case "image":
 									p.Logger.Error("无法解析图片URL")
 								case "file":
 									p.Logger.Error("无法解析文件URL")
 								}
-								return true, nil
+								continue
 							}
 							link, _ := m.Message[i].Data["url"].(string)
 							if link != "" {
 								if modifyer, err := utils.NewURLModifier(link); err != nil {
 									p.Logger.Error("无法解析图片URL", "error", err)
-									return true, nil
+									continue
 								} else {
 									newLink := modifyer.SetQuery("rkey", key_20).String()
 									switch seg.Type {

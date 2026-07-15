@@ -112,7 +112,10 @@ func (store *AniaRedisStorage) Del(ctx context.Context, key string) bool {
 func (store *AniaRedisStorage) Clear(ctx context.Context) bool {
 	iter := store.rdb.Scan(ctx, 0, store.prefix+"*", 0).Iterator()
 	for iter.Next(ctx) {
-		store.rdb.Del(ctx, iter.Val()).Result()
+		if _, err := store.rdb.Del(ctx, iter.Val()).Result(); err != nil {
+			store.logger.Error("Redis del failed", "key", iter.Val(), "error", err)
+			return false
+		}
 	}
 	if err := iter.Err(); err != nil {
 		return false

@@ -41,9 +41,8 @@ func (n *napcatHttpAdapter) postAndCheck(url string, body any, result any) bool 
 	if result != nil {
 		req = req.SetResult(result)
 	}
-	targetUrl := url
 	if n.token != nil {
-		targetUrl += "?access_token=" + *n.token
+		req = req.SetQueryParam("access_token", *n.token)
 	}
 	resp, err := req.Post(url)
 	if err != nil {
@@ -115,7 +114,7 @@ func (n *napcatHttpAdapter) onMsg(data []byte) {
 			}
 		}
 	case "notice":
-		noticeType := callBack["notice_type"].(string)
+		noticeType, _ := callBack["notice_type"].(string)
 		httpSpreadNotice(n, noticeType, data)
 	}
 }
@@ -203,20 +202,26 @@ func (n *napcatHttpAdapter) SendFriendForwardMsg(userId message.QID, chain msgch
 
 func (n *napcatHttpAdapter) GetMsgDetail(msgId message.QID) (*message.Message, bool) {
 	data := map[string]message.QID{"message_id": msgId}
-	result := httpMsgDetail{}
-	if !n.postAndCheck(n.baseUrl+"/get_msg", data, &result) {
+	var resp message.Response[message.Message]
+	if !n.postAndCheck(n.baseUrl+"/get_msg", data, &resp) {
 		return nil, false
 	}
-	return &result.Data, true
+	if !checkResponseStatus(&resp) {
+		return nil, false
+	}
+	return &resp.Data, true
 }
 
 func (n *napcatHttpAdapter) GetForwardMsg(msgId message.QID) (msgs *[]message.Message, success bool) {
 	data := map[string]message.QID{"message_id": msgId}
-	result := httpForwardMsgDetail{}
-	if !n.postAndCheck(n.baseUrl+"/get_forward_msg", data, &result) {
+	var resp message.Response[httpForwardData]
+	if !n.postAndCheck(n.baseUrl+"/get_forward_msg", data, &resp) {
 		return nil, false
 	}
-	return &result.Data, true
+	if !checkResponseStatus(&resp) {
+		return nil, false
+	}
+	return &resp.Data.Messages, true
 }
 
 func (n *napcatHttpAdapter) GetGroupUserInfo(groupId, userId message.QID) (*message.GroupUserInfo, bool) {
@@ -282,13 +287,14 @@ func (n *napcatHttpAdapter) GetGroupMsgHistory(groupId message.QID, count int, m
 		"count":       count,
 		"message_seq": message_seq,
 	}
-	resp := struct {
-		Messages []message.Message `json:"messages"`
-	}{}
+	var resp message.Response[httpForwardData]
 	if !n.postAndCheck(n.baseUrl+"/get_group_msg_history", data, &resp) {
 		return nil, false
 	}
-	return &resp.Messages, true
+	if !checkResponseStatus(&resp) {
+		return nil, false
+	}
+	return &resp.Data.Messages, true
 }
 
 func (n *napcatHttpAdapter) GetFriendMsgHistory(userId message.QID, count int, message_seq int) (*[]message.Message, bool) {
@@ -297,13 +303,14 @@ func (n *napcatHttpAdapter) GetFriendMsgHistory(userId message.QID, count int, m
 		"count":       count,
 		"message_seq": message_seq,
 	}
-	resp := struct {
-		Messages []message.Message `json:"messages"`
-	}{}
+	var resp message.Response[httpForwardData]
 	if !n.postAndCheck(n.baseUrl+"/get_friend_msg_history", data, &resp) {
 		return nil, false
 	}
-	return &resp.Messages, true
+	if !checkResponseStatus(&resp) {
+		return nil, false
+	}
+	return &resp.Data.Messages, true
 }
 
 func (n *napcatHttpAdapter) GetAIChatacter() (*[]message.AIChatacter, bool) {
@@ -347,10 +354,7 @@ type httpGroupPushData struct {
 	Message []message.OB11Segment `json:"message"`
 }
 
-type httpMsgDetail struct {
-	Data message.Message `json:"data"`
-}
-
-type httpForwardMsgDetail struct {
-	Data []message.Message `json:"data"`
+// httpForwardData 对应 OneBot v11 get_forward_msg / *_msg_history 响应的 data 字段
+type httpForwardData struct {
+	Messages []message.Message `json:"messages"`
 }

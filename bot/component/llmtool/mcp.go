@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"net"
 	"net/http"
 	"os/exec"
 	"strings"
@@ -68,29 +69,15 @@ func (c *MCPClient) Connect(ctx context.Context) error {
 	switch strings.ToLower(c.config.Transport) {
 	case "streamable", "streamable-http":
 		log.Printf("[MCP:%s] 连接 Streamable HTTP: %s", c.config.Name, c.config.Endpoint)
-		httpClient := &http.Client{Timeout: c.config.Timeout}
-		if len(c.config.Headers) > 0 {
-			httpClient.Transport = &headerTransport{
-				base:    http.DefaultTransport,
-				headers: c.config.Headers,
-			}
-		}
 		transport = &mcp.StreamableClientTransport{
 			Endpoint:   c.config.Endpoint,
-			HTTPClient: httpClient,
+			HTTPClient: newStreamHTTPClient(c.config.Headers),
 		}
 	case "sse":
 		log.Printf("[MCP:%s] 连接 SSE: %s", c.config.Name, c.config.Endpoint)
-		httpClient := &http.Client{Timeout: c.config.Timeout}
-		if len(c.config.Headers) > 0 {
-			httpClient.Transport = &headerTransport{
-				base:    http.DefaultTransport,
-				headers: c.config.Headers,
-			}
-		}
 		transport = &mcp.SSEClientTransport{
 			Endpoint:   c.config.Endpoint,
-			HTTPClient: httpClient,
+			HTTPClient: newStreamHTTPClient(c.config.Headers),
 		}
 	default:
 		log.Printf("[MCP:%s] 启动进程: %s %v", c.config.Name, c.config.Command, c.config.Args)
@@ -524,4 +511,24 @@ func (t *headerTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 		r.Header.Set(k, v)
 	}
 	return t.base.RoundTrip(r)
+}
+
+// newStreamHTTPClient 构建用于流式传输（Streamable/SSE）的 HTTP 客户端。
+// 不设置整体 http.Client.Timeout：Go 文档明确该超时覆盖整个请求生命周期
+// （含读取响应体），会中断长连接 SSE 流的持续读取——对 Streamable 会引发
+// 频繁重连、超过超时时长的流式响应直接失败。改为在 Transport 层设置
+// DialContext 与 ResponseHeaderTimeout，既保护握手阶段不无限挂起，又不影响
+// 长连接的持续读取。
+func newStreamHTTPClient(headers map[string]string) *http.Client {
+	transport := &http.Transport{}
+	if t, ok := http.DefaultTransport.(*http.Transport); ok {
+		transport = t.Clone()
+	}
+	transport.DialContext = (&net.Dialer{Timeout: 30 * time.Second}).DialContext
+	transport.ResponseHeaderTimeout = 30 * time.Second
+	rt := http.RoundTripper(transport)
+	if len(headers) > 0 {
+		rt = &headerTransport{base: transport, headers: headers}
+	}
+	return &http.Client{Transport: rt}
 }

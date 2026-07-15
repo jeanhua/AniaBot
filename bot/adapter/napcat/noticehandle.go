@@ -20,7 +20,9 @@ var noticeRegistry = map[string]noticeTypeRegistry{
 	"group_upload": {
 		parser: func(data []byte) any {
 			var notice message.GroupUploadNotice
-			json.Unmarshal(data, &notice)
+			if err := json.Unmarshal(data, &notice); err != nil {
+				return nil
+			}
 			return notice
 		},
 		handler: func(notice any, trigger adapter.TriggerWrapper) {
@@ -32,7 +34,9 @@ var noticeRegistry = map[string]noticeTypeRegistry{
 	"group_admin": {
 		parser: func(data []byte) any {
 			var notice message.GroupAdminNotice
-			json.Unmarshal(data, &notice)
+			if err := json.Unmarshal(data, &notice); err != nil {
+				return nil
+			}
 			return notice
 		},
 		handler: func(notice any, trigger adapter.TriggerWrapper) {
@@ -44,7 +48,9 @@ var noticeRegistry = map[string]noticeTypeRegistry{
 	"group_decrease": {
 		parser: func(data []byte) any {
 			var notice message.GroupDecreaseNotice
-			json.Unmarshal(data, &notice)
+			if err := json.Unmarshal(data, &notice); err != nil {
+				return nil
+			}
 			return notice
 		},
 		handler: func(notice any, trigger adapter.TriggerWrapper) {
@@ -56,7 +62,9 @@ var noticeRegistry = map[string]noticeTypeRegistry{
 	"group_increase": {
 		parser: func(data []byte) any {
 			var notice message.GroupIncreaseNotice
-			json.Unmarshal(data, &notice)
+			if err := json.Unmarshal(data, &notice); err != nil {
+				return nil
+			}
 			return notice
 		},
 		handler: func(notice any, trigger adapter.TriggerWrapper) {
@@ -68,7 +76,9 @@ var noticeRegistry = map[string]noticeTypeRegistry{
 	"group_ban": {
 		parser: func(data []byte) any {
 			var notice message.GroupBanNotice
-			json.Unmarshal(data, &notice)
+			if err := json.Unmarshal(data, &notice); err != nil {
+				return nil
+			}
 			return notice
 		},
 		handler: func(notice any, trigger adapter.TriggerWrapper) {
@@ -80,7 +90,9 @@ var noticeRegistry = map[string]noticeTypeRegistry{
 	"friend_add": {
 		parser: func(data []byte) any {
 			var notice message.FriendAddNotice
-			json.Unmarshal(data, &notice)
+			if err := json.Unmarshal(data, &notice); err != nil {
+				return nil
+			}
 			return notice
 		},
 		handler: func(notice any, trigger adapter.TriggerWrapper) {
@@ -92,7 +104,9 @@ var noticeRegistry = map[string]noticeTypeRegistry{
 	"group_recall": {
 		parser: func(data []byte) any {
 			var notice message.GroupRecallNotice
-			json.Unmarshal(data, &notice)
+			if err := json.Unmarshal(data, &notice); err != nil {
+				return nil
+			}
 			return notice
 		},
 		handler: func(notice any, trigger adapter.TriggerWrapper) {
@@ -104,7 +118,9 @@ var noticeRegistry = map[string]noticeTypeRegistry{
 	"friend_recall": {
 		parser: func(data []byte) any {
 			var notice message.FriendRecallNotice
-			json.Unmarshal(data, &notice)
+			if err := json.Unmarshal(data, &notice); err != nil {
+				return nil
+			}
 			return notice
 		},
 		handler: func(notice any, trigger adapter.TriggerWrapper) {
@@ -116,7 +132,9 @@ var noticeRegistry = map[string]noticeTypeRegistry{
 	"poke": {
 		parser: func(data []byte) any {
 			var notice message.PokeNotice
-			json.Unmarshal(data, &notice)
+			if err := json.Unmarshal(data, &notice); err != nil {
+				return nil
+			}
 			return notice
 		},
 		handler: func(notice any, trigger adapter.TriggerWrapper) {
@@ -128,7 +146,9 @@ var noticeRegistry = map[string]noticeTypeRegistry{
 	"lucky_king": {
 		parser: func(data []byte) any {
 			var notice message.LuckyKingNotice
-			json.Unmarshal(data, &notice)
+			if err := json.Unmarshal(data, &notice); err != nil {
+				return nil
+			}
 			return notice
 		},
 		handler: func(notice any, trigger adapter.TriggerWrapper) {
@@ -140,7 +160,9 @@ var noticeRegistry = map[string]noticeTypeRegistry{
 	"honor": {
 		parser: func(data []byte) any {
 			var notice message.HonorNotice
-			json.Unmarshal(data, &notice)
+			if err := json.Unmarshal(data, &notice); err != nil {
+				return nil
+			}
 			return notice
 		},
 		handler: func(notice any, trigger adapter.TriggerWrapper) {
@@ -152,7 +174,9 @@ var noticeRegistry = map[string]noticeTypeRegistry{
 	"group_msg_emoji_like": {
 		parser: func(data []byte) any {
 			var notice message.GroupMsgEmojiLikeNotice
-			json.Unmarshal(data, &notice)
+			if err := json.Unmarshal(data, &notice); err != nil {
+				return nil
+			}
 			return notice
 		},
 		handler: func(notice any, trigger adapter.TriggerWrapper) {
@@ -164,7 +188,9 @@ var noticeRegistry = map[string]noticeTypeRegistry{
 	"essence": {
 		parser: func(data []byte) any {
 			var notice message.EssenceNotice
-			json.Unmarshal(data, &notice)
+			if err := json.Unmarshal(data, &notice); err != nil {
+				return nil
+			}
 			return notice
 		},
 		handler: func(notice any, trigger adapter.TriggerWrapper) {
@@ -176,7 +202,9 @@ var noticeRegistry = map[string]noticeTypeRegistry{
 	"group_card": {
 		parser: func(data []byte) any {
 			var notice message.GroupCardNotice
-			json.Unmarshal(data, &notice)
+			if err := json.Unmarshal(data, &notice); err != nil {
+				return nil
+			}
 			return notice
 		},
 		handler: func(notice any, trigger adapter.TriggerWrapper) {

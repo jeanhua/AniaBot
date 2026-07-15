@@ -14,6 +14,14 @@ import (
 
 var errToolExecute = errors.New("function tool执行错误")
 
+// FileConfig file 工具配置
+type FileConfig struct {
+	// Enable 是否启用本地文件发送工具。默认关闭：该工具可读取宿主机上任意可读
+	// 文件并发送给用户，LLM（含被注入提示词的情形）可能借此泄露敏感文件，
+	// 故需显式开启（与 bash 工具一致采用 opt-in）。
+	Enable bool `json:"enable" mapstructure:"enable"`
+}
+
 // SendFileTool 读取本地文件并发送
 type SendFileParams struct {
 	Name string `json:"name" desc:"要发送的文件名(包括后缀),用于显示,如 1.txt"`
