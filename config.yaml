@@ -15,13 +15,28 @@ bot:
       listen_port: 6679 # 本地监听端口，用于napcat向bot上报事件。注意这里如果是docker的话使用localhost无法连接，建议换成内网ip，即在napcat配置页面的http client设置为ip
       target_url: http://localhost:6680 # napcat开放的url，用于bot向napcat上报事件
 
-  # 插件存储适配器
+  # 存储适配器（缓存 + 持久化两层，独立配置、互不影响）
   store:
-    # 默认redis适配器
-    redis:
-      address: "localhost:6379"
-      password: ""
-      db: 0
+    # 缓存存储：易失，支持 TTL 与列表语义，适合热数据/临时会话/分布式锁
+    cache:
+      driver: redis # redis（默认，需 Redis 服务） | memory（进程内内存，零依赖，重启清空）
+      redis:
+        address: "localhost:6379"
+        password: ""
+        db: 0
+      # memory 引擎无需任何配置
+
+    # 持久化存储：重启不丢失，适合需要长期保存的数据（插件配置/用户数据/历史记录等）
+    persistent:
+      driver: sqlite # sqlite（默认，纯 Go 无 CGO） | mysql
+      sqlite:
+        path: "./data/aniabot.db" # 数据库文件路径，目录不存在会自动创建
+      mysql:
+        # 标准 go-sql-driver DSN，charset=utf8mb4 建议保留
+        dsn: "root:password@tcp(localhost:3306)/aniabot?charset=utf8mb4&parseTime=true&loc=Local"
+        max_open_conns: 20 # 最大连接数，<=0 时使用默认值 10
+        max_idle_conns: 5 # 最大空闲连接数，<=0 时使用默认值 5
+        conn_max_lifetime_sec: 300 # 连接最长存活时间（秒），<=0 时默认 1800
 
 # 插件自定义配置
 plugin:

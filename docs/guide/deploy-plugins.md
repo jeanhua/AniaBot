@@ -174,7 +174,7 @@ plugin:
 **设计模式**：这是部署分支中 **最复杂的插件**，包含约 8 个源文件，展示了完整的「数据收集 - 持久化 - 内容生成 - 触发控制」架构：
 
 - **消息收集**：每条群消息经过滤后追加到内存 buffer
-- **异步 Redis 持久化**：buffer 定期刷新到 Redis，防止进程重启丢失数据，写入操作在独立 goroutine 中异步执行，不阻塞消息处理
+- **异步缓存持久化**：buffer 定期刷新到缓存存储，防止进程重启丢失数据，写入操作在独立 goroutine 中异步执行，不阻塞消息处理
 - **LLM 内容生成**：达到消息阈值后，将收集的消息作为上下文交给 LLM 生成群刊内容
 - **阈值触发机制**：通过 `msg_threshold` 控制自动触发时机，也可通过 `/gn gen` 手动触发
 
@@ -304,7 +304,7 @@ plugin:
 |----------|----------|------|
 | Channel 任务队列（带缓冲 channel + goroutine 池） | acgwallpaper、waifupics | [常见模式](/plugin/patterns) |
 | LLM 集成（OpenAI 兼容 API 调用、prompt 构造） | githubrepoer、urlparser、groupnewsletter | [常见模式](/plugin/patterns) |
-| Redis 缓存（TTL 缓存、异步持久化） | urlparser、groupnewsletter | [数据存储](/plugin/storage) |
+| 缓存存储（TTL 缓存、异步持久化） | urlparser、groupnewsletter | [数据存储](/plugin/storage) |
 | Cron 定时任务（周期性触发、概率执行） | activeman | [定时任务](/plugin/cron) |
 | 交互式多步骤会话（用户状态机） | chatrecordsmaker | [常见模式](/plugin/patterns) |
 | 高优先级 Order（前置过滤器） | interceptor | [插件概览](/plugin/overview) |

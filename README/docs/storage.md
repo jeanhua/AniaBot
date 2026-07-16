@@ -1,8 +1,13 @@
 # 存储（Storage）接口参考
 
-本页概述 AniaBot 中插件可使用的存储接口与常见用法。框架使用 `common/storage` 提供统一的 Storage 抽象（具体实现常见为 Redis），实际方法和签名以 `common/storage/storage.go` 为准。
+AniaBot 为插件提供两层接口适配的存储：
 
-主要目的：为插件提供持久化读写能力，并对各插件做键前缀隔离。
+- **缓存层（CACHE）**：`common/storage.Storage`，本页所述。易失，支持 TTL 与列表语义；后端为 Redis（默认）或进程内 memory。
+- **持久化层（PERSISTENT）**：`common/storage.PersistentStorage`。重启不丢失，无 TTL/列表语义；后端为 SQLite（默认，纯 Go 无 CGO）或 MySQL。
+
+两层均采用 Clone 的 `base64(插件名)` 命名空间隔离，由框架在 DI 时注入（缓存为 `p.Storage`，持久化为 `p.PersistentStorage`）。实际方法和签名分别以 `common/storage/storage.go` 与 `common/storage/persistent.go` 为准。
+
+主要目的：为插件提供读写能力，并对各插件做键前缀隔离。
 
 ## 接口签名
 
@@ -22,6 +27,27 @@ type Storage interface {
     Clone(prefix string) Storage
 }
 ```
+
+## 持久化层接口（PersistentStorage）
+
+```go
+type PersistentStorage interface {
+    GetString(ctx context.Context, key string) (string, bool)
+    SetString(ctx context.Context, key, val string) bool
+
+    Get(ctx context.Context, key string, out any) bool
+    Set(ctx context.Context, key string, val any) bool
+
+    Has(ctx context.Context, key string) bool
+    Del(ctx context.Context, key string) bool
+    Keys(ctx context.Context, prefix string) ([]string, error)
+    Clear(ctx context.Context) bool
+
+    Clone(prefix string) PersistentStorage
+}
+```
+
+与缓存层 `Storage` 相比，持久化层**不支持 TTL / `Option` / `ScanKeys`**——有序数据建议将 JSON 数组整体读写。其余方法语义与缓存层一致（`(value, bool)` / `bool`，错误内部记录后返回 false）。后端为 SQLite（默认，纯 Go 无 CGO）或 MySQL，配置见 `bot.store.persistent`。
 
 ## Option 配置系统
 

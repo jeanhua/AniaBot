@@ -86,7 +86,7 @@ Plugins implement `common/plugin.Plugin` by embedding `plugin.Meta` and overridi
 - **Ordered execution**: `LevelLog = -1000`, `LevelNormal = 0`, `LevelPostHandle = 1000`. Plugins sorted by `Order` at startup.
 - **Middleware chain**: `OnGroupMsg`/`OnFriendMsg` return `(bool, error)`. Return `false` to stop propagation to subsequent plugins.
 - **Broadcast notices**: All 14 notice event types (recall, poke, ban, etc.) are delivered to every plugin — no short-circuit.
-- **DI injection**: Core injects `Storage`, `RestyClient`, `Logger`, and `SystemConfig` before calling `Start()`.
+- **DI injection**: Core injects `Storage` (cache) and `PersistentStorage` alongside `RestyClient`, `Logger`, and `SystemConfig` before calling `Start()`.
 - **Lifecycle**: `Start()` → `StartCron()` → `Awake()` → message/notice events → `OnPanic()`
 - **Panic recovery**: Every plugin call is wrapped in `safeExecute`; goroutines spawned via `bot.Go()` have crash recovery that notifies all plugins.
 
@@ -118,6 +118,15 @@ msgchain.Builder().Group(target).Text("hello").Mention(qid).Build()
 msgchain.Builder().GroupForward(target).Node(sender, content).Build()
 ```
 
+### Storage
+
+AniaBot exposes two interface-adapted storage layers, both with Clone-based `base64(pluginName)` namespacing injected per plugin:
+
+- **CACHE** (`common/storage.Storage`, injected as `p.Storage`): volatile; supports TTL + Redis-list semantics. Backends: `redis` (default) | `memory` (opt-in, process-local).
+- **PERSISTENT** (`common/storage.PersistentStorage`, injected as `p.PersistentStorage`): durable KV/document store, survives restart, no TTL/list semantics. Backends: `sqlite` (default) | `mysql` (opt-in).
+
+All SQL backends use pure-Go drivers (`modernc.org/sqlite`, `github.com/go-sql-driver/mysql`) — no CGO, cross-compile friendly. Config lives under `bot.store.cache` / `bot.store.persistent`; factories in `bot/core/storage_factory.go`.
+
 ## Key Conventions
 
 - **Language**: Code comments and user-facing strings are in Chinese
@@ -144,7 +153,9 @@ Three GitHub Actions workflows in `.github/workflows/`:
 | `modelcontextprotocol/go-sdk` | MCP protocol client |
 | `gorilla/websocket` | WebSocket for NapCat adapter |
 | `go-resty/resty/v2` | HTTP client |
-| `redis/go-redis/v9` | Redis storage backend |
+| `redis/go-redis/v9` | Redis cache storage backend |
+| `modernc.org/sqlite` | Pure-Go SQLite, persistent storage default |
+| `github.com/go-sql-driver/mysql` | Pure-Go MySQL, persistent storage opt-in |
 | `robfig/cron/v3` | Cron scheduling for timed plugins |
 | `spf13/viper` | YAML configuration loading |
 | `lmittmann/tint` | Colored slog handler |

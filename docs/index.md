@@ -33,6 +33,6 @@ features:
     title: 简洁 API
     details: 提供直观的插件接口和消息构造器，几十行代码即可完成一个功能插件。
   - icon: 💾
-    title: 持久化存储
-    details: 内置 Redis/内存双引擎存储抽象，插件数据自动隔离，无需关心命名冲突。
+    title: 双层存储
+    details: 缓存层（Redis/内存）+ 持久化层（SQLite/MySQL），均纯 Go 无 CGO，插件数据自动隔离，无需关心命名冲突。
 ---

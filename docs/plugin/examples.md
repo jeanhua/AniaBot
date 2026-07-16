@@ -515,7 +515,7 @@ func (p *WizardPlugin) cleanExpiredSessions() {
 
 - 音乐点歌（分页交互 + 文件发送）
 - GitHub 仓库分析（LLM 集成 + Markdown 转图片）
-- 群刊生成（消息收集 + Redis 持久化 + AI 生成）
+- 群刊生成（消息收集 + 缓存持久化 + AI 生成）
 - 消息拦截器（黑白名单 + 高优先级 Order）
 
 也可以查看 [常见模式](./patterns) 了解更多设计模式。

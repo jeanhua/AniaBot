@@ -24,10 +24,11 @@ type Meta struct {
 
 	Order int // 插件执行顺序，从小到大
 
-	Storage      storage.Storage
-	RestyClient  *resty.Client
-	Logger       *slog.Logger
-	SystemConfig SystemConfig
+	Storage           storage.Storage
+	PersistentStorage storage.PersistentStorage
+	RestyClient       *resty.Client
+	Logger            *slog.Logger
+	SystemConfig      SystemConfig
 }
 
 func (p *Meta) GetMeta() *Meta {
@@ -36,6 +37,10 @@ func (p *Meta) GetMeta() *Meta {
 
 func (p *Meta) SetStorage(s storage.Storage) {
 	p.Storage = s
+}
+
+func (p *Meta) SetPersistentStorage(s storage.PersistentStorage) {
+	p.PersistentStorage = s
 }
 
 func (p *Meta) SetRestyClient(c *resty.Client) {

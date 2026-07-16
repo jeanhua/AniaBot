@@ -24,6 +24,7 @@ type Plugin interface {
 
 type DI interface {
 	SetStorage(s storage.Storage)
+	SetPersistentStorage(s storage.PersistentStorage)
 	SetRestyClient(*resty.Client)
 	SetLogger(*slog.Logger)
 	SetConfig(SystemConfig)

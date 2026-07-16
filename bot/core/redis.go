@@ -3,6 +3,7 @@ package core
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"strings"
 	"time"
@@ -17,20 +18,19 @@ type AniaRedisStorage struct {
 	logger *slog.Logger
 }
 
-func NewAniaRedisStorage(ctx context.Context, addr, passwd string, db int, logger *slog.Logger) *AniaRedisStorage {
+func NewAniaRedisStorage(ctx context.Context, addr, passwd string, db int, logger *slog.Logger) (*AniaRedisStorage, error) {
 	rdb := redis.NewClient(&redis.Options{
 		Addr:     addr,
 		Password: passwd,
 		DB:       db,
 	})
-	_, err := rdb.Ping(ctx).Result()
-	if err != nil {
-		panic(err)
+	if _, err := rdb.Ping(ctx).Result(); err != nil {
+		return nil, fmt.Errorf("ping redis %s: %w", addr, err)
 	}
 	return &AniaRedisStorage{
 		rdb:    rdb,
 		logger: logger,
-	}
+	}, nil
 }
 
 func (store *AniaRedisStorage) Clone(prefix string) storage.Storage {

@@ -22,8 +22,12 @@
 **症状**：启动时 panic 提示 Redis 连接失败。
 
 **解决方案**：
-- **方案 A**：确保 Redis 已启动，`config.yaml` 中的 `redis.addr` 配置正确
-- **方案 B**：不配置 Redis，框架会自动降级为内存存储（重启后数据清空，适合开发测试）
+- **方案 A**：确保 Redis 已启动，`config.yaml` 中的 `bot.store.cache.redis` 配置正确
+- **方案 B**：无需 Redis 时，设置 `bot.store.cache.driver: memory`，改用进程内内存缓存（重启后清空，适合开发测试）
+
+::: tip 持久化存储默认即开即用
+框架默认使用 SQLite 作为持久化层（数据文件位于 `./data/aniabot.db`），无需安装任何外部数据库。Redis 只承担缓存职责，不是持久化存储。
+:::
 
 ### 配置文件不生效
 
@@ -110,16 +114,17 @@
 - 合理设置 Order，让快速响应的插件先执行
 - 不需要的插件不要注册
 
-### Redis 内存占用高
+### Redis 缓存内存占用高
 
 **可能原因**：
-1. **没有设置 TTL**：数据永不过期
+1. **没有设置 TTL**：缓存数据永不过期
 2. **List 无限增长**：没有用 `LTrim` 限制长度
 
 **解决方案**：
 - 为缓存数据设置合理的 TTL
 - 用 `RPush` + `LTrim` 保持列表固定长度
 - 定期 `ScanKeys` 清理不需要的数据
+- 或改用 `bot.store.cache.driver: memory` 改用进程内内存缓存
 
 ---
 

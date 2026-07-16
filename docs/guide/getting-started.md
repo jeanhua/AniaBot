@@ -14,7 +14,7 @@
 |------|---------|------|
 | Go | 1.26.0 或更高 | 编译运行框架 |
 | napcat | 最新版 | QQ 协议适配器（必须） |
-| Redis | 任意稳定版本 | 持久化存储（可选，不装则用内存存储） |
+| Redis | 任意稳定版本 | 缓存存储（可选，不装可用内存存储代替） |
 
 ::: tip 操作系统
 Windows、Linux、macOS 均可运行。下面的命令以 Linux/macOS 为主，Windows 用户将 `go run` 替换为 `go run` 即可（Go 是跨平台的）。
@@ -197,8 +197,12 @@ bot.AddPlugin(pluginnews.NewPlugin())                 // 新闻：定时推送
 **症状**：启动时 panic 提示 Redis 连接失败。
 
 **解决方案**：
-- 方案 A：确保 Redis 已启动并配置正确
-- 方案 B：不配置 Redis，框架会自动降级为内存存储（重启后数据清空）
+- 方案 A：确保 Redis 已启动，`bot.store.cache.redis` 配置正确
+- 方案 B：无需 Redis 时，在 `config.yaml` 设置 `bot.store.cache.driver: memory`，改用进程内内存缓存（重启后清空，无需额外服务）
+
+::: tip 持久化存储无需外部服务
+框架默认使用 SQLite 作为持久化层（数据文件位于 `./data/aniabot.db`），开箱即用、无需安装任何数据库。需要 MySQL 时可改设 `bot.store.persistent.driver: mysql`。
+:::
 
 ### 配置文件不生效
 

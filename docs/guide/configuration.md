@@ -50,15 +50,35 @@ bot:
       # 设为 0 表示不重连（调试时方便查看错误）
       max_retries: 5
 
-# Redis 配置（可选）
-# 不配置此项时，框架自动使用内存存储引擎
-# 内存存储重启后数据会清空，适合本地开发
-redis:
-  addr: "localhost:6379"
-  password: ""
-  # 使用第几号数据库，0~15
-  # 建议不同实例使用不同 db，避免数据冲突
-  db: 0
+  # 存储配置（缓存 + 持久化两层，独立配置、互不影响）
+  store:
+    # ---- 缓存存储 ----
+    # 易失，支持 TTL 与列表语义，适合热数据/临时会话/分布式锁
+    cache:
+      # 驱动：redis（默认，需 Redis 服务） | memory（进程内内存，零依赖，重启清空）
+      driver: redis
+      redis:
+        address: "localhost:6379"
+        password: ""
+        # 使用第几号数据库，0~15
+        # 建议不同实例使用不同 db，避免数据冲突
+        db: 0
+      # memory 引擎无需任何配置
+
+    # ---- 持久化存储 ----
+    # 重启不丢失，适合需要长期保存的数据（插件配置/用户数据/历史记录等）
+    persistent:
+      # 驱动：sqlite（默认，纯 Go 无 CGO，零依赖文件数据库） | mysql
+      driver: sqlite
+      sqlite:
+        # 数据库文件路径，目录不存在会自动创建；支持 ":memory:" 内存数据库
+        path: "./data/aniabot.db"
+      mysql:
+        # 标准 go-sql-driver DSN，charset=utf8mb4 建议保留
+        dsn: "root:password@tcp(localhost:3306)/aniabot?charset=utf8mb4&parseTime=true&loc=Local"
+        max_open_conns: 20          # 最大连接数，0 表示不限
+        max_idle_conns: 5           # 最大空闲连接数
+        conn_max_lifetime_sec: 300 # 连接最长存活时间（秒）
 
 # ============================================
 # 插件配置区域
@@ -116,17 +136,45 @@ plugin:
 | `admin_id` | int | 管理员 QQ 号，用于权限控制 |
 | `adapter.ws.address` | string | napcat WebSocket Server 地址 |
 | `adapter.ws.max_retries` | int | 断线重连最大次数，`-1` 为无限重连 |
+| `store` | object | 存储配置（缓存 + 持久化两层），详见下方 [`bot.store`](#bot-store) |
 
-### `redis`
+### `bot.store`
+
+存储配置分为缓存（cache）与持久化（persistent）两层，二者独立配置、互不影响：
+
+- **cache（缓存层）**：易失存储，支持 TTL 与列表语义，适合热数据、临时会话、分布式锁。
+- **persistent（持久化层）**：重启不丢失，适合需要长期保存的数据（插件配置、用户数据、历史记录等）。
+
+::: warning 破坏性变更
+旧版本的 `bot.store.redis`（字符串地址）、`bot.store.password`、`bot.store.db` 三个字段已废弃。请迁移到下方新的 `bot.store.cache` / `bot.store.persistent` 结构。
+:::
+
+#### `bot.store.cache`
 
 | 字段 | 类型 | 默认值 | 说明 |
 |------|------|--------|------|
-| `addr` | string | `localhost:6379` | Redis 地址 |
-| `password` | string | `""` | Redis 密码 |
-| `db` | int | `0` | Redis 数据库编号 |
+| `driver` | string | `redis` | 缓存驱动：`redis`（需 Redis 服务）或 `memory`（进程内内存，零依赖，重启清空） |
+| `redis.address` | string | `localhost:6379` | Redis 地址（driver 为 `redis` 时生效） |
+| `redis.password` | string | `""` | Redis 密码 |
+| `redis.db` | int | `0` | Redis 数据库编号，0~15 |
 
-::: info 不配置 Redis
-若不配置 Redis，框架会自动使用内存存储引擎（重启后数据清空）。
+::: warning 缓存默认不会自动降级
+默认使用 Redis 作为缓存层。若 Redis 不可达，框架会记录错误并退出（**不会**自动降级为内存存储）。如需零依赖、免安装的本地缓存，显式设置 `bot.store.cache.driver: memory`，但重启后缓存数据会清空，且多实例之间不共享。
+:::
+
+#### `bot.store.persistent`
+
+| 字段 | 类型 | 默认值 | 说明 |
+|------|------|--------|------|
+| `driver` | string | `sqlite` | 持久化驱动：`sqlite`（纯 Go 无 CGO）或 `mysql` |
+| `sqlite.path` | string | `./data/aniabot.db` | SQLite 数据库文件路径，目录不存在会自动创建；支持 `:memory:` 内存数据库 |
+| `mysql.dsn` | string | — | 标准 go-sql-driver DSN，如 `root:pass@tcp(host:3306)/db?charset=utf8mb4&parseTime=true&loc=Local` |
+| `mysql.max_open_conns` | int | `20` | 最大连接数，0 表示不限 |
+| `mysql.max_idle_conns` | int | `5` | 最大空闲连接数 |
+| `mysql.conn_max_lifetime_sec` | int | `300` | 连接最长存活时间（秒） |
+
+::: tip 零依赖持久化
+默认使用 SQLite 作为持久化层，纯 Go 驱动 `modernc.org/sqlite` 无需 CGO、无需额外安装数据库服务，开箱即用。需要多实例共享或更高吞吐时，切换 `driver: mysql` 即可。
 :::
 
 ### `plugin.ai_chat_bot`
@@ -243,6 +291,11 @@ bot:
     ws:
       address: ws://localhost:4455
       max_retries: 0   # 开发时不重连，方便看到错误
+  store:
+    cache:
+      driver: memory   # 本地开发免装 Redis，用进程内内存（重启清空）
+    persistent:
+      driver: sqlite   # SQLite 零依赖，文件落盘
 
 plugin:
   ai_chat_bot:
@@ -255,7 +308,7 @@ plugin:
 
 ### 生产部署
 
-使用 `config.yaml`，填入正式的 API Key，开启重连和 Redis：
+使用 `config.yaml`，填入正式的 API Key，开启重连，并配置生产级存储（Redis 缓存 + SQLite/MySQL 持久化）：
 
 ```yaml
 bot:
@@ -264,11 +317,17 @@ bot:
     ws:
       address: ws://localhost:4455
       max_retries: -1  # 生产环境无限重连
-
-redis:
-  addr: "localhost:6379"
-  password: "your-redis-password"
-  db: 0
+  store:
+    cache:
+      driver: redis   # 生产环境使用 Redis 作为缓存
+      redis:
+        address: "localhost:6379"
+        password: "your-redis-password"
+        db: 0
+    persistent:
+      driver: sqlite  # 持久化层（生产高吞吐可切换 mysql）
+      sqlite:
+        path: "./data/aniabot.db"
 
 plugin:
   ai_chat_bot:

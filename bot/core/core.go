@@ -32,6 +32,7 @@ type AniaBot struct {
 	cfg     *viper.Viper
 
 	storage     storage.Storage
+	persistent  storage.PersistentStorage
 	restyClient *resty.Client
 
 	logger *slog.Logger
@@ -60,6 +61,12 @@ type Option func(*AniaBot)
 func WithStorage(storage storage.Storage) Option {
 	return func(ania *AniaBot) {
 		ania.storage = storage
+	}
+}
+
+func WithPersistentStorage(storage storage.PersistentStorage) Option {
+	return func(ania *AniaBot) {
+		ania.persistent = storage
 	}
 }
 
@@ -142,13 +149,24 @@ func (ania *AniaBot) Run() {
 		ania.cfg = cfg
 	}
 
-	// storage
+	// 缓存存储（易失，支持 TTL/列表；默认 redis，可配置 memory）
 	if ania.storage == nil {
-		ania.storage = NewAniaRedisStorage(context.Background(),
-			ania.cfg.GetString("bot.store.redis"),
-			ania.cfg.GetString("bot.store.password"),
-			ania.cfg.GetInt("bot.store.db"),
-			Logger().WithGroup("Redis"))
+		store, err := newCacheStorage(context.Background(), ania.cfg, Logger().WithGroup("Cache"))
+		if err != nil {
+			Logger().Error("初始化缓存存储失败", "error", err)
+			os.Exit(1)
+		}
+		ania.storage = store
+	}
+
+	// 持久化存储（重启不丢失；默认 sqlite，可配置 mysql）
+	if ania.persistent == nil {
+		store, err := newPersistentStorage(context.Background(), ania.cfg, Logger().WithGroup("Persistent"))
+		if err != nil {
+			Logger().Error("初始化持久化存储失败", "error", err)
+			os.Exit(1)
+		}
+		ania.persistent = store
 	}
 
 	// resty
@@ -164,6 +182,7 @@ func (ania *AniaBot) Run() {
 			// DI
 			encodeName := base64.StdEncoding.EncodeToString([]byte(p.GetMeta().Name))
 			p.SetStorage(ania.storage.Clone(encodeName))
+			p.SetPersistentStorage(ania.persistent.Clone(encodeName))
 			p.SetRestyClient(ania.restyClient)
 			p.SetLogger(Logger().WithGroup(p.GetMeta().Name))
 			p.SetConfig(plugin.SystemConfig{
