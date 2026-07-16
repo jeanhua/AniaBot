@@ -1,0 +1,675 @@
+package pluginaichat
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"log/slog"
+	"sort"
+	"strconv"
+	"strings"
+	"sync"
+	"time"
+
+	"github.com/jeanhua/AniaBot/bot/component/aichat"
+	"github.com/jeanhua/AniaBot/bot/component/llmtool"
+	"github.com/jeanhua/AniaBot/bot/component/tasklog"
+	"github.com/jeanhua/AniaBot/common/bot"
+	"github.com/jeanhua/AniaBot/common/model/message"
+	"github.com/jeanhua/AniaBot/common/msgchain"
+	"github.com/jeanhua/AniaBot/common/storage"
+	"github.com/robfig/cron/v3"
+)
+
+// 触发对象类型
+const (
+	clockTargetGroup  = "group"
+	clockTargetFriend = "friend"
+)
+
+const (
+	clockTaskPrefix = "task:"
+	clockIndexKey   = "index"
+	clockSeqKey     = "seq"
+)
+
+// ClockTask AI 定时任务。
+//
+// 与框架的 robfig/cron 静态任务（StartCron 注册）不同，ClockTask 由 AI / 用户动态
+// 创建、持久化到 PersistentStorage，由 clockManager 拥有的独立 *cron.Cron 实例调度。
+// 触发时以全新的一次性上下文（无历史持久化）执行，结束后丢弃，支持完整工具调用流程。
+type ClockTask struct {
+	ID         string      `json:"id"`
+	Cron       string      `json:"cron"`        // cron 表达式（5 字段或 @every 等）
+	Title      string      `json:"title"`       // 任务标题
+	Content    string      `json:"content"`     // 任务内容，触发时作为对话内容发送给 AI
+	TargetType string      `json:"target_type"` // group / friend
+	TargetID   message.QID `json:"target_id"`   // 群号或 QQ 号
+	Enabled    bool        `json:"enabled"`
+	TimeoutSec int         `json:"timeout_sec"` // 单次执行超时秒数，<=0 用默认值
+	CreatedBy  message.QID `json:"created_by"`  // 创建者 QQ（用于群聊 @ 提醒），0 表示无
+	Note       string      `json:"note,omitempty"`
+	CreatedAt  time.Time   `json:"created_at"`
+	UpdatedAt  time.Time   `json:"updated_at"`
+	LastRunAt  time.Time   `json:"last_run_at,omitempty"`
+	NextRunAt  time.Time   `json:"next_run_at,omitempty"`
+}
+
+// ClockUpdateFields 定时任务可更新字段，指针类型表示「仅当提供时才更新」。
+type ClockUpdateFields struct {
+	Cron       *string
+	Title      *string
+	Content    *string
+	TargetType *string
+	TargetID   *message.QID
+	Enabled    *bool
+	TimeoutSec *int
+	Note       *string
+}
+
+// clockManager AI 定时任务调度器：持久化 + 调度 + 触发执行 + 执行日志。
+//
+// 拥有独立的 *cron.Cron 实例（不与框架的 cron 共用），从而与 StartCron 注册的
+// 静态任务明确区分。所有状态变更在 mu 保护下落盘，保证重启不丢失。
+type clockManager struct {
+	plugin *AIChatPlugin
+	store  storage.PersistentStorage
+	log    *tasklog.Logger
+	logger *slog.Logger
+
+	defaultTimeout time.Duration
+
+	mu          sync.Mutex
+	tasks       map[string]*ClockTask
+	entries     map[string]cron.EntryID
+	seq         uint64
+	cron        *cron.Cron
+	cronStarted bool
+	bot         bot.Bot
+}
+
+func newClockManager(p *AIChatPlugin, defaultTimeout time.Duration, maxLog int) *clockManager {
+	m := &clockManager{
+		plugin:         p,
+		store:          p.PersistentStorage.Clone("clock:"),
+		log:            tasklog.New(p.PersistentStorage.Clone("clocklog:"), maxLog, p.Logger.WithGroup("tasklog")),
+		logger:         p.Logger.WithGroup("clock"),
+		defaultTimeout: defaultTimeout,
+		tasks:          map[string]*ClockTask{},
+		entries:        map[string]cron.EntryID{},
+		cron:           cron.New(),
+	}
+	m.loadAll()
+	return m
+}
+
+// Start 在 Bot 就绪后启动调度器并调度所有已加载任务。由 Awake 调用。
+func (m *clockManager) Start(b bot.Bot) {
+	m.mu.Lock()
+	m.bot = b
+	m.cron.Start()
+	m.cronStarted = true
+	for _, t := range m.tasks {
+		m.scheduleLocked(t)
+	}
+	count := len(m.tasks)
+	m.mu.Unlock()
+	m.logger.Info("AI定时任务调度器已启动", "tasks", count)
+}
+
+// ---- 持久化 ----
+
+func (m *clockManager) loadAll() {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	var ids []string
+	if ok := m.store.Get(context.Background(), clockIndexKey, &ids); !ok {
+		// 无索引时回退扫描 task: 前缀，兼容直接写入的情况
+		keys, err := m.store.Keys(context.Background(), clockTaskPrefix)
+		if err == nil {
+			for _, k := range keys {
+				ids = append(ids, strings.TrimPrefix(k, clockTaskPrefix))
+			}
+		}
+	}
+	for _, id := range ids {
+		var t ClockTask
+		if ok := m.store.Get(context.Background(), clockTaskPrefix+id, &t); ok {
+			if t.ID == "" {
+				t.ID = id
+			}
+			m.tasks[id] = &t
+		}
+	}
+	if s, ok := m.store.GetString(context.Background(), clockSeqKey); ok {
+		if n, err := strconv.ParseUint(s, 10, 64); err == nil {
+			m.seq = n
+		}
+	}
+}
+
+func (m *clockManager) nextID() string {
+	m.seq++
+	m.store.SetString(context.Background(), clockSeqKey, strconv.FormatUint(m.seq, 10))
+	return strconv.FormatUint(m.seq, 36)
+}
+
+func (m *clockManager) persistTaskLocked(t *ClockTask) {
+	m.store.Set(context.Background(), clockTaskPrefix+t.ID, t)
+}
+
+func (m *clockManager) persistIndexLocked() {
+	ids := make([]string, 0, len(m.tasks))
+	for id := range m.tasks {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	m.store.Set(context.Background(), clockIndexKey, ids)
+}
+
+// ---- 增删改查 ----
+
+// Add 校验并新增定时任务，返回新任务 ID。
+func (m *clockManager) Add(t *ClockTask) (string, error) {
+	if t == nil {
+		return "", fmt.Errorf("任务不能为空")
+	}
+	if _, err := cron.ParseStandard(t.Cron); err != nil {
+		return "", fmt.Errorf("cron 表达式无效: %w", err)
+	}
+	if strings.TrimSpace(t.Content) == "" {
+		return "", fmt.Errorf("任务内容不能为空")
+	}
+	if t.TargetType != clockTargetGroup && t.TargetType != clockTargetFriend {
+		return "", fmt.Errorf("触发对象类型必须为 group 或 friend")
+	}
+
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	t.ID = m.nextID()
+	now := time.Now()
+	if t.CreatedAt.IsZero() {
+		t.CreatedAt = now
+	}
+	t.UpdatedAt = now
+	m.tasks[t.ID] = t
+	m.persistTaskLocked(t)
+	m.persistIndexLocked()
+	if m.cronStarted {
+		m.scheduleLocked(t)
+	}
+	return t.ID, nil
+}
+
+// Update 按字段更新任务并重新调度。
+func (m *clockManager) Update(id string, f ClockUpdateFields) (*ClockTask, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	cur, ok := m.tasks[id]
+	if !ok {
+		return nil, fmt.Errorf("定时任务不存在: %s", id)
+	}
+	nt := *cur
+	if f.Cron != nil {
+		if _, err := cron.ParseStandard(*f.Cron); err != nil {
+			return nil, fmt.Errorf("cron 表达式无效: %w", err)
+		}
+		nt.Cron = *f.Cron
+	}
+	if f.Title != nil {
+		nt.Title = *f.Title
+	}
+	if f.Content != nil {
+		if strings.TrimSpace(*f.Content) == "" {
+			return nil, fmt.Errorf("任务内容不能为空")
+		}
+		nt.Content = *f.Content
+	}
+	if f.TargetType != nil {
+		if *f.TargetType != clockTargetGroup && *f.TargetType != clockTargetFriend {
+			return nil, fmt.Errorf("触发对象类型必须为 group 或 friend")
+		}
+		nt.TargetType = *f.TargetType
+	}
+	if f.TargetID != nil {
+		nt.TargetID = *f.TargetID
+	}
+	if f.Enabled != nil {
+		nt.Enabled = *f.Enabled
+	}
+	if f.TimeoutSec != nil {
+		nt.TimeoutSec = *f.TimeoutSec
+	}
+	if f.Note != nil {
+		nt.Note = *f.Note
+	}
+	nt.UpdatedAt = time.Now()
+	m.tasks[id] = &nt
+	m.persistTaskLocked(&nt)
+	if m.cronStarted {
+		m.unscheduleLocked(id)
+		m.scheduleLocked(&nt)
+	}
+	return &nt, nil
+}
+
+// Delete 删除任务，返回是否曾存在。
+func (m *clockManager) Delete(id string) bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if _, ok := m.tasks[id]; !ok {
+		return false
+	}
+	delete(m.tasks, id)
+	m.store.Del(context.Background(), clockTaskPrefix+id)
+	m.persistIndexLocked()
+	if m.cronStarted {
+		m.unscheduleLocked(id)
+	}
+	return true
+}
+
+// Get 返回任务的副本。
+func (m *clockManager) Get(id string) (*ClockTask, bool) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	t, ok := m.tasks[id]
+	if !ok {
+		return nil, false
+	}
+	cp := *t
+	return &cp, true
+}
+
+// List 返回所有任务的副本，按创建时间升序。
+func (m *clockManager) List() []*ClockTask {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	out := make([]*ClockTask, 0, len(m.tasks))
+	for _, t := range m.tasks {
+		cp := *t
+		out = append(out, &cp)
+	}
+	sort.Slice(out, func(i, j int) bool {
+		return out[i].CreatedAt.Before(out[j].CreatedAt)
+	})
+	return out
+}
+
+// ListByTarget 返回指定触发对象的任务列表。
+func (m *clockManager) ListByTarget(targetType string, targetID message.QID) []*ClockTask {
+	all := m.List()
+	out := make([]*ClockTask, 0)
+	for _, t := range all {
+		if t.TargetType == targetType && t.TargetID == targetID {
+			out = append(out, t)
+		}
+	}
+	return out
+}
+
+// ---- 调度 ----
+
+func (m *clockManager) scheduleLocked(t *ClockTask) {
+	if !t.Enabled {
+		return
+	}
+	taskID := t.ID
+	entryID, err := m.cron.AddFunc(t.Cron, func() {
+		// 重新读取最新状态，任务可能已被更新 / 禁用 / 删除
+		m.mu.Lock()
+		cur := m.tasks[taskID]
+		m.mu.Unlock()
+		if cur == nil || !cur.Enabled {
+			return
+		}
+		m.runTask(cur)
+	})
+	if err != nil {
+		m.logger.Error("注册定时任务失败", "task", t.ID, "cron", t.Cron, "error", err)
+		return
+	}
+	m.entries[t.ID] = entryID
+	if entry := m.cron.Entry(entryID); entry.Valid() {
+		t.NextRunAt = entry.Next
+		m.persistTaskLocked(t)
+	}
+}
+
+func (m *clockManager) unscheduleLocked(id string) {
+	if entryID, ok := m.entries[id]; ok {
+		m.cron.Remove(entryID)
+		delete(m.entries, id)
+	}
+}
+
+// RunNow 立即触发一次任务（手动执行，不影响 cron 调度）。任务不存在时返回 false。
+func (m *clockManager) RunNow(id string) bool {
+	t, ok := m.Get(id)
+	if !ok {
+		return false
+	}
+	m.runTask(t)
+	return true
+}
+
+// ---- 触发执行 ----
+
+// runTask 在独立的可恢复 goroutine 中执行一次任务。
+func (m *clockManager) runTask(task *ClockTask) {
+	if m.bot == nil {
+		m.logger.Warn("定时任务触发但 bot 尚未就绪，跳过", "task", task.ID, "title", task.Title)
+		return
+	}
+	m.bot.Go("clock:"+task.ID, func() {
+		start := time.Now()
+		logEntry := m.log.Record(tasklog.Entry{
+			TaskID:      task.ID,
+			TaskTitle:   task.Title,
+			TargetType:  task.TargetType,
+			TargetID:    uint64(task.TargetID),
+			TriggerTime: start,
+			Status:      tasklog.StatusRunning,
+		})
+
+		// 记录 LastRunAt
+		m.mu.Lock()
+		if cur, ok := m.tasks[task.ID]; ok {
+			cur.LastRunAt = start
+			m.persistTaskLocked(cur)
+		}
+		m.mu.Unlock()
+
+		finished := false
+		defer func() {
+			if !finished {
+				// panic 或未正常返回：兜底标记为 error
+				m.log.Update(logEntry.ID, func(e *tasklog.Entry) {
+					e.Status = tasklog.StatusError
+					e.DurationMs = time.Since(start).Milliseconds()
+					e.Error = "未正常完成（可能发生 panic）"
+					e.FinishedAt = time.Now()
+				})
+				m.logger.Error("定时任务未正常完成", "task", task.ID, "title", task.Title)
+			}
+		}()
+
+		timeout := m.defaultTimeout
+		if task.TimeoutSec > 0 {
+			timeout = time.Duration(task.TimeoutSec) * time.Second
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), timeout)
+		defer cancel()
+
+		resp, usage, runErr := m.executeTask(ctx, task)
+		duration := time.Since(start)
+
+		if runErr != nil {
+			status := tasklog.StatusError
+			errMsg := runErr.Error()
+			if errors.Is(runErr, context.DeadlineExceeded) {
+				status = tasklog.StatusTimeout
+			}
+			m.log.Update(logEntry.ID, func(e *tasklog.Entry) {
+				e.Status = status
+				e.DurationMs = duration.Milliseconds()
+				e.Error = errMsg
+				e.PromptTokens = usage.PromptTokens
+				e.CompletionTokens = usage.CompletionTokens
+				e.TotalTokens = usage.TotalTokens
+				e.FinishedAt = time.Now()
+			})
+			finished = true
+			m.logger.Warn("定时任务执行结束（非成功）", "task", task.ID, "title", task.Title,
+				"status", status, "error", errMsg, "duration", duration)
+			if status == tasklog.StatusTimeout {
+				m.sendText(task, "⏰ 定时任务「"+task.Title+"」执行超时（"+timeout.String()+"），已中止")
+			}
+			return
+		}
+
+		m.log.Update(logEntry.ID, func(e *tasklog.Entry) {
+			e.Status = tasklog.StatusSuccess
+			e.DurationMs = duration.Milliseconds()
+			e.PromptTokens = usage.PromptTokens
+			e.CompletionTokens = usage.CompletionTokens
+			e.TotalTokens = usage.TotalTokens
+			e.FinishedAt = time.Now()
+		})
+		finished = true
+		m.logger.Info("定时任务执行成功", "task", task.ID, "title", task.Title,
+			"duration", duration, "tokens", usage.TotalTokens)
+		_ = resp // 最终回复已在 executeTask 内发送
+	})
+}
+
+// executeTask 构建一次性上下文执行任务并返回最终回复与 token 用量。
+func (m *clockManager) executeTask(ctx context.Context, task *ClockTask) (string, aichat.TokenUsage, error) {
+	p := m.plugin
+	isGroup := task.TargetType == clockTargetGroup
+	prompt := p.getPromptForID(task.TargetID, isGroup)
+
+	// 每次触发独立的 SessionToolExecutor（动态 MCP 工具互不影响）；
+	// historyStore 传 nil → 全新一次性上下文，不持久化、执行后丢弃
+	sessionExecutor := p.toolExecutor.NewSessionExecutor()
+	// 注册 send_message 工具，让执行中的任务可主动给任意群 / 好友发消息
+	sessionExecutor.RegisterSession(newClockSendMessageTool(m))
+	chat, err := aichat.NewChatBot(
+		p.botConfig.baseURL, p.botConfig.apiKey, p.botConfig.model,
+		prompt, p.botConfig.maxContextTokens, sessionExecutor, nil,
+	)
+	if err != nil {
+		return "", aichat.TokenUsage{}, fmt.Errorf("创建对话失败: %w", err)
+	}
+	if p.skillManager != nil {
+		chat.SetSkillManager(p.skillManager)
+	}
+
+	cbs := m.makeClockCallback(ctx, task)
+	resp, usage, err := chat.Chat(ctx, m.buildTriggerPrompt(task), cbs, p.buildChatOptions())
+	if err != nil {
+		return "", usage, err
+	}
+	// 发送最终文本回复（工具过程中的中间文本已由回调即时发送）
+	if strings.TrimSpace(resp) != "" {
+		m.sendText(task, resp)
+	}
+	return resp, usage, nil
+}
+
+// buildTriggerPrompt 构造触发时发送给 AI 的内容：【定时任务】标题\n 内容。
+func (m *clockManager) buildTriggerPrompt(task *ClockTask) string {
+	var sb strings.Builder
+	sb.WriteString("【定时任务】")
+	if strings.TrimSpace(task.Title) != "" {
+		sb.WriteString(task.Title)
+	}
+	sb.WriteString("\n")
+	sb.WriteString(task.Content)
+	if strings.TrimSpace(task.Note) != "" {
+		sb.WriteString("\n（备注：")
+		sb.WriteString(task.Note)
+		sb.WriteString("）")
+	}
+	return sb.String()
+}
+
+// makeClockCallback 构造触发时面向目标对象（群 / 好友）的工具回调。
+func (m *clockManager) makeClockCallback(ctx context.Context, task *ClockTask) llmtool.CallBackFuncs {
+	b := m.bot
+	targetID := task.TargetID
+	isGroup := task.TargetType == clockTargetGroup
+	logger := m.logger
+	var loadedImages []string
+
+	cbs := llmtool.CallBackFuncs{
+		SendText: func(s string) (string, error) {
+			m.sendText(task, s)
+			logger.Info("定时任务发送文本", "task", task.ID, "target", targetID, "text", s)
+			return "发送成功", nil
+		},
+		SendImage: func(bs64 string) (string, error) {
+			ok := m.sendImage(task, bs64)
+			if !ok {
+				return "", fmt.Errorf("发送失败")
+			}
+			logger.Info("定时任务发送图片", "task", task.ID, "target", targetID)
+			return "发送成功", nil
+		},
+		SendFile: func(name, bs64 string) (string, error) {
+			ok := m.sendFile(task, name, bs64)
+			if !ok {
+				return "", fmt.Errorf("发送失败")
+			}
+			logger.Info("定时任务发送文件", "task", task.ID, "target", targetID, "file", name)
+			return "发送成功", nil
+		},
+		GetMsgHistory: func(count, messageSeq int) (string, error) {
+			if isGroup {
+				msgs, ok := b.GetGroupMsgHistory(targetID, count, messageSeq)
+				if !ok || msgs == nil {
+					return "", fmt.Errorf("获取历史消息失败")
+				}
+				return formatHistoryText(msgs, b), nil
+			}
+			msgs, ok := b.GetFriendMsgHistory(targetID, count, messageSeq)
+			if !ok || msgs == nil {
+				return "", fmt.Errorf("获取历史消息失败")
+			}
+			return formatHistoryText(msgs, b), nil
+		},
+		GetPrivateFileURL: func(fileId string) (string, error) {
+			if isGroup {
+				return "", fmt.Errorf("当前为群聊定时任务，无法获取私聊文件")
+			}
+			url, ok := b.GetPrivateFileURL(targetID, fileId)
+			if !ok {
+				return "", fmt.Errorf("获取私聊文件URL失败")
+			}
+			return url, nil
+		},
+		LoadImages: func() (string, error) {
+			return "当前为定时任务触发，无消息图片可加载", nil
+		},
+		TakeLoadedImages: func() []string {
+			imgs := loadedImages
+			loadedImages = nil
+			return imgs
+		},
+	}
+
+	// 复用插件本地图片读取逻辑（主模型多模态或配置了备用识别模型时可用）
+	if m.plugin.multimodal || m.plugin.ocrModel != nil {
+		p := m.plugin
+		cbs.LoadLocalImage = func(path string) (string, error) {
+			return p.loadLocalImageInto(ctx, path, &loadedImages), nil
+		}
+	}
+	return cbs
+}
+
+// formatHistoryText 将历史消息格式化为纯文本（与 msgcallback.go 的格式一致）。
+func formatHistoryText(msgs *[]message.Message, b bot.Bot) string {
+	var sb strings.Builder
+	for _, msg := range *msgs {
+		sb.WriteString(fmt.Sprintf("[message_seq:%d]\n", msg.MessageSeq))
+		sb.WriteString(msg.FriendlyText(true,
+			message.WithGetMsgFunc(b.GetMsgDetail),
+			message.WithGetForwardMsgFunc(b.GetForwardMsg),
+		))
+		sb.WriteString("\n")
+	}
+	return sb.String()
+}
+
+// ---- 目标消息发送 ----
+
+func (m *clockManager) sendText(task *ClockTask, text string) bool {
+	if m.bot == nil {
+		return false
+	}
+	if task.TargetType == clockTargetGroup {
+		builder := msgchain.Builder().Group()
+		if task.CreatedBy != 0 {
+			builder.Mention(task.CreatedBy)
+			builder.Text(" " + text)
+		} else {
+			builder.Text(text)
+		}
+		_, ok := m.bot.SendGroupMsg(task.TargetID, builder.Build())
+		return ok
+	}
+	builder := msgchain.Builder().Friend()
+	builder.Text(text)
+	_, ok := m.bot.SendFriendMsg(task.TargetID, builder.Build())
+	return ok
+}
+
+func (m *clockManager) sendImage(task *ClockTask, bs64 string) bool {
+	if m.bot == nil {
+		return false
+	}
+	if task.TargetType == clockTargetGroup {
+		builder := msgchain.Builder().Group()
+		builder.ImageBase64(bs64)
+		_, ok := m.bot.SendGroupMsg(task.TargetID, builder.Build())
+		return ok
+	}
+	builder := msgchain.Builder().Friend()
+	builder.ImageBase64(bs64)
+	_, ok := m.bot.SendFriendMsg(task.TargetID, builder.Build())
+	return ok
+}
+
+func (m *clockManager) sendFile(task *ClockTask, name, bs64 string) bool {
+	if m.bot == nil {
+		return false
+	}
+	if task.TargetType == clockTargetGroup {
+		builder := msgchain.Builder().Group()
+		builder.FileBase64(name, bs64)
+		_, ok := m.bot.SendGroupMsg(task.TargetID, builder.Build())
+		return ok
+	}
+	builder := msgchain.Builder().Friend()
+	builder.FileBase64(name, bs64)
+	_, ok := m.bot.SendFriendMsg(task.TargetID, builder.Build())
+	return ok
+}
+
+// sendTextTo 向任意指定对象发送文本（不限于任务自身目标），供 send_message 工具使用。
+func (m *clockManager) sendTextTo(targetType string, targetID message.QID, text string) bool {
+	if m.bot == nil {
+		return false
+	}
+	if targetType == clockTargetGroup {
+		builder := msgchain.Builder().Group()
+		builder.Text(text)
+		_, ok := m.bot.SendGroupMsg(targetID, builder.Build())
+		return ok
+	}
+	builder := msgchain.Builder().Friend()
+	builder.Text(text)
+	_, ok := m.bot.SendFriendMsg(targetID, builder.Build())
+	return ok
+}
+
+// sendImageTo 向任意指定对象发送图片（base64，不含 data: 前缀）。
+func (m *clockManager) sendImageTo(targetType string, targetID message.QID, bs64 string) bool {
+	if m.bot == nil {
+		return false
+	}
+	if targetType == clockTargetGroup {
+		builder := msgchain.Builder().Group()
+		builder.ImageBase64(bs64)
+		_, ok := m.bot.SendGroupMsg(targetID, builder.Build())
+		return ok
+	}
+	builder := msgchain.Builder().Friend()
+	builder.ImageBase64(bs64)
+	_, ok := m.bot.SendFriendMsg(targetID, builder.Build())
+	return ok
+}

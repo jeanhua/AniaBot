@@ -104,33 +104,39 @@ func (p *AIChatPlugin) configureImageCallbacks(ctx context.Context, bot bot.Bot,
 		return images
 	}
 	callbacks.LoadLocalImage = func(path string) (string, error) {
-		// 与 file 工具一致，禁止读取配置文件（避免凭据等敏感信息经图片通道泄露）
-		if strings.Contains(path, "config.yaml") || strings.Contains(path, "config.dev.yaml") {
-			return "禁止读取配置文件", nil
-		}
-		data, err := os.ReadFile(path)
-		if err != nil {
-			return fmt.Sprintf("读取本地图片失败: %v", err), nil
-		}
-		dataURI := "data:" + imageMIME(path) + ";base64," + base64.StdEncoding.EncodeToString(data)
-
-		if p.multimodal {
-			// data URI 推入待加载队列，下一轮由 TakeLoadedImages 取出并入上下文；
-			// data URI 不依赖外部链接，历史持久化后重启也不会失效
-			loadedImages = append(loadedImages, dataURI)
-			return fmt.Sprintf("已加载本地图片 %s，将在下一轮上下文中提供，请直接查看图片后回答", path), nil
-		}
-
-		if p.ocrModel == nil {
-			return "当前主模型不支持加载图片，且未配置备用图片识别模型，无法查看图片内容", nil
-		}
-		description, err := p.ocrModel.GetSingleImageDesc(ctx, "描述图片内容", dataURI, p.buildOCRChatOptions())
-		if err != nil {
-			p.Logger.Error("备用图片识别请求失败", "path", path, "error", err.Error())
-			return fmt.Sprintf("本地图片识别失败: %v", err), nil
-		}
-		return "主模型不支持多模态，以下是备用图片识别模型返回的图片描述：\n" + description, nil
+		return p.loadLocalImageInto(ctx, path, &loadedImages), nil
 	}
+}
+
+// loadLocalImageInto 读取本地图片供 LLM 查看：主模型支持多模态时把 data URI 推入
+// 待加载队列（loadedImages 由调用方持有，下一轮上下文提供），否则交由备用识别模型描述。
+// 与 file 工具一致，禁止读取配置文件以避免凭据等敏感信息经图片通道泄露。
+func (p *AIChatPlugin) loadLocalImageInto(ctx context.Context, path string, loadedImages *[]string) string {
+	if strings.Contains(path, "config.yaml") || strings.Contains(path, "config.dev.yaml") {
+		return "禁止读取配置文件"
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return fmt.Sprintf("读取本地图片失败: %v", err)
+	}
+	dataURI := "data:" + imageMIME(path) + ";base64," + base64.StdEncoding.EncodeToString(data)
+
+	if p.multimodal {
+		// data URI 推入待加载队列，下一轮由 TakeLoadedImages 取出并入上下文；
+		// data URI 不依赖外部链接，历史持久化后重启也不会失效
+		*loadedImages = append(*loadedImages, dataURI)
+		return fmt.Sprintf("已加载本地图片 %s，将在下一轮上下文中提供，请直接查看图片后回答", path)
+	}
+
+	if p.ocrModel == nil {
+		return "当前主模型不支持加载图片，且未配置备用图片识别模型，无法查看图片内容"
+	}
+	description, err := p.ocrModel.GetSingleImageDesc(ctx, "描述图片内容", dataURI, p.buildOCRChatOptions())
+	if err != nil {
+		p.Logger.Error("备用图片识别请求失败", "path", path, "error", err.Error())
+		return fmt.Sprintf("本地图片识别失败: %v", err)
+	}
+	return "主模型不支持多模态，以下是备用图片识别模型返回的图片描述：\n" + description
 }
 
 // imageMIME 根据文件扩展名推断图片 MIME 类型，无法识别时回退到 image/png。

@@ -103,6 +103,15 @@ plugin:
     local_image:
       enable: false           # 是否启用本地图片读取工具
 
+    # AI 定时任务（clock）配置
+    # 与框架的 StartCron 静态定时任务不同，clock 由 AI / 用户动态创建、持久化保存、
+    # 重启不丢失，到点时以全新的一次性上下文自动执行任务内容（可调用工具完成复杂流程）。
+    # AI 可通过 clock_create 等工具自行管理；用户可通过 /clock 命令查看与管理。
+    clock:
+      enable: true                # 是否启用定时任务功能
+      default_timeout_sec: 120    # 单次触发默认超时（秒），超时会记录到执行日志并中止
+      max_log_entries: 500        # 执行日志保留条数（滚动覆盖）
+
   # 每日新闻插件
   dailyNews:
     api: "https://60s.viki.moe/v2/60s?encoding=image-proxy" # api端点

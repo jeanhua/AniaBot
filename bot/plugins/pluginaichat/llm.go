@@ -26,11 +26,21 @@ func (p *AIChatPlugin) clearActiveContext(id message.QID) {
 	p.activeContexts.Delete(id)
 }
 
-func (p *AIChatPlugin) getChat(id message.QID, prompt string) *aichat.ChatBot {
+func (p *AIChatPlugin) getChat(id message.QID, isGroup bool, prompt string) *aichat.ChatBot {
 	chat, ok := p.chats.Load(id)
 	if !ok {
 		// 每个会话创建独立的 SessionToolExecutor，动态加载的工具互不影响
 		sessionExecutor := p.toolExecutor.NewSessionExecutor()
+		// 注册定时任务管理工具，默认触发对象为当前会话（群聊/好友）
+		if p.clockManager != nil {
+			targetType := clockTargetFriend
+			if isGroup {
+				targetType = clockTargetGroup
+			}
+			for _, tool := range newClockTools(p.clockManager, targetType, id) {
+				sessionExecutor.RegisterSession(tool)
+			}
+		}
 		// 每个会话独立的历史持久化存储；g:/f: 前缀避免群聊与好友 id 相同导致历史串扰
 		var historyStore aichat.HistoryStore
 		if p.PersistentStorage != nil {

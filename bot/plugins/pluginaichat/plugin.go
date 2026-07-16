@@ -75,6 +75,9 @@ type AIChatPlugin struct {
 	toolExecutor *llmtool.ToolExecuter
 
 	skillManager *llmtool.SkillManager
+
+	// clockManager AI 定时任务调度器；为 nil 表示功能未启用
+	clockManager *clockManager
 }
 
 const (
@@ -101,6 +104,10 @@ func NewAIChatPlugin() *AIChatPlugin {
 }
 
 func (p *AIChatPlugin) OnGroupMsg(ctx context.Context, bot bot.Bot, cmd command.Command, msg message.Message) (bool, error) {
+	if cmd.Name == "clock" {
+		return p.handleClockCommand(ctx, bot, cmd, msg)
+	}
+
 	if !cmd.Mention {
 		cnt := 0
 		if v, ok := p.noMentionCount.Load(msg.GroupId); ok {
@@ -153,7 +160,7 @@ func (p *AIChatPlugin) OnGroupMsg(ctx context.Context, bot bot.Bot, cmd command.
 	defer p.unLock(msg.GroupId)
 	defer p.clearActiveContext(msg.GroupId)
 	p.noMentionCount.Store(msg.GroupId, 0)
-	chat := p.getChat(msg.GroupId, p.getPromptForID(msg.GroupId, true))
+	chat := p.getChat(msg.GroupId, true, p.getPromptForID(msg.GroupId, true))
 	if chat == nil {
 		builder := msgchain.Builder().Group()
 		builder.Text("无法创建对话，请检查日志信息哦")
@@ -216,6 +223,10 @@ func (p *AIChatPlugin) OnGroupMsg(ctx context.Context, bot bot.Bot, cmd command.
 }
 
 func (p *AIChatPlugin) OnFriendMsg(ctx context.Context, bot bot.Bot, cmd command.Command, msg message.Message) (bool, error) {
+	if cmd.Name == "clock" {
+		return p.handleClockCommand(ctx, bot, cmd, msg)
+	}
+
 	if cmd.Name == "stop" {
 		if p.stopRequest(msg.Sender.UserId) {
 			builder := msgchain.Builder().Friend()
@@ -239,7 +250,7 @@ func (p *AIChatPlugin) OnFriendMsg(ctx context.Context, bot bot.Bot, cmd command
 	defer p.unLock(msg.Sender.UserId)
 	defer p.clearActiveContext(msg.Sender.UserId)
 
-	chat := p.getChat(msg.Sender.UserId, p.getPromptForID(msg.Sender.UserId, false))
+	chat := p.getChat(msg.Sender.UserId, false, p.getPromptForID(msg.Sender.UserId, false))
 	if chat == nil {
 		builder := msgchain.Builder().Friend()
 		builder.Text("无法创建对话，请检查日志信息哦")
@@ -501,6 +512,30 @@ func (p *AIChatPlugin) Start(ctx context.Context, cfg *viper.Viper) error {
 	}
 	p.Logger.Info("工具执行器初始化完成")
 
+	// AI 定时任务（clock）：AI / 用户动态管理的持久化定时任务，独立于框架 cron
+	if cfg.GetBool("plugin.ai_chat_bot.clock.enable") {
+		defaultTimeoutSec := cfg.GetInt("plugin.ai_chat_bot.clock.default_timeout_sec")
+		if defaultTimeoutSec <= 0 {
+			defaultTimeoutSec = 120
+		}
+		maxLog := cfg.GetInt("plugin.ai_chat_bot.clock.max_log_entries")
+		if maxLog <= 0 {
+			maxLog = 500
+		}
+		p.clockManager = newClockManager(p, time.Duration(defaultTimeoutSec)*time.Second, maxLog)
+		p.Logger.Info("已启用AI定时任务功能", "tasks", len(p.clockManager.List()), "default_timeout_sec", defaultTimeoutSec)
+	} else {
+		p.Logger.Info("AI定时任务功能未启用（plugin.ai_chat_bot.clock.enable=false）")
+	}
+
+	return nil
+}
+
+// Awake Bot 启动完成后启动定时任务调度器。
+func (p *AIChatPlugin) Awake(ctx context.Context, bot bot.Bot) error {
+	if p.clockManager != nil {
+		p.clockManager.Start(bot)
+	}
 	return nil
 }
 
