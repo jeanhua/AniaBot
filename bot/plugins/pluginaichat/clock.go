@@ -455,8 +455,6 @@ func (m *clockManager) executeTask(ctx context.Context, task *ClockTask) (string
 	// 每次触发独立的 SessionToolExecutor（动态 MCP 工具互不影响）；
 	// historyStore 传 nil → 全新一次性上下文，不持久化、执行后丢弃
 	sessionExecutor := p.toolExecutor.NewSessionExecutor()
-	// 注册 send_message 工具，让执行中的任务可主动给任意群 / 好友发消息
-	sessionExecutor.RegisterSession(newClockSendMessageTool(m))
 	chat, err := aichat.NewChatBot(
 		p.botConfig.baseURL, p.botConfig.apiKey, p.botConfig.model,
 		prompt, p.botConfig.maxContextTokens, sessionExecutor, nil,
@@ -473,7 +471,9 @@ func (m *clockManager) executeTask(ctx context.Context, task *ClockTask) (string
 	if err != nil {
 		return "", usage, err
 	}
-	// 发送最终文本回复（工具过程中的中间文本已由回调即时发送）
+	// 只发送最终文本回复到触发对象；多轮工具过程中的中间轮文本由
+	// makeClockCallback 的 SendText 丢弃（仅记日志），避免触发对象收到
+	// 中途碎片的非预期消息。工具主动调用的图片/文件仍正常发送。
 	if strings.TrimSpace(resp) != "" {
 		m.sendText(task, resp)
 	}
@@ -506,10 +506,12 @@ func (m *clockManager) makeClockCallback(ctx context.Context, task *ClockTask) l
 	var loadedImages []string
 
 	cbs := llmtool.CallBackFuncs{
+		// SendText 是多轮工具循环中模型中间轮文本的自动回执通道。
+		// 定时任务不自动回显——数字人要主动发消息必须显式调用 send_message 工具；
+		// 这里仅记录日志，丢弃中间轮文本，避免触发对象收到非预期的多条消息。
 		SendText: func(s string) (string, error) {
-			m.sendText(task, s)
-			logger.Info("定时任务发送文本", "task", task.ID, "target", targetID, "text", s)
-			return "发送成功", nil
+			logger.Info("定时任务丢弃中间轮文本（未主动发送）", "task", task.ID, "text", s)
+			return "已记录，未发送", nil
 		},
 		SendImage: func(bs64 string) (string, error) {
 			ok := m.sendImage(task, bs64)
@@ -637,39 +639,5 @@ func (m *clockManager) sendFile(task *ClockTask, name, bs64 string) bool {
 	builder := msgchain.Builder().Friend()
 	builder.FileBase64(name, bs64)
 	_, ok := m.bot.SendFriendMsg(task.TargetID, builder.Build())
-	return ok
-}
-
-// sendTextTo 向任意指定对象发送文本（不限于任务自身目标），供 send_message 工具使用。
-func (m *clockManager) sendTextTo(targetType string, targetID message.QID, text string) bool {
-	if m.bot == nil {
-		return false
-	}
-	if targetType == clockTargetGroup {
-		builder := msgchain.Builder().Group()
-		builder.Text(text)
-		_, ok := m.bot.SendGroupMsg(targetID, builder.Build())
-		return ok
-	}
-	builder := msgchain.Builder().Friend()
-	builder.Text(text)
-	_, ok := m.bot.SendFriendMsg(targetID, builder.Build())
-	return ok
-}
-
-// sendImageTo 向任意指定对象发送图片（base64，不含 data: 前缀）。
-func (m *clockManager) sendImageTo(targetType string, targetID message.QID, bs64 string) bool {
-	if m.bot == nil {
-		return false
-	}
-	if targetType == clockTargetGroup {
-		builder := msgchain.Builder().Group()
-		builder.ImageBase64(bs64)
-		_, ok := m.bot.SendGroupMsg(targetID, builder.Build())
-		return ok
-	}
-	builder := msgchain.Builder().Friend()
-	builder.ImageBase64(bs64)
-	_, ok := m.bot.SendFriendMsg(targetID, builder.Build())
 	return ok
 }

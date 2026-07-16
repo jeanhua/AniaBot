@@ -190,67 +190,6 @@ func (t *clockDeleteTool) Execute(_ context.Context, params any, _ llmtool.CallB
 	return "", fmt.Errorf("定时任务不存在: %s", p.ID)
 }
 
-// ---- clock_send_message ----
-
-type clockSendMessageParams struct {
-	TargetType  string `json:"target_type" desc:"目标类型 group(群聊)/friend(私聊)"`
-	TargetID    uint64 `json:"target_id" desc:"目标ID(群号或QQ号)"`
-	Text        string `json:"text,omitempty" desc:"要发送的文本内容"`
-	ImageBase64 string `json:"image_base64,omitempty" desc:"可选，要发送的图片(base64，不含data:前缀)"`
-}
-
-type clockSendMessageTool struct {
-	llmtool.BaseTool[clockSendMessageParams]
-	mgr *clockManager
-}
-
-// newClockSendMessageTool 创建主动发消息工具，仅在定时任务触发执行时注册。
-func newClockSendMessageTool(mgr *clockManager) *clockSendMessageTool {
-	return &clockSendMessageTool{
-		BaseTool: llmtool.MakeBaseTool(
-			"send_message",
-			"向指定的群或好友主动发送消息（文本和/或图片）。用于定时任务执行中通知任意对象，不限于任务自身的触发对象",
-			clockSendMessageParams{},
-		),
-		mgr: mgr,
-	}
-}
-
-func (t *clockSendMessageTool) Execute(_ context.Context, params any, _ llmtool.CallBackFuncs) (string, error) {
-	p := params.(*clockSendMessageParams)
-	if p.TargetType != clockTargetGroup && p.TargetType != clockTargetFriend {
-		return "", fmt.Errorf("target_type 必须为 group 或 friend")
-	}
-	if p.TargetID == 0 {
-		return "", fmt.Errorf("target_id 不能为空")
-	}
-	if strings.TrimSpace(p.Text) == "" && strings.TrimSpace(p.ImageBase64) == "" {
-		return "", fmt.Errorf("text 和 image_base64 至少需要一个")
-	}
-
-	var sent []string
-	targetID := message.QID(p.TargetID)
-	if strings.TrimSpace(p.Text) != "" {
-		if t.mgr.sendTextTo(p.TargetType, targetID, p.Text) {
-			sent = append(sent, "文本")
-		} else {
-			return "", fmt.Errorf("发送文本失败")
-		}
-	}
-	if strings.TrimSpace(p.ImageBase64) != "" {
-		if t.mgr.sendImageTo(p.TargetType, targetID, p.ImageBase64) {
-			sent = append(sent, "图片")
-		} else {
-			return "", fmt.Errorf("发送图片失败")
-		}
-	}
-	target := "群"
-	if p.TargetType == clockTargetFriend {
-		target = "好友"
-	}
-	return fmt.Sprintf("已向%s %d 发送%s", target, p.TargetID, strings.Join(sent, "和")), nil
-}
-
 // ---- clock_log ----
 
 type clockLogParams struct {
