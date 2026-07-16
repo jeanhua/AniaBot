@@ -436,7 +436,7 @@ func (p *AIChatPlugin) Start(ctx context.Context, cfg *viper.Viper) error {
 			p.ocrParameter.top_k = &v
 		}
 
-		ocrllm, err := aichat.NewChatBot(ocrBaseUrl, ocrAPIKey, ocrModel, ocrPrompt, 0, nil)
+		ocrllm, err := aichat.NewChatBot(ocrBaseUrl, ocrAPIKey, ocrModel, ocrPrompt, 0, nil, nil)
 		if err != nil {
 			p.Logger.Error("无法初始化备用图片识别 LLM", "error", err.Error())
 			p.ocrEnable = false
@@ -476,6 +476,15 @@ func (p *AIChatPlugin) Start(ctx context.Context, cfg *viper.Viper) error {
 	if fileConfig.Enable {
 		p.Logger.Info("已启用file工具（可读取宿主机本地文件并发送，请注意安全风险）")
 	}
+	var localImageConfig functool.LocalImageConfig
+	if cfg.IsSet("plugin.ai_chat_bot.local_image") {
+		if err := cfg.UnmarshalKey("plugin.ai_chat_bot.local_image", &localImageConfig); err != nil {
+			p.Logger.Warn("解析 local_image 工具配置失败", "error", err.Error())
+		}
+	}
+	if localImageConfig.Enable {
+		p.Logger.Info("已启用local_image工具（可读取宿主机本地图片供AI查看，请注意安全风险）")
+	}
 	var err error
 	p.toolExecutor, p.skillManager, err = functool.CreateToolsWithSkill(
 		p.llmParameter.searchToken,
@@ -483,6 +492,7 @@ func (p *AIChatPlugin) Start(ctx context.Context, cfg *viper.Viper) error {
 		skillsDir,
 		bashConfig,
 		fileConfig,
+		localImageConfig,
 		skills,
 	)
 	if err != nil {

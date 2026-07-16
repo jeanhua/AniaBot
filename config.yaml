@@ -96,6 +96,13 @@ plugin:
       prompt: |-
         你负责将看到的图片用markdown格式描述出来，不要有无关的其他对话
 
+    # local_image 工具配置（读取宿主机本地图片供AI查看）
+    # 主模型支持多模态时，图片以 data URI 形式放入下一轮上下文由模型直接查看；
+    # 不支持多模态时，转交上方 ocr 备用模型描述。注意：可读取宿主机上任意可读
+    # 图片文件，有泄露敏感截图风险，故默认关闭、需显式开启（与 bash/file 同级风险）。
+    local_image:
+      enable: false           # 是否启用本地图片读取工具
+
   # 每日新闻插件
   dailyNews:
     api: "https://60s.viki.moe/v2/60s?encoding=image-proxy" # api端点

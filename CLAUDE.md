@@ -57,9 +57,9 @@ common/                  Shared interfaces and models (adapter, plugin, storage,
 bot/core/                AniaBot orchestrator: plugin lifecycle, event dispatch, DI, storage impls
 bot/adapter/napcat/      NapCat protocol adapters (WebSocket and HTTP)
 bot/component/           AI chat engine
-  aichat/                  ChatBot, LLMClient, MessageBuilder, ToolOrchestrator, MemoryWindow
+  aichat/                  ChatBot, LLMClient, MessageBuilder, ToolOrchestrator, messageWindow
   llmtool/                 Tool interface, ToolExecuter, MCP client, SkillManager, schema parser
-  functool/                Built-in tools (time, web search, meme, file, msg history)
+  functool/                Built-in tools (time, web search, meme, file, msg history, image loading)
 bot/plugins/             Six built-in plugins (sys, log, repeat, antiwithdrawal, aichat, news)
 bot/utils/               Command parsing, message extraction, URL helpers, time formatting
 custom/                  User-created plugin examples and templates
@@ -95,7 +95,7 @@ Plugins implement `common/plugin.Plugin` by embedding `plugin.Meta` and overridi
 Tools are defined as structs embedding `llmtool.BaseTool[ParamsType]`. Parameter structs use `json` tags for names and `desc` tags for descriptions. The `parser.go` reflection engine auto-generates OpenAI-compatible function schemas from these structs — no manual JSON schema needed.
 
 Registration hierarchy:
-1. `functool.CreateDefaultTools()` — registers built-in tools. Always on: `time`, `web_search`, `web_explore` (both via Jina), `meme`, `msg_history`, `private_file`. Opt-in (gated behind config flags for safety): `bash` (executes on the host with whitelist/blacklist regex) and `file`/`send_file`.
+1. `functool.CreateDefaultTools()` — registers built-in tools. Always on: `time`, `web_search`, `web_explore` (both via Jina), `meme`, `msg_history`, `private_file`, `load_images` (LLM-invoked, on-demand loading of images in the user's current/quoted message; recognition via the multimodal model or OCR fallback in the callback). Opt-in (gated behind config flags for safety): `bash` (executes on the host with whitelist/blacklist regex), `file`/`send_file`, and `local_image` (reads host-local image files for the LLM to view; served as a data URI to the multimodal model or OCR fallback in the callback).
 2. `functool.CreateToolsWithMCP()` — adds MCP discovery tools
 3. `functool.CreateToolsWithSkill()` — adds `skill_read` tool
 
@@ -106,8 +106,8 @@ Each user session gets a `SessionToolExecutor` with isolated dynamic tools. MCP 
 `ChatBot` orchestrates per-session conversations:
 - `LLMClient` wraps the OpenAI Go SDK (`openai-go/v3`), supporting reasoning content (DeepSeek-style `reasoning_content`)
 - `MessageBuilder` constructs message arrays with system prompt, skill registry, chat history, tool results
-- `MessageWindow` is a sliding window that trims to recent N user turns
-- `ToolOrchestrator` runs the multi-turn agent loop: LLM → tool call → result → LLM (up to `MAX_ITERATIONS`, default 10)
+- `messageWindow` (in `memorywindow.go`) is a token-budget context window, not a fixed-turn slider: it records prompt-token usage and, once that exceeds 80% of `max_context_tokens`, compresses prior history via an LLM summarizer (`MaybeCompress` / `NewContextCompressor`). History is persisted across restarts via an injected `HistoryStore` (backed by `PersistentStorage`, namespaced per group/friend): `append`/`MaybeCompress`/`clear` all sync to disk with a background context; `ChatBot.LoadHistory` replays on session creation. On replay, remote http(s) image URLs (QQ temp links that expire) are degraded to a text marker, while `data:` URIs (local images) are preserved.
+- `ToolOrchestrator` runs the multi-turn agent loop: LLM → tool call → result → LLM (up to `MAX_ITERATIONS` iterations, default 20, overridable via the `MAX_ITERATIONS` env var)
 - `CallBackFuncs` bridges tool execution back to QQ messaging (send text, image, file)
 
 ### Message Chain Builder

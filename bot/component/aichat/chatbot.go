@@ -14,7 +14,7 @@ type ChatBot struct {
 	window           *messageWindow
 }
 
-func NewChatBot(baseURL, apiKey, model, prompt string, maxContextTokens int, toolExecutor ToolExecutor) (*ChatBot, error) {
+func NewChatBot(baseURL, apiKey, model, prompt string, maxContextTokens int, toolExecutor ToolExecutor, historyStore HistoryStore) (*ChatBot, error) {
 	llmClient, err := NewLLMClient(baseURL, apiKey, model)
 	if err != nil {
 		return nil, err
@@ -24,7 +24,7 @@ func NewChatBot(baseURL, apiKey, model, prompt string, maxContextTokens int, too
 	toolOrchestrator := NewToolOrchestrator(toolExecutor, msgBuilder)
 
 	compressor := NewContextCompressor(prompt)
-	window := newMessageWindow(maxContextTokens, llmClient, compressor)
+	window := newMessageWindow(maxContextTokens, llmClient, compressor, historyStore)
 
 	return &ChatBot{
 		llmClient:        llmClient,
@@ -32,6 +32,12 @@ func NewChatBot(baseURL, apiKey, model, prompt string, maxContextTokens int, too
 		toolOrchestrator: toolOrchestrator,
 		window:           window,
 	}, nil
+}
+
+// LoadHistory 从持久化存储回放历史对话，重启后调用以恢复上下文。
+// historyStore 未注入时为空操作。
+func (b *ChatBot) LoadHistory(ctx context.Context) {
+	b.window.load(ctx)
 }
 
 func (b *ChatBot) Chat(ctx context.Context, userInput string, callbacks llmtool.CallBackFuncs, opts ChatOptions) (string, TokenUsage, error) {

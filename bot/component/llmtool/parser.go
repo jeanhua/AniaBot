@@ -29,9 +29,9 @@ type FunctionDef struct {
 
 // ToolCall LLM 返回的工具调用信息
 type ToolCall struct {
-	ID        string
-	Name      string
-	Arguments string
+	ID        string `json:"id"`
+	Name      string `json:"name"`
+	Arguments string `json:"arguments"`
 }
 
 func structToOpenAITool(tool Tool) ToolDef {

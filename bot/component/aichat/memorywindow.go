@@ -15,18 +15,88 @@ type messageWindow struct {
 	llmClient        *LLMClient
 	compressor       CompressorFunc
 	lastPromptTokens int
+	store            HistoryStore
 }
 
-func newMessageWindow(maxContextTokens int, llmClient *LLMClient, compressor CompressorFunc) *messageWindow {
+func newMessageWindow(maxContextTokens int, llmClient *LLMClient, compressor CompressorFunc, store HistoryStore) *messageWindow {
 	return &messageWindow{
 		maxContextTokens: maxContextTokens,
 		llmClient:        llmClient,
 		compressor:       compressor,
+		store:            store,
+	}
+}
+
+// load 从持久化存储回放历史；存储为空或未注入时保持空窗口。
+func (w *messageWindow) load(ctx context.Context) {
+	if w.store == nil {
+		return
+	}
+	msgs, err := w.store.Load(ctx)
+	if err != nil {
+		// 加载失败不应阻断对话，按空历史继续，后续 Save 会覆盖
+		return
+	}
+	// 回放的历史中的图片 URL（多为 QQ 临时签名链接）重启后大概率失效，
+	// 若原样发给 LLM 会因拉取失败导致整轮对话报错。这里把图片片段降级为
+	// 文本标记：仅作用于内存中回放后的副本，落盘的原始 URL 不变（无损），
+	// 当前会话本轮新加载的图片在 persist 之前仍是 ImageURL 片段，不受影响。
+	w.messages = degradeImagesToText(msgs)
+}
+
+// degradeImagesToText 将消息中基于 http(s) URL 的图片片段替换为文本标记。
+// 用于回放持久化历史时规避失效的图片 URL（如 QQ 临时签名链接）。
+// data URI（base64 内联，如本地图片）不依赖外部链接、重启不失效，故保留原样。
+// 文本片段与工具调用不变。
+func degradeImagesToText(msgs []Message) []Message {
+	for i := range msgs {
+		msg := &msgs[i]
+		if len(msg.Parts) == 0 {
+			continue
+		}
+		changed := false
+		newParts := make([]ContentPart, 0, len(msg.Parts))
+		for _, p := range msg.Parts {
+			if p.Type == ContentPartImageURL && isRemoteImageURL(p.ImageURL) {
+				newParts = append(newParts, TextPart("[图片，链接已失效]"))
+				changed = true
+				continue
+			}
+			newParts = append(newParts, p)
+		}
+		if changed {
+			msg.Parts = newParts
+		}
+	}
+	return msgs
+}
+
+// isRemoteImageURL 判断图片引用是否为可能失效的远程 http(s) 链接。
+// data:、本地路径等非 http 形式返回 false（视为不失效，保留原样）。
+func isRemoteImageURL(s string) bool {
+	if s == "" {
+		return false
+	}
+	lower := strings.ToLower(s)
+	return strings.HasPrefix(lower, "http://") || strings.HasPrefix(lower, "https://")
+}
+
+// persist 将当前历史落盘；store 未注入时为空操作。
+// 使用独立的后台 context，避免请求被 /stop 取消时丢失刚写入的历史。
+func (w *messageWindow) persist() {
+	if w.store == nil {
+		return
+	}
+	ctx := context.Background()
+	if err := w.store.Save(ctx, w.messages); err != nil {
+		// 落盘失败仅记录，不影响内存中的对话
+		_ = err
 	}
 }
 
 func (w *messageWindow) append(msgs ...Message) {
 	w.messages = append(w.messages, msgs...)
+	w.persist()
 }
 
 func (w *messageWindow) history() []Message {
@@ -36,6 +106,10 @@ func (w *messageWindow) history() []Message {
 func (w *messageWindow) clear() {
 	w.messages = nil
 	w.lastPromptTokens = 0
+	if w.store != nil {
+		// 删除持久化历史，重启后也不再恢复
+		_ = w.store.Clear(context.Background())
+	}
 }
 
 func (w *messageWindow) RecordUsage(usage TokenUsage) {
@@ -63,6 +137,8 @@ func (w *messageWindow) MaybeCompress(ctx context.Context) error {
 
 	w.messages = compressed
 	w.lastPromptTokens = 0
+	// 压缩后历史发生改变，需落盘覆盖旧记录
+	w.persist()
 	return nil
 }
 
