@@ -19,7 +19,7 @@ import (
 //
 //	/clock                查看当前会话的定时任务
 //	/clock list [all]     列出任务（all 仅管理员，列出全部）
-//	/clock add <cron> | <标题> | <内容>   新增任务（默认当前会话为触发对象）
+//	/clock add [--once] <cron> | <标题> | <内容>   新增任务（默认当前会话为触发对象，--once 表示单次任务）
 //	/clock del <id>       删除任务
 //	/clock on <id>        启用任务
 //	/clock off <id>       停用任务
@@ -116,11 +116,17 @@ func (p *AIChatPlugin) cmdList(targetType string, targetID message.QID, all bool
 }
 
 func (p *AIChatPlugin) cmdAdd(args []string, targetType string, targetID message.QID, creator message.QID) string {
-	// 格式：<cron> | <标题> | <内容>，cron 可含空格，以 | 切分三段
+	// 格式：[--once] <cron> | <标题> | <内容>，cron 可含空格，以 | 切分三段
+	// 可选 --once 前缀标志：标记为单次任务，触发执行后自动销毁
+	runOnce := false
+	if len(args) > 0 && args[0] == "--once" {
+		runOnce = true
+		args = args[1:]
+	}
 	raw := strings.Join(args, " ")
 	parts := strings.SplitN(raw, "|", 3)
 	if len(parts) < 3 {
-		return "用法：/clock add <cron表达式> | <标题> | <内容>\n示例：/clock add 0 8 * * * | 早安 | 大家早上好"
+		return "用法：/clock add [--once] <cron表达式> | <标题> | <内容>\n示例：/clock add 0 8 * * * | 早安 | 大家早上好"
 	}
 	cronExpr := strings.TrimSpace(parts[0])
 	title := strings.TrimSpace(parts[1])
@@ -134,6 +140,7 @@ func (p *AIChatPlugin) cmdAdd(args []string, targetType string, targetID message
 		Content:    content,
 		TargetType: targetType,
 		TargetID:   targetID,
+		RunOnce:    runOnce,
 		Enabled:    true,
 		CreatedBy:  creator,
 	}
@@ -145,7 +152,11 @@ func (p *AIChatPlugin) cmdAdd(args []string, targetType string, targetID message
 	if !task.NextRunAt.IsZero() {
 		next = "，下次触发 " + task.NextRunAt.Local().Format("01-02 15:04")
 	}
-	return fmt.Sprintf("已添加定时任务（ID: %s）%s\ncron: %s\n标题: %s", id, next, cronExpr, title)
+	mode := "重复"
+	if runOnce {
+		mode = "单次"
+	}
+	return fmt.Sprintf("已添加定时任务（ID: %s，模式: %s）%s\ncron: %s\n标题: %s", id, mode, next, cronExpr, title)
 }
 
 func (p *AIChatPlugin) cmdDelete(args []string) string {
@@ -294,13 +305,18 @@ func formatTaskLine(t *ClockTask) string {
 	if t.TargetType == clockTargetFriend {
 		target = "好友" + t.TargetID.String()
 	}
-	return fmt.Sprintf("%s [%s] %s | %s → %s", state, t.ID, truncStr(t.Title, 12), t.Cron, target)
+	mode := "重复"
+	if t.RunOnce {
+		mode = "单次"
+	}
+	return fmt.Sprintf("%s [%s] %s | %s | %s → %s", state, t.ID, truncStr(t.Title, 12), mode, t.Cron, target)
 }
 
 func formatTaskDetail(t *ClockTask) string {
 	var sb strings.Builder
 	sb.WriteString(fmt.Sprintf("任务 ID: %s\n", t.ID))
 	sb.WriteString(fmt.Sprintf("状态: %s\n", enabledText(t.Enabled)))
+	sb.WriteString(fmt.Sprintf("模式: %s\n", runOnceText(t.RunOnce)))
 	sb.WriteString(fmt.Sprintf("cron: %s\n", t.Cron))
 	sb.WriteString(fmt.Sprintf("标题: %s\n", t.Title))
 	sb.WriteString(fmt.Sprintf("内容: %s\n", t.Content))
@@ -350,6 +366,14 @@ func enabledText(on bool) string {
 	return "停用"
 }
 
+// runOnceText 返回任务模式的中文描述。
+func runOnceText(once bool) string {
+	if once {
+		return "单次"
+	}
+	return "重复"
+}
+
 func truncStr(s string, n int) string {
 	s = strings.ReplaceAll(s, "\n", " ")
 	r := []rune(s)
@@ -363,7 +387,7 @@ func truncStr(s string, n int) string {
 func clockHelpText(isAdmin bool) string {
 	help := `定时任务命令：
 /clock              查看当前会话的定时任务
-/clock add <cron> | <标题> | <内容>   新增任务
+/clock add [--once] <cron> | <标题> | <内容>   新增任务（--once 为单次任务，触发后自动销毁）
 /clock del <id>     删除任务
 /clock on <id>      启用任务
 /clock off <id>     停用任务

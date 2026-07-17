@@ -31,7 +31,7 @@ func newClockTools(mgr *clockManager, defType string, defID message.QID) []llmto
 	base := clockToolBase{mgr: mgr, defType: defType, defID: defID}
 	return []llmtool.Tool{
 		&clockCreateTool{
-			BaseTool:     llmtool.MakeBaseTool("clock_create", "创建一个AI定时任务。到点时会以全新的一次性上下文自动执行任务内容（可调用工具完成复杂流程），并把结果发到触发对象。cron用5字段(分 时 日 月 周)或@every 1h等", clockCreateParams{}),
+			BaseTool:     llmtool.MakeBaseTool("clock_create", "创建一个AI定时任务。到点时会以全新的一次性上下文自动执行任务内容（可调用工具完成复杂流程），并把结果发到触发对象。cron用5字段(分 时 日 月 周)或@every 1h等。run_once=true为单次任务，触发执行一次后自动销毁；默认false为重复执行", clockCreateParams{}),
 			clockToolBase: base,
 		},
 		&clockListTool{
@@ -61,6 +61,7 @@ type clockCreateParams struct {
 	Content    string `json:"content" desc:"任务内容，触发时作为对话内容发送给AI，应写清完整可执行的指令"`
 	TargetType string `json:"target_type,omitempty" desc:"触发对象类型 group(群聊)/friend(私聊)，不填默认当前会话"`
 	TargetID   uint64 `json:"target_id,omitempty" desc:"触发对象ID(群号或QQ号)，不填默认当前会话"`
+	RunOnce    bool   `json:"run_once,omitempty" desc:"是否为单次任务：true表示触发执行一次后自动销毁，false(默认)为重复执行"`
 	TimeoutSec int    `json:"timeout_sec,omitempty" desc:"单次执行超时秒数，不填用默认值"`
 	Note       string `json:"note,omitempty" desc:"备注信息"`
 }
@@ -79,6 +80,7 @@ func (t *clockCreateTool) Execute(_ context.Context, params any, _ llmtool.CallB
 		Content:    p.Content,
 		TargetType: targetType,
 		TargetID:   targetID,
+		RunOnce:    p.RunOnce,
 		TimeoutSec: p.TimeoutSec,
 		Note:       p.Note,
 		Enabled:    true,
@@ -91,7 +93,11 @@ func (t *clockCreateTool) Execute(_ context.Context, params any, _ llmtool.CallB
 	if !task.NextRunAt.IsZero() {
 		next = "，下次触发 " + task.NextRunAt.Local().Format("01-02 15:04")
 	}
-	return fmt.Sprintf("已创建定时任务 ID=%s，cron=%s，目标=%s/%d%s", id, p.Cron, targetType, uint64(targetID), next), nil
+	mode := "重复"
+	if p.RunOnce {
+		mode = "单次"
+	}
+	return fmt.Sprintf("已创建定时任务 ID=%s，模式=%s，cron=%s，目标=%s/%d%s", id, mode, p.Cron, targetType, uint64(targetID), next), nil
 }
 
 // ---- clock_list ----
@@ -134,6 +140,7 @@ type clockUpdateParams struct {
 	TargetType *string `json:"target_type,omitempty" desc:"新的触发对象类型 group/friend"`
 	TargetID   *uint64 `json:"target_id,omitempty" desc:"新的触发对象ID"`
 	Enabled    *bool   `json:"enabled,omitempty" desc:"是否启用"`
+	RunOnce    *bool   `json:"run_once,omitempty" desc:"是否改为单次任务（true=触发一次后销毁，false=重复执行）"`
 	TimeoutSec *int    `json:"timeout_sec,omitempty" desc:"新的超时秒数"`
 	Note       *string `json:"note,omitempty" desc:"新的备注"`
 }
@@ -154,6 +161,7 @@ func (t *clockUpdateTool) Execute(_ context.Context, params any, _ llmtool.CallB
 		Content:    p.Content,
 		TargetType: p.TargetType,
 		Enabled:    p.Enabled,
+		RunOnce:    p.RunOnce,
 		TimeoutSec: p.TimeoutSec,
 		Note:       p.Note,
 	}
@@ -165,7 +173,7 @@ func (t *clockUpdateTool) Execute(_ context.Context, params any, _ llmtool.CallB
 	if err != nil {
 		return "", err
 	}
-	return fmt.Sprintf("已更新定时任务 ID=%s，状态=%s，cron=%s", task.ID, enabledText(task.Enabled), task.Cron), nil
+	return fmt.Sprintf("已更新定时任务 ID=%s，状态=%s，模式=%s，cron=%s", task.ID, enabledText(task.Enabled), runOnceText(task.RunOnce), task.Cron), nil
 }
 
 // ---- clock_delete ----

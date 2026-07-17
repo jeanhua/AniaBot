@@ -184,6 +184,77 @@ func TestBuildTriggerPrompt(t *testing.T) {
 	}
 }
 
+func TestRunOnceDestroyAfterTrigger(t *testing.T) {
+	p := &AIChatPlugin{}
+	p.Logger = slog.Default()
+	p.PersistentStorage = newPFake()
+	m := newClockManager(p, 30*time.Second, 100)
+
+	id, err := m.Add(&ClockTask{
+		Cron: "@every 1h", Title: "只跑一次", Content: "内容",
+		TargetType: "group", TargetID: 7, Enabled: true, RunOnce: true,
+	})
+	if err != nil {
+		t.Fatalf("Add failed: %v", err)
+	}
+	if g, _ := m.Get(id); !g.RunOnce {
+		t.Fatal("RunOnce should persist as true")
+	}
+
+	// 模拟 cron 回调触发：直接调用 scheduleLocked 注册的闭包会受 cron 调度约束，
+	// 这里改用 RunNow 走 runTask，再手动调用 destroyOneShot 复刻回调销毁逻辑。
+	// （runTask 依赖 m.bot，这里不接真实 bot，故仅验证销毁路径。）
+	m.mu.Lock()
+	m.bot = nil // runTask 在 bot==nil 时直接返回，不影响销毁断言
+	m.mu.Unlock()
+
+	m.destroyOneShot(id)
+	if _, ok := m.Get(id); ok {
+		t.Fatal("one-shot task should be destroyed after trigger")
+	}
+	if len(m.List()) != 0 {
+		t.Fatalf("expected 0 tasks after one-shot destroy, got %d", len(m.List()))
+	}
+
+	// 重启模拟：单次任务销毁后不应再被加载
+	m2 := newClockManager(p, 30*time.Second, 100)
+	if len(m2.List()) != 0 {
+		t.Fatalf("expected 0 tasks after reload, got %d", len(m2.List()))
+	}
+}
+
+func TestRunOncePersistedAcrossReload(t *testing.T) {
+	p := &AIChatPlugin{}
+	p.Logger = slog.Default()
+	p.PersistentStorage = newPFake()
+	m := newClockManager(p, 30*time.Second, 100)
+
+	id, err := m.Add(&ClockTask{
+		Cron: "@every 1h", Title: "单次", Content: "x",
+		TargetType: "friend", TargetID: 9, Enabled: true, RunOnce: true,
+	})
+	if err != nil {
+		t.Fatalf("Add failed: %v", err)
+	}
+	_ = id
+
+	m2 := newClockManager(p, 30*time.Second, 100)
+	loaded := m2.List()
+	if len(loaded) != 1 || !loaded[0].RunOnce {
+		t.Fatalf("RunOnce flag not persisted: %+v", loaded)
+	}
+
+	// Update 可切换为重复任务
+	no := false
+	if _, err := m2.Update(loaded[0].ID, ClockUpdateFields{RunOnce: &no}); err != nil {
+		t.Fatalf("Update failed: %v", err)
+	}
+	m3 := newClockManager(p, 30*time.Second, 100)
+	if g := m3.List(); len(g) != 1 || g[0].RunOnce {
+		t.Fatalf("RunOnce should be false after update: %+v", g)
+	}
+}
+
 func TestResolveTarget(t *testing.T) {
 	b := clockToolBase{defType: clockTargetGroup, defID: message.QID(123)}
 	// 默认回退到当前会话

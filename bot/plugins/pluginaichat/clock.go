@@ -46,6 +46,7 @@ type ClockTask struct {
 	TargetType string      `json:"target_type"` // group / friend
 	TargetID   message.QID `json:"target_id"`   // 群号或 QQ 号
 	Enabled    bool        `json:"enabled"`
+	RunOnce    bool        `json:"run_once"`    // 单次任务：触发执行完成后自动销毁
 	TimeoutSec int         `json:"timeout_sec"` // 单次执行超时秒数，<=0 用默认值
 	CreatedBy  message.QID `json:"created_by"`  // 创建者 QQ（用于群聊 @ 提醒），0 表示无
 	Note       string      `json:"note,omitempty"`
@@ -63,6 +64,7 @@ type ClockUpdateFields struct {
 	TargetType *string
 	TargetID   *message.QID
 	Enabled    *bool
+	RunOnce    *bool
 	TimeoutSec *int
 	Note       *string
 }
@@ -240,6 +242,9 @@ func (m *clockManager) Update(id string, f ClockUpdateFields) (*ClockTask, error
 	if f.Enabled != nil {
 		nt.Enabled = *f.Enabled
 	}
+	if f.RunOnce != nil {
+		nt.RunOnce = *f.RunOnce
+	}
 	if f.TimeoutSec != nil {
 		nt.TimeoutSec = *f.TimeoutSec
 	}
@@ -327,6 +332,10 @@ func (m *clockManager) scheduleLocked(t *ClockTask) {
 			return
 		}
 		m.runTask(cur)
+		// 单次任务：触发执行完成后自动销毁（无论成功/超时/失败均已走完 runTask）
+		if cur.RunOnce {
+			m.destroyOneShot(taskID)
+		}
 	})
 	if err != nil {
 		m.logger.Error("注册定时任务失败", "task", t.ID, "cron", t.Cron, "error", err)
@@ -343,6 +352,15 @@ func (m *clockManager) unscheduleLocked(id string) {
 	if entryID, ok := m.entries[id]; ok {
 		m.cron.Remove(entryID)
 		delete(m.entries, id)
+	}
+}
+
+// destroyOneShot 销毁已触发的单次任务：从内存与持久化中移除并取消调度。
+// 在 cron 回调中于 runTask 之后调用——runTask 已把执行投递到独立 goroutine，
+// 此处仅清理调度状态，不影响进行中的执行（任务结构体不会被原地修改）。
+func (m *clockManager) destroyOneShot(id string) {
+	if m.Delete(id) {
+		m.logger.Info("单次定时任务执行后已自动销毁", "task", id)
 	}
 }
 
