@@ -35,10 +35,10 @@ func (p *AIChatPlugin) handleClockCommand(ctx context.Context, b bot.Bot, cmd co
 
 	isGroup := msg.GroupId != 0
 	targetType := clockTargetFriend
-	targetID := msg.Sender.UserId
+	targetID := msg.Sender.UserId.String()
 	if isGroup {
 		targetType = clockTargetGroup
-		targetID = msg.GroupId
+		targetID = msg.GroupId.String()
 	}
 	isAdmin := msg.Sender.UserId == p.SystemConfig.AdminId
 
@@ -93,7 +93,7 @@ func (p *AIChatPlugin) handleClockCommand(ctx context.Context, b bot.Bot, cmd co
 	return false, nil
 }
 
-func (p *AIChatPlugin) cmdList(targetType string, targetID message.QID, all bool) string {
+func (p *AIChatPlugin) cmdList(targetType string, targetID string, all bool) string {
 	var tasks []*ClockTask
 	if all {
 		tasks = p.clockManager.List()
@@ -115,7 +115,7 @@ func (p *AIChatPlugin) cmdList(targetType string, targetID message.QID, all bool
 	return sb.String()
 }
 
-func (p *AIChatPlugin) cmdAdd(args []string, targetType string, targetID message.QID, creator message.QID) string {
+func (p *AIChatPlugin) cmdAdd(args []string, targetType string, targetID string, creator message.QID) string {
 	// 格式：[--once] <cron> | <标题> | <内容>，cron 可含空格，以 | 切分三段
 	// 可选 --once 前缀标志：标记为单次任务，触发执行后自动销毁
 	runOnce := false
@@ -242,7 +242,7 @@ func (p *AIChatPlugin) cmdTimeout(args []string) string {
 	return "已恢复任务 " + id + " 超时为默认值"
 }
 
-func (p *AIChatPlugin) cmdLog(targetType string, targetID message.QID, n int, all bool) string {
+func (p *AIChatPlugin) cmdLog(targetType string, targetID string, n int, all bool) string {
 	var logs []tasklog.Entry
 	if all {
 		logs = p.clockManager.log.Recent(n)
@@ -250,7 +250,7 @@ func (p *AIChatPlugin) cmdLog(targetType string, targetID message.QID, n int, al
 		// 普通视角：仅本会话触发对象的日志，多取一些再过滤
 		entries := p.clockManager.log.Recent(n * 5)
 		for _, e := range entries {
-			if e.TargetType == targetType && e.TargetID == uint64(targetID) {
+			if e.TargetType == targetType && e.TargetID == targetID {
 				logs = append(logs, e)
 				if len(logs) >= n {
 					break
@@ -301,9 +301,9 @@ func formatTaskLine(t *ClockTask) string {
 	if !t.Enabled {
 		state = "⏸️"
 	}
-	target := "群" + t.TargetID.String()
+	target := "群" + t.TargetID
 	if t.TargetType == clockTargetFriend {
-		target = "好友" + t.TargetID.String()
+		target = "好友" + t.TargetID
 	}
 	mode := "重复"
 	if t.RunOnce {
@@ -320,9 +320,9 @@ func formatTaskDetail(t *ClockTask) string {
 	sb.WriteString(fmt.Sprintf("cron: %s\n", t.Cron))
 	sb.WriteString(fmt.Sprintf("标题: %s\n", t.Title))
 	sb.WriteString(fmt.Sprintf("内容: %s\n", t.Content))
-	target := "群聊 " + t.TargetID.String()
+	target := "群聊 " + t.TargetID
 	if t.TargetType == clockTargetFriend {
-		target = "好友 " + t.TargetID.String()
+		target = "好友 " + t.TargetID
 	}
 	sb.WriteString(fmt.Sprintf("触发对象: %s\n", target))
 	if t.TimeoutSec > 0 {

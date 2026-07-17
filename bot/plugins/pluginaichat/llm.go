@@ -37,7 +37,7 @@ func (p *AIChatPlugin) getChat(id message.QID, isGroup bool, prompt string) *aic
 			if isGroup {
 				targetType = clockTargetGroup
 			}
-			for _, tool := range newClockTools(p.clockManager, targetType, id) {
+			for _, tool := range newClockTools(p.clockManager, targetType, id.String()) {
 				sessionExecutor.RegisterSession(tool)
 			}
 		}

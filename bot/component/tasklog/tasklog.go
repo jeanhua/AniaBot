@@ -33,7 +33,7 @@ type Entry struct {
 	TaskID           string    `json:"task_id"`
 	TaskTitle        string    `json:"task_title"`
 	TargetType       string    `json:"target_type"` // group / friend
-	TargetID         uint64    `json:"target_id"`
+	TargetID         string    `json:"target_id"`
 	TriggerTime      time.Time `json:"trigger_time"`
 	Status           Status    `json:"status"`
 	DurationMs       int64     `json:"duration_ms"`

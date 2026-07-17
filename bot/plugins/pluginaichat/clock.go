@@ -44,7 +44,7 @@ type ClockTask struct {
 	Title      string      `json:"title"`       // 任务标题
 	Content    string      `json:"content"`     // 任务内容，触发时作为对话内容发送给 AI
 	TargetType string      `json:"target_type"` // group / friend
-	TargetID   message.QID `json:"target_id"`   // 群号或 QQ 号
+	TargetID   string      `json:"target_id"`   // 群号或 QQ 号
 	Enabled    bool        `json:"enabled"`
 	RunOnce    bool        `json:"run_once"`    // 单次任务：触发执行完成后自动销毁
 	TimeoutSec int         `json:"timeout_sec"` // 单次执行超时秒数，<=0 用默认值
@@ -62,7 +62,7 @@ type ClockUpdateFields struct {
 	Title      *string
 	Content    *string
 	TargetType *string
-	TargetID   *message.QID
+	TargetID   *string
 	Enabled    *bool
 	RunOnce    *bool
 	TimeoutSec *int
@@ -305,7 +305,7 @@ func (m *clockManager) List() []*ClockTask {
 }
 
 // ListByTarget 返回指定触发对象的任务列表。
-func (m *clockManager) ListByTarget(targetType string, targetID message.QID) []*ClockTask {
+func (m *clockManager) ListByTarget(targetType string, targetID string) []*ClockTask {
 	all := m.List()
 	out := make([]*ClockTask, 0)
 	for _, t := range all {
@@ -388,7 +388,7 @@ func (m *clockManager) runTask(task *ClockTask) {
 			TaskID:      task.ID,
 			TaskTitle:   task.Title,
 			TargetType:  task.TargetType,
-			TargetID:    uint64(task.TargetID),
+			TargetID:    task.TargetID,
 			TriggerTime: start,
 			Status:      tasklog.StatusRunning,
 		})
@@ -468,7 +468,8 @@ func (m *clockManager) runTask(task *ClockTask) {
 func (m *clockManager) executeTask(ctx context.Context, task *ClockTask) (string, aichat.TokenUsage, error) {
 	p := m.plugin
 	isGroup := task.TargetType == clockTargetGroup
-	prompt := p.getPromptForID(task.TargetID, isGroup)
+	targetQID, _ := strconv.ParseUint(task.TargetID, 10, 64)
+	prompt := p.getPromptForID(message.QID(targetQID), isGroup)
 
 	// 每次触发独立的 SessionToolExecutor（动态 MCP 工具互不影响）；
 	// historyStore 传 nil → 全新一次性上下文，不持久化、执行后丢弃
@@ -518,11 +519,13 @@ func (m *clockManager) buildTriggerPrompt(task *ClockTask) string {
 // makeClockCallback 构造触发时面向目标对象（群 / 好友）的工具回调。
 func (m *clockManager) makeClockCallback(ctx context.Context, task *ClockTask) llmtool.CallBackFuncs {
 	b := m.bot
-	targetID := task.TargetID
+	targetIDStr := task.TargetID
+	targetID, _ := strconv.ParseUint(targetIDStr, 10, 64)
 	isGroup := task.TargetType == clockTargetGroup
 	logger := m.logger
 	var loadedImages []string
 
+	qid := message.QID(targetID)
 	cbs := llmtool.CallBackFuncs{
 		// SendText 是多轮工具循环中模型中间轮文本的自动回执通道。
 		// 定时任务不自动回显——数字人要主动发消息必须显式调用 send_message 工具；
@@ -536,7 +539,7 @@ func (m *clockManager) makeClockCallback(ctx context.Context, task *ClockTask) l
 			if !ok {
 				return "", fmt.Errorf("发送失败")
 			}
-			logger.Info("定时任务发送图片", "task", task.ID, "target", targetID)
+			logger.Info("定时任务发送图片", "task", task.ID, "target", targetIDStr)
 			return "发送成功", nil
 		},
 		SendFile: func(name, bs64 string) (string, error) {
@@ -544,18 +547,18 @@ func (m *clockManager) makeClockCallback(ctx context.Context, task *ClockTask) l
 			if !ok {
 				return "", fmt.Errorf("发送失败")
 			}
-			logger.Info("定时任务发送文件", "task", task.ID, "target", targetID, "file", name)
+			logger.Info("定时任务发送文件", "task", task.ID, "target", targetIDStr, "file", name)
 			return "发送成功", nil
 		},
 		GetMsgHistory: func(count, messageSeq int) (string, error) {
 			if isGroup {
-				msgs, ok := b.GetGroupMsgHistory(targetID, count, messageSeq)
+				msgs, ok := b.GetGroupMsgHistory(qid, count, messageSeq)
 				if !ok || msgs == nil {
 					return "", fmt.Errorf("获取历史消息失败")
 				}
 				return formatHistoryText(msgs, b), nil
 			}
-			msgs, ok := b.GetFriendMsgHistory(targetID, count, messageSeq)
+			msgs, ok := b.GetFriendMsgHistory(qid, count, messageSeq)
 			if !ok || msgs == nil {
 				return "", fmt.Errorf("获取历史消息失败")
 			}
@@ -565,7 +568,7 @@ func (m *clockManager) makeClockCallback(ctx context.Context, task *ClockTask) l
 			if isGroup {
 				return "", fmt.Errorf("当前为群聊定时任务，无法获取私聊文件")
 			}
-			url, ok := b.GetPrivateFileURL(targetID, fileId)
+			url, ok := b.GetPrivateFileURL(qid, fileId)
 			if !ok {
 				return "", fmt.Errorf("获取私聊文件URL失败")
 			}
@@ -611,6 +614,7 @@ func (m *clockManager) sendText(task *ClockTask, text string) bool {
 	if m.bot == nil {
 		return false
 	}
+	targetID, _ := strconv.ParseUint(task.TargetID, 10, 64)
 	if task.TargetType == clockTargetGroup {
 		builder := msgchain.Builder().Group()
 		if task.CreatedBy != 0 {
@@ -619,28 +623,34 @@ func (m *clockManager) sendText(task *ClockTask, text string) bool {
 		} else {
 			builder.Text(text)
 		}
-		_, ok := m.bot.SendGroupMsg(task.TargetID, builder.Build())
+		_, ok := m.bot.SendGroupMsg(message.QID(targetID), builder.Build())
 		return ok
 	}
 	builder := msgchain.Builder().Friend()
 	builder.Text(text)
-	_, ok := m.bot.SendFriendMsg(task.TargetID, builder.Build())
+	_, ok := m.bot.SendFriendMsg(message.QID(targetID), builder.Build())
 	return ok
+}
+
+func (m *clockManager) parseTargetID(task *ClockTask) message.QID {
+	n, _ := strconv.ParseUint(task.TargetID, 10, 64)
+	return message.QID(n)
 }
 
 func (m *clockManager) sendImage(task *ClockTask, bs64 string) bool {
 	if m.bot == nil {
 		return false
 	}
+	qid := m.parseTargetID(task)
 	if task.TargetType == clockTargetGroup {
 		builder := msgchain.Builder().Group()
 		builder.ImageBase64(bs64)
-		_, ok := m.bot.SendGroupMsg(task.TargetID, builder.Build())
+		_, ok := m.bot.SendGroupMsg(qid, builder.Build())
 		return ok
 	}
 	builder := msgchain.Builder().Friend()
 	builder.ImageBase64(bs64)
-	_, ok := m.bot.SendFriendMsg(task.TargetID, builder.Build())
+	_, ok := m.bot.SendFriendMsg(qid, builder.Build())
 	return ok
 }
 
@@ -648,14 +658,15 @@ func (m *clockManager) sendFile(task *ClockTask, name, bs64 string) bool {
 	if m.bot == nil {
 		return false
 	}
+	qid := m.parseTargetID(task)
 	if task.TargetType == clockTargetGroup {
 		builder := msgchain.Builder().Group()
 		builder.FileBase64(name, bs64)
-		_, ok := m.bot.SendGroupMsg(task.TargetID, builder.Build())
+		_, ok := m.bot.SendGroupMsg(qid, builder.Build())
 		return ok
 	}
 	builder := msgchain.Builder().Friend()
 	builder.FileBase64(name, bs64)
-	_, ok := m.bot.SendFriendMsg(task.TargetID, builder.Build())
+	_, ok := m.bot.SendFriendMsg(qid, builder.Build())
 	return ok
 }

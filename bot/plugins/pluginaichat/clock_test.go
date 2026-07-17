@@ -9,7 +9,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/jeanhua/AniaBot/common/model/message"
 	"github.com/jeanhua/AniaBot/common/storage"
 )
 
@@ -93,15 +92,15 @@ func TestClockManagerCRUDAndPersist(t *testing.T) {
 	m := newClockManager(p, 30*time.Second, 100)
 
 	// 无效 cron 应失败
-	if _, err := m.Add(&ClockTask{Cron: "not a cron", Content: "c", TargetType: "group", TargetID: 1}); err == nil {
+	if _, err := m.Add(&ClockTask{Cron: "not a cron", Content: "c", TargetType: "group", TargetID: "1"}); err == nil {
 		t.Fatal("expected error for invalid cron")
 	}
 	// 缺少内容应失败
-	if _, err := m.Add(&ClockTask{Cron: "@every 1h", TargetType: "group", TargetID: 1}); err == nil {
+	if _, err := m.Add(&ClockTask{Cron: "@every 1h", TargetType: "group", TargetID: "1"}); err == nil {
 		t.Fatal("expected error for empty content")
 	}
 
-	id, err := m.Add(&ClockTask{Cron: "@every 1h", Title: "喝水", Content: "提醒喝水", TargetType: "group", TargetID: 123, Enabled: true})
+	id, err := m.Add(&ClockTask{Cron: "@every 1h", Title: "喝水", Content: "提醒喝水", TargetType: "group", TargetID: "123", Enabled: true})
 	if err != nil {
 		t.Fatalf("Add failed: %v", err)
 	}
@@ -128,10 +127,10 @@ func TestClockManagerCRUDAndPersist(t *testing.T) {
 	}
 
 	// ListByTarget 过滤
-	if len(m.ListByTarget("group", 123)) != 1 {
+	if len(m.ListByTarget("group", "123")) != 1 {
 		t.Fatal("ListByTarget group/123 should have 1")
 	}
-	if len(m.ListByTarget("friend", 123)) != 0 {
+	if len(m.ListByTarget("friend", "123")) != 0 {
 		t.Fatal("ListByTarget friend/123 should have 0")
 	}
 
@@ -192,7 +191,7 @@ func TestRunOnceDestroyAfterTrigger(t *testing.T) {
 
 	id, err := m.Add(&ClockTask{
 		Cron: "@every 1h", Title: "只跑一次", Content: "内容",
-		TargetType: "group", TargetID: 7, Enabled: true, RunOnce: true,
+		TargetType: "group", TargetID: "7", Enabled: true, RunOnce: true,
 	})
 	if err != nil {
 		t.Fatalf("Add failed: %v", err)
@@ -231,7 +230,7 @@ func TestRunOncePersistedAcrossReload(t *testing.T) {
 
 	id, err := m.Add(&ClockTask{
 		Cron: "@every 1h", Title: "单次", Content: "x",
-		TargetType: "friend", TargetID: 9, Enabled: true, RunOnce: true,
+		TargetType: "friend", TargetID: "9", Enabled: true, RunOnce: true,
 	})
 	if err != nil {
 		t.Fatalf("Add failed: %v", err)
@@ -256,17 +255,17 @@ func TestRunOncePersistedAcrossReload(t *testing.T) {
 }
 
 func TestResolveTarget(t *testing.T) {
-	b := clockToolBase{defType: clockTargetGroup, defID: message.QID(123)}
+	b := clockToolBase{defType: clockTargetGroup, defID: "123"}
 	// 默认回退到当前会话
-	if tt, id := b.resolveTarget("", 0); tt != clockTargetGroup || id != 123 {
-		t.Fatalf("default resolve wrong: %s %d", tt, id)
+	if tt, id := b.resolveTarget("", ""); tt != clockTargetGroup || id != "123" {
+		t.Fatalf("default resolve wrong: %s %s", tt, id)
 	}
 	// 显式提供则采用
-	if tt, id := b.resolveTarget(clockTargetFriend, 999); tt != clockTargetFriend || id != 999 {
-		t.Fatalf("explicit resolve wrong: %s %d", tt, id)
+	if tt, id := b.resolveTarget(clockTargetFriend, "999"); tt != clockTargetFriend || id != "999" {
+		t.Fatalf("explicit resolve wrong: %s %s", tt, id)
 	}
 	// 类型对但 id 缺失 → 回退
-	if tt, id := b.resolveTarget(clockTargetFriend, 0); tt != clockTargetGroup || id != 123 {
-		t.Fatalf("half resolve wrong: %s %d", tt, id)
+	if tt, id := b.resolveTarget(clockTargetFriend, ""); tt != clockTargetGroup || id != "123" {
+		t.Fatalf("half resolve wrong: %s %s", tt, id)
 	}
 }
