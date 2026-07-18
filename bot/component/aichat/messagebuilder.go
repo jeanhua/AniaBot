@@ -2,6 +2,7 @@ package aichat
 
 import (
 	"github.com/jeanhua/AniaBot/bot/component/llmtool"
+	"github.com/jeanhua/AniaBot/bot/utils"
 )
 
 type MessageBuilder struct {
@@ -35,11 +36,15 @@ func (b *MessageBuilder) buildSystemPrompt() string {
 	return b.prompt + "\n\n" + skillBlock
 }
 
+func (b *MessageBuilder) withTimePrefix(input string) string {
+	return "[" + utils.GetFormattedTime() + "] " + input
+}
+
 func (b *MessageBuilder) BuildChatMessages(userInput string, history []Message) []Message {
 	messages := make([]Message, 0, 1+len(history)+1)
 	messages = append(messages, TextMessage(RoleSystem, b.buildSystemPrompt()))
 	messages = append(messages, history...)
-	messages = append(messages, TextMessage(RoleUser, userInput))
+	messages = append(messages, TextMessage(RoleUser, b.withTimePrefix(userInput)))
 	return messages
 }
 
@@ -54,7 +59,7 @@ func (b *MessageBuilder) BuildImageContextMessage(imageURLs []string) Message {
 
 func (b *MessageBuilder) BuildVisionMessages(userInput, imageURL string) []Message {
 	parts := []ContentPart{
-		TextPart(userInput),
+		TextPart(b.withTimePrefix(userInput)),
 		ImageURLPart(imageURL),
 	}
 
