@@ -3,10 +3,12 @@ package pluginaichat
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/jeanhua/AniaBot/bot/component/llmtool"
 	"github.com/jeanhua/AniaBot/bot/component/tasklog"
+	"github.com/jeanhua/AniaBot/common/model/message"
 )
 
 // clockToolBase 为所有定时任务工具共享调度器引用与当前会话默认触发对象。
@@ -28,13 +30,18 @@ func (b clockToolBase) resolveTarget(givenType string, givenID string) (string, 
 // defType/defID 为当前会话的触发对象，作为工具参数缺省时的默认值。
 func newClockTools(mgr *clockManager, defType string, defID string) []llmtool.Tool {
 	base := clockToolBase{mgr: mgr, defType: defType, defID: defID}
+	// 把当前会话场景写进工具描述，让 AI 明确自己处于群聊还是私聊、默认发到哪个对象
+	sessionDesc := "私聊（对方QQ " + defID + "）"
+	if defType == clockTargetGroup {
+		sessionDesc = "群聊（群号 " + defID + "）"
+	}
 	return []llmtool.Tool{
 		&clockCreateTool{
-			BaseTool:      llmtool.MakeBaseTool("clock_create", "创建一个AI定时任务。到点时会以全新的一次性上下文自动执行任务内容（可调用工具完成复杂流程），并把结果发到触发对象。cron用5字段(分 时 日 月 周)或@every 1h等。run_once=true为单次任务，触发执行一次后自动销毁；默认false为重复执行", clockCreateParams{}),
+			BaseTool:      llmtool.MakeBaseTool("clock_create", "创建一个AI定时任务。到点时会以全新的一次性上下文自动执行任务内容（可调用工具完成复杂流程），并把结果发到触发对象。当前会话为"+sessionDesc+"，target_type/target_id不填时默认发到当前会话。cron用5字段(分 时 日 月 周)或@every 1h等。run_once=true为单次任务，触发执行一次后自动销毁；默认false为重复执行", clockCreateParams{}),
 			clockToolBase: base,
 		},
 		&clockListTool{
-			BaseTool:      llmtool.MakeBaseTool("clock_list", "列出定时任务。不传参数默认列出当前会话的任务", clockListParams{}),
+			BaseTool:      llmtool.MakeBaseTool("clock_list", "列出定时任务。当前会话为"+sessionDesc+"，不传参数默认列出当前会话的任务", clockListParams{}),
 			clockToolBase: base,
 		},
 		&clockUpdateTool{
@@ -60,6 +67,7 @@ type clockCreateParams struct {
 	Content    string `json:"content" desc:"任务内容，触发时作为对话内容发送给AI，应写清完整可执行的指令"`
 	TargetType string `json:"target_type,omitempty" desc:"触发对象类型 group(群聊)/friend(私聊)，不填默认当前会话"`
 	TargetID   string `json:"target_id,omitempty" desc:"触发对象ID(群号或QQ号)，不填默认当前会话"`
+	CreatedBy  string `json:"created_by,omitempty" desc:"群聊任务触发时要@的人的QQ号，一般填当前让你创建任务的群成员（其消息以 [nickname:昵称 id:QQ号] 开头，取其中的id）；不填则触发时不@任何人；私聊任务无需填写"`
 	RunOnce    bool   `json:"run_once,omitempty" desc:"是否为单次任务：true表示触发执行一次后自动销毁，false(默认)为重复执行"`
 	TimeoutSec int    `json:"timeout_sec,omitempty" desc:"单次执行超时秒数，不填用默认值"`
 	Note       string `json:"note,omitempty" desc:"备注信息"`
@@ -73,6 +81,14 @@ type clockCreateTool struct {
 func (t *clockCreateTool) Execute(_ context.Context, params any, _ llmtool.CallBackFuncs) (string, error) {
 	p := params.(*clockCreateParams)
 	targetType, targetID := t.resolveTarget(p.TargetType, p.TargetID)
+	var creator message.QID
+	if s := strings.TrimSpace(p.CreatedBy); s != "" {
+		n, err := strconv.ParseUint(s, 10, 64)
+		if err != nil {
+			return "", fmt.Errorf("created_by 必须是QQ号数字: %w", err)
+		}
+		creator = message.QID(n)
+	}
 	task := &ClockTask{
 		Cron:       p.Cron,
 		Title:      p.Title,
@@ -83,6 +99,7 @@ func (t *clockCreateTool) Execute(_ context.Context, params any, _ llmtool.CallB
 		TimeoutSec: p.TimeoutSec,
 		Note:       p.Note,
 		Enabled:    true,
+		CreatedBy:  creator,
 	}
 	id, err := t.mgr.Add(task)
 	if err != nil {

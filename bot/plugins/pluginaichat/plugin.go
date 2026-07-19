@@ -160,7 +160,7 @@ func (p *AIChatPlugin) OnGroupMsg(ctx context.Context, bot bot.Bot, cmd command.
 	defer p.unLock(msg.GroupId)
 	defer p.clearActiveContext(msg.GroupId)
 	p.noMentionCount.Store(msg.GroupId, 0)
-	chat := p.getChat(msg.GroupId, true, p.getPromptForID(msg.GroupId, true))
+	chat := p.getChat(bot, msg.GroupId, true, p.getPromptForID(msg.GroupId, true))
 	if chat == nil {
 		builder := msgchain.Builder().Group()
 		builder.Text("无法创建对话，请检查日志信息哦")
@@ -250,7 +250,7 @@ func (p *AIChatPlugin) OnFriendMsg(ctx context.Context, bot bot.Bot, cmd command
 	defer p.unLock(msg.Sender.UserId)
 	defer p.clearActiveContext(msg.Sender.UserId)
 
-	chat := p.getChat(msg.Sender.UserId, false, p.getPromptForID(msg.Sender.UserId, false))
+	chat := p.getChat(bot, msg.Sender.UserId, false, p.getPromptForID(msg.Sender.UserId, false))
 	if chat == nil {
 		builder := msgchain.Builder().Friend()
 		builder.Text("无法创建对话，请检查日志信息哦")

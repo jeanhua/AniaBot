@@ -2,8 +2,11 @@ package pluginaichat
 
 import (
 	"context"
+	"fmt"
+	"strings"
 
 	"github.com/jeanhua/AniaBot/bot/component/aichat"
+	"github.com/jeanhua/AniaBot/common/bot"
 	"github.com/jeanhua/AniaBot/common/model/message"
 )
 
@@ -26,7 +29,32 @@ func (p *AIChatPlugin) clearActiveContext(id message.QID) {
 	p.activeContexts.Delete(id)
 }
 
-func (p *AIChatPlugin) getChat(id message.QID, isGroup bool, prompt string) *aichat.ChatBot {
+// buildScenePrompt 生成当前对话场景描述，注入到 system prompt 末尾，
+// 让 AI 明确自己处于群聊还是私聊，以及消息 [nickname:昵称 id:QQ号] 前缀中
+// id 的含义（用于 @人、填写定时任务 created_by 等场景）。
+func (p *AIChatPlugin) buildScenePrompt(b bot.Bot, id message.QID, isGroup bool) string {
+	var sb strings.Builder
+	sb.WriteString("\n\n【当前对话场景】\n")
+	if isGroup {
+		sb.WriteString("你正在一个QQ群聊中与多位成员对话，群号：" + id.String())
+		if b != nil {
+			if info, ok := b.GetGroupDetail(id); ok && info != nil {
+				if info.GroupName != "" {
+					sb.WriteString("，群名：" + info.GroupName)
+				}
+				if info.MemberCount > 0 {
+					sb.WriteString(fmt.Sprintf("，成员 %d 人", info.MemberCount))
+				}
+			}
+		}
+	} else {
+		sb.WriteString("你正在与一位QQ用户私聊，对方QQ：" + id.String())
+	}
+	sb.WriteString("\n用户消息以 [nickname:昵称 id:QQ号] 开头，id 即该发言者的QQ号。")
+	return sb.String()
+}
+
+func (p *AIChatPlugin) getChat(b bot.Bot, id message.QID, isGroup bool, prompt string) *aichat.ChatBot {
 	chat, ok := p.chats.Load(id)
 	if !ok {
 		// 每个会话创建独立的 SessionToolExecutor，动态加载的工具互不影响
@@ -41,6 +69,8 @@ func (p *AIChatPlugin) getChat(id message.QID, isGroup bool, prompt string) *aic
 				sessionExecutor.RegisterSession(tool)
 			}
 		}
+		// 在 system prompt 末尾注入当前对话场景（群聊/私聊、群信息、消息 id 前缀含义）
+		prompt += p.buildScenePrompt(b, id, isGroup)
 		// 每个会话独立的历史持久化存储；g:/f: 前缀避免群聊与好友 id 相同导致历史串扰
 		var historyStore aichat.HistoryStore
 		if p.PersistentStorage != nil {

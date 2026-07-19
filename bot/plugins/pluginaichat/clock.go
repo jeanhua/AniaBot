@@ -469,7 +469,8 @@ func (m *clockManager) executeTask(ctx context.Context, task *ClockTask) (string
 	p := m.plugin
 	isGroup := task.TargetType == clockTargetGroup
 	targetQID, _ := strconv.ParseUint(task.TargetID, 10, 64)
-	prompt := p.getPromptForID(message.QID(targetQID), isGroup)
+	// 注入对话场景（群聊/私聊），触发时 AI 同样清楚自己面对的场景
+	prompt := p.getPromptForID(message.QID(targetQID), isGroup) + p.buildScenePrompt(m.bot, message.QID(targetQID), isGroup)
 
 	// 每次触发独立的 SessionToolExecutor（动态 MCP 工具互不影响）；
 	// historyStore 传 nil → 全新一次性上下文，不持久化、执行后丢弃
