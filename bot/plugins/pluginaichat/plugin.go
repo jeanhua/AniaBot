@@ -82,6 +82,9 @@ type AIChatPlugin struct {
 
 	// clockManager AI 定时任务调度器；为 nil 表示功能未启用
 	clockManager *clockManager
+
+	// memoryManager 长期记忆管理器；为 nil 表示功能未启用
+	memoryManager *memoryManager
 }
 
 const (
@@ -578,6 +581,19 @@ func (p *AIChatPlugin) Start(ctx context.Context, cfg *viper.Viper) error {
 		p.Logger.Info("已启用AI定时任务功能", "tasks", len(p.clockManager.List()), "default_timeout_sec", defaultTimeoutSec)
 	} else {
 		p.Logger.Info("AI定时任务功能未启用（plugin.ai_chat_bot.clock.enable=false）")
+	}
+
+	// AI 长期记忆：由 AI 通过 memory_save/search/forget 工具自行管理的跨会话记忆，
+	// 按群聊/好友 scope 隔离，持久化到 PersistentStorage（memory: 命名空间）
+	if cfg.GetBool("plugin.ai_chat_bot.memory.enable") {
+		maxEntries := cfg.GetInt("plugin.ai_chat_bot.memory.max_entries")
+		if maxEntries <= 0 {
+			maxEntries = 200
+		}
+		p.memoryManager = newMemoryManager(p.PersistentStorage, p.Logger.WithGroup("memory"), maxEntries)
+		p.Logger.Info("已启用AI长期记忆功能", "max_entries", maxEntries)
+	} else {
+		p.Logger.Info("AI长期记忆功能未启用（plugin.ai_chat_bot.memory.enable=false）")
 	}
 
 	return nil

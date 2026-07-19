@@ -1,0 +1,145 @@
+package pluginaichat
+
+import (
+	"errors"
+	"io"
+	"log/slog"
+	"strings"
+	"testing"
+)
+
+func newTestMemoryManager(maxEntries int) *memoryManager {
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	return newMemoryManager(newPFake(), logger, maxEntries)
+}
+
+func TestMemoryAddAndList(t *testing.T) {
+	m := newTestMemoryManager(0)
+
+	e, err := m.add("g:123", "456", "小明喜欢熬夜打榜", []string{"偏好"})
+	if err != nil {
+		t.Fatalf("add 失败: %v", err)
+	}
+	if e.ID == "" {
+		t.Fatal("add 未生成 ID")
+	}
+
+	entries := m.list("g:123")
+	if len(entries) != 1 {
+		t.Fatalf("期望 1 条记忆，实际 %d 条", len(entries))
+	}
+	if entries[0].Content != "小明喜欢熬夜打榜" || entries[0].UserID != "456" {
+		t.Fatalf("记忆内容不符: %+v", entries[0])
+	}
+
+	// scope 隔离：其它群/私聊看不到
+	if got := m.list("g:999"); len(got) != 0 {
+		t.Fatalf("scope 隔离失效，g:999 看到 %d 条记忆", len(got))
+	}
+	if got := m.list("f:123"); len(got) != 0 {
+		t.Fatalf("scope 隔离失效，f:123 看到 %d 条记忆", len(got))
+	}
+}
+
+func TestMemoryAddDedup(t *testing.T) {
+	m := newTestMemoryManager(0)
+
+	first, err := m.add("g:123", "", "群规：不许发广告", nil)
+	if err != nil {
+		t.Fatalf("首次 add 失败: %v", err)
+	}
+	// 空白差异应被规范化去重
+	second, err := m.add("g:123", "", "  群规：不许发广告 \n", nil)
+	if err != nil {
+		t.Fatalf("重复 add 失败: %v", err)
+	}
+	if first.ID != second.ID {
+		t.Fatalf("重复内容应返回已有条目，ID 不同: %s vs %s", first.ID, second.ID)
+	}
+	if got := m.list("g:123"); len(got) != 1 {
+		t.Fatalf("去重失效，实际 %d 条", len(got))
+	}
+}
+
+func TestMemoryAddEmpty(t *testing.T) {
+	m := newTestMemoryManager(0)
+	if _, err := m.add("g:123", "", "   ", nil); err == nil {
+		t.Fatal("空内容应报错")
+	}
+}
+
+func TestMemoryMaxEntries(t *testing.T) {
+	m := newTestMemoryManager(2)
+
+	if _, err := m.add("g:123", "", "第一条", nil); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := m.add("g:123", "", "第二条", nil); err != nil {
+		t.Fatal(err)
+	}
+	_, err := m.add("g:123", "", "第三条", nil)
+	if !errors.Is(err, ErrMemoryFull) {
+		t.Fatalf("达到上限应返回 ErrMemoryFull，实际: %v", err)
+	}
+
+	// 删除一条后可继续写入
+	entries := m.list("g:123")
+	if !m.remove("g:123", entries[0].ID) {
+		t.Fatal("remove 失败")
+	}
+	if _, err := m.add("g:123", "", "第三条", nil); err != nil {
+		t.Fatalf("删除后 add 仍失败: %v", err)
+	}
+}
+
+func TestMemoryRemove(t *testing.T) {
+	m := newTestMemoryManager(0)
+
+	e, _ := m.add("g:123", "", "待删除", nil)
+	if !m.remove("g:123", e.ID) {
+		t.Fatal("remove 已存在 ID 应返回 true")
+	}
+	if got := m.list("g:123"); len(got) != 0 {
+		t.Fatalf("删除后仍有 %d 条", len(got))
+	}
+	if m.remove("g:123", e.ID) {
+		t.Fatal("remove 不存在 ID 应返回 false")
+	}
+	// 不影响其它 scope
+	other, _ := m.add("g:999", "", "别的群的记忆", nil)
+	if m.remove("g:123", other.ID) {
+		t.Fatal("不应跨 scope 删除")
+	}
+}
+
+func TestFilterMemoryByRelevance(t *testing.T) {
+	entries := []memoryEntry{
+		{ID: "a", Content: "完全无关的内容"},
+		{ID: "b", Content: "用户喜欢喝咖啡"},
+		{ID: "c", Content: "随便记的一条", Tags: []string{"咖啡"}},
+	}
+	matched := filterMemoryByRelevance(entries, []string{"咖啡"})
+	if len(matched) != 2 {
+		t.Fatalf("零分条目应被过滤，期望 2 条，实际 %d 条", len(matched))
+	}
+	// tag 命中权重(20)高于正文命中(10)，c 应排最前
+	if matched[0].ID != "c" || matched[1].ID != "b" {
+		t.Fatalf("排序不符: %v", matched)
+	}
+
+	// 全部零分时返回空
+	if got := filterMemoryByRelevance(entries, []string{"奶茶"}); len(got) != 0 {
+		t.Fatalf("无命中应返回空，实际 %d 条", len(got))
+	}
+}
+
+func TestFormatMemoryLine(t *testing.T) {
+	m := newTestMemoryManager(0)
+	e, _ := m.add("g:123", "456", "内容", []string{"标签"})
+	line := formatMemoryLine(e)
+	for _, want := range []string{e.ID, "456", "标签", "内容"} {
+		if !strings.Contains(line, want) {
+			t.Fatalf("格式化结果缺少 %q: %s", want, line)
+		}
+	}
+}

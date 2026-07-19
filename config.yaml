@@ -112,6 +112,13 @@ plugin:
       default_timeout_sec: 120    # 单次触发默认超时（秒），超时会记录到执行日志并中止
       max_log_entries: 500        # 执行日志保留条数（滚动覆盖）
 
+    # AI 长期记忆（memory）配置
+    # 由 AI 通过 memory_save / memory_search / memory_forget 工具自行管理的跨会话记忆，
+    # 持久化保存、重启不丢失。记忆按群聊/好友隔离，群与群、群与私聊之间互不可见。
+    memory:
+      enable: true                # 是否启用长期记忆功能
+      max_entries: 200            # 单个会话（群/好友）的记忆条数上限，写满后 AI 需先清理旧记忆
+
   # 每日新闻插件
   dailyNews:
     api: "https://60s.viki.moe/v2/60s?encoding=image-proxy" # api端点

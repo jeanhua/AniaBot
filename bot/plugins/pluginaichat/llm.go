@@ -51,6 +51,9 @@ func (p *AIChatPlugin) buildScenePrompt(b bot.Bot, id message.QID, isGroup bool)
 		sb.WriteString("你正在与一位QQ用户私聊，对方QQ：" + id.String())
 	}
 	sb.WriteString("\n用户消息以 [nickname:昵称 id:QQ号] 开头，id 即该发言者的QQ号。")
+	if p.memoryManager != nil {
+		sb.WriteString("\n\n【长期记忆】你拥有跨会话的长期记忆能力：对话中得知的用户称呼/偏好/重要信息、群里的约定或值得记住的事件，应主动调用 memory_save 保存；当对话涉及过去的事情或你不确定的背景时，先调用 memory_search 回忆；记忆有误或用户要求忘记时用 memory_forget 删除。记忆仅在当前会话内可见。")
+	}
 	return sb.String()
 }
 
@@ -66,6 +69,19 @@ func (p *AIChatPlugin) getChat(b bot.Bot, id message.QID, isGroup bool, prompt s
 				targetType = clockTargetGroup
 			}
 			for _, tool := range newClockTools(p.clockManager, targetType, id.String()) {
+				sessionExecutor.RegisterSession(tool)
+			}
+		}
+		// 注册长期记忆工具，scope 绑定当前会话（群聊 g:群号 / 私聊 f:QQ号），
+		// 从机制上保证记忆不会跨会话泄露
+		if p.memoryManager != nil {
+			scope := "f:" + id.String()
+			sessionDesc := "私聊（对方QQ " + id.String() + "）"
+			if isGroup {
+				scope = "g:" + id.String()
+				sessionDesc = "群聊（群号 " + id.String() + "）"
+			}
+			for _, tool := range newMemoryTools(p.memoryManager, scope, sessionDesc) {
 				sessionExecutor.RegisterSession(tool)
 			}
 		}

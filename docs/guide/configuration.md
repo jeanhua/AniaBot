@@ -175,6 +175,16 @@ plugin:
 
 与框架的 `StartCron` 静态任务不同，clock 任务由 AI / 用户**动态创建**、持久化保存、重启不丢。详见 [AI 对话插件](/guide/builtin-plugins#ai-对话插件)。
 
+### AI 长期记忆（memory）
+
+```yaml
+    memory:
+      enable: true              # 启用后 AI 可通过 memory_save/search/forget 工具管理长期记忆
+      max_entries: 200          # 单个会话（群/好友）的记忆条数上限
+```
+
+记忆按群聊 / 好友隔离、持久化保存、重启不丢。详见 [AI 对话插件](/guide/builtin-plugins#ai-对话插件)。
+
 ## plugin.dailyNews —— 每日新闻插件
 
 ```yaml
