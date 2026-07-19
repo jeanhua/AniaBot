@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"strconv"
 	"strings"
@@ -33,6 +34,9 @@ type AIChatPlugin struct {
 	rateCh      chan struct{}
 
 	activeContexts sync.Map
+
+	// pendingMsgs AI 响应期间到达的消息排队队列，按会话（群/好友）隔离
+	pendingMsgs sync.Map
 
 	noMentionCount sync.Map
 
@@ -138,6 +142,8 @@ func (p *AIChatPlugin) OnGroupMsg(ctx context.Context, bot bot.Bot, cmd command.
 	}
 
 	if cmd.Name == "stop" {
+		// 停止当前请求的同时丢弃排队消息，避免停止后又自动回复
+		p.drainPending(msg.GroupId, true)
 		if p.stopRequest(msg.GroupId) {
 			builder := msgchain.Builder().Group()
 			builder.Text("用户停止AI响应")
@@ -152,9 +158,17 @@ func (p *AIChatPlugin) OnGroupMsg(ctx context.Context, bot bot.Bot, cmd command.
 	}
 
 	if !p.tryLock(msg.GroupId) {
-		builder := msgchain.Builder().Group()
-		builder.Text("正在等待响应中，不要着急哦~")
-		bot.SendGroupMsg(msg.GroupId, builder.Build())
+		// 当前正在响应：消息进入排队队列，响应结束后自动合并处理
+		first, ok := p.enqueuePending(msg.GroupId, true, msg)
+		if !ok {
+			builder := msgchain.Builder().Group()
+			builder.Text("排队消息太多啦，稍后再试试吧~")
+			bot.SendGroupMsg(msg.GroupId, builder.Build())
+		} else if first {
+			builder := msgchain.Builder().Group()
+			builder.Text("正在回复上一条消息，你的消息已排队，稍后回复你~")
+			bot.SendGroupMsg(msg.GroupId, builder.Build())
+		}
 		return true, nil
 	}
 	defer p.unLock(msg.GroupId)
@@ -169,55 +183,17 @@ func (p *AIChatPlugin) OnGroupMsg(ctx context.Context, bot bot.Bot, cmd command.
 	}
 
 	chatCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
 	p.setActiveContext(msg.GroupId, cancel)
 
-	builder := msgchain.Builder().Group()
-	extraText := p.extraMsg(bot, msg)
-	if strings.Contains(extraText, "#新对话") {
-		err := chat.ClearHistory(ctx)
-		if err != nil {
-			p.Logger.Error("无法清理AI聊天信息", "error", err)
-			return false, nil
-		} else {
-			p.Logger.Info("清理AI对话信息成功")
-		}
-
-		if cleared := chat.ClearDynamicTools(); cleared > 0 {
-			p.Logger.Info("清理动态加载的 MCP 工具", "count", cleared)
-		}
-	}
-
-	msgFuncs := MakeGroupCallback(bot, msg.GroupId, msg.Sender.UserId, p.Logger)
-	p.configureImageCallbacks(chatCtx, bot, msg, &msgFuncs)
-
-	chatOpts := p.buildChatOptions()
-	resp, usage, err := chat.Chat(chatCtx, extraText, msgFuncs, chatOpts)
-	if err != nil {
-		if errors.Is(err, context.Canceled) {
-			builder.Text("AI 响应已被停止")
-			bot.SendGroupMsg(msg.GroupId, builder.Build())
-			return false, nil
-		} else if errors.Is(err, context.DeadlineExceeded) {
-			builder.Text("请求超时")
-			bot.SendGroupMsg(msg.GroupId, builder.Build())
+	// 先取出可能遗留的排队消息（上一响应结束瞬间到达、未来得及处理的），与本次消息合并；
+	// 之后每轮响应结束继续排空队列，直到没有新消息为止
+	batch := append(p.drainPending(msg.GroupId, true), msg)
+	for len(batch) > 0 {
+		if !p.processChatBatch(chatCtx, bot, msg.GroupId, true, chat, batch) {
 			return false, nil
 		}
-		builder.Text("无法解析的错误信息，请查看日志")
-		p.Logger.Error("AI请求错误", "error", err.Error())
-		bot.SendGroupMsg(msg.GroupId, builder.Build())
-		return false, nil
-	}
-
-	if len(strings.TrimSpace(resp)) == 0 {
-		p.Logger.Info("AI请求没有返回什么东西")
-		return true, nil
-	}
-
-	p.Logger.Info("AI请求token消耗", "group", msg.GroupId, "prompt_tokens", usage.PromptTokens, "completion_tokens", usage.CompletionTokens, "total_tokens", usage.TotalTokens)
-	builder.Mention(msg.Sender.UserId)
-	builder.Text(" " + resp)
-	if _, success := bot.SendGroupMsg(msg.GroupId, builder.Build()); success {
-		p.Logger.Info("发送文本", "group", msg.GroupId, "user", msg.Sender.UserId, "text", resp)
+		batch = p.drainPending(msg.GroupId, true)
 	}
 	return true, nil
 }
@@ -228,6 +204,8 @@ func (p *AIChatPlugin) OnFriendMsg(ctx context.Context, bot bot.Bot, cmd command
 	}
 
 	if cmd.Name == "stop" {
+		// 停止当前请求的同时丢弃排队消息，避免停止后又自动回复
+		p.drainPending(msg.Sender.UserId, false)
 		if p.stopRequest(msg.Sender.UserId) {
 			builder := msgchain.Builder().Friend()
 			builder.Text("用户停止AI响应")
@@ -242,9 +220,17 @@ func (p *AIChatPlugin) OnFriendMsg(ctx context.Context, bot bot.Bot, cmd command
 	}
 
 	if !p.tryLock(msg.Sender.UserId) {
-		builder := msgchain.Builder().Friend()
-		builder.Text("正在等待响应中，不要着急哦~")
-		bot.SendFriendMsg(msg.Sender.UserId, builder.Build())
+		// 当前正在响应：消息进入排队队列，响应结束后自动合并处理
+		first, ok := p.enqueuePending(msg.Sender.UserId, false, msg)
+		if !ok {
+			builder := msgchain.Builder().Friend()
+			builder.Text("排队消息太多啦，稍后再试试吧~")
+			bot.SendFriendMsg(msg.Sender.UserId, builder.Build())
+		} else if first {
+			builder := msgchain.Builder().Friend()
+			builder.Text("正在回复上一条消息，你的消息已排队，稍后回复你~")
+			bot.SendFriendMsg(msg.Sender.UserId, builder.Build())
+		}
 		return true, nil
 	}
 	defer p.unLock(msg.Sender.UserId)
@@ -259,56 +245,122 @@ func (p *AIChatPlugin) OnFriendMsg(ctx context.Context, bot bot.Bot, cmd command
 	}
 
 	chatCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
 	p.setActiveContext(msg.Sender.UserId, cancel)
 
-	builder := msgchain.Builder().Friend()
-	extraText := p.extraMsg(bot, msg)
-	if strings.Contains(extraText, "#新对话") {
-		err := chat.ClearHistory(ctx)
-		if err != nil {
-			p.Logger.Error("无法清理AI聊天信息", "error", err.Error())
+	// 先取出可能遗留的排队消息（上一响应结束瞬间到达、未来得及处理的），与本次消息合并；
+	// 之后每轮响应结束继续排空队列，直到没有新消息为止
+	batch := append(p.drainPending(msg.Sender.UserId, false), msg)
+	for len(batch) > 0 {
+		if !p.processChatBatch(chatCtx, bot, msg.Sender.UserId, false, chat, batch) {
 			return false, nil
-		} else {
-			p.Logger.Info("清理AI对话信息成功")
 		}
+		batch = p.drainPending(msg.Sender.UserId, false)
+	}
+	return true, nil
+}
+
+// processChatBatch 处理一批消息：可能只有一条（直接触发），也可能包含 AI 响应期间
+// 排队的多条消息。多条时合并为一轮请求，让 AI 一次性回应。返回 false 表示应终止
+// 处理循环（请求被取消或出错，已通知用户并丢弃剩余排队消息）。
+func (p *AIChatPlugin) processChatBatch(ctx context.Context, b bot.Bot, id message.QID, isGroup bool, chat *aichat.ChatBot, batch []message.Message) bool {
+	lastMsg := batch[len(batch)-1]
+
+	// 合并本批消息文本；多条时加引导说明，让 AI 知道这些是响应期间积攒的消息
+	var extraText string
+	if len(batch) == 1 {
+		extraText = p.extraMsg(b, lastMsg)
+	} else {
+		var sb strings.Builder
+		fmt.Fprintf(&sb, "【以下是 %d 条在你响应期间收到的消息，请逐一回应】\n", len(batch))
+		for i := range batch {
+			sb.WriteString(p.extraMsg(b, batch[i]))
+			sb.WriteString("\n")
+		}
+		extraText = sb.String()
+	}
+
+	if strings.Contains(extraText, "#新对话") {
+		if err := chat.ClearHistory(ctx); err != nil {
+			p.Logger.Error("无法清理AI聊天信息", "error", err)
+			return false
+		}
+		p.Logger.Info("清理AI对话信息成功")
 
 		if cleared := chat.ClearDynamicTools(); cleared > 0 {
 			p.Logger.Info("清理动态加载的 MCP 工具", "count", cleared)
 		}
 	}
 
-	msgFuncs := MakeFriendCallback(bot, msg.Sender.UserId, p.Logger)
-	p.configureImageCallbacks(chatCtx, bot, msg, &msgFuncs)
+	var msgFuncs llmtool.CallBackFuncs
+	if isGroup {
+		msgFuncs = MakeGroupCallback(b, id, lastMsg.Sender.UserId, p.Logger)
+	} else {
+		msgFuncs = MakeFriendCallback(b, id, p.Logger)
+	}
+	p.configureImageCallbacks(ctx, b, &msgFuncs, batch...)
 
 	chatOpts := p.buildChatOptions()
-	resp, usage, err := chat.Chat(chatCtx, extraText, msgFuncs, chatOpts)
+	resp, usage, err := chat.Chat(ctx, extraText, msgFuncs, chatOpts)
 	if err != nil {
-		if errors.Is(err, context.Canceled) {
-			builder.Text("AI 响应已被停止")
-			bot.SendFriendMsg(msg.Sender.UserId, builder.Build())
-			return false, nil
-		} else if errors.Is(err, context.DeadlineExceeded) {
-			builder.Text("请求超时")
-			bot.SendFriendMsg(msg.Sender.UserId, builder.Build())
-			return false, nil
+		// 出错或取消时丢弃剩余排队消息，避免连续报错刷屏
+		p.drainPending(id, isGroup)
+		switch {
+		case errors.Is(err, context.Canceled):
+			p.sendPlainText(b, id, isGroup, "AI 响应已被停止")
+		case errors.Is(err, context.DeadlineExceeded):
+			p.sendPlainText(b, id, isGroup, "请求超时")
+		default:
+			p.Logger.Error("AI请求错误", "error", err.Error())
+			p.sendPlainText(b, id, isGroup, "无法解析的错误信息，请查看日志")
 		}
-		builder.Text("无法解析的错误信息，请查看日志")
-		p.Logger.Error("AI请求错误", "error", err.Error())
-		bot.SendFriendMsg(msg.Sender.UserId, builder.Build())
-		return false, nil
+		return false
 	}
 
 	if len(strings.TrimSpace(resp)) == 0 {
 		p.Logger.Info("AI请求没有返回什么东西")
-		return true, nil
+		return true
 	}
 
-	p.Logger.Info("AI请求token消耗", "user", msg.Sender.UserId, "prompt_tokens", usage.PromptTokens, "completion_tokens", usage.CompletionTokens, "total_tokens", usage.TotalTokens)
-	builder.Text(resp)
-	if _, success := bot.SendFriendMsg(msg.Sender.UserId, builder.Build()); success {
-		p.Logger.Info("发送文本", "user", msg.Sender.UserId, "text", resp)
+	p.Logger.Info("AI请求token消耗", "id", id, "is_group", isGroup, "batch", len(batch), "prompt_tokens", usage.PromptTokens, "completion_tokens", usage.CompletionTokens, "total_tokens", usage.TotalTokens)
+
+	if isGroup {
+		// 群聊中 @ 本批所有发言者（去重），让排队消息的每个人都收到回应
+		builder := msgchain.Builder().Group()
+		seen := make(map[message.QID]struct{}, len(batch))
+		for i := range batch {
+			uid := batch[i].Sender.UserId
+			if _, ok := seen[uid]; ok {
+				continue
+			}
+			seen[uid] = struct{}{}
+			builder.Mention(uid)
+		}
+		builder.Text(" " + resp)
+		if _, success := b.SendGroupMsg(id, builder.Build()); success {
+			p.Logger.Info("发送文本", "group", id, "batch", len(batch), "text", resp)
+		}
+	} else {
+		builder := msgchain.Builder().Friend()
+		builder.Text(resp)
+		if _, success := b.SendFriendMsg(id, builder.Build()); success {
+			p.Logger.Info("发送文本", "user", id, "batch", len(batch), "text", resp)
+		}
 	}
-	return true, nil
+	return true
+}
+
+// sendPlainText 发送纯文本提示信息（不 @ 任何人）
+func (p *AIChatPlugin) sendPlainText(b bot.Bot, id message.QID, isGroup bool, text string) {
+	if isGroup {
+		builder := msgchain.Builder().Group()
+		builder.Text(text)
+		b.SendGroupMsg(id, builder.Build())
+	} else {
+		builder := msgchain.Builder().Friend()
+		builder.Text(text)
+		b.SendFriendMsg(id, builder.Build())
+	}
 }
 
 func (p *AIChatPlugin) buildChatOptions() aichat.ChatOptions {

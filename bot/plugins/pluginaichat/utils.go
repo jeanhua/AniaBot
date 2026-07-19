@@ -24,7 +24,7 @@ func (p *AIChatPlugin) extraMsg(bot bot.Bot, msg message.Message) string {
 	)
 }
 
-func collectImageURLs(bot bot.Bot, msg message.Message) []string {
+func collectImageURLs(bot bot.Bot, msgs ...message.Message) []string {
 	urls := make([]string, 0)
 	seenURLs := make(map[string]struct{})
 	seenMessages := make(map[message.QID]struct{})
@@ -58,12 +58,14 @@ func collectImageURLs(bot bot.Bot, msg message.Message) []string {
 		}
 	}
 
-	collect(msg)
+	for _, msg := range msgs {
+		collect(msg)
+	}
 	return urls
 }
 
-func (p *AIChatPlugin) configureImageCallbacks(ctx context.Context, bot bot.Bot, msg message.Message, callbacks *llmtool.CallBackFuncs) {
-	imageURLs := collectImageURLs(bot, msg)
+func (p *AIChatPlugin) configureImageCallbacks(ctx context.Context, bot bot.Bot, callbacks *llmtool.CallBackFuncs, msgs ...message.Message) {
+	imageURLs := collectImageURLs(bot, msgs...)
 	var loadedImages []string
 	loaded := false
 
