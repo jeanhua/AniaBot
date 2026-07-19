@@ -1,84 +1,86 @@
 # 项目介绍
 
-**AniaBot** 是一个基于 Go 语言开发的高性能、插件驱动型 QQ 机器人框架。它采用模块化设计，提供简洁的插件接口和丰富的内置功能，让开发者能够快速构建功能强大的 QQ 机器人应用。
+**AniaBot** 是一个基于 Go 语言开发的高性能、插件驱动型 QQ 机器人框架。它通过 [NapCat](https://napneko.github.io/) 以 OneBot v11 协议接入 QQ，并内置了一套由 OpenAI 兼容大模型驱动的 AI 对话引擎 —— 支持工具调用（Tool Use）、MCP（Model Context Protocol）、Skill 系统与 AI 定时任务。
 
-## 它能做什么？
+## 设计理念
 
-先看看用 AniaBot 已经实现的插件，给你一些灵感：
+AniaBot 的核心哲学是 **「一切皆为插件」**：
 
-| 插件 | 功能 | 涉及技术 |
-|------|------|---------|
-| 二次元壁纸 | 发送 `/acg` 获取随机动漫壁纸 | HTTP API、图片发送 |
-| 音乐点歌 | `/music 周杰伦` 搜索并发送音乐文件 | 分页交互、文件发送 |
-| 群刊生成 | 自动收集群消息，AI 生成幽默群刊 | LLM 集成、缓存持久化、定时任务 |
-| 抖音解析 | 自动识别抖音链接，发送无水印视频 | 正则匹配、URL 解析 |
-| GitHub 分析 | 输入仓库链接，AI 生成项目分析报告 | LLM 工具调用、Markdown 转图片 |
-| 聊天记录伪造 | 私聊交互式创建合并转发消息 | 多步会话状态管理 |
-| 消息拦截器 | 黑白名单过滤无关消息 | 高优先级 Order、配置驱动 |
+- 框架本身只做三件事：连接协议适配器、分发消息事件、管理插件生命周期
+- 所有功能 —— 包括 AI 对话、防撤回、复读机 —— 都是插件，与你将要编写的插件地位完全平等
+- 内置插件同时也是最好的开发参考：它们的写法就是你写自定义插件的写法
 
-这些插件都在 `custom/plugins/` 目录下，每个都是完整可运行的示例，也是你学习插件开发的最佳参考。
-
-## 框架特色
-
-- **高性能**：基于 Go 语言开发，充分利用并发特性，支持高并发消息处理
-- **插件驱动**：采用插件化架构，功能模块化，易于扩展和维护
-- **协议兼容**：支持多种 QQ 机器人协议适配器（如 napcat WebSocket/HTTP）
-- **配置灵活**：基于 Viper 的配置文件管理，支持 YAML 格式
-- **开发友好**：简洁的插件接口，几十行代码即可完成一个功能插件
-
-## 消息是怎么被处理的？
-
-当群里有人发一条消息时，AniaBot 的处理流程如下：
+## 整体架构
 
 ```mermaid
-flowchart TD
-    A[用户在群里发消息] --> B[napcat 收到消息，转发给 AniaBot]
-    B --> C[核心引擎解析消息<br>提取命令名、参数、是否 @ 了机器人]
-    C --> D{按 Order 从小到大<br>依次交给每个插件处理}
+flowchart TB
+    QQ[QQ 服务器] <--> NapCat[NapCat 协议端]
+    NapCat <-->|WebSocket / HTTP| Adapter[协议适配器层<br/>bot/adapter/napcat]
+    Adapter --> Core[AniaBot 核心<br/>bot/core]
+    Core -->|事件分发 · 中间件链| Plugins[插件层<br/>bot/plugins/*]
 
-    D --> E[插件 A · Order=-1000<br>拦截器，检查黑白名单]
-    E -->|被拦截 · return false| STOP[后续插件不再执行]
-    E -->|放行 · return true| F[插件 B · Order=0<br>日志插件，打印消息到控制台]
+    subgraph BuiltIn[内置插件]
+        Sys[系统插件]
+        Log[日志插件]
+        Repeat[复读机]
+        Anti[防撤回]
+        AI[AI 对话]
+        News[每日新闻]
+    end
 
-    F -->|return true| G[插件 C · Order=10<br>你的自定义插件]
-    G -->|匹配到 /hello · return false| STOP2[阻止后续插件]
-    G -->|不是我的命令 · return true| H[插件 D · Order=1000<br>后处理插件]
-    H --> END[处理完成]
+    Plugins --> BuiltIn
+    Plugins --> Custom[你的自定义插件]
+
+    AI --> Engine[AI 引擎<br/>bot/component/aichat]
+    Engine --> Tools[工具系统<br/>llmtool / functool]
+    Tools --> MCP[MCP Servers]
+    Tools --> Skills[Skills]
+
+    Core --> Cache[(缓存层<br/>Redis / 内存)]
+    Core --> Store[(持久化层<br/>SQLite / MySQL)]
 ```
 
-每个插件只需要关心自己负责的命令，其他消息直接 `return true` 传给下一个插件。就像一条流水线，每个工位只处理自己会的工序。
+## 核心特性
 
-## 系统架构
+### ⚡ 高性能事件处理
 
-AniaBot 采用分层架构设计，确保高内聚、低耦合：
+WebSocket 适配器采用 **工作池（Worker Pool）+ 消息队列** 模型：连接层只负责收发，事件解析与插件分发在独立的工作协程中完成。`worker_count` 设为 0 时按 CPU 核数自动调整，队列长度可通过 `worker_queue_size` 配置。
 
-![系统架构](./framework.png)
+### 🧩 中间件式插件链
 
-### 协议适配层
+插件按 `Order` 从小到大排序执行，消息事件返回 `false` 即可阻断后续插件 —— 就像 Web 框架的中间件：
 
-负责与 QQ 协议进行通信。你可以把它理解为「翻译官」——它把 napcat 发来的 WebSocket 消息翻译成框架能理解的格式，也把框架要发送的消息翻译成 napcat 能理解的格式。目前支持 WebSocket 和 HTTP 两种适配器。
+```
+LevelLog(-1000)  →  LevelNormal(0)  →  LevelPostHandle(1000)
+   日志插件            业务插件             AI 对话（兜底响应）
+```
 
-### 核心引擎层
+### 🤖 完整的 AI Agent 能力
 
-框架的「大脑」，负责：
+- **工具调用**：内置时间、联网搜索、网页浏览、梗图、消息历史、文件发送等工具，反射自动生成 JSON Schema，无需手写
+- **MCP 集成**：接入任意 MCP Server（stdio / SSE / Streamable HTTP），两阶段懒加载避免上下文爆炸
+- **Skill 系统**：把领域知识封装为 Skill，AI 按需阅读
+- **上下文管理**：按 token 预算管理对话窗口，超过 80% 自动让 LLM 总结压缩，历史持久化、重启不丢
+- **AI 定时任务**：AI 自己也能创建 cron 任务 —— 「每天早上 8 点给我发今日天气」一句话即可
 
-- **消息分发**：接收协议层消息，路由给相应插件处理
-- **插件管理**：插件的注册、加载和生命周期管理
-- **事件调度**：基于优先级（`Order` 字段）的事件处理机制
-- **命令解析**：识别命令名称、提取参数
-- **存储抽象**：为插件提供缓存（Redis/内存）和持久化（SQLite/MySQL）双层存储接口
+### 💾 双层存储，自动隔离
 
-### 插件生态层
+| 层级 | 接口 | 后端 | 适用场景 |
+| --- | --- | --- | --- |
+| 缓存层 | `Storage` | Redis（默认）/ 内存 | 热数据、TTL、分布式锁、列表 |
+| 持久化层 | `PersistentStorage` | SQLite（默认）/ MySQL | 用户数据、配置、历史记录 |
 
-所有功能都以插件形式存在。框架内置了 6 个常用插件（日志、AI 对话、复读机等），你也可以编写自己的插件。插件之间互不干扰，可以自由组合。
+框架在注入时按插件名自动做命名空间隔离，插件之间永远不会键冲突。所有 SQL 后端均为纯 Go 驱动，交叉编译无忧。
 
-### 配置管理层
+## 适用场景
 
-基于 Viper 的统一配置管理，支持 YAML 格式。每个插件拥有独立的配置节，互不冲突。
+- 🤖 **智能群助手**：接入 DeepSeek / GPT / Qwen 等模型，@机器人 即可对话，还能联网搜索、识别图片
+- 📰 **定时推送**：新闻、天气、提醒事项，cron 表达式精确控制
+- 🛡️ **群管理**：防撤回、消息回顾、入群欢迎（需自行扩展）
+- 🛠️ **自动化 Agent**：开启 bash / file 工具后，AI 可以直接操作宿主机完成任务（默认关闭，按需开启）
 
-## 项目仓库
+## 下一步
 
-| 分支 | 说明 |
-|------|------|
-| [main](https://github.com/jeanhua/AniaBot) | 框架主分支，稳定版本 |
-| [dev/deploy](https://github.com/jeanhua/AniaBot/tree/dev/deploy) | 部署分支，包含丰富的插件示例 |
+- [快速开始](/guide/getting-started) —— 5 分钟跑起你的机器人
+- [插件系统概览](/plugin/overview) —— 了解插件的生命周期与执行模型
+- [第一个插件](/plugin/first-plugin) —— 动手写一个响应命令的插件

@@ -1,343 +1,222 @@
-# 配置说明
+# 配置详解
 
-AniaBot 使用 YAML 文件管理所有配置，基于 [Viper](https://github.com/spf13/viper) 加载。你只需要在项目根目录放一个 `config.yaml`，框架启动时会自动读取。
+AniaBot 使用 [Viper](https://github.com/spf13/viper) 加载 YAML 配置。启动时**优先读取 `config.dev.yaml`**，不存在则回退到 `config.yaml`。
 
-## 配置文件加载机制
+配置分为两大块：`bot`（框架级）与 `plugin`（插件级）。
 
-AniaBot 支持两个配置文件：
+## bot —— 框架配置
 
-| 文件 | 用途 | 说明 |
-|------|------|------|
-| `config.yaml` | 生产配置 | 默认配置文件，框架一定会尝试加载 |
-| `config.dev.yaml` | 开发配置 | 优先加载，不存在时自动回退到 `config.yaml` |
-
-框架启动时的加载顺序：
-
-1. **优先**尝试读取 `config.dev.yaml`
-2. 如果 `config.dev.yaml` **不存在**，自动回退读取 `config.yaml`
-
-::: tip 开发与生产环境分离
-推荐在本地开发时使用 `config.dev.yaml`，部署到服务器时只保留 `config.yaml`。这样你可以在本地使用测试 API Key、调试端口等配置，而不用每次切换环境都手动改文件。
-
-`config.dev.yaml` 已被添加到 `.gitignore`（或应被添加），不会被提交到代码仓库，避免泄露密钥。
-:::
-
-::: warning 不要同时存在两个文件
-如果 `config.dev.yaml` 存在，框架**只会**读取它，不会读取 `config.yaml`。如果你修改了 `config.yaml` 但发现没有生效，检查一下是不是 `config.dev.yaml` 在"插队"。
-:::
-
-## 完整配置示例
-
-下面是一份带有详细注释的完整配置文件，涵盖了框架运行所需的所有核心配置：
+### admin_id
 
 ```yaml
-# ============================================
-# AniaBot 主配置文件
-# ============================================
-
-# bot 核心配置
 bot:
-  # 管理员 QQ 号，拥有最高权限（如执行 /reload 等管理命令）
   admin_id: 123456789
-  # 适配器配置 —— 连接到 NapCat 的方式
-  adapter:
-    ws:
-      # NapCat WebSocket Server 地址
-      # 需要与 NapCat 配置中的 WebSocket Server 保持一致
-      address: ws://localhost:4455
-      # 连接失败后的最大重连次数
-      # 设为 -1 表示无限重连（适合生产环境，断线后自动恢复）
-      # 设为 0 表示不重连（调试时方便查看错误）
-      max_retries: 5
+```
 
-  # 存储配置（缓存 + 持久化两层，独立配置、互不影响）
+管理员 QQ 号。拥有最高权限：远程 `/exit` 退出、强制执行定时推送、查看全部定时任务、接收 panic 告警与启动通知等。
+
+### adapter —— 协议适配器
+
+WebSocket 与 HTTP **二选一**，取决于 `cmd/main.go` 中创建的适配器：
+
+::: code-group
+
+```yaml [WebSocket（推荐）]
+bot:
+  adapter:
+    # token: xxx        # 若 NapCat 端设置了 access token 则取消注释
+    ws:
+      address: ws://localhost:4455  # NapCat WebSocket 服务端地址
+      max_retries: 5                # 连接失败最大重连次数
+      worker_count: 0               # 事件处理线程数，0 = 按 CPU 自动调整
+      worker_queue_size: 1024       # 消息队列长度，超出则丢弃
+```
+
+```yaml [HTTP]
+bot:
+  adapter:
+    http:
+      listen_port: 6679                      # 本地监听端口，接收 NapCat 事件上报
+      target_url: http://localhost:6680      # NapCat HTTP 服务端地址
+```
+
+:::
+
+::: warning Docker 部署注意
+HTTP 模式下 NapCat 向 `localhost` 上报会失败，请将 NapCat 的 HTTP Client 地址改为 AniaBot 所在机器的内网 IP。
+:::
+
+### store —— 双层存储
+
+缓存与持久化两层独立配置、互不影响。
+
+```yaml
+bot:
   store:
-    # ---- 缓存存储 ----
-    # 易失，支持 TTL 与列表语义，适合热数据/临时会话/分布式锁
-    cache:
-      # 驱动：redis（默认，需 Redis 服务） | memory（进程内内存，零依赖，重启清空）
-      driver: redis
+    cache:                      # 缓存层：易失，支持 TTL 与列表语义
+      driver: redis             # redis（默认）| memory（进程内，重启清空）
       redis:
         address: "localhost:6379"
         password: ""
-        # 使用第几号数据库，0~15
-        # 建议不同实例使用不同 db，避免数据冲突
         db: 0
-      # memory 引擎无需任何配置
 
-    # ---- 持久化存储 ----
-    # 重启不丢失，适合需要长期保存的数据（插件配置/用户数据/历史记录等）
-    persistent:
-      # 驱动：sqlite（默认，纯 Go 无 CGO，零依赖文件数据库） | mysql
-      driver: sqlite
+    persistent:                 # 持久化层：重启不丢
+      driver: sqlite            # sqlite（默认，纯 Go 无 CGO）| mysql
       sqlite:
-        # 数据库文件路径，目录不存在会自动创建；支持 ":memory:" 内存数据库
         path: "./data/aniabot.db"
       mysql:
-        # 标准 go-sql-driver DSN，charset=utf8mb4 建议保留
         dsn: "root:password@tcp(localhost:3306)/aniabot?charset=utf8mb4&parseTime=true&loc=Local"
-        max_open_conns: 20          # 最大连接数，0 表示不限
-        max_idle_conns: 5           # 最大空闲连接数
-        conn_max_lifetime_sec: 300 # 连接最长存活时间（秒）
+        max_open_conns: 20          # <=0 时默认 10
+        max_idle_conns: 5           # <=0 时默认 5
+        conn_max_lifetime_sec: 300  # <=0 时默认 1800
+```
 
-# ============================================
-# 插件配置区域
-# 每个插件的 key 对应该插件 Meta 中的 SystemConfigKey
-# ============================================
+## plugin.ai_chat_bot —— AI 对话插件
+
+### 基础配置
+
+```yaml
 plugin:
-  # ---- AI 对话插件 ----
-  # 填入你的 OpenAI 兼容 API 信息即可使用
   ai_chat_bot:
-    # API 基础地址，支持任何 OpenAI 兼容接口
-    # 例如 OpenAI、DeepSeek、本地 Ollama 等
-    base_url: "https://api.openai.com/v1"
-    model: "gpt-4o-mini"
-    api_key: "sk-your-api-key"
-    # 单次回复的最大 token 数，越大回复越长但消耗越多
-    max_token: 2048
-    # 生成温度：0 表示最确定性，1 表示最随机
-    # 日常聊天建议 0.7~0.9，严肃任务建议 0.3~0.5
-    temperature: 0.7
-    # 系统提示词，定义机器人的"人设"
-    prompt: "你是一个有趣的 QQ 机器人助手"
-    # 图片识别（OCR）子配置
+    base_url: "https://api.deepseek.com"  # 任意 OpenAI 兼容 API
+    api_key: "sk-xxxx"
+    model: "deepseek-chat"
+    multimodal: false   # 主模型是否支持图片输入
+    rate_limit: 2       # 每秒最多调用次数
+```
+
+### 模型参数
+
+```yaml
+    max_context_tokens: 128000  # 上下文 token 预算，超过 80% 自动压缩历史
+    temperature: 1.2
+    top_p: 0.9
+    top_k: 100
+    max_token: 8192
+    thinking:
+      enable: false      # 深度思考开关
+      mode: "auto"       # none / low / medium / high / auto
+    prompt: |-
+      你是一个ai对话机器人，在QQ上和别人聊天，说话不要长篇大论
+```
+
+::: tip 按群/按人定制人格
+在项目根目录创建 `aniabot.prompt.json`，可为特定群聊或好友覆盖 system prompt：
+
+```json
+{
+  "groups": { "123456": "你是这个群的管理助手..." },
+  "friends": { "7891011": "你是我的私人秘书..." }
+}
+```
+:::
+
+### Skill 系统
+
+```yaml
+    skills_dir: "./skills"  # Skill 目录
+    skills: []              # 指定加载的 skill 名称，空 = 加载全部
+```
+
+### 联网搜索
+
+```yaml
+    search:
+      token: "jina_xxx"   # Jina AI token，用于 web_search / web_explore 工具
+```
+
+### OCR 备用识图
+
+主模型不支持多模态时，可配置一个备用视觉模型把图片转述为文字：
+
+```yaml
     ocr:
       enable: false
-      base_url: "https://api.openai.com/v1"
-      model: "gpt-4o"
-      api_key: "sk-your-ocr-api-key"
+      base_url: "https://api.siliconflow.cn/v1"
+      api_key: ""
+      model: "Qwen/Qwen3-VL-8B-Instruct"
+      temperature: 0.6
+      top_p: 0.95
+      top_k: 20
+      max_token: 600
+      prompt: |-
+        你负责将看到的图片用markdown格式描述出来，不要有无关的其他对话
+```
 
-  # ---- 每日新闻插件 ----
+### 高危工具（默认关闭）
+
+::: danger 安全提醒
+以下工具允许 AI 直接操作宿主机，存在风险，**默认全部关闭**，请确认环境隔离后再开启。
+:::
+
+```yaml
+    bash:               # 允许 AI 在宿主机执行 shell 命令
+      enable: false
+      shell: "/bin/bash"
+      env: []           # 环境变量，如 ["HOME=/root"]
+      whitelist: []     # 非空时仅允许匹配这些正则的命令
+      blacklist:        # 匹配这些正则的命令被禁止
+        - config(\.dev)?\.(yaml|yml|json)
+        - "^mkfs"
+        - "^shutdown"
+
+    local_image:        # 允许 AI 读取宿主机本地图片
+      enable: false
+```
+
+### AI 定时任务（clock）
+
+```yaml
+    clock:
+      enable: true              # 启用后 AI 可自主创建定时任务
+      default_timeout_sec: 120  # 单次触发默认超时
+      max_log_entries: 500      # 执行日志保留条数（滚动覆盖）
+```
+
+与框架的 `StartCron` 静态任务不同，clock 任务由 AI / 用户**动态创建**、持久化保存、重启不丢。详见 [AI 对话插件](/guide/builtin-plugins#ai-对话插件)。
+
+## plugin.dailyNews —— 每日新闻插件
+
+```yaml
+plugin:
   dailyNews:
-    # 新闻图片 API 地址
-    api: "https://uapis.cn/api/v1/daily/news-image"
-    # Cron 表达式，控制每日推送时间
-    # "0 12 * * *" 表示每天中午 12:00
-    # "30 8 * * 1-5" 表示工作日早上 8:30
-    cron: "0 12 * * *"
-    # 接收新闻推送的群号列表
-    groups:
-      - 123456789
-      - 987654321
-
-  # ---- 自定义插件配置示例 ----
-  # key 名称需要与你的插件代码中读取的路径一致
-  yourplugin:
-    api_key: "your-key"
-    timeout: 30
+    api: "https://60s.viki.moe/v2/60s?encoding=image-proxy"  # 新闻图 API
+    cron: "0 18 * * *"    # cron 表达式，每天 18:00 触发
+    groups:               # 接收推送的群号列表
+      - 123456
+      - 7891011
 ```
 
-## 配置项说明
+## aniabot.mcp.json —— MCP 服务定义
 
-### `bot`
+项目根目录下的 `aniabot.mcp.json` 定义 AI 可用的 MCP Server，支持 stdio / SSE / Streamable HTTP 三种传输：
 
-| 字段 | 类型 | 说明 |
-|------|------|------|
-| `admin_id` | int | 管理员 QQ 号，用于权限控制 |
-| `adapter.ws.address` | string | napcat WebSocket Server 地址 |
-| `adapter.ws.max_retries` | int | 断线重连最大次数，`-1` 为无限重连 |
-| `store` | object | 存储配置（缓存 + 持久化两层），详见下方 [`bot.store`](#bot-store) |
-
-### `bot.store`
-
-存储配置分为缓存（cache）与持久化（persistent）两层，二者独立配置、互不影响：
-
-- **cache（缓存层）**：易失存储，支持 TTL 与列表语义，适合热数据、临时会话、分布式锁。
-- **persistent（持久化层）**：重启不丢失，适合需要长期保存的数据（插件配置、用户数据、历史记录等）。
-
-::: warning 破坏性变更
-旧版本的 `bot.store.redis`（字符串地址）、`bot.store.password`、`bot.store.db` 三个字段已废弃。请迁移到下方新的 `bot.store.cache` / `bot.store.persistent` 结构。
-:::
-
-#### `bot.store.cache`
-
-| 字段 | 类型 | 默认值 | 说明 |
-|------|------|--------|------|
-| `driver` | string | `redis` | 缓存驱动：`redis`（需 Redis 服务）或 `memory`（进程内内存，零依赖，重启清空） |
-| `redis.address` | string | `localhost:6379` | Redis 地址（driver 为 `redis` 时生效） |
-| `redis.password` | string | `""` | Redis 密码 |
-| `redis.db` | int | `0` | Redis 数据库编号，0~15 |
-
-::: warning 缓存默认不会自动降级
-默认使用 Redis 作为缓存层。若 Redis 不可达，框架会记录错误并退出（**不会**自动降级为内存存储）。如需零依赖、免安装的本地缓存，显式设置 `bot.store.cache.driver: memory`，但重启后缓存数据会清空，且多实例之间不共享。
-:::
-
-#### `bot.store.persistent`
-
-| 字段 | 类型 | 默认值 | 说明 |
-|------|------|--------|------|
-| `driver` | string | `sqlite` | 持久化驱动：`sqlite`（纯 Go 无 CGO）或 `mysql` |
-| `sqlite.path` | string | `./data/aniabot.db` | SQLite 数据库文件路径，目录不存在会自动创建；支持 `:memory:` 内存数据库 |
-| `mysql.dsn` | string | — | 标准 go-sql-driver DSN，如 `root:pass@tcp(host:3306)/db?charset=utf8mb4&parseTime=true&loc=Local` |
-| `mysql.max_open_conns` | int | `20` | 最大连接数，0 表示不限 |
-| `mysql.max_idle_conns` | int | `5` | 最大空闲连接数 |
-| `mysql.conn_max_lifetime_sec` | int | `300` | 连接最长存活时间（秒） |
-
-::: tip 零依赖持久化
-默认使用 SQLite 作为持久化层，纯 Go 驱动 `modernc.org/sqlite` 无需 CGO、无需额外安装数据库服务，开箱即用。需要多实例共享或更高吞吐时，切换 `driver: mysql` 即可。
-:::
-
-### `plugin.ai_chat_bot`
-
-| 字段 | 类型 | 说明 |
-|------|------|------|
-| `base_url` | string | OpenAI 兼容接口地址 |
-| `model` | string | 使用的模型名称 |
-| `api_key` | string | API 密钥 |
-| `max_token` | int | 单次最大 token 数 |
-| `temperature` | float | 生成温度，0~1 |
-| `prompt` | string | 系统提示词 |
-| `ocr.enable` | bool | 是否启用图片识别 |
-
-### `plugin.dailyNews`
-
-| 字段 | 类型 | 说明 |
-|------|------|------|
-| `api` | string | 新闻图片 API 地址 |
-| `cron` | string | Cron 表达式，控制推送时间 |
-| `groups` | []int | 接收推送的群号列表 |
-
-## 在插件中读取配置
-
-插件通过 `Start` 生命周期方法接收全局 `*viper.Viper` 实例。框架在调用 `Start` 之前已经完成了配置文件的加载，你只需要用对应的 key 去读取即可。
-
-```go
-func (p *YourPlugin) Start(ctx context.Context, cfg *viper.Viper) error {
-    // 用 GetString、GetInt、GetBool 等方法读取配置
-    // 路径格式统一为: plugin.<你的插件key>.<字段名>
-    p.apiKey = cfg.GetString("plugin.yourplugin.api_key")
-    p.timeout = cfg.GetInt("plugin.yourplugin.timeout")
-    return nil
+```json
+{
+  "servers": [
+    {
+      "name": "my-server",
+      "transport": "stdio",
+      "command": "python",
+      "args": ["-m", "mcp_server"],
+      "env": { "API_KEY": "xxx" },
+      "timeout": 30
+    },
+    {
+      "name": "remote-server",
+      "transport": "sse",
+      "endpoint": "http://localhost:3000",
+      "headers": { "Authorization": "Bearer token123" },
+      "timeout": 30
+    }
+  ]
 }
 ```
 
-::: tip 配置路径规则
-配置路径的格式是 `plugin.<插件key>.<字段名>`，其中 `<插件key>` 就是 YAML 文件中 `plugin:` 下面那一层的 key 名称。比如 YAML 中写的 `plugin.ai_chat_bot`，读取时就用 `cfg.GetString("plugin.ai_chat_bot.model")`。
-:::
+MCP 工具采用两阶段懒加载：AI 先通过发现工具查看有哪些 MCP 能力，按需加载到当前会话，避免工具描述撑爆上下文。
 
-### 实战示例：拦截器插件
+## 环境变量
 
-下面是一个真实案例 —— 自定义的拦截器插件（`custom/plugins/interceptor`），它通过配置文件管理黑名单和白名单：
-
-**YAML 配置：**
-
-```yaml
-plugin:
-  interceptor:
-    # 黑名单模式：拦截指定群/用户，其余放行
-    # 适用于：想屏蔽少数吵闹的群或用户
-    blacklist:
-      groups:
-        - "111111111"   # 某个吵闹的群
-        - "222222222"
-      users:
-        - "333333333"   # 某个刷屏的用户
-    # 白名单模式：只放行指定群/用户，其余全部拦截
-    # 适用于：只想让机器人在特定群/用户中工作
-    # 一般不与黑名单同时使用
-    whitelist:
-      groups: []
-      users: []
-```
-
-**Go 代码读取：**
-
-```go
-func (p *InterceptorPlugin) Start(ctx context.Context, cfg *viper.Viper) error {
-    // 读取黑名单中的群号列表
-    p.interceptGroup = cfg.GetStringSlice("plugin.interceptor.blacklist.groups")
-    // 读取黑名单中的用户列表
-    p.interceptUser = cfg.GetStringSlice("plugin.interceptor.blacklist.users")
-
-    // 读取白名单中的群号列表
-    p.permitGroup = cfg.GetStringSlice("plugin.interceptor.whitelist.groups")
-    // 读取白名单中的用户列表
-    p.permitUser = cfg.GetStringSlice("plugin.interceptor.whitelist.users")
-
-    return nil
-}
-```
-
-::: warning 黑白名单是两种模式
-拦截器的默认行为是**拦截所有消息**。黑白名单是两种互斥的使用模式：
-
-- **黑名单模式**：`blacklist` 填入要屏蔽的群/用户，`whitelist` 留空 → 被列出的群/用户被拦截，其余放行
-- **白名单模式**：`whitelist` 填入要放行的群/用户，`blacklist` 留空 → 被列出的群/用户被放行，其余全部拦截
-
-一般**不同时使用**。如果同时配置，黑名单先生效（命中即拦截），白名单仅对未命中黑名单的条目生效。
-:::
-
-::: info 常用的 Viper 读取方法
-| 方法 | 返回类型 | 适用场景 |
-|------|----------|----------|
-| `cfg.GetString(key)` | string | 字符串配置 |
-| `cfg.GetInt(key)` | int | 数字配置 |
-| `cfg.GetBool(key)` | bool | 开关配置 |
-| `cfg.GetStringSlice(key)` | []string | 字符串列表（如群号列表） |
-| `cfg.GetIntSlice(key)` | []int | 数字列表 |
-| `cfg.GetDuration(key)` | time.Duration | 时间间隔（如 `"30s"`） |
-:::
-
-## 环境配置建议
-
-### 本地开发
-
-创建 `config.dev.yaml`，填入测试用的 API Key 和本地服务地址：
-
-```yaml
-bot:
-  admin_id: 987654321
-  adapter:
-    ws:
-      address: ws://localhost:4455
-      max_retries: 0   # 开发时不重连，方便看到错误
-  store:
-    cache:
-      driver: memory   # 本地开发免装 Redis，用进程内内存（重启清空）
-    persistent:
-      driver: sqlite   # SQLite 零依赖，文件落盘
-
-plugin:
-  ai_chat_bot:
-    base_url: "http://localhost:11434/v1"  # 本地 Ollama
-    model: "qwen2.5"
-    api_key: "ollama"
-    temperature: 0.9
-    prompt: "你是一个测试用的机器人"
-```
-
-### 生产部署
-
-使用 `config.yaml`，填入正式的 API Key，开启重连，并配置生产级存储（Redis 缓存 + SQLite/MySQL 持久化）：
-
-```yaml
-bot:
-  admin_id: 123456789
-  adapter:
-    ws:
-      address: ws://localhost:4455
-      max_retries: -1  # 生产环境无限重连
-  store:
-    cache:
-      driver: redis   # 生产环境使用 Redis 作为缓存
-      redis:
-        address: "localhost:6379"
-        password: "your-redis-password"
-        db: 0
-    persistent:
-      driver: sqlite  # 持久化层（生产高吞吐可切换 mysql）
-      sqlite:
-        path: "./data/aniabot.db"
-
-plugin:
-  ai_chat_bot:
-    base_url: "https://api.openai.com/v1"
-    model: "gpt-4o-mini"
-    api_key: "sk-production-key"
-    temperature: 0.7
-    prompt: "你是一个有用的 QQ 机器人助手"
-```
-
-::: warning 保护你的配置文件
-`config.yaml` 和 `config.dev.yaml` 包含 API 密钥等敏感信息，**不要**提交到 Git 仓库。框架已内置保护机制，禁止通过机器人发送这两个文件。请确保 `.gitignore` 中包含这两个文件。
-:::
+| 变量 | 说明 |
+| --- | --- |
+| `MAX_ITERATIONS` | AI Agent 单轮对话的最大工具迭代次数，默认 20 |

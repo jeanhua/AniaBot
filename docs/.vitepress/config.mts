@@ -3,16 +3,24 @@ import { withMermaid } from 'vitepress-plugin-mermaid'
 
 export default withMermaid(defineConfig({
   title: 'AniaBot',
-  description: '一个插件驱动型 QQ 机器人框架',
+  description: '一个插件驱动型 QQ 机器人框架 —— Go 语言开发，内置 AI 对话 / MCP / 定时任务',
   lang: 'zh-CN',
   base: '/AniaBot/',
+  cleanUrls: true,
+  lastUpdated: true,
 
   head: [
     ['link', { rel: 'icon', href: '/AniaBot/logo.png' }],
+    ['meta', { name: 'theme-color', content: '#e8547f' }],
+    ['meta', { name: 'og:title', content: 'AniaBot 文档' }],
+    ['meta', { name: 'og:description', content: '插件驱动型 QQ 机器人框架' }],
   ],
+  markdown: {
+    lineNumbers: true,
+  },
 
   themeConfig: {
-    logo: '/AniaBot/logo.png',
+    logo: '/logo.png',
     siteTitle: 'AniaBot',
 
     nav: [
@@ -22,9 +30,10 @@ export default withMermaid(defineConfig({
       {
         text: '链接',
         items: [
-          { text: '主分支', link: 'https://github.com/jeanhua/AniaBot' },
-          { text: '部署分支 (示例插件)', link: 'https://github.com/jeanhua/AniaBot/tree/dev/deploy' },
+          { text: 'GitHub 主分支', link: 'https://github.com/jeanhua/AniaBot' },
+          { text: '部署分支（示例插件）', link: 'https://github.com/jeanhua/AniaBot/tree/dev/deploy' },
           { text: '提交 Issue', link: 'https://github.com/jeanhua/AniaBot/issues' },
+          { text: 'Releases', link: 'https://github.com/jeanhua/AniaBot/releases' },
         ],
       },
     ],
@@ -32,11 +41,16 @@ export default withMermaid(defineConfig({
     sidebar: {
       '/guide/': [
         {
-          text: '开始',
+          text: '开始使用',
           items: [
             { text: '项目介绍', link: '/guide/introduction' },
             { text: '快速开始', link: '/guide/getting-started' },
-            { text: '配置说明', link: '/guide/configuration' },
+            { text: '配置详解', link: '/guide/configuration' },
+          ],
+        },
+        {
+          text: '插件生态',
+          items: [
             { text: '内置插件', link: '/guide/builtin-plugins' },
             { text: '部署分支插件', link: '/guide/deploy-plugins' },
             { text: '常见问题', link: '/guide/faq' },
@@ -47,12 +61,22 @@ export default withMermaid(defineConfig({
         {
           text: '插件开发',
           items: [
-            { text: '概览', link: '/plugin/overview' },
+            { text: '插件系统概览', link: '/plugin/overview' },
             { text: '第一个插件', link: '/plugin/first-plugin' },
-            { text: '消息构造器', link: '/plugin/message-builder' },
             { text: '命令解析', link: '/plugin/commands' },
+            { text: '消息构造器', link: '/plugin/message-builder' },
+          ],
+        },
+        {
+          text: '进阶能力',
+          items: [
             { text: '数据存储', link: '/plugin/storage' },
             { text: '定时任务', link: '/plugin/cron' },
+          ],
+        },
+        {
+          text: '实战',
+          items: [
             { text: '完整示例', link: '/plugin/examples' },
             { text: '常见模式', link: '/plugin/patterns' },
           ],
@@ -63,6 +87,7 @@ export default withMermaid(defineConfig({
           text: 'API 参考',
           items: [
             { text: '事件接口', link: '/api/events' },
+            { text: 'Bot 接口', link: '/api/bot' },
             { text: '存储接口', link: '/api/storage' },
           ],
         },
@@ -80,6 +105,16 @@ export default withMermaid(defineConfig({
 
     search: {
       provider: 'local',
+      options: {
+        translations: {
+          button: { buttonText: '搜索文档', buttonAriaLabel: '搜索文档' },
+          modal: {
+            noResultsText: '没有找到相关结果',
+            resetButtonTitle: '清除查询条件',
+            footer: { selectText: '选择', navigateText: '切换', closeText: '关闭' },
+          },
+        },
+      },
     },
 
     editLink: {
