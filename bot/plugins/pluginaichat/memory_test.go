@@ -112,6 +112,61 @@ func TestMemoryRemove(t *testing.T) {
 	}
 }
 
+func TestMemoryUpdate(t *testing.T) {
+	m := newTestMemoryManager(0)
+
+	e, _ := m.add("g:123", "456", "旧内容", []string{"旧标签"})
+	created := e.CreatedAt
+
+	if err := m.update("g:123", e.ID, "789", "新内容", []string{"新标签"}); err != nil {
+		t.Fatalf("update 失败: %v", err)
+	}
+	entries := m.list("g:123")
+	if len(entries) != 1 {
+		t.Fatalf("update 后条目数不符: %d", len(entries))
+	}
+	got := entries[0]
+	if got.Content != "新内容" || got.UserID != "789" || len(got.Tags) != 1 || got.Tags[0] != "新标签" {
+		t.Fatalf("update 后内容不符: %+v", got)
+	}
+	if !got.CreatedAt.Equal(created) {
+		t.Fatalf("update 不应改变创建时间: %v -> %v", created, got.CreatedAt)
+	}
+
+	// ID 不存在
+	if err := m.update("g:123", "deadbeef", "", "x", nil); err == nil {
+		t.Fatal("更新不存在的 ID 应报错")
+	}
+	// 空内容
+	if err := m.update("g:123", e.ID, "", "   ", nil); err == nil {
+		t.Fatal("空内容应报错")
+	}
+	// 不影响其它 scope
+	if err := m.update("g:999", e.ID, "", "跨 scope", nil); err == nil {
+		t.Fatal("不应跨 scope 更新")
+	}
+}
+
+func TestMemoryScopes(t *testing.T) {
+	m := newTestMemoryManager(0)
+
+	if got := m.scopes(); len(got) != 0 {
+		t.Fatalf("空管理器应无 scope，实际 %v", got)
+	}
+
+	if _, err := m.add("g:123", "", "群记忆", nil); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := m.add("f:456", "", "私聊记忆", nil); err != nil {
+		t.Fatal(err)
+	}
+
+	got := m.scopes()
+	if len(got) != 2 || got[0] != "f:456" || got[1] != "g:123" {
+		t.Fatalf("scopes 不符（应排序）: %v", got)
+	}
+}
+
 func TestFilterMemoryByRelevance(t *testing.T) {
 	entries := []memoryEntry{
 		{ID: "a", Content: "完全无关的内容"},

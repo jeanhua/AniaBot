@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -127,6 +128,48 @@ func (m *memoryManager) remove(scope, id string) bool {
 		}
 	}
 	return false
+}
+
+// scopes 列出当前已有记忆的全部会话 scope（g:群号 / f:QQ号），排序后返回。
+// 供 Web 面板的记忆管理页使用。
+func (m *memoryManager) scopes() []string {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	keys, err := m.store.Keys(context.Background(), "")
+	if err != nil {
+		m.logger.Error("列出记忆 scope 失败", "error", err)
+		return nil
+	}
+	slices.Sort(keys)
+	return keys
+}
+
+// update 按 ID 更新指定 scope 中一条记忆的内容、关联 QQ 与标签；
+// ID 不存在时返回错误。创建时间保留不变。
+func (m *memoryManager) update(scope, id, userID, content string, tags []string) error {
+	content = strings.TrimSpace(content)
+	if content == "" {
+		return errors.New("记忆内容不能为空")
+	}
+
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	entries := m.listLocked(scope)
+	for i, e := range entries {
+		if e.ID == id {
+			entries[i].UserID = strings.TrimSpace(userID)
+			entries[i].Content = content
+			entries[i].Tags = tags
+			if ok := m.store.Set(context.Background(), scope, entries); !ok {
+				m.logger.Error("更新记忆后落盘失败", "scope", scope, "id", id)
+				return errors.New("记忆保存失败，请查看日志")
+			}
+			return nil
+		}
+	}
+	return fmt.Errorf("记忆不存在: %s", id)
 }
 
 // newMemoryID 生成短随机 ID（8 位十六进制）。

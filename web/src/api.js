@@ -99,6 +99,15 @@ export const api = {
   deleteSkill: (name) =>
     request(`/api/skills/${encodeURIComponent(name)}`, { method: 'DELETE' }),
 
+  getMemoryScopes: () => request('/api/memory/scopes'),
+  getMemories: (scope) => request(`/api/memory/list?scope=${encodeURIComponent(scope)}`),
+  createMemory: (entry) =>
+    request('/api/memory', { method: 'POST', body: JSON.stringify(entry) }),
+  updateMemory: (entry) =>
+    request('/api/memory', { method: 'PUT', body: JSON.stringify(entry) }),
+  deleteMemory: (scope, id) =>
+    request(`/api/memory?scope=${encodeURIComponent(scope)}&id=${encodeURIComponent(id)}`, { method: 'DELETE' }),
+
   restart: () => request('/api/restart', { method: 'POST' }),
   // 轮询等待 Bot 重启完成（会话持久化在数据库中，重启后仍有效）
   async waitUntilUp(timeoutMs = 60000) {

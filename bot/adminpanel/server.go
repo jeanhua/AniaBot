@@ -74,6 +74,21 @@ type SkillSource interface {
 	SkillUpload(filename string, data []byte) error
 }
 
+// MemorySource 可选接口：插件实现后，面板「记忆管理」页可对其 AI 长期记忆
+// 做列表 / 新增 / 编辑 / 删除（当前由 AI 对话插件实现）。改动即时生效，无需重启。
+type MemorySource interface {
+	// MemoryScopes 返回已有记忆的会话 scope 列表及各自条数
+	MemoryScopes() []plugininfo.MemoryScopeInfo
+	// MemoryList 返回指定 scope 的全部记忆（新在前）
+	MemoryList(scope string) ([]plugininfo.MemoryEntryInfo, error)
+	// MemoryCreate 新增一条记忆，返回生成的 ID
+	MemoryCreate(up plugininfo.MemoryEntryUpsert) (string, error)
+	// MemoryUpdate 按 ID 更新一条记忆
+	MemoryUpdate(up plugininfo.MemoryEntryUpsert) error
+	// MemoryDelete 按 ID 删除一条记忆
+	MemoryDelete(scope, id string) error
+}
+
 // Options 面板依赖。
 type Options struct {
 	Listen        string                          // 监听地址，如 127.0.0.1:7700
@@ -86,6 +101,7 @@ type Options struct {
 	Clocks        ClockTaskSource                 // AI 定时任务列表与启停（可为 nil）
 	MsgLogs       func(limit int) []msglog.Entry  // 消息日志（群/好友/通知，可为 nil）
 	Skills        SkillSource                     // AI skill 管理（可为 nil）
+	Memories      MemorySource                    // AI 长期记忆管理（可为 nil）
 	Logger        *slog.Logger
 }
 
@@ -148,6 +164,11 @@ func (s *Server) routes() {
 	s.mux.Handle("GET /api/skills", s.requireAuth(http.HandlerFunc(s.handleSkillList)))
 	s.mux.Handle("POST /api/skills", s.requireAuth(http.HandlerFunc(s.handleSkillUpload)))
 	s.mux.Handle("DELETE /api/skills/{name}", s.requireAuth(http.HandlerFunc(s.handleSkillDelete)))
+	s.mux.Handle("GET /api/memory/scopes", s.requireAuth(http.HandlerFunc(s.handleMemoryScopes)))
+	s.mux.Handle("GET /api/memory/list", s.requireAuth(http.HandlerFunc(s.handleMemoryList)))
+	s.mux.Handle("POST /api/memory", s.requireAuth(http.HandlerFunc(s.handleMemoryCreate)))
+	s.mux.Handle("PUT /api/memory", s.requireAuth(http.HandlerFunc(s.handleMemoryUpdate)))
+	s.mux.Handle("DELETE /api/memory", s.requireAuth(http.HandlerFunc(s.handleMemoryDelete)))
 	s.mux.Handle("POST /api/restart", s.requireAuth(http.HandlerFunc(s.handleRestart)))
 	s.mux.Handle("/", s.spaHandler())
 }
@@ -588,6 +609,89 @@ func (s *Server) handleSkillDelete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.opt.Logger.Info("skill 已通过 Web 面板删除", "skill", name)
+	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
+}
+
+// ---- memory handlers（AI 长期记忆管理） ----
+
+// handleMemoryScopes 返回已有记忆的会话 scope 列表及条数（功能未启用时返回空数组）。
+func (s *Server) handleMemoryScopes(w http.ResponseWriter, _ *http.Request) {
+	if s.opt.Memories == nil {
+		writeJSON(w, http.StatusOK, []any{})
+		return
+	}
+	scopes := s.opt.Memories.MemoryScopes()
+	if scopes == nil {
+		scopes = []plugininfo.MemoryScopeInfo{}
+	}
+	writeJSON(w, http.StatusOK, scopes)
+}
+
+// handleMemoryList 返回指定 scope（query 参数 scope）的全部记忆。
+func (s *Server) handleMemoryList(w http.ResponseWriter, r *http.Request) {
+	if s.opt.Memories == nil {
+		writeError(w, http.StatusNotFound, "记忆功能未启用")
+		return
+	}
+	entries, err := s.opt.Memories.MemoryList(r.URL.Query().Get("scope"))
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if entries == nil {
+		entries = []plugininfo.MemoryEntryInfo{}
+	}
+	writeJSON(w, http.StatusOK, entries)
+}
+
+// handleMemoryCreate 新增一条记忆。
+func (s *Server) handleMemoryCreate(w http.ResponseWriter, r *http.Request) {
+	if s.opt.Memories == nil {
+		writeError(w, http.StatusNotFound, "记忆功能未启用")
+		return
+	}
+	var req plugininfo.MemoryEntryUpsert
+	if err := readJSON(r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, "请求格式错误")
+		return
+	}
+	id, err := s.opt.Memories.MemoryCreate(req)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "id": id})
+}
+
+// handleMemoryUpdate 按 ID 更新一条记忆。
+func (s *Server) handleMemoryUpdate(w http.ResponseWriter, r *http.Request) {
+	if s.opt.Memories == nil {
+		writeError(w, http.StatusNotFound, "记忆功能未启用")
+		return
+	}
+	var req plugininfo.MemoryEntryUpsert
+	if err := readJSON(r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, "请求格式错误")
+		return
+	}
+	if err := s.opt.Memories.MemoryUpdate(req); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
+}
+
+// handleMemoryDelete 按 ID 删除一条记忆（query 参数 scope 与 id）。
+func (s *Server) handleMemoryDelete(w http.ResponseWriter, r *http.Request) {
+	if s.opt.Memories == nil {
+		writeError(w, http.StatusNotFound, "记忆功能未启用")
+		return
+	}
+	q := r.URL.Query()
+	if err := s.opt.Memories.MemoryDelete(q.Get("scope"), q.Get("id")); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
 	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
 }
 
