@@ -78,7 +78,7 @@ Clone(prefix string) PersistentStorage
 ```
 
 ::: tip 有序数据怎么存？
-持久层没有列表语义。需要保存数组时，把切片作为 JSON 值整体读写：
+持久层没有列表语义。需要保存数组时，小规模数据可把切片作为 JSON 值整体读写：
 
 ```go
 var list []string
@@ -86,6 +86,10 @@ p.PersistentStorage.Get(ctx, "list", &list)
 list = append(list, "new item")
 p.PersistentStorage.Set(ctx, "list", list)
 ```
+
+数据量大（如持续增长的日志）时，整体读写会产生放大且单条记录体积失控，
+建议用可排序的键逐条存储（如 `e:<序号>`），通过 `Keys("e:")` 列举、按序号排序——
+框架内的 querylog / tasklog 即采用这种方式。
 :::
 
 ## 后端配置

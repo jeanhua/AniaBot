@@ -37,9 +37,10 @@ func (p *AIChatPlugin) QueryLogRecent(f querylog.Filter) []querylog.Entry {
 // queryRecorder 一次 Query 的日志记录上下文。processChatBatch 在会话锁内串行执行，
 // 且工具观测回调与 Chat 同 goroutine，因此 toolCalls 无需额外加锁。
 type queryRecorder struct {
-	entry     querylog.Entry
-	toolCalls []querylog.ToolCallRecord
-	start     time.Time
+	entry          querylog.Entry
+	toolCalls      []querylog.ToolCallRecord
+	toolCallsTotal int // 工具调用总数（含超出上限被丢弃的）
+	start          time.Time
 }
 
 // beginQuery 开始记录一次 Query：写入 running 状态的日志并挂载工具调用观察者。
@@ -71,6 +72,10 @@ func (p *AIChatPlugin) beginQuery(chat *aichat.ChatBot, id message.QID, isGroup 
 		Status:   querylog.StatusRunning,
 	})
 	chat.SetToolObserver(func(info aichat.ToolCallInfo) {
+		r.toolCallsTotal++
+		if len(r.toolCalls) >= querylog.MaxToolCallRecords {
+			return // 明细最多保留 MaxToolCallRecords 条，总数仍计入 ToolCallsTotal
+		}
 		rec := querylog.ToolCallRecord{
 			Name:       info.Name,
 			Arguments:  querylog.Truncate(info.Arguments, querylog.MaxArgsRunes),
@@ -113,6 +118,7 @@ func (p *AIChatPlugin) finishQuery(r *queryRecorder, chat *aichat.ChatBot, usage
 		e.CompletionTokens = usage.CompletionTokens
 		e.TotalTokens = usage.TotalTokens
 		e.ToolCalls = toolCalls
+		e.ToolCallsTotal = r.toolCallsTotal
 		e.Reply = querylog.Truncate(reply, querylog.MaxReplyRunes)
 		e.Error = errText
 	})

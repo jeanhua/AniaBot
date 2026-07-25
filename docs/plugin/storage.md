@@ -78,7 +78,8 @@ keys, err := p.Storage.ScanKeys(ctx, "user:*", 100)
 后端：`sqlite`（默认，纯 Go）/ `mysql`。
 
 ```go
-// KV（无 TTL、无列表 —— 有序数据请整体存 JSON 数组）
+// KV（无 TTL、无列表 —— 小规模有序数据可整体存 JSON 数组，
+// 数据量大时建议用可排序的键逐条存储，如 e:<序号>）
 p.PersistentStorage.SetString(ctx, "token", "abc")
 val, ok := p.PersistentStorage.GetString(ctx, "token")
 
