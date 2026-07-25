@@ -164,24 +164,9 @@ const groups = computed(() => {
   return [...map.entries()].map(([name, fields]) => ({ name, fields }))
 })
 
-// 搜索过滤后的分组
-const filteredGroups = computed(() => {
-  const q = search.value.trim().toLowerCase()
-  if (!q) return groups.value
-  return groups.value
-    .map((g) => ({
-      name: g.name,
-      fields: g.fields.filter((f) =>
-        f.label.toLowerCase().includes(q) ||
-        f.key.toLowerCase().includes(q) ||
-        (f.help || '').toLowerCase().includes(q)
-      ),
-    }))
-    .filter((g) => g.fields.length > 0)
-})
-
 // 分组归类：框架基础 / AI 对话 / 插件
 const FRAMEWORK = new Set(['Bot 基础', 'Web 面板', 'NapCat 适配器', '缓存存储'])
+const CAT_ORDER = ['框架基础', 'AI 对话', '插件']
 
 function categoryOf(groupName) {
   if (FRAMEWORK.has(groupName)) return '框架基础'
@@ -189,13 +174,30 @@ function categoryOf(groupName) {
   return '插件'
 }
 
+// 搜索过滤后的分组，按分类排序（与左侧导航一致，插件在最后）
+const filteredGroups = computed(() => {
+  const q = search.value.trim().toLowerCase()
+  const list = !q
+    ? groups.value
+    : groups.value
+      .map((g) => ({
+        name: g.name,
+        fields: g.fields.filter((f) =>
+          f.label.toLowerCase().includes(q) ||
+          f.key.toLowerCase().includes(q) ||
+          (f.help || '').toLowerCase().includes(q)
+        ),
+      }))
+      .filter((g) => g.fields.length > 0)
+  return [...list].sort((a, b) => CAT_ORDER.indexOf(categoryOf(a.name)) - CAT_ORDER.indexOf(categoryOf(b.name)))
+})
+
 const categorized = computed(() => {
-  const order = ['框架基础', 'AI 对话', '插件']
-  const map = new Map(order.map((n) => [n, []]))
+  const map = new Map(CAT_ORDER.map((n) => [n, []]))
   for (const g of filteredGroups.value) {
     map.get(categoryOf(g.name)).push(g)
   }
-  return order.map((name) => ({ name, groups: map.get(name) })).filter((c) => c.groups.length > 0)
+  return CAT_ORDER.map((name) => ({ name, groups: map.get(name) })).filter((c) => c.groups.length > 0)
 })
 
 function shortName(groupName) {
