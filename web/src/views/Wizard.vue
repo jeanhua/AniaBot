@@ -1,8 +1,8 @@
 <template>
   <div class="min-h-screen bg-zinc-950 relative overflow-hidden flex items-center justify-center p-4">
     <!-- 背景光斑 -->
-    <div class="absolute -top-40 -left-40 w-[500px] h-[500px] rounded-full bg-white/5 blur-[120px]" />
-    <div class="absolute -bottom-40 -right-40 w-[500px] h-[500px] rounded-full bg-white/10 blur-[120px]" />
+    <div class="absolute -top-40 -left-40 w-125 h-125 rounded-full bg-white/5 blur-[120px]" />
+    <div class="absolute -bottom-40 -right-40 w-125 h-125 rounded-full bg-white/10 blur-[120px]" />
 
     <div class="relative bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden">
       <!-- 步骤指示 -->
@@ -20,7 +20,7 @@
       <div class="p-8">
         <!-- 步骤 0: 欢迎 -->
         <div v-if="step === 0" class="space-y-5 text-center">
-          <div class="mx-auto w-14 h-14 rounded-2xl bg-gradient-to-br from-white to-zinc-300 flex items-center justify-center text-zinc-900 font-bold text-2xl shadow-lg">
+          <div class="mx-auto w-14 h-14 rounded-2xl bg-linear-to-br from-white to-zinc-300 flex items-center justify-center text-zinc-900 font-bold text-2xl shadow-lg">
             A
           </div>
           <h1 class="text-xl font-bold text-slate-800">欢迎使用 AniaBot 🎉</h1>
