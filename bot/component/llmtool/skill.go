@@ -323,7 +323,7 @@ func NewSkillReadTool(manager *SkillManager) *SkillReadTool {
 	return &SkillReadTool{
 		BaseTool: MakeBaseTool(
 			"skill_read",
-			"读取指定 skill 的详细指令内容。当你需要使用某个 skill 时，先调用此工具获取其完整指令，再按照指令执行任务。参数 skill_name 从 <available_skills> 列表中选择。如需读取附属文档（如 reference.md），传入 file_name 参数。skill 中的脚本文件（.sh/.py等）可直接通过 bash 工具执行，无需先读取。",
+			"读取指定 skill 的详细指令内容。当你需要使用某个 skill 时，先调用此工具获取其完整指令，再按照指令执行任务。参数 skill_name 从 <available_skills> 列表中选择。如需读取附属文档（如 reference.md），传入 file_name 参数。skill 中的脚本文件（.sh/.py等）可通过 bash 工具执行（.sh 脚本用 `sh 脚本路径` 运行，不要假设 bash 存在），无需先读取。",
 			SkillReadParams{},
 		),
 		manager: manager,
@@ -392,7 +392,7 @@ func (t *SkillReadTool) Execute(ctx context.Context, params any, callbacks CallB
 		}
 		if len(skill.ExtraFiles) > 0 {
 			sb.WriteString("\n## [附带文件]\n\n")
-			sb.WriteString("无需读取，可直接通过 bash 工具直接执行：\n")
+			sb.WriteString("无需读取，可通过 bash 工具执行（.sh 脚本用 `sh 脚本路径` 运行）：\n")
 			for name, path := range skill.ExtraFiles {
 				sb.WriteString(fmt.Sprintf("- %s → %s\n", name, path))
 			}

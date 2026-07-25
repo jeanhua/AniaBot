@@ -83,7 +83,7 @@ func NewBashTool(config BashConfig) (*BashTool, error) {
 		return nil, err
 	}
 
-	desc := fmt.Sprintf("在宿主机上执行 shell 命令（通过 %s 解释执行，可在命令中显式调用 bash/ash/python 等其他解释器），超时2分钟，输出最大4096字符", shell)
+	desc := fmt.Sprintf("在宿主机上执行 shell 命令（由 %s 解释执行），超时2分钟，输出最大4096字符。注意：不要假设环境存在 bash，运行 .sh 脚本优先用 `sh 脚本路径`；需要 python3 等其他解释器时先用 `command -v` 确认其存在", shell)
 	return &BashTool{
 		BaseTool:  llmtool.MakeBaseTool("bash", desc, BashParams{}),
 		shell:     shell,
@@ -164,6 +164,9 @@ func (t *BashTool) Execute(_ context.Context, params any, _ llmtool.CallBackFunc
 
 	if err != nil {
 		if exitErr, ok := err.(*exec.ExitError); ok {
+			if exitErr.ExitCode() == 127 {
+				return result, fmt.Errorf("bash: 命令退出码 127（命令未找到）。提示：当前环境可能没有 bash，运行脚本请改用 `sh 脚本路径`，或先用 `command -v <命令>` 确认解释器存在后重试")
+			}
 			return result, fmt.Errorf("bash: 命令退出码 %d", exitErr.ExitCode())
 		}
 		return result, fmt.Errorf("bash: 执行失败: %w", err)
