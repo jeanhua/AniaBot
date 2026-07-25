@@ -5,6 +5,8 @@
 
   <Login v-else-if="!auth.loggedIn" />
 
+  <Wizard v-else-if="auth.setupRequired" />
+
   <div v-else class="min-h-screen bg-slate-100 flex">
     <!-- 侧边导航 -->
     <aside class="w-56 bg-slate-900 text-slate-200 flex flex-col shrink-0">
@@ -70,6 +72,7 @@ import { onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { api, auth } from './api.js'
 import Login from './views/Login.vue'
+import Wizard from './views/Wizard.vue'
 
 const router = useRouter()
 const navItems = [

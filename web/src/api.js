@@ -3,6 +3,7 @@ import { reactive } from 'vue'
 export const auth = reactive({
   loggedIn: false,
   checked: false,
+  setupRequired: false,
 })
 
 async function request(path, options = {}) {
@@ -25,8 +26,9 @@ async function request(path, options = {}) {
 export const api = {
   async checkLogin() {
     try {
-      await request('/api/me')
+      const me = await request('/api/me')
       auth.loggedIn = true
+      auth.setupRequired = me.setup_required === true
     } catch {
       auth.loggedIn = false
     } finally {
@@ -36,7 +38,13 @@ export const api = {
   async login(password) {
     await request('/api/login', { method: 'POST', body: JSON.stringify({ password }) })
     auth.loggedIn = true
+    // 登录后拉取 setup 状态
+    try {
+      const me = await request('/api/me')
+      auth.setupRequired = me.setup_required === true
+    } catch { /* 忽略 */ }
   },
+  completeSetup: () => request('/api/setup/complete', { method: 'POST' }),
   async logout() {
     await request('/api/logout', { method: 'POST' })
     auth.loggedIn = false

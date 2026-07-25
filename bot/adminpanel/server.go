@@ -95,6 +95,7 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("POST /api/login", s.handleLogin)
 	s.mux.HandleFunc("POST /api/logout", s.handleLogout)
 	s.mux.Handle("GET /api/me", s.requireAuth(http.HandlerFunc(s.handleMe)))
+	s.mux.Handle("POST /api/setup/complete", s.requireAuth(http.HandlerFunc(s.handleSetupComplete)))
 	s.mux.Handle("PUT /api/password", s.requireAuth(http.HandlerFunc(s.handleChangePassword)))
 	s.mux.Handle("GET /api/config/schema", s.requireAuth(http.HandlerFunc(s.handleConfigSchema)))
 	s.mux.Handle("GET /api/config", s.requireAuth(http.HandlerFunc(s.handleConfigGet)))
@@ -193,6 +194,15 @@ func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleMe(w http.ResponseWriter, _ *http.Request) {
+	writeJSON(w, http.StatusOK, map[string]any{
+		"ok":             true,
+		"setup_required": s.opt.Config.SetupPending(),
+	})
+}
+
+// handleSetupComplete 标记首次设置向导完成（或跳过）。
+func (s *Server) handleSetupComplete(w http.ResponseWriter, _ *http.Request) {
+	s.opt.Config.CompleteSetup()
 	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
 }
 

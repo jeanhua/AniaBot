@@ -43,7 +43,10 @@ const (
 )
 
 // 内部元数据键（不进入 viper）
-const metaInitialized = "meta.initialized"
+const (
+	metaInitialized  = "meta.initialized"
+	metaSetupPending = "meta.setup_pending"
+)
 
 //go:embed default_config.yaml
 var defaultConfigYAML []byte
@@ -95,6 +98,8 @@ func (s *Store) Init() error {
 			return fmt.Errorf("写入默认配置失败: %w", err)
 		}
 		s.logger.Info("已写入默认配置（可在 Web 控制面板中修改）")
+		// 全新安装：标记待完成设置向导（迁移用户无需引导）
+		s.store.SetString(ctx, metaSetupPending, "1")
 	}
 
 	// 迁移两个独立的 JSON 配置文件（无论配置来自迁移还是默认值）
@@ -200,6 +205,17 @@ func flatten(m map[string]any, prefix string, out map[string]any) {
 			out[key] = v
 		}
 	}
+}
+
+// SetupPending 返回是否为待完成首次设置向导的全新安装。
+func (s *Store) SetupPending() bool {
+	v, ok := s.store.GetString(context.Background(), metaSetupPending)
+	return ok && v == "1"
+}
+
+// CompleteSetup 标记首次设置向导已完成（或已跳过）。
+func (s *Store) CompleteSetup() {
+	s.store.Del(context.Background(), metaSetupPending)
 }
 
 // Set 写入一个配置键（值 JSON 编码）。键统一转小写存储，与 viper 的
