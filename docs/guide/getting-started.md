@@ -74,7 +74,7 @@ make clean     # 清理 build/
 
 ```
 AniaBot/
-├── cmd/main.go            # 入口：创建适配器、注册插件、启动
+├── cmd/main.go            # 入口：注册适配器工厂与插件、启动（适配器按 bot.adapter.mode 创建）
 ├── web/                   # Web 控制面板前端（Vite + Vue3 + Tailwind）
 ├── common/                # 公共接口：plugin / bot / msgchain / storage
 ├── bot/

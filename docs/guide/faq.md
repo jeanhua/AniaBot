@@ -7,13 +7,13 @@
 按以下顺序排查：
 
 1. **NapCat 是否已登录**：确认 NapCat 端 QQ 登录成功且在线
-2. **适配器类型是否匹配**：`cmd/main.go` 中创建的是 WebSocket 适配器，NapCat 就必须开启 WebSocket 服务端；HTTP 适配器则对应 HTTP 服务端 + 客户端上报
+2. **适配器类型是否匹配**：`bot.adapter.mode` 为 `ws`（WebSocket）时，NapCat 就必须开启 WebSocket 服务端；为 `http` 时则对应 HTTP 服务端 + 客户端上报
 3. **地址是否正确**：默认 `ws://localhost:4455`，Docker 环境不能用 `localhost`，改用内网 IP
 4. **access token**：NapCat 端设置了 token 时，在面板「配置管理」中填写 `bot.adapter.token`（重启生效）
 
 ### WebSocket 一直重连失败？
 
-- `bot.adapter.ws.max_retries` 控制最大重连次数，达到后放弃
+- 连接失败会**无限重试**（指数退避，封顶 30 秒），连接状态与最近错误可在 Web 面板查看；修改连接配置后重启生效
 - 检查 NapCat 的 WebSocket 服务端是否监听在配置的端口
 - Windows 上检查防火墙是否拦截
 

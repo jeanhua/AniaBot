@@ -59,19 +59,21 @@ AniaBot 的全部配置存储在**数据库**中（持久化存储的 `ania_kv` 
 
 ### adapter —— 协议适配器
 
-WebSocket 与 HTTP **二选一**，取决于 `cmd/main.go` 中创建的适配器：
+WebSocket 与 HTTP **二选一**，由配置键 `bot.adapter.mode`（`ws` / `http`）决定。在[首次设置向导](/guide/web-panel#首次设置向导)中选择，也可在面板「配置编辑」中修改，**重启后生效**：
 
 ::: code-group
 
 ```text [WebSocket（推荐）]
+bot.adapter.mode               = ws                    # 连接模式（默认）
 bot.adapter.token              # 若 NapCat 端设置了 access token 则设置该键
-bot.adapter.ws.address         = ws://localhost:4455  # NapCat WebSocket 服务端地址
-bot.adapter.ws.max_retries     = 5                    # 连接失败最大重连次数
-bot.adapter.ws.worker_count    = 0                    # 事件处理线程数，0 = 按 CPU 自动调整
-bot.adapter.ws.worker_queue_size = 1024               # 消息队列长度，超出则丢弃
+bot.adapter.ws.address         = ws://localhost:4455   # NapCat WebSocket 服务端地址
+bot.adapter.ws.worker_count    = 0                     # 事件处理线程数，0 = 按 CPU 自动调整
+bot.adapter.ws.worker_queue_size = 1024                # 消息队列长度，超出则丢弃
 ```
 
 ```text [HTTP]
+bot.adapter.mode               = http                  # 连接模式
+bot.adapter.token              # 若 NapCat 端设置了 access token 则设置该键
 bot.adapter.http.listen_port   = 6679                  # 本地监听端口，接收 NapCat 事件上报
 bot.adapter.http.target_url    = http://localhost:6680 # NapCat HTTP 服务端地址
 ```
