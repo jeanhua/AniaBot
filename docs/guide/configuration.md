@@ -34,6 +34,10 @@ AniaBot 的全部配置存储在**数据库**中（持久化存储的 `ania_kv` 
 
 非字符串类型（int / bool / 数组等）按 JSON 解析，如 `ANIA_BOT_ADMIN_ID=123456789`。覆盖生效时启动日志会打印 `环境变量覆盖配置 key=...`。
 
+::: tip 典型用途：恢复被关闭的面板
+如果在面板中误将 `bot.admin_panel.enable` 关闭导致面板无法访问，可用 `ANIA_BOT_ADMIN_PANEL_ENABLE=true` 启动临时拉起面板，改回后再正常启动。详见 [Web 控制面板](/guide/web-panel#启用与访问)。
+:::
+
 ## bot —— 框架配置
 
 ### admin_id

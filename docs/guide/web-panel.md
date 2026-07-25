@@ -13,6 +13,23 @@ AniaBot 内置 Web 控制面板（Vue 3 + Tailwind CSS，构建产物通过 `go:
 
 启动后访问 `http://127.0.0.1:7700`。如需局域网访问，将 `listen` 改为 `0.0.0.0:7700`（面板有密码保护，仍建议仅在内网暴露）；容器部署时也可直接用环境变量 `ANIA_BOT_ADMIN_PANEL_LISTEN` 覆盖（见 [环境变量覆盖](/guide/configuration#环境变量覆盖-ania-前缀)）。
 
+::: warning 在面板里把面板关了怎么办？
+「启用面板」开关本身也在面板里，关闭并重启后面板不再启动，配置也就无法再通过面板修改。此时**无需手动改数据库**，用环境变量强制拉起面板即可（优先级高于数据库中的值，不写回数据库）：
+
+```powershell
+# Windows PowerShell
+$env:ANIA_BOT_ADMIN_PANEL_ENABLE = 'true'
+.\AniaBot.exe
+```
+
+```bash
+# Linux / macOS
+ANIA_BOT_ADMIN_PANEL_ENABLE=true ./AniaBot
+```
+
+启动后登录面板，把「启用面板」改回开启并重启 Bot，之后即可去掉环境变量正常启动。该机制对任意配置键都有效，规则见 [环境变量覆盖](/guide/configuration#环境变量覆盖-ania-前缀)。
+:::
+
 ## 登录
 
 **首次启动**时，控制台会打印一次随机初始密码：
