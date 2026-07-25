@@ -76,8 +76,8 @@
         :key="log.id"
         class="bg-white rounded-xl shadow-sm border border-slate-200/60 overflow-hidden"
       >
-        <!-- 摘要行（点击展开详情） -->
-        <button class="w-full text-left px-5 py-3.5 hover:bg-slate-50/60 transition-colors" @click="toggle(log.id)">
+        <!-- 摘要行（点击弹出详情窗口） -->
+        <button class="w-full text-left px-5 py-3.5 hover:bg-slate-50/60 transition-colors" @click="detail = log">
           <div class="flex items-center gap-2 flex-wrap">
             <span class="text-xs px-2 py-0.5 rounded-full whitespace-nowrap" :class="statusClass(log.status)">
               {{ statusText(log.status) }}
@@ -96,22 +96,63 @@
             <span v-if="log.iterations">LLM {{ log.iterations }} 轮</span>
             <span v-if="log.total_tokens">tokens {{ log.total_tokens }} ({{ log.prompt_tokens }}+{{ log.completion_tokens }})</span>
             <span v-if="log.senders?.length">来自 {{ log.senders.join(', ') }}</span>
-            <span class="ml-auto text-zinc-400">{{ expanded.has(log.id) ? '收起 ▲' : '详情 ▼' }}</span>
+            <span class="ml-auto text-zinc-400">详情 ⤢</span>
           </div>
         </button>
+      </div>
+    </section>
 
-        <!-- 展开详情 -->
-        <div v-if="expanded.has(log.id)" class="border-t border-slate-100 px-5 py-4 space-y-4 bg-slate-50/40">
+    <!-- 详情弹窗：点遮罩 / 右上角关闭 / Esc 均可关闭 -->
+    <div
+      v-if="detail"
+      class="fixed inset-0 bg-zinc-950/50 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+      @click.self="detail = null"
+    >
+      <div class="bg-white rounded-xl shadow-2xl border border-zinc-200 w-full max-w-3xl max-h-[85vh] flex flex-col">
+        <!-- 弹窗头部 -->
+        <div class="flex items-center gap-2 flex-wrap px-5 py-3.5 border-b border-zinc-100 shrink-0">
+          <span class="text-xs px-2 py-0.5 rounded-full whitespace-nowrap" :class="statusClass(detail.status)">
+            {{ statusText(detail.status) }}
+          </span>
+          <span class="text-xs px-2 py-0.5 rounded-full whitespace-nowrap bg-zinc-100 text-zinc-600 border border-zinc-200">
+            {{ detail.chat_type === 'group' ? '群聊' : '私聊' }} · {{ detail.target_id }}
+          </span>
+          <span class="text-[11px] text-slate-400 font-mono">{{ fmtTime(detail.time) }}</span>
+          <button
+            class="ml-auto w-7 h-7 flex items-center justify-center rounded-md text-zinc-400 hover:text-zinc-800 hover:bg-zinc-100 transition-colors"
+            title="关闭"
+            @click="detail = null"
+          >
+            ✕
+          </button>
+        </div>
+
+        <!-- 弹窗内容（可滚动） -->
+        <div class="px-5 py-4 space-y-4 overflow-y-auto">
+          <!-- 概要指标 -->
+          <div class="flex items-center gap-3 text-[11px] text-slate-400 font-mono flex-wrap">
+            <span v-if="detail.status !== 'running'">用时 {{ fmtDuration(detail.duration_ms) }}</span>
+            <span v-if="detail.iterations">LLM {{ detail.iterations }} 轮</span>
+            <span v-if="detail.total_tokens">tokens {{ detail.total_tokens }} ({{ detail.prompt_tokens }}+{{ detail.completion_tokens }})</span>
+            <span v-if="detail.senders?.length">来自 {{ detail.senders.join(', ') }}</span>
+          </div>
+
+          <!-- 用户输入 -->
+          <div>
+            <h3 class="text-[11px] tracking-[0.2em] uppercase text-zinc-400 font-medium mb-2">用户输入</h3>
+            <p class="text-sm text-slate-700 whitespace-pre-wrap break-all leading-relaxed bg-slate-50 border border-slate-200/70 rounded-lg px-3 py-2">{{ detail.query }}</p>
+          </div>
+
           <!-- 错误信息 -->
-          <div v-if="log.error" class="text-xs text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2 whitespace-pre-wrap break-all">
-            {{ log.error }}
+          <div v-if="detail.error" class="text-xs text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2 whitespace-pre-wrap break-all">
+            {{ detail.error }}
           </div>
 
           <!-- 工具调用明细 -->
-          <div v-if="log.tool_calls?.length" class="space-y-2">
+          <div v-if="detail.tool_calls?.length" class="space-y-2">
             <h3 class="text-[11px] tracking-[0.2em] uppercase text-zinc-400 font-medium">工具调用</h3>
             <div
-              v-for="(tc, i) in log.tool_calls"
+              v-for="(tc, i) in detail.tool_calls"
               :key="i"
               class="bg-white border border-slate-200/70 rounded-lg overflow-hidden"
             >
@@ -138,13 +179,13 @@
           </div>
 
           <!-- 最终回复 -->
-          <div v-if="log.reply">
+          <div v-if="detail.reply">
             <h3 class="text-[11px] tracking-[0.2em] uppercase text-zinc-400 font-medium mb-2">最终回复</h3>
-            <p class="text-sm text-slate-700 whitespace-pre-wrap break-all leading-relaxed bg-white border border-slate-200/70 rounded-lg px-3 py-2">{{ log.reply }}</p>
+            <p class="text-sm text-slate-700 whitespace-pre-wrap break-all leading-relaxed bg-slate-50 border border-slate-200/70 rounded-lg px-3 py-2">{{ detail.reply }}</p>
           </div>
         </div>
       </div>
-    </section>
+    </div>
   </div>
 </template>
 
@@ -168,7 +209,8 @@ const applied = reactive(emptyFilters())
 
 const logs = ref([])
 const autoRefresh = ref(true)
-const expanded = ref(new Set())
+// detail 为当前弹窗展示的日志（null 表示弹窗关闭）
+const detail = ref(null)
 let timer = null
 
 const hasFilter = computed(() => Object.values(applied).some((v) => v !== ''))
@@ -184,11 +226,9 @@ function resetFilters() {
   load()
 }
 
-function toggle(id) {
-  const s = new Set(expanded.value)
-  if (s.has(id)) s.delete(id)
-  else s.add(id)
-  expanded.value = s
+// Esc 关闭详情弹窗
+function onKeydown(e) {
+  if (e.key === 'Escape') detail.value = null
 }
 
 function fmtTime(t) {
@@ -233,10 +273,12 @@ onMounted(() => {
   load()
   timer = setInterval(() => { if (!document.hidden && autoRefresh.value) load() }, 4000)
   document.addEventListener('visibilitychange', onVisible)
+  document.addEventListener('keydown', onKeydown)
 })
 
 onUnmounted(() => {
   clearInterval(timer)
   document.removeEventListener('visibilitychange', onVisible)
+  document.removeEventListener('keydown', onKeydown)
 })
 </script>
