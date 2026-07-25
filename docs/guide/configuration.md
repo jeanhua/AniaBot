@@ -1,13 +1,13 @@
 # 配置详解
 
-AniaBot 的全部配置存储在**数据库**中（持久化存储的 `ania_kv` 表），通过内置的 **Web 控制面板**查看与修改，不再使用 `config.yaml`。
+AniaBot 的全部配置存储在**数据库**中（持久化存储的 `ania_kv` 表），通过内置的 **Web 控制面板**查看与修改，不使用任何 yaml 配置文件。
 
 - 首次启动时自动写入默认配置，并进入[首次设置向导](/guide/web-panel#首次设置向导)。
 - 配置在面板中保存后**重启 Bot 生效**。
 - 面板操作方式见 [Web 控制面板](/guide/web-panel)。
 
 ::: tip 键名约定
-配置键为点分路径（大小写不敏感），与历史 `config.yaml` 的层级一一对应，如 `plugin.ai_chat_bot.model`。本文仍以 YAML 形式展示各配置的结构与默认值。
+配置键为点分路径（大小写不敏感），如 `plugin.ai_chat_bot.model`。在面板的「配置编辑」页按键名查找并修改即可；本文各节列出所有键名、默认值与说明。
 :::
 
 ## 引导配置（环境变量）
@@ -40,23 +40,20 @@ AniaBot 的全部配置存储在**数据库**中（持久化存储的 `ania_kv` 
 
 ## bot —— 框架配置
 
-### admin_id
+面板位置：**配置编辑 → Bot 配置**
 
-```yaml
-bot:
-  admin_id: 123456789
-```
+### admin_id —— 管理员
 
-管理员 QQ 号。拥有最高权限：远程 `/exit` 退出、强制执行定时推送、查看全部定时任务、接收 panic 告警与启动通知等。
+| 配置键 | 默认值 | 说明 |
+| --- | --- | --- |
+| `bot.admin_id` | `123456789` | 管理员 QQ 号。拥有最高权限：远程 `/exit` 退出、强制执行定时推送、查看全部定时任务、接收 panic 告警与启动通知等 |
 
 ### admin_panel —— Web 控制面板
 
-```yaml
-bot:
-  admin_panel:
-    enable: true                # 是否启用面板
-    listen: "127.0.0.1:7700"    # 监听地址；改为 0.0.0.0:7700 可局域网访问（面板有密码保护）
-```
+| 配置键 | 默认值 | 说明 |
+| --- | --- | --- |
+| `bot.admin_panel.enable` | `true` | 是否启用面板 |
+| `bot.admin_panel.listen` | `127.0.0.1:7700` | 监听地址；改为 `0.0.0.0:7700` 可局域网访问（面板有密码保护） |
 
 首次启动会在控制台打印**随机初始密码**（仅显示一次），登录后可在面板右上角修改。详见 [Web 控制面板](/guide/web-panel)。
 
@@ -66,23 +63,17 @@ WebSocket 与 HTTP **二选一**，取决于 `cmd/main.go` 中创建的适配器
 
 ::: code-group
 
-```yaml [WebSocket（推荐）]
-bot:
-  adapter:
-    # token: xxx        # 若 NapCat 端设置了 access token 则设置该键
-    ws:
-      address: ws://localhost:4455  # NapCat WebSocket 服务端地址
-      max_retries: 5                # 连接失败最大重连次数
-      worker_count: 0               # 事件处理线程数，0 = 按 CPU 自动调整
-      worker_queue_size: 1024       # 消息队列长度，超出则丢弃
+```text [WebSocket（推荐）]
+bot.adapter.token              # 若 NapCat 端设置了 access token 则设置该键
+bot.adapter.ws.address         = ws://localhost:4455  # NapCat WebSocket 服务端地址
+bot.adapter.ws.max_retries     = 5                    # 连接失败最大重连次数
+bot.adapter.ws.worker_count    = 0                    # 事件处理线程数，0 = 按 CPU 自动调整
+bot.adapter.ws.worker_queue_size = 1024               # 消息队列长度，超出则丢弃
 ```
 
-```yaml [HTTP]
-bot:
-  adapter:
-    http:
-      listen_port: 6679                      # 本地监听端口，接收 NapCat 事件上报
-      target_url: http://localhost:6680      # NapCat HTTP 服务端地址
+```text [HTTP]
+bot.adapter.http.listen_port   = 6679                  # 本地监听端口，接收 NapCat 事件上报
+bot.adapter.http.target_url    = http://localhost:6680 # NapCat HTTP 服务端地址
 ```
 
 :::
@@ -93,47 +84,41 @@ HTTP 模式下 NapCat 向 `localhost` 上报会失败，请将 NapCat 的 HTTP C
 
 ### store.cache —— 缓存存储
 
-```yaml
-bot:
-  store:
-    cache:                      # 缓存层：易失，支持 TTL 与列表语义
-      driver: memory            # memory（默认，进程内，重启清空）| redis（多实例共享）
-      redis:
-        address: "localhost:6379"
-        password: ""
-        db: 0
-```
+| 配置键 | 默认值 | 说明 |
+| --- | --- | --- |
+| `bot.store.cache.driver` | `memory` | 缓存层（易失，支持 TTL 与列表语义）：`memory`（进程内，重启清空）/ `redis`（多实例共享） |
+| `bot.store.cache.redis.address` | `localhost:6379` | Redis 地址（driver 为 redis 时生效） |
+| `bot.store.cache.redis.password` | 空 | Redis 密码 |
+| `bot.store.cache.redis.db` | `0` | Redis 数据库编号 |
 
-持久化层的位置由上方[环境变量](#引导配置-环境变量)决定，不在此处配置。
+持久化层的位置由上方[环境变量](#引导配置-环境变量)决定，不在面板中配置。
 
 ## plugin.ai_chat_bot —— AI 对话插件
 
+面板位置：**配置编辑 → 插件配置**
+
 ### 基础配置
 
-```yaml
-plugin:
-  ai_chat_bot:
-    base_url: "https://api.deepseek.com"  # 任意 OpenAI 兼容 API
-    api_key: "sk-xxxx"
-    model: "deepseek-chat"
-    multimodal: false   # 主模型是否支持图片输入
-    rate_limit: 2       # 每秒最多调用次数
-```
+| 配置键 | 默认值 | 说明 |
+| --- | --- | --- |
+| `plugin.ai_chat_bot.base_url` | `https://api.deepseek.com` | 任意 OpenAI 兼容 API 地址 |
+| `plugin.ai_chat_bot.api_key` | `sk-xxxx` | API 密钥 |
+| `plugin.ai_chat_bot.model` | `deepseek-chat` | 主模型名称 |
+| `plugin.ai_chat_bot.multimodal` | `false` | 主模型是否支持图片输入 |
+| `plugin.ai_chat_bot.rate_limit` | `2` | 每秒最多调用次数 |
 
 ### 模型参数
 
-```yaml
-    max_context_tokens: 128000  # 上下文 token 预算，超过 80% 自动压缩历史
-    temperature: 1.2
-    top_p: 0.9
-    top_k: 100
-    max_token: 8192
-    thinking:
-      enable: false      # 深度思考开关
-      mode: "auto"       # none / low / medium / high / auto
-    prompt: |-
-      你是一个ai对话机器人，在QQ上和别人聊天，说话不要长篇大论
-```
+| 配置键 | 默认值 | 说明 |
+| --- | --- | --- |
+| `plugin.ai_chat_bot.max_context_tokens` | `128000` | 上下文 token 预算，超过 80% 自动压缩历史 |
+| `plugin.ai_chat_bot.temperature` | `1.2` | 采样温度 |
+| `plugin.ai_chat_bot.top_p` | `0.9` | 核采样 |
+| `plugin.ai_chat_bot.top_k` | `100` | Top-K 采样 |
+| `plugin.ai_chat_bot.max_token` | `8192` | 单次回复最大 token |
+| `plugin.ai_chat_bot.thinking.enable` | `false` | 深度思考开关 |
+| `plugin.ai_chat_bot.thinking.mode` | `auto` | `none` / `low` / `medium` / `high` / `auto` |
+| `plugin.ai_chat_bot.prompt` | `你是一个ai对话机器人，在QQ上和别人聊天，说话不要长篇大论` | 系统提示词（system prompt） |
 
 ::: tip 按群/按人定制人格
 在面板的「文件编辑 → Prompt 覆盖」页（配置键 `files.prompt_json`，原 `aniabot.prompt.json`），可为特定群聊或好友覆盖 system prompt：
@@ -148,35 +133,32 @@ plugin:
 
 ### Skill 系统
 
-```yaml
-    skills_dir: "./skills"  # Skill 目录
-    skills: []              # 指定加载的 skill 名称，空 = 加载全部
-```
+| 配置键 | 默认值 | 说明 |
+| --- | --- | --- |
+| `plugin.ai_chat_bot.skills_dir` | `./skills` | Skill 目录 |
+| `plugin.ai_chat_bot.skills` | `[]` | 指定加载的 skill 名称，空 = 加载全部 |
 
 ### 联网搜索
 
-```yaml
-    search:
-      token: "jina_xxx"   # Jina AI token，用于 web_search / web_explore 工具
-```
+| 配置键 | 默认值 | 说明 |
+| --- | --- | --- |
+| `plugin.ai_chat_bot.search.token` | 空 | Jina AI token，用于 `web_search` / `web_explore` 工具 |
 
 ### OCR 备用识图
 
 主模型不支持多模态时，可配置一个备用视觉模型把图片转述为文字：
 
-```yaml
-    ocr:
-      enable: false
-      base_url: "https://api.siliconflow.cn/v1"
-      api_key: ""
-      model: "Qwen/Qwen3-VL-8B-Instruct"
-      temperature: 0.6
-      top_p: 0.95
-      top_k: 20
-      max_token: 600
-      prompt: |-
-        你负责将看到的图片用markdown格式描述出来，不要有无关的其他对话
-```
+| 配置键 | 默认值 | 说明 |
+| --- | --- | --- |
+| `plugin.ai_chat_bot.ocr.enable` | `false` | 是否启用 OCR 备用识图 |
+| `plugin.ai_chat_bot.ocr.base_url` | `https://api.siliconflow.cn/v1` | 视觉模型 API 地址 |
+| `plugin.ai_chat_bot.ocr.api_key` | 空 | API 密钥 |
+| `plugin.ai_chat_bot.ocr.model` | `Qwen/Qwen3-VL-8B-Instruct` | 视觉模型名称 |
+| `plugin.ai_chat_bot.ocr.temperature` | `0.6` | 采样温度 |
+| `plugin.ai_chat_bot.ocr.top_p` | `0.95` | 核采样 |
+| `plugin.ai_chat_bot.ocr.top_k` | `20` | Top-K 采样 |
+| `plugin.ai_chat_bot.ocr.max_token` | `600` | 单次描述最大 token |
+| `plugin.ai_chat_bot.ocr.prompt` | `你负责将看到的图片用markdown格式描述出来，不要有无关的其他对话` | 图片描述提示词 |
 
 ### 高危工具（默认关闭）
 
@@ -184,56 +166,45 @@ plugin:
 以下工具允许 AI 直接操作宿主机，存在风险，**默认全部关闭**，请确认环境隔离后再开启。
 :::
 
-```yaml
-    bash:               # 允许 AI 在宿主机执行 shell 命令
-      enable: false
-      shell: "/bin/bash"
-      env: []           # 环境变量，如 ["HOME=/root"]
-      whitelist: []     # 非空时仅允许匹配这些正则的命令
-      blacklist:        # 匹配这些正则的命令被禁止
-        - "^mkfs"
-        - "^shutdown"
-
-    local_image:        # 允许 AI 读取宿主机本地图片
-      enable: false
-```
+| 配置键 | 默认值 | 说明 |
+| --- | --- | --- |
+| `plugin.ai_chat_bot.bash.enable` | `false` | 允许 AI 在宿主机执行 shell 命令 |
+| `plugin.ai_chat_bot.bash.shell` | `/bin/bash` | 使用的 shell |
+| `plugin.ai_chat_bot.bash.env` | `[]` | 环境变量，如 `["HOME=/root"]` |
+| `plugin.ai_chat_bot.bash.whitelist` | `[]` | 非空时仅允许匹配这些正则的命令 |
+| `plugin.ai_chat_bot.bash.blacklist` | `["^mkfs", "^shutdown"]` | 匹配这些正则的命令被禁止 |
+| `plugin.ai_chat_bot.local_image.enable` | `false` | 允许 AI 读取宿主机本地图片 |
 
 ### AI 定时任务（clock）
 
-```yaml
-    clock:
-      enable: true              # 启用后 AI 可自主创建定时任务
-      default_timeout_sec: 120  # 单次触发默认超时
-      max_log_entries: 500      # 执行日志保留条数（滚动覆盖）
-```
+| 配置键 | 默认值 | 说明 |
+| --- | --- | --- |
+| `plugin.ai_chat_bot.clock.enable` | `true` | 启用后 AI 可自主创建定时任务 |
+| `plugin.ai_chat_bot.clock.default_timeout_sec` | `120` | 单次触发默认超时（秒） |
+| `plugin.ai_chat_bot.clock.max_log_entries` | `500` | 执行日志保留条数（滚动覆盖） |
 
 与框架的 `StartCron` 静态任务不同，clock 任务由 AI / 用户**动态创建**、持久化保存、重启不丢。执行日志可在面板「状态总览」页查看。详见 [AI 对话插件](/guide/builtin-plugins#ai-对话插件)。
 
 ### AI 长期记忆（memory）
 
-```yaml
-    memory:
-      enable: true              # 启用后 AI 可通过 memory_save/search/forget 工具管理长期记忆
-      max_entries: 200          # 单个会话（群/好友）的记忆条数上限
-```
+| 配置键 | 默认值 | 说明 |
+| --- | --- | --- |
+| `plugin.ai_chat_bot.memory.enable` | `true` | 启用后 AI 可通过 `memory_save` / `memory_search` / `memory_forget` 工具管理长期记忆 |
+| `plugin.ai_chat_bot.memory.max_entries` | `200` | 单个会话（群/好友）的记忆条数上限 |
 
 记忆按群聊 / 好友隔离、持久化保存、重启不丢。详见 [AI 对话插件](/guide/builtin-plugins#ai-对话插件)。
 
 ## plugin.dailyNews —— 每日新闻插件
 
-```yaml
-plugin:
-  dailyNews:
-    api: "https://60s.viki.moe/v2/60s?encoding=image-proxy"  # 新闻图 API
-    cron: "0 18 * * *"    # cron 表达式，每天 18:00 触发
-    groups:               # 接收推送的群号列表
-      - 123456
-      - 7891011
-```
+| 配置键 | 默认值 | 说明 |
+| --- | --- | --- |
+| `plugin.dailyNews.api` | `https://60s.viki.moe/v2/60s?encoding=image-proxy` | 新闻图 API |
+| `plugin.dailyNews.cron` | `0 18 * * *` | cron 表达式，默认每天 18:00 触发 |
+| `plugin.dailyNews.groups` | `[123456, 7891011]` | 接收推送的群号列表 |
 
 ## files.mcp_json —— MCP 服务定义
 
-配置键 `files.mcp_json`（面板「文件编辑 → MCP 服务器」页，原 `aniabot.mcp.json`）定义 AI 可用的 MCP Server，支持 stdio / SSE / Streamable HTTP 三种传输：
+配置键 `files.mcp_json`（面板「文件编辑 → MCP 服务器」页，原 `aniabot.mcp.json`）定义 AI 可用的 MCP Server，内容为 JSON，支持 stdio / SSE / Streamable HTTP 三种传输：
 
 ```json
 {

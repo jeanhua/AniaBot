@@ -90,24 +90,21 @@ p.PersistentStorage.Set(ctx, "list", list)
 
 ## 后端配置
 
-```yaml
-bot:
-  store:
-    cache:
-      driver: redis   # redis | memory
-      redis:
-        address: "localhost:6379"
-        password: ""
-        db: 0
-    persistent:
-      driver: sqlite  # sqlite | mysql
-      sqlite:
-        path: "./data/aniabot.db"
-      mysql:
-        dsn: "root:password@tcp(localhost:3306)/aniabot?charset=utf8mb4&parseTime=true&loc=Local"
-        max_open_conns: 20
-        max_idle_conns: 5
-        conn_max_lifetime_sec: 300
-```
+缓存层在面板「配置编辑」页修改（保存后重启生效）：
+
+| 配置键 | 默认值 | 说明 |
+| --- | --- | --- |
+| `bot.store.cache.driver` | `memory` | `memory` / `redis` |
+| `bot.store.cache.redis.address` | `localhost:6379` | Redis 地址 |
+| `bot.store.cache.redis.password` | 空 | Redis 密码 |
+| `bot.store.cache.redis.db` | `0` | Redis 数据库编号 |
+
+持久层的位置属于引导配置，通过环境变量设置（详见 [配置详解 · 引导配置](/guide/configuration#引导配置-环境变量)）：
+
+| 环境变量 | 默认值 | 说明 |
+| --- | --- | --- |
+| `ANIABOT_STORE_DRIVER` | `sqlite` | `sqlite` / `mysql` |
+| `ANIABOT_SQLITE_PATH` | `./data/aniabot.db` | SQLite 数据库文件路径 |
+| `ANIABOT_MYSQL_DSN` | 无 | MySQL go-sql-driver DSN（驱动为 mysql 时必填） |
 
 使用示例与实战模式见 [插件开发 · 数据存储](/plugin/storage)。
