@@ -2,7 +2,7 @@
 
 AniaBot 的全部配置存储在**数据库**中（持久化存储的 `ania_kv` 表），通过内置的 **Web 控制面板**查看与修改，不再使用 `config.yaml`。
 
-- 首次启动时自动写入默认配置；检测到旧版 `config.yaml` / `config.dev.yaml` / `aniabot.mcp.json` / `aniabot.prompt.json` 时会**自动迁移**到数据库并更名为 `.bak`。
+- 首次启动时自动写入默认配置，并进入[首次设置向导](/guide/web-panel#首次设置向导)。
 - 配置在面板中保存后**重启 Bot 生效**。
 - 面板操作方式见 [Web 控制面板](/guide/web-panel)。
 

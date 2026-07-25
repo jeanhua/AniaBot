@@ -151,8 +151,7 @@ func (ania *AniaBot) Run() {
 		ania.persistent = store
 	}
 
-	// 配置中心：全部配置存于数据库（首启写入默认值；检测到旧版
-	// config.yaml / aniabot.mcp.json 等文件时自动迁移并更名为 .bak）。
+	// 配置中心：全部配置存于数据库（首启写入默认值并进入设置向导）。
 	// ToViper 构建内存 viper，插件与适配器的读取方式保持不变。
 	if ania.cfg == nil {
 		cs := configstore.New(ania.persistent, Logger().WithGroup("Config"))

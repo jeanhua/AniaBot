@@ -45,17 +45,7 @@ AniaBot 的配置存储在数据库中，**首次启动**会自动写入默认�
 ============================================================
 ```
 
-打开 `http://127.0.0.1:7700` 登录面板，在「配置管理」页完成最关键的三处配置（保存后重启生效）：
-
-| 配置键 | 说明 |
-| --- | --- |
-| `bot.admin_id` | ① 你的 QQ 号（管理员） |
-| `bot.adapter.ws.address` | ② NapCat 的 WebSocket 地址（默认 `ws://localhost:4455`） |
-| `plugin.ai_chat_bot.api_key` | ③ 你的 LLM API Key（及 `base_url` / `model`） |
-
-::: tip 从旧版本升级？
-检测到旧版 `config.yaml` / `config.dev.yaml` / `aniabot.mcp.json` / `aniabot.prompt.json` 时会自动迁移到数据库，并将旧文件更名为 `.bak`，无需手工处理。
-:::
+使用该密码登录 `http://127.0.0.1:7700`，首次登录会自动进入**设置向导**：依次填写 NapCat 连接地址、管理员 QQ 与 AI 模型配置（Base URL / API Key / 模型），保存后一键重启即可生效。
 
 完整配置项说明见 [配置详解](/guide/configuration)，面板使用见 [Web 控制面板](/guide/web-panel)。
 

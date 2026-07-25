@@ -1,12 +1,10 @@
 // Package configstore 提供基于持久化存储的配置中心。
 //
-// AniaBot 的全部配置（原 config.yaml / aniabot.mcp.json / aniabot.prompt.json）
-// 以点分键（与历史 viper 键完全一致，如 plugin.ai_chat_bot.base_url）的形式
-// 存储在持久化存储的保留命名空间 __config 下，值以 JSON 编码以保留类型
+// AniaBot 的全部配置以点分键（与历史 viper 键一致，如 plugin.ai_chat_bot.base_url）
+// 的形式存储在持久化存储的保留命名空间 __config 下，值以 JSON 编码以保留类型
 // （string / float / bool / 数组）。
 //
-// 启动时通过 [Store.Init] 完成初始化：首次运行写入默认值（内嵌的
-// default_config.yaml），若检测到旧版配置文件则自动迁移并更名为 .bak。
+// 首次启动时通过 [Store.Init] 写入默认配置（内嵌的 config_tmpl.yaml），
 // 之后通过 [Store.ToViper] 构建内存 viper 供框架与插件使用——插件的
 // Start(ctx, *viper.Viper) 接口与读取语义（Get*/IsSet/UnmarshalKey）完全不变。
 package configstore
@@ -17,7 +15,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
-	"os"
 	"strings"
 	"sync"
 
@@ -28,15 +25,7 @@ import (
 // Namespace 配置在持久化存储中的保留命名空间。
 const Namespace = "__config"
 
-// 旧版配置文件（迁移来源，迁移后更名为 .bak）
-const (
-	legacyConfigDev  = "config.dev.yaml"
-	legacyConfig     = "config.yaml"
-	legacyMCPFile    = "aniabot.mcp.json"
-	legacyPromptFile = "aniabot.prompt.json"
-)
-
-// 特殊配置键：两个原独立 JSON 文件的原始文本
+// 特殊配置键：MCP 服务器 / Prompt 覆盖的原始 JSON 文本
 const (
 	KeyMCPJSON    = "files.mcp_json"
 	KeyPromptJSON = "files.prompt_json"
@@ -48,7 +37,7 @@ const (
 	metaSetupPending = "meta.setup_pending"
 )
 
-//go:embed default_config.yaml
+//go:embed config_tmpl.yaml
 var defaultConfigYAML []byte
 
 // Store 配置中心。并发安全。
@@ -66,45 +55,19 @@ func New(root storage.PersistentStorage, logger *slog.Logger) *Store {
 	return &Store{store: root.Clone(Namespace), logger: logger}
 }
 
-// Init 初始化配置：已完成则直接返回；否则优先从旧版配置文件迁移，
-// 没有旧配置文件时写入默认值。迁移成功的旧文件会被重命名为 .bak。
+// Init 初始化配置：已完成则直接返回；否则写入默认配置并标记待完成设置向导。
 func (s *Store) Init() error {
 	ctx := context.Background()
 	if s.store.Has(ctx, metaInitialized) {
 		return nil
 	}
 
-	legacy, legacyName := s.findLegacyConfig()
-	if legacy != "" {
-		if err := s.migrateFromYAML(legacy); err != nil {
-			return fmt.Errorf("迁移旧配置文件 %s 失败: %w", legacy, err)
-		}
-		s.logger.Info("已从旧配置文件迁移配置", "file", legacy)
-		s.backupFile(legacy)
-		// 另一份配置文件（若存在）一并更名，避免下次启动混淆
-		other := legacyConfig
-		if legacyName == legacyConfig {
-			other = legacyConfigDev
-		}
-		if _, err := os.Stat(other); err == nil {
-			s.backupFile(other)
-		}
-		// 旧配置可能缺少新增键（如 bot.admin_panel.*），用默认值补齐
-		if err := s.seedDefaults(false); err != nil {
-			return fmt.Errorf("补齐默认配置失败: %w", err)
-		}
-	} else {
-		if err := s.seedDefaults(true); err != nil {
-			return fmt.Errorf("写入默认配置失败: %w", err)
-		}
-		s.logger.Info("已写入默认配置（可在 Web 控制面板中修改）")
-		// 全新安装：标记待完成设置向导（迁移用户无需引导）
-		s.store.SetString(ctx, metaSetupPending, "1")
+	if err := s.seedDefaults(); err != nil {
+		return fmt.Errorf("写入默认配置失败: %w", err)
 	}
-
-	// 迁移两个独立的 JSON 配置文件（无论配置来自迁移还是默认值）
-	s.migrateTextFile(legacyMCPFile, KeyMCPJSON)
-	s.migrateTextFile(legacyPromptFile, KeyPromptJSON)
+	s.logger.Info("已写入默认配置（可在 Web 控制面板中修改）")
+	// 全新安装：标记待完成设置向导
+	s.store.SetString(ctx, metaSetupPending, "1")
 
 	if ok := s.store.SetString(ctx, metaInitialized, "1"); !ok {
 		return fmt.Errorf("写入配置初始化标记失败")
@@ -112,62 +75,8 @@ func (s *Store) Init() error {
 	return nil
 }
 
-// findLegacyConfig 返回有效的旧版配置文件路径（config.dev.yaml 优先）。
-func (s *Store) findLegacyConfig() (path, name string) {
-	if _, err := os.Stat(legacyConfigDev); err == nil {
-		return legacyConfigDev, legacyConfigDev
-	}
-	if _, err := os.Stat(legacyConfig); err == nil {
-		return legacyConfig, legacyConfig
-	}
-	return "", ""
-}
-
-// migrateFromYAML 读取旧版 YAML，拍平后写入配置中心。
-// bot.store.persistent.* 子树已改由环境变量引导，迁移时丢弃。
-func (s *Store) migrateFromYAML(path string) error {
-	v := viper.New()
-	v.SetConfigFile(path)
-	if err := v.ReadInConfig(); err != nil {
-		return err
-	}
-	flat := map[string]any{}
-	flatten(v.AllSettings(), "", flat)
-	for k, val := range flat {
-		if strings.HasPrefix(k, "bot.store.persistent.") || k == "bot.store.persistent" {
-			continue
-		}
-		if err := s.Set(k, val); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-// migrateTextFile 将旧版 JSON 文本文件迁入指定配置键并更名为 .bak。
-// 文件不存在时静默跳过。
-func (s *Store) migrateTextFile(path, key string) {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return
-	}
-	if err := s.Set(key, string(data)); err != nil {
-		s.logger.Warn("迁移配置文件失败", "file", path, "error", err)
-		return
-	}
-	s.logger.Info("已迁移配置文件", "file", path, "key", key)
-	s.backupFile(path)
-}
-
-func (s *Store) backupFile(path string) {
-	if err := os.Rename(path, path+".bak"); err != nil {
-		s.logger.Warn("旧配置文件更名失败（不影响迁移结果）", "file", path, "error", err)
-	}
-}
-
-// seedDefaults 写入内嵌默认配置（default_config.yaml）。
-// overwrite=false 时仅补齐缺失键，不覆盖已有（迁移后）的值。
-func (s *Store) seedDefaults(overwrite bool) error {
+// seedDefaults 写入内嵌默认配置（config_tmpl.yaml）。
+func (s *Store) seedDefaults() error {
 	v := viper.New()
 	v.SetConfigType("yaml")
 	if err := v.ReadConfig(strings.NewReader(string(defaultConfigYAML))); err != nil {
@@ -177,11 +86,7 @@ func (s *Store) seedDefaults(overwrite bool) error {
 	flatten(v.AllSettings(), "", flat)
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	ctx := context.Background()
 	for k, val := range flat {
-		if !overwrite && s.store.Has(ctx, k) {
-			continue
-		}
 		if err := s.setLocked(k, val); err != nil {
 			return err
 		}

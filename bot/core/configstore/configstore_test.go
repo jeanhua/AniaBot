@@ -3,8 +3,6 @@ package configstore
 import (
 	"context"
 	"encoding/json"
-	"os"
-	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -100,8 +98,6 @@ func (m *memPersistent) Clone(prefix string) storage.PersistentStorage {
 
 func newTestStore(t *testing.T) *Store {
 	t.Helper()
-	// 独立临时目录，避免触达真实工作目录下的旧配置文件
-	t.Chdir(t.TempDir())
 	return New(newMemPersistent(), nil)
 }
 
@@ -129,6 +125,18 @@ func TestSeedDefaults(t *testing.T) {
 	if v.IsSet("bot.admin_id") {
 		t.Fatal("admin_id 为空时不应被写入（IsSet 语义）")
 	}
+	// 全新安装应标记待完成设置向导
+	if !s.SetupPending() {
+		t.Fatal("全新安装应标记 SetupPending")
+	}
+	s.CompleteSetup()
+	if s.SetupPending() {
+		t.Fatal("CompleteSetup 后应清除标记")
+	}
+	// 再次 Init 应幂等
+	if err := s.Init(); err != nil {
+		t.Fatal(err)
+	}
 }
 
 func TestSetGetRoundTrip(t *testing.T) {
@@ -154,91 +162,5 @@ func TestSetGetRoundTrip(t *testing.T) {
 	}
 	if !v.GetBool("plugin.ai_chat_bot.multimodal") {
 		t.Fatal("multimodal should be true")
-	}
-}
-
-func TestMigrateFromLegacyYAML(t *testing.T) {
-	s := newTestStore(t)
-	legacy := `bot:
-  admin_id: 10001
-  adapter:
-    ws:
-      address: ws://example:4455
-  store:
-    persistent:
-      driver: mysql
-      mysql:
-        dsn: "root@tcp(localhost)/x"
-plugin:
-  ai_chat_bot:
-    base_url: "https://api.example.com"
-    api_key: "sk-test"
-    model: "my-model"
-`
-	if err := os.WriteFile("config.yaml", []byte(legacy), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile("aniabot.mcp.json", []byte(`{"servers":[{"name":"demo","transport":"stdio","command":"echo"}]}`), 0o644); err != nil {
-		t.Fatal(err)
-	}
-
-	if err := s.Init(); err != nil {
-		t.Fatal(err)
-	}
-	v := s.ToViper()
-	if got := v.GetInt64("bot.admin_id"); got != 10001 {
-		t.Fatalf("admin_id = %d", got)
-	}
-	if got := v.GetString("plugin.ai_chat_bot.api_key"); got != "sk-test" {
-		t.Fatalf("api_key = %q", got)
-	}
-	// bot.store.persistent.* 已改由环境变量引导，迁移时应丢弃
-	if v.IsSet("bot.store.persistent.driver") {
-		t.Fatal("persistent 配置不应迁入配置中心")
-	}
-	// 旧配置缺失的新增键应以默认值补齐
-	if !v.GetBool("bot.admin_panel.enable") {
-		t.Fatal("迁移后应以默认值补齐 bot.admin_panel.enable")
-	}
-	if got := v.GetInt("plugin.ai_chat_bot.max_token"); got != 8192 {
-		t.Fatalf("迁移后应以默认值补齐 max_token, got %d", got)
-	}
-	// MCP JSON 原文应迁入 files.mcp_json
-	if got := v.GetString(KeyMCPJSON); got == "" {
-		t.Fatal("files.mcp_json 应包含迁移内容")
-	}
-	// 旧文件应更名为 .bak
-	if _, err := os.Stat("config.yaml.bak"); err != nil {
-		t.Fatal("config.yaml 应更名为 .bak")
-	}
-	if _, err := os.Stat("aniabot.mcp.json.bak"); err != nil {
-		t.Fatal("aniabot.mcp.json 应更名为 .bak")
-	}
-
-	// 再次 Init 应为幂等（不重复迁移）
-	if err := s.Init(); err != nil {
-		t.Fatal(err)
-	}
-}
-
-func TestMigratePrefersDevConfig(t *testing.T) {
-	s := newTestStore(t)
-	if err := os.WriteFile("config.dev.yaml", []byte("plugin:\n  ai_chat_bot:\n    model: dev-model\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile("config.yaml", []byte("plugin:\n  ai_chat_bot:\n    model: prod-model\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	if err := s.Init(); err != nil {
-		t.Fatal(err)
-	}
-	if got := s.ToViper().GetString("plugin.ai_chat_bot.model"); got != "dev-model" {
-		t.Fatalf("应优先迁移 config.dev.yaml, model = %q", got)
-	}
-	// 两份文件都应更名，避免下次启动混淆
-	for _, f := range []string{"config.dev.yaml.bak", "config.yaml.bak"} {
-		if _, err := os.Stat(f); err != nil {
-			t.Fatalf("%s 应存在", filepath.Base(f))
-		}
 	}
 }
