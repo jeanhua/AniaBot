@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"os"
 	"strings"
 
 	"github.com/jeanhua/AniaBot/common/storage"
@@ -36,29 +37,35 @@ func newCacheStorage(ctx context.Context, cfg *viper.Viper, logger *slog.Logger)
 	}
 }
 
-// newPersistentStorage 根据配置创建持久化存储（重启不丢失）。
-// 默认驱动为 sqlite；可配置为 mysql。均使用纯 Go 驱动，无需 CGO。
-func newPersistentStorage(ctx context.Context, cfg *viper.Viper, logger *slog.Logger) (storage.PersistentStorage, error) {
-	driver := strings.ToLower(cfg.GetString("bot.store.persistent.driver"))
+// newPersistentStorage 创建持久化存储（重启不丢失）。
+//
+// 持久化存储是配置中心的载体，必须在读取任何配置之前打开，因此其驱动与
+// 位置通过环境变量引导（不经过配置中心）：
+//   - ANIABOT_STORE_DRIVER: sqlite（默认） | mysql
+//   - ANIABOT_SQLITE_PATH: sqlite 文件路径，默认 ./data/aniabot.db
+//   - ANIABOT_MYSQL_DSN:   mysql 标准 go-sql-driver DSN
+//
+// 均使用纯 Go 驱动，无需 CGO。
+func newPersistentStorage(ctx context.Context, logger *slog.Logger) (storage.PersistentStorage, error) {
+	driver := strings.ToLower(os.Getenv("ANIABOT_STORE_DRIVER"))
 	if driver == "" {
 		driver = "sqlite"
 	}
 	switch driver {
 	case "sqlite":
-		path := cfg.GetString("bot.store.persistent.sqlite.path")
+		path := os.Getenv("ANIABOT_SQLITE_PATH")
 		if path == "" {
 			path = "./data/aniabot.db"
 		}
 		logger.Info("使用 SQLite 持久化存储引擎", "path", path)
 		return NewAniaSqliteStorage(ctx, path, logger)
 	case "mysql":
-		dsn := cfg.GetString("bot.store.persistent.mysql.dsn")
+		dsn := os.Getenv("ANIABOT_MYSQL_DSN")
+		if dsn == "" {
+			return nil, fmt.Errorf("使用 MySQL 持久化存储需要设置环境变量 ANIABOT_MYSQL_DSN")
+		}
 		logger.Info("使用 MySQL 持久化存储引擎")
-		return NewAniaMysqlStorage(ctx, dsn, MysqlPoolConfig{
-			MaxOpenConns:       cfg.GetInt("bot.store.persistent.mysql.max_open_conns"),
-			MaxIdleConns:       cfg.GetInt("bot.store.persistent.mysql.max_idle_conns"),
-			ConnMaxLifetimeSec: cfg.GetInt("bot.store.persistent.mysql.conn_max_lifetime_sec"),
-		}, logger)
+		return NewAniaMysqlStorage(ctx, dsn, MysqlPoolConfig{}, logger)
 	default:
 		return nil, fmt.Errorf("未知的持久化存储驱动: %s（可选：sqlite / mysql）", driver)
 	}

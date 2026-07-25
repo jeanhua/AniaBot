@@ -1,8 +1,26 @@
 # 配置详解
 
-AniaBot 使用 [Viper](https://github.com/spf13/viper) 加载 YAML 配置。启动时**优先读取 `config.dev.yaml`**，不存在则回退到 `config.yaml`。
+AniaBot 的全部配置存储在**数据库**中（持久化存储的 `ania_kv` 表），通过内置的 **Web 控制面板**查看与修改，不再使用 `config.yaml`。
 
-配置分为两大块：`bot`（框架级）与 `plugin`（插件级）。
+- 首次启动时自动写入默认配置；检测到旧版 `config.yaml` / `config.dev.yaml` / `aniabot.mcp.json` / `aniabot.prompt.json` 时会**自动迁移**到数据库并更名为 `.bak`。
+- 配置在面板中保存后**重启 Bot 生效**。
+- 面板操作方式见 [Web 控制面板](/guide/web-panel)。
+
+::: tip 键名约定
+配置键为点分路径（大小写不敏感），与历史 `config.yaml` 的层级一一对应，如 `plugin.ai_chat_bot.model`。本文仍以 YAML 形式展示各配置的结构与默认值。
+:::
+
+## 引导配置（环境变量）
+
+唯一不经过数据库的配置是**持久化存储本身的位置**（配置中心的载体，必须先于配置加载），通过环境变量设置：
+
+| 变量 | 说明 | 默认值 |
+| --- | --- | --- |
+| `ANIABOT_STORE_DRIVER` | 持久化驱动：`sqlite` / `mysql` | `sqlite` |
+| `ANIABOT_SQLITE_PATH` | SQLite 数据库文件路径 | `./data/aniabot.db` |
+| `ANIABOT_MYSQL_DSN` | MySQL 标准 go-sql-driver DSN | 无（驱动为 mysql 时必填） |
+
+其余所有配置（管理员、适配器、缓存、面板、插件）都在数据库中，通过面板编辑。
 
 ## bot —— 框架配置
 
@@ -15,6 +33,17 @@ bot:
 
 管理员 QQ 号。拥有最高权限：远程 `/exit` 退出、强制执行定时推送、查看全部定时任务、接收 panic 告警与启动通知等。
 
+### admin_panel —— Web 控制面板
+
+```yaml
+bot:
+  admin_panel:
+    enable: true                # 是否启用面板
+    listen: "127.0.0.1:7700"    # 监听地址；改为 0.0.0.0:7700 可局域网访问（面板有密码保护）
+```
+
+首次启动会在控制台打印**随机初始密码**（仅显示一次），登录后可在面板右上角修改。详见 [Web 控制面板](/guide/web-panel)。
+
 ### adapter —— 协议适配器
 
 WebSocket 与 HTTP **二选一**，取决于 `cmd/main.go` 中创建的适配器：
@@ -24,7 +53,7 @@ WebSocket 与 HTTP **二选一**，取决于 `cmd/main.go` 中创建的适配器
 ```yaml [WebSocket（推荐）]
 bot:
   adapter:
-    # token: xxx        # 若 NapCat 端设置了 access token 则取消注释
+    # token: xxx        # 若 NapCat 端设置了 access token 则设置该键
     ws:
       address: ws://localhost:4455  # NapCat WebSocket 服务端地址
       max_retries: 5                # 连接失败最大重连次数
@@ -46,30 +75,20 @@ bot:
 HTTP 模式下 NapCat 向 `localhost` 上报会失败，请将 NapCat 的 HTTP Client 地址改为 AniaBot 所在机器的内网 IP。
 :::
 
-### store —— 双层存储
-
-缓存与持久化两层独立配置、互不影响。
+### store.cache —— 缓存存储
 
 ```yaml
 bot:
   store:
     cache:                      # 缓存层：易失，支持 TTL 与列表语义
-      driver: redis             # redis（默认）| memory（进程内，重启清空）
+      driver: memory            # memory（默认，进程内，重启清空）| redis（多实例共享）
       redis:
         address: "localhost:6379"
         password: ""
         db: 0
-
-    persistent:                 # 持久化层：重启不丢
-      driver: sqlite            # sqlite（默认，纯 Go 无 CGO）| mysql
-      sqlite:
-        path: "./data/aniabot.db"
-      mysql:
-        dsn: "root:password@tcp(localhost:3306)/aniabot?charset=utf8mb4&parseTime=true&loc=Local"
-        max_open_conns: 20          # <=0 时默认 10
-        max_idle_conns: 5           # <=0 时默认 5
-        conn_max_lifetime_sec: 300  # <=0 时默认 1800
 ```
+
+持久化层的位置由上方[环境变量](#引导配置-环境变量)决定，不在此处配置。
 
 ## plugin.ai_chat_bot —— AI 对话插件
 
@@ -101,7 +120,7 @@ plugin:
 ```
 
 ::: tip 按群/按人定制人格
-在项目根目录创建 `aniabot.prompt.json`，可为特定群聊或好友覆盖 system prompt：
+在面板的「文件编辑 → Prompt 覆盖」页（配置键 `files.prompt_json`，原 `aniabot.prompt.json`），可为特定群聊或好友覆盖 system prompt：
 
 ```json
 {
@@ -156,7 +175,6 @@ plugin:
       env: []           # 环境变量，如 ["HOME=/root"]
       whitelist: []     # 非空时仅允许匹配这些正则的命令
       blacklist:        # 匹配这些正则的命令被禁止
-        - config(\.dev)?\.(yaml|yml|json)
         - "^mkfs"
         - "^shutdown"
 
@@ -173,7 +191,7 @@ plugin:
       max_log_entries: 500      # 执行日志保留条数（滚动覆盖）
 ```
 
-与框架的 `StartCron` 静态任务不同，clock 任务由 AI / 用户**动态创建**、持久化保存、重启不丢。详见 [AI 对话插件](/guide/builtin-plugins#ai-对话插件)。
+与框架的 `StartCron` 静态任务不同，clock 任务由 AI / 用户**动态创建**、持久化保存、重启不丢。执行日志可在面板「状态总览」页查看。详见 [AI 对话插件](/guide/builtin-plugins#ai-对话插件)。
 
 ### AI 长期记忆（memory）
 
@@ -197,9 +215,9 @@ plugin:
       - 7891011
 ```
 
-## aniabot.mcp.json —— MCP 服务定义
+## files.mcp_json —— MCP 服务定义
 
-项目根目录下的 `aniabot.mcp.json` 定义 AI 可用的 MCP Server，支持 stdio / SSE / Streamable HTTP 三种传输：
+配置键 `files.mcp_json`（面板「文件编辑 → MCP 服务器」页，原 `aniabot.mcp.json`）定义 AI 可用的 MCP Server，支持 stdio / SSE / Streamable HTTP 三种传输：
 
 ```json
 {
@@ -225,7 +243,7 @@ plugin:
 
 MCP 工具采用两阶段懒加载：AI 先通过发现工具查看有哪些 MCP 能力，按需加载到当前会话，避免工具描述撑爆上下文。
 
-## 环境变量
+## 其他环境变量
 
 | 变量 | 说明 |
 | --- | --- |

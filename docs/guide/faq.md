@@ -9,7 +9,7 @@
 1. **NapCat 是否已登录**：确认 NapCat 端 QQ 登录成功且在线
 2. **适配器类型是否匹配**：`cmd/main.go` 中创建的是 WebSocket 适配器，NapCat 就必须开启 WebSocket 服务端；HTTP 适配器则对应 HTTP 服务端 + 客户端上报
 3. **地址是否正确**：默认 `ws://localhost:4455`，Docker 环境不能用 `localhost`，改用内网 IP
-4. **access token**：NapCat 端设置了 token 时，`config.yaml` 的 `bot.adapter.token` 也要填写
+4. **access token**：NapCat 端设置了 token 时，在面板「配置管理」中填写 `bot.adapter.token`（重启生效）
 
 ### WebSocket 一直重连失败？
 
@@ -17,9 +17,9 @@
 - 检查 NapCat 的 WebSocket 服务端是否监听在配置的端口
 - Windows 上检查防火墙是否拦截
 
-### 提示「配置读取错误」或直接退出？
+### 提示「配置读取错误」或插件初始化失败？
 
-框架优先加载 `config.dev.yaml`。如果你同时存在两个配置文件，请确认你改的是实际生效的那个。插件读取不到自己的配置键时会在 `Start()` 返回错误并记录日志。
+配置存于数据库，通过面板修改后**需要重启才生效**——确认改完后重启过 Bot。插件读取不到自己的配置键时会在 `Start()` 返回错误并记录日志；可在面板「配置管理 → 高级模式 (JSON)」中检查键名是否正确（点分路径，大小写不敏感）。
 
 ## AI 对话
 
@@ -48,21 +48,19 @@ clock 任务持久化在 `PersistentStorage` 的 `clock:` 命名空间下，重�
 
 ### 不想装 Redis 可以吗？
 
-可以。`bot.store.cache.driver` 改为 `memory` 即使用进程内内存缓存，零依赖。代价：重启后缓存丢失、多实例间不共享。
+可以，默认就是。缓存驱动默认为 `memory`（进程内内存，零依赖）。需要多实例共享缓存时再把 `bot.store.cache.driver` 改为 `redis`。
 
 ### 数据文件在哪？
 
-默认 SQLite 持久化数据在 `./data/aniabot.db`（`bot.store.persistent.sqlite.path` 可改）。目录不存在会自动创建。
+默认 SQLite 持久化数据在 `./data/aniabot.db`（环境变量 `ANIABOT_SQLITE_PATH` 可改）。目录不存在会自动创建。
 
 ### 换 MySQL 怎么配？
 
-```yaml
-bot:
-  store:
-    persistent:
-      driver: mysql
-      mysql:
-        dsn: "root:password@tcp(host:3306)/aniabot?charset=utf8mb4&parseTime=true&loc=Local"
+通过环境变量切换持久化驱动（详见 [配置详解](/guide/configuration#引导配置-环境变量)）：
+
+```bash
+export ANIABOT_STORE_DRIVER=mysql
+export ANIABOT_MYSQL_DSN="root:password@tcp(host:3306)/aniabot?charset=utf8mb4&parseTime=true&loc=Local"
 ```
 
 ## 插件开发

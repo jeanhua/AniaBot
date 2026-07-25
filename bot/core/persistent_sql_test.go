@@ -279,9 +279,9 @@ func TestNewCacheStorage_UnknownDriver(t *testing.T) {
 }
 
 func TestNewPersistentStorage_DefaultSqlite(t *testing.T) {
-	cfg := viper.New()
-	cfg.Set("bot.store.persistent.sqlite.path", ":memory:")
-	s, err := newPersistentStorage(context.Background(), cfg, testDiscardLogger())
+	t.Setenv("ANIABOT_STORE_DRIVER", "sqlite")
+	t.Setenv("ANIABOT_SQLITE_PATH", ":memory:")
+	s, err := newPersistentStorage(context.Background(), testDiscardLogger())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -292,9 +292,8 @@ func TestNewPersistentStorage_DefaultSqlite(t *testing.T) {
 }
 
 func TestNewPersistentStorage_UnknownDriver(t *testing.T) {
-	cfg := viper.New()
-	cfg.Set("bot.store.persistent.driver", "bogus")
-	if _, err := newPersistentStorage(context.Background(), cfg, testDiscardLogger()); err == nil {
+	t.Setenv("ANIABOT_STORE_DRIVER", "bogus")
+	if _, err := newPersistentStorage(context.Background(), testDiscardLogger()); err == nil {
 		t.Fatal("expected error for unknown persistent driver")
 	}
 }

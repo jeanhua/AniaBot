@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"os"
 	"strconv"
 	"strings"
 	"sync"
@@ -88,8 +87,8 @@ type AIChatPlugin struct {
 }
 
 const (
-	LockExpTime      = time.Minute * 10
-	promptConfigFile = "aniabot.prompt.json"
+	LockExpTime     = time.Minute * 10
+	promptConfigKey = "files.prompt_json"
 )
 
 type promptOverrideConfig struct {
@@ -439,7 +438,7 @@ func (p *AIChatPlugin) Start(ctx context.Context, cfg *viper.Viper) error {
 	}
 
 	// 加载群聊/好友独立 prompt 覆盖配置
-	p.loadPromptOverrides()
+	p.loadPromptOverrides(cfg)
 
 	if cfg.IsSet("plugin.ai_chat_bot.max_token") {
 		v := cfg.GetInt("plugin.ai_chat_bot.max_token")
@@ -607,27 +606,23 @@ func (p *AIChatPlugin) Awake(ctx context.Context, bot bot.Bot) error {
 	return nil
 }
 
-func (p *AIChatPlugin) loadPromptOverrides() {
+func (p *AIChatPlugin) loadPromptOverrides(cfg *viper.Viper) {
 	p.promptOverrides.groups = make(map[message.QID]string)
 	p.promptOverrides.friends = make(map[message.QID]string)
 
-	data, err := os.ReadFile(promptConfigFile)
-	if err != nil {
-		if os.IsNotExist(err) {
-			p.Logger.Info("未找到 Prompt 覆盖配置文件，跳过加载", "file", promptConfigFile)
-			return
-		}
-		p.Logger.Warn("读取 Prompt 覆盖配置文件失败", "error", err.Error())
+	raw := cfg.GetString(promptConfigKey)
+	if strings.TrimSpace(raw) == "" {
+		p.Logger.Info("未配置 Prompt 覆盖，跳过加载", "key", promptConfigKey)
 		return
 	}
 
-	var cfg promptOverrideConfig
-	if err := json.Unmarshal(data, &cfg); err != nil {
-		p.Logger.Warn("解析 Prompt 覆盖配置文件失败", "error", err.Error())
+	var overrideCfg promptOverrideConfig
+	if err := json.Unmarshal([]byte(raw), &overrideCfg); err != nil {
+		p.Logger.Warn("解析 Prompt 覆盖配置失败", "error", err.Error())
 		return
 	}
 
-	for k, v := range cfg.Groups {
+	for k, v := range overrideCfg.Groups {
 		id, err := strconv.ParseUint(k, 10, 64)
 		if err != nil {
 			p.Logger.Warn("Prompt 覆盖配置: 无效的群聊ID", "id", k, "error", err.Error())
@@ -635,7 +630,7 @@ func (p *AIChatPlugin) loadPromptOverrides() {
 		}
 		p.promptOverrides.groups[message.QID(id)] = v
 	}
-	for k, v := range cfg.Friends {
+	for k, v := range overrideCfg.Friends {
 		id, err := strconv.ParseUint(k, 10, 64)
 		if err != nil {
 			p.Logger.Warn("Prompt 覆盖配置: 无效的好友ID", "id", k, "error", err.Error())

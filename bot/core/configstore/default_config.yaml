@@ -1,7 +1,13 @@
-# bot配置
+# AniaBot 默认配置（首次启动时写入数据库，之后请在 Web 控制面板中修改）
+# 持久化存储位置由环境变量引导（ANIABOT_STORE_DRIVER / ANIABOT_SQLITE_PATH / ANIABOT_MYSQL_DSN），不在此处配置
 bot:
   # 管理员信息
   admin_id: # 管理员qq
+
+  # Web 控制面板
+  admin_panel:
+    enable: true # 是否启用 Web 控制面板
+    listen: "127.0.0.1:7700" # 监听地址（如需局域网访问改为 0.0.0.0:7700，注意面板有密码保护）
 
   # napcat网络交换适配器，websocket/http二选一
   adapter:
@@ -15,28 +21,19 @@ bot:
       listen_port: 6679 # 本地监听端口，用于napcat向bot上报事件。注意这里如果是docker的话使用localhost无法连接，建议换成内网ip，即在napcat配置页面的http client设置为ip
       target_url: http://localhost:6680 # napcat开放的url，用于bot向napcat上报事件
 
-  # 存储适配器（缓存 + 持久化两层，独立配置、互不影响）
+  # 缓存存储（易失，支持 TTL 与列表语义）
   store:
-    # 缓存存储：易失，支持 TTL 与列表语义，适合热数据/临时会话/分布式锁
     cache:
-      driver: redis # redis（默认，需 Redis 服务） | memory（进程内内存，零依赖，重启清空）
+      driver: memory # memory（默认，进程内内存，零依赖，重启清空） | redis（需 Redis 服务，支持多实例共享）
       redis:
         address: "localhost:6379"
         password: ""
         db: 0
-      # memory 引擎无需任何配置
 
-    # 持久化存储：重启不丢失，适合需要长期保存的数据（插件配置/用户数据/历史记录等）
-    persistent:
-      driver: sqlite # sqlite（默认，纯 Go 无 CGO） | mysql
-      sqlite:
-        path: "./data/aniabot.db" # 数据库文件路径，目录不存在会自动创建
-      mysql:
-        # 标准 go-sql-driver DSN，charset=utf8mb4 建议保留
-        dsn: "root:password@tcp(localhost:3306)/aniabot?charset=utf8mb4&parseTime=true&loc=Local"
-        max_open_conns: 20 # 最大连接数，<=0 时使用默认值 10
-        max_idle_conns: 5 # 最大空闲连接数，<=0 时使用默认值 5
-        conn_max_lifetime_sec: 300 # 连接最长存活时间（秒），<=0 时默认 1800
+# 原独立 JSON 配置文件的内容（MCP 服务器 / 群与好友 Prompt 覆盖），在 Web 面板「文件」页编辑
+files:
+  mcp_json: ""
+  prompt_json: ""
 
 # 插件自定义配置
 plugin:
@@ -77,7 +74,7 @@ plugin:
       env: []                 # 环境变量，格式 KEY=VALUE，如 ["HOME=/root", "LANG=zh_CN.UTF-8"]
       whitelist: []           # 非空时只允许匹配这些正则的命令，如 ["^ls", "^cat"]
       blacklist:              # 匹配这些正则的命令被禁止
-        - config(\.dev)?\.(yaml|yml|json)
+        - config(\.dev)?\.(yaml|yml|json)(\.bak)?  # 迁移遗留的旧配置文件（含敏感信息）
         - "^mkfs"
         - "^shutdown"
         - "^reboot"
@@ -97,24 +94,16 @@ plugin:
         你负责将看到的图片用markdown格式描述出来，不要有无关的其他对话
 
     # local_image 工具配置（读取宿主机本地图片供AI查看）
-    # 主模型支持多模态时，图片以 data URI 形式放入下一轮上下文由模型直接查看；
-    # 不支持多模态时，转交上方 ocr 备用模型描述。注意：可读取宿主机上任意可读
-    # 图片文件，有泄露敏感截图风险，故默认关闭、需显式开启（与 bash/file 同级风险）。
     local_image:
       enable: false           # 是否启用本地图片读取工具
 
     # AI 定时任务（clock）配置
-    # 与框架的 StartCron 静态定时任务不同，clock 由 AI / 用户动态创建、持久化保存、
-    # 重启不丢失，到点时以全新的一次性上下文自动执行任务内容（可调用工具完成复杂流程）。
-    # AI 可通过 clock_create 等工具自行管理；用户可通过 /clock 命令查看与管理。
     clock:
       enable: true                # 是否启用定时任务功能
       default_timeout_sec: 120    # 单次触发默认超时（秒），超时会记录到执行日志并中止
       max_log_entries: 500        # 执行日志保留条数（滚动覆盖）
 
     # AI 长期记忆（memory）配置
-    # 由 AI 通过 memory_save / memory_search / memory_forget 工具自行管理的跨会话记忆，
-    # 持久化保存、重启不丢失。记忆按群聊/好友隔离，群与群、群与私聊之间互不可见。
     memory:
       enable: true                # 是否启用长期记忆功能
       max_entries: 200            # 单个会话（群/好友）的记忆条数上限，写满后 AI 需先清理旧记忆
@@ -128,3 +117,45 @@ plugin:
       - 7891011
 
 
+
+  # 拦截器插件
+  interceptor: # 优先级: 黑名单 > 白名单 > 其他
+    # 黑名单
+    blacklist:
+      users: []
+      groups: []
+    # 白名单
+    whitelist:
+      users:
+        - "all"
+      groups:
+        - "all"
+
+  # 群刊插件
+  group_newsletter:
+    fmt: "md" # 输出格式 md或jpg, jpg需要先启动md2img-api容器: docker run -d -p 3000:3000 --name md2img-api jeanhua/md2img-api:latest
+    model:
+      base_url: "https://api.openai.com/v1"
+      api_key: "your-api-key"
+      model: "gpt-4"
+      prompt: ""  # 可选，留空使用默认prompt
+    msg_threshold: 100  # 消息阈值
+    max_messages: 500   # 最大保存消息数
+    enabled_groups: []  # 留空表示所有群启用，或填写群号列表
+
+  # gdmusic插件
+  gdmusic:
+    base_url: "https://music-api.gdstudio.xyz/api.php"  # 留空使用默认
+
+  # url解析插件
+  url_parser:
+    cache_ttl: 60 # 缓存时间，单位分钟
+    token: "xxx" # jina ai token
+    llm:
+      base_url: "https://open.bigmodel.cn/api/paas/v4"
+      api_key: ""
+      model: "GLM-4-Flash-250414"
+
+component:
+  md2img:
+    apipoint: "http://localhost:3000"

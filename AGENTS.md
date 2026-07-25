@@ -21,11 +21,14 @@ Requires Go 1.26+ (see `go.mod`).
 ```bash
 make linux     # → build/AniaBot     (GOOS=linux GOARCH=amd64)
 make windows   # → build/AniaBot.exe
+make web       # rebuild admin panel frontend (cd web && npm ci && npm run build → bot/adminpanel/dist)
 make clean     # remove build/
 
 # Manual
 cd cmd && GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -o ../build/AniaBot
 ```
+
+The panel frontend's built `dist/` is committed to the repo, so plain `go build` never requires Node.
 
 ### Test
 
@@ -45,11 +48,14 @@ go mod verify
 
 ## Configuration
 
-- `config.yaml` — production config (loaded via Viper)
-- `config.dev.yaml` — development config (tried first, falls back to `config.yaml`)
-- `aniabot.mcp.json` — MCP server definitions (stdio / Streamable HTTP / SSE transports)
+All configuration lives in the **database** (the persistent storage's `ania_kv` table), managed via the built-in **Web admin panel** (`bot/adminpanel`, Vue 3 + Tailwind frontend in `web/`, embedded via `go:embed`). There is no `config.yaml` anymore.
 
-Config is loaded in `bot/core/core.go`. Plugins receive their config section via `SetConfig(*viper.Viper)` during DI injection — each plugin gets the `plugin.<key>` sub-tree matching its `Meta.SystemConfigKey`.
+- `bot/core/configstore/` — config center. Keys are dot-paths identical to the historical viper keys (`plugin.ai_chat_bot.base_url`, ...), values JSON-encoded. `Init()` seeds defaults from the embedded `default_config.yaml` on first run and auto-migrates legacy `config.yaml` / `config.dev.yaml` / `aniabot.mcp.json` / `aniabot.prompt.json` (renamed to `.bak`). `ToViper()` builds an in-memory viper so plugin `Start(ctx, *viper.Viper)` semantics are unchanged.
+- **Bootstrap env vars** (needed before the DB opens): `ANIABOT_STORE_DRIVER` (sqlite|mysql), `ANIABOT_SQLITE_PATH` (default `./data/aniabot.db`), `ANIABOT_MYSQL_DSN`.
+- MCP servers and per-group/friend prompt overrides are config keys `files.mcp_json` / `files.prompt_json` (raw JSON text), edited in the panel's Files page.
+- Panel auth: random initial password printed to console on first run, SHA-256+salt hash in the `__admin` namespace; config changes take effect after restart.
+
+Config is assembled in `bot/core/core.go` `Run()`: persistent storage (env) → configstore init → `ToViper()` → cache storage → plugins. Plugins read their own `plugin.<name>.*` keys from the whole viper passed to `Start()`.
 
 ## Architecture
 
@@ -59,6 +65,8 @@ Config is loaded in `bot/core/core.go`. Plugins receive their config section via
 cmd/main.go              Entry point: creates adapter, registers plugins, runs bot
 common/                  Shared interfaces and models (adapter, plugin, storage, bot, msgchain)
 bot/core/                AniaBot orchestrator: plugin lifecycle, event dispatch, DI, storage impls
+  configstore/             DB-backed config center (seed/migrate/ToViper)
+bot/adminpanel/          Web admin panel: config/status APIs + embedded SPA (dist/)
 bot/adapter/napcat/      NapCat protocol adapters (WebSocket and HTTP)
 bot/component/           AI chat engine
   aichat/                  ChatBot, LLMClient, MessageBuilder, ToolOrchestrator, messageWindow
@@ -67,6 +75,7 @@ bot/component/           AI chat engine
 bot/plugins/             Six built-in plugins (sys, log, repeat, antiwithdrawal, aichat, news)
 bot/utils/               Command parsing, message extraction, URL helpers, time formatting
 custom/                  User-created plugin examples and templates
+web/                     Admin panel frontend (Vite + Vue 3 + Tailwind v4, builds into bot/adminpanel/dist)
 docs/                    VitePress documentation site
 ```
 
@@ -131,10 +140,10 @@ msgchain.Builder().GroupForward(target).Node(sender, content).Build()
 
 AniaBot exposes two interface-adapted storage layers, both with Clone-based `base64(pluginName)` namespacing injected per plugin:
 
-- **CACHE** (`common/storage.Storage`, injected as `p.Storage`): volatile; supports TTL + Redis-list semantics. Backends: `redis` (default) | `memory` (opt-in, process-local).
+- **CACHE** (`common/storage.Storage`, injected as `p.Storage`): volatile; supports TTL + Redis-list semantics. Backends: `memory` (default, process-local) | `redis` (opt-in, shared across instances).
 - **PERSISTENT** (`common/storage.PersistentStorage`, injected as `p.PersistentStorage`): durable KV/document store, survives restart, no TTL/list semantics. Backends: `sqlite` (default) | `mysql` (opt-in).
 
-All SQL backends use pure-Go drivers (`modernc.org/sqlite`, `github.com/go-sql-driver/mysql`) — no CGO, cross-compile friendly. Config lives under `bot.store.cache` / `bot.store.persistent`; factories in `bot/core/storage_factory.go`.
+All SQL backends use pure-Go drivers (`modernc.org/sqlite`, `github.com/go-sql-driver/mysql`) — no CGO, cross-compile friendly. Cache config lives under `bot.store.cache` in the DB config; the persistent backend itself is bootstrapped via env vars (`ANIABOT_STORE_DRIVER` / `ANIABOT_SQLITE_PATH` / `ANIABOT_MYSQL_DSN`); factories in `bot/core/storage_factory.go`.
 
 ## Key Conventions
 
@@ -167,5 +176,5 @@ Three GitHub Actions workflows in `.github/workflows/`:
 | `modernc.org/sqlite`             | Pure-Go SQLite, persistent storage default |
 | `github.com/go-sql-driver/mysql` | Pure-Go MySQL, persistent storage opt-in   |
 | `robfig/cron/v3`                 | Cron scheduling for timed plugins          |
-| `spf13/viper`                    | YAML configuration loading                 |
+| `spf13/viper`                    | In-memory config view for plugins           |
 | `lmittmann/tint`                 | Colored slog handler                       |

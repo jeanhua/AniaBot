@@ -12,6 +12,9 @@ import (
 	"time"
 
 	"github.com/go-resty/resty/v2"
+	"github.com/jeanhua/AniaBot/bot/adminpanel"
+	"github.com/jeanhua/AniaBot/bot/component/tasklog"
+	"github.com/jeanhua/AniaBot/bot/core/configstore"
 	"github.com/jeanhua/AniaBot/bot/utils"
 	"github.com/jeanhua/AniaBot/common/adapter"
 	"github.com/jeanhua/AniaBot/common/model/message"
@@ -31,6 +34,8 @@ type AniaBot struct {
 	plugins []plugin.Plugin
 	cfg     *viper.Viper
 
+	configStore *configstore.Store
+
 	storage     storage.Storage
 	persistent  storage.PersistentStorage
 	restyClient *resty.Client
@@ -42,6 +47,9 @@ type AniaBot struct {
 
 	// goroutine数目
 	goroutineNum atomic.Int32
+
+	// 启动时间
+	startTime time.Time
 }
 
 const (
@@ -108,6 +116,7 @@ func NewAniaBot(adapter adapter.Adapter, option ...Option) *AniaBot {
 }
 
 func (ania *AniaBot) Run() {
+	ania.startTime = time.Now()
 	sort.SliceStable(ania.plugins, func(i, j int) bool {
 		return ania.plugins[i].GetMeta().Order < ania.plugins[j].GetMeta().Order
 	})
@@ -131,22 +140,28 @@ func (ania *AniaBot) Run() {
 	}
 	ania.adapter.SetTrigger(trigger)
 
-	// config
-	if ania.cfg == nil {
-		cfg := viper.New()
-		cfg.AddConfigPath("./")
-		cfg.SetConfigName("config.dev")
-		if err := cfg.ReadInConfig(); err == nil {
-			Logger().Info("使用开发环境配置: config.dev.yaml")
-		} else {
-			cfg.SetConfigName("config")
-			if err := cfg.ReadInConfig(); err != nil {
-				Logger().Error("无法读取配置文件: %v", "error", err)
-				os.Exit(1)
-			}
-			Logger().Info("使用默认配置: config.yaml")
+	// 持久化存储（重启不丢失；配置中心的载体，必须最先初始化。
+	// 驱动与位置由环境变量引导：ANIABOT_STORE_DRIVER / ANIABOT_SQLITE_PATH / ANIABOT_MYSQL_DSN）
+	if ania.persistent == nil {
+		store, err := newPersistentStorage(context.Background(), Logger().WithGroup("Persistent"))
+		if err != nil {
+			Logger().Error("初始化持久化存储失败", "error", err)
+			os.Exit(1)
 		}
-		ania.cfg = cfg
+		ania.persistent = store
+	}
+
+	// 配置中心：全部配置存于数据库（首启写入默认值；检测到旧版
+	// config.yaml / aniabot.mcp.json 等文件时自动迁移并更名为 .bak）。
+	// ToViper 构建内存 viper，插件与适配器的读取方式保持不变。
+	if ania.cfg == nil {
+		cs := configstore.New(ania.persistent, Logger().WithGroup("Config"))
+		if err := cs.Init(); err != nil {
+			Logger().Error("初始化配置中心失败", "error", err)
+			os.Exit(1)
+		}
+		ania.configStore = cs
+		ania.cfg = cs.ToViper()
 	}
 
 	// 缓存存储（易失，支持 TTL/列表；默认 redis，可配置 memory）
@@ -157,16 +172,6 @@ func (ania *AniaBot) Run() {
 			os.Exit(1)
 		}
 		ania.storage = store
-	}
-
-	// 持久化存储（重启不丢失；默认 sqlite，可配置 mysql）
-	if ania.persistent == nil {
-		store, err := newPersistentStorage(context.Background(), ania.cfg, Logger().WithGroup("Persistent"))
-		if err != nil {
-			Logger().Error("初始化持久化存储失败", "error", err)
-			os.Exit(1)
-		}
-		ania.persistent = store
 	}
 
 	// resty
@@ -227,7 +232,54 @@ func (ania *AniaBot) Run() {
 		}
 	}()
 
+	// Web 控制面板（配置修改重启后生效）
+	if ania.configStore != nil && ania.cfg.GetBool("bot.admin_panel.enable") {
+		ania.startAdminPanel()
+	}
+
 	ania.adapter.Serve(ania.cfg)
+}
+
+// startAdminPanel 启动 Web 控制面板（goroutine 内运行 HTTP 服务）。
+func (ania *AniaBot) startAdminPanel() {
+	// 查找提供定时任务执行日志的插件（如 AI 对话插件的 clock 功能）
+	var taskLogFn func(limit int) []tasklog.Entry
+	for _, p := range ania.plugins {
+		if src, ok := p.(adminpanel.TaskLogSource); ok {
+			taskLogFn = src.TaskLogRecent
+			break
+		}
+	}
+
+	srv := adminpanel.NewServer(adminpanel.Options{
+		Listen:     ania.cfg.GetString("bot.admin_panel.listen"),
+		Config:     ania.configStore,
+		Persistent: ania.persistent,
+		Bot:        ania,
+		Adapter: func() string {
+			type connChecker interface{ Connected() bool }
+			if c, ok := ania.adapter.(connChecker); ok {
+				if c.Connected() {
+					return "connected"
+				}
+				return "reconnecting"
+			}
+			return "unknown"
+		},
+		TaskLogs: taskLogFn,
+		Logger:   Logger().WithGroup("AdminPanel"),
+	})
+	go srv.Run()
+}
+
+// GoroutineNum 返回当前由框架追踪的 goroutine 数目。
+func (ania *AniaBot) GoroutineNum() int32 {
+	return ania.goroutineNum.Load()
+}
+
+// StartTime 返回 Bot 启动时间。
+func (ania *AniaBot) StartTime() time.Time {
+	return ania.startTime
 }
 
 func (ania *AniaBot) GetPluginList() []plugininfo.PluginInfo {

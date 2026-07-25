@@ -173,25 +173,23 @@ type mcpServerEntry struct {
 	Description string            `json:"description"`
 }
 
-const mcpConfigFile = "aniabot.mcp.json"
+const mcpConfigKey = "files.mcp_json"
 
-func (p *AIChatPlugin) loadMCPConfigs(_ *viper.Viper) error {
-	data, err := os.ReadFile(mcpConfigFile)
-	if err != nil {
-		if os.IsNotExist(err) {
-			p.Logger.Info("未找到 MCP 配置文件，跳过 MCP 加载", "file", mcpConfigFile)
-			return nil
-		}
-		return fmt.Errorf("读取 MCP 配置文件失败: %w", err)
+// loadMCPConfigs 从配置中心读取 MCP 服务器配置（原 aniabot.mcp.json 的原始 JSON 文本）。
+func (p *AIChatPlugin) loadMCPConfigs(cfg *viper.Viper) error {
+	raw := cfg.GetString(mcpConfigKey)
+	if strings.TrimSpace(raw) == "" {
+		p.Logger.Info("未配置 MCP 服务器，跳过 MCP 加载", "key", mcpConfigKey)
+		return nil
 	}
 
 	var fileCfg mcpFileConfig
-	if err := json.Unmarshal(data, &fileCfg); err != nil {
-		return fmt.Errorf("解析 MCP 配置文件失败: %w", err)
+	if err := json.Unmarshal([]byte(raw), &fileCfg); err != nil {
+		return fmt.Errorf("解析 MCP 配置失败: %w", err)
 	}
 
 	if len(fileCfg.Servers) == 0 {
-		p.Logger.Info("MCP 配置文件中未配置任何服务器")
+		p.Logger.Info("MCP 配置中未配置任何服务器")
 		return nil
 	}
 

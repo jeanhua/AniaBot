@@ -33,7 +33,7 @@ import "github.com/jeanhua/AniaBot/custom/plugins/waifupics"
 bot.AddPlugin(waifupics.NewPlugin())
 ```
 
-部分插件有自己的配置项，请参考各插件源码中的 `Start()` 方法读取的配置键，在 `config.yaml` 的 `plugin:` 节点下补充对应配置。
+部分插件有自己的配置项，请参考各插件源码中的 `Start()` 方法读取的配置键，在 Web 控制面板的「配置管理 → 高级模式 (JSON)」中以 `plugin.<插件名>.*` 键补充对应配置（重启生效）。
 
 ## 学习路径建议
 

@@ -8,11 +8,11 @@
 | --- | --- | --- |
 | Go | **1.26+** | 见 `go.mod`，交叉编译友好 |
 | NapCat | 任意近期版本 | QQ 协议端，提供 OneBot v11 接口 |
-| Redis | 可选 | 默认缓存后端；没有可改用内存模式 |
+| Redis | 可选 | 缓存后端之一；默认使用内存缓存，无需安装 |
 | LLM API Key | 可选 | 启用 AI 对话时需要（DeepSeek / OpenAI 等） |
 
-::: tip 没有 Redis？
-将 `bot.store.cache.driver` 改为 `memory` 即可零依赖运行，代价是重启后缓存丢失。
+::: tip 想用 Redis？
+默认缓存驱动为 `memory`（零依赖，重启清空）。在面板「配置管理」页将 `bot.store.cache.driver` 改为 `redis` 并填写地址即可，多实例部署时建议切换。
 :::
 
 ## 第一步：部署 NapCat
@@ -30,35 +30,36 @@ cd AniaBot
 go mod tidy
 ```
 
-## 第三步：配置
-
-编辑 `config.yaml`，最关键的三处：
-
-```yaml
-bot:
-  admin_id: 123456789          # ① 你的 QQ 号（管理员）
-  adapter:
-    ws:
-      address: ws://localhost:4455   # ② NapCat 的 WebSocket 地址
-
-plugin:
-  ai_chat_bot:
-    base_url: "https://api.deepseek.com"
-    api_key: "sk-xxxx"         # ③ 你的 LLM API Key
-    model: "deepseek-chat"
-```
-
-::: warning 开发环境提示
-框架会**优先加载 `config.dev.yaml`**，找不到才回退到 `config.yaml`。日常开发建议复制一份 `config.dev.yaml` 用于本地调试，避免改动生产配置。
-:::
-
-完整配置项说明见 [配置详解](/guide/configuration)。
-
-## 第四步：启动
+## 第三步：启动与配置
 
 ```bash
 go run cmd/main.go
 ```
+
+AniaBot 的配置存储在数据库中，**首次启动**会自动写入默认配置，并在控制台打印 Web 控制面板的**随机初始密码**（仅显示一次）：
+
+```
+============================================================
+  Web 控制面板初始密码（仅显示一次，登录后可修改）:
+    Xx9aBcDeFg
+============================================================
+```
+
+打开 `http://127.0.0.1:7700` 登录面板，在「配置管理」页完成最关键的三处配置（保存后重启生效）：
+
+| 配置键 | 说明 |
+| --- | --- |
+| `bot.admin_id` | ① 你的 QQ 号（管理员） |
+| `bot.adapter.ws.address` | ② NapCat 的 WebSocket 地址（默认 `ws://localhost:4455`） |
+| `plugin.ai_chat_bot.api_key` | ③ 你的 LLM API Key（及 `base_url` / `model`） |
+
+::: tip 从旧版本升级？
+检测到旧版 `config.yaml` / `config.dev.yaml` / `aniabot.mcp.json` / `aniabot.prompt.json` 时会自动迁移到数据库，并将旧文件更名为 `.bak`，无需手工处理。
+:::
+
+完整配置项说明见 [配置详解](/guide/configuration)，面板使用见 [Web 控制面板](/guide/web-panel)。
+
+## 第四步：开始使用
 
 看到插件注册日志后，机器人就已上线：
 
@@ -73,28 +74,30 @@ go run cmd/main.go
 ```bash
 make linux     # 交叉编译 Linux amd64 → build/AniaBot
 make windows   # 编译 Windows → build/AniaBot.exe
+make web       # 重新构建 Web 面板前端（修改 web/ 后需要）
 make clean     # 清理 build/
 ```
 
-所有存储后端均为纯 Go 实现（无 CGO），交叉编译开箱即用。
+所有存储后端均为纯 Go 实现（无 CGO），面板前端产物已随仓库提交并嵌入二进制，交叉编译开箱即用。
 
 ## 目录结构速览
 
 ```
 AniaBot/
 ├── cmd/main.go            # 入口：创建适配器、注册插件、启动
-├── config.yaml            # 生产配置
-├── config.dev.yaml        # 开发配置（优先加载）
-├── aniabot.mcp.json       # MCP Server 定义
+├── web/                   # Web 控制面板前端（Vite + Vue3 + Tailwind）
 ├── common/                # 公共接口：plugin / bot / msgchain / storage
 ├── bot/
-│   ├── core/              # 核心：插件生命周期、事件分发、DI 注入
+│   ├── core/              # 核心：插件生命周期、事件分发、DI 注入、配置中心
+│   ├── adminpanel/        # Web 控制面板后端（配置/状态 API + 内嵌前端）
 │   ├── adapter/napcat/    # NapCat WebSocket / HTTP 适配器
 │   ├── component/         # AI 引擎：aichat / llmtool / functool
 │   ├── plugins/           # 六个内置插件
 │   └── utils/             # 命令解析、消息提取等工具
 └── custom/                # 自定义插件示例与模板
 ```
+
+配置存于数据库（默认 `./data/aniabot.db`，可用环境变量调整，见 [配置详解](/guide/configuration#引导配置-环境变量)）。
 
 ## 下一步
 

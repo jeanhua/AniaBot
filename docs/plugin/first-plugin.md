@@ -111,7 +111,7 @@ go run cmd/main.go
 
 ## 进阶：读取自己的配置
 
-如果插件需要配置项，在 `config.yaml` 的 `plugin:` 下加一节，然后在 `Start` 中读取：
+如果插件需要配置项，在 Web 控制面板的「配置管理 → 高级模式 (JSON)」中添加 `plugin.<插件名>.*` 键（配置存于数据库），然后在 `Start` 中读取：
 
 ```yaml
 plugin:

@@ -48,8 +48,8 @@ const steps = [
     desc: '启动 NapCat 并开放 WebSocket / HTTP 接口',
   },
   {
-    title: '编辑 config.yaml',
-    desc: '填写适配器地址、管理员 QQ 与 AI 的 api_key',
+    title: '面板中配置',
+    desc: '启动后在 Web 控制面板填写适配器地址、管理员 QQ 与 AI 的 api_key',
   },
   {
     title: '启动！',

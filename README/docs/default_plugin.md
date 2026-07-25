@@ -51,7 +51,7 @@ bot.AddPlugin(pluginrepeat.NewPlugin())
 **触发方式**：
 - 在群聊或私聊中@机器人即可开始对话
 
-**配置示例**（在config.yaml中）：
+**配置示例**（配置存于数据库，通过 Web 控制面板修改，键结构如下）：
 ```yaml
 plugin:
   ai_chat_bot:
@@ -106,7 +106,7 @@ bot.AddPlugin(pluginantiwithdrawal.NewPlugin())
 
 **功能描述**：定期抓取并推送来自配置来源的新闻、头条相关资讯到群聊，支持订阅/退订和关键词过滤。
 
-**配置示例**（在 `config.yaml` 中）：
+**配置示例**（配置存于数据库，通过 Web 控制面板修改，键结构如下）：
 
 ```yaml
 plugin:

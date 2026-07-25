@@ -48,4 +48,8 @@ docs/node_modules/
 docs/.vitepress/dist/
 docs/.vitepress/cache/
 
-node_modules/
+# web admin panel
+web/node_modules/
+
+# playwright test artifacts
+.playwright-mcp/

@@ -37,6 +37,13 @@ type wsPushData[T any] struct {
 	Echo   string `json:"echo"`
 }
 
+// Connected 返回当前 WebSocket 连接是否就绪（false 表示断线重连中）。
+func (n *napcatWebSocketAdapter) Connected() bool {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	return n.wsConn != nil
+}
+
 func request[T any](n *napcatWebSocketAdapter, action string, params any, prefix string) (*T, bool) {
 
 	echo := fmt.Sprintf("%s:%d", prefix, time.Now().UnixNano())

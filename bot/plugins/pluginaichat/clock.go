@@ -105,6 +105,19 @@ func newClockManager(p *AIChatPlugin, defaultTimeout time.Duration, maxLog int) 
 	return m
 }
 
+// recentLogs 返回最近的执行日志（新在前），供 /clock 命令与 Web 控制面板查询。
+func (m *clockManager) recentLogs(limit int) []tasklog.Entry {
+	return m.log.Recent(limit)
+}
+
+// TaskLogRecent 供 Web 控制面板查询 AI 定时任务执行日志（clock 未启用时返回 nil）。
+func (p *AIChatPlugin) TaskLogRecent(limit int) []tasklog.Entry {
+	if p.clockManager == nil {
+		return nil
+	}
+	return p.clockManager.recentLogs(limit)
+}
+
 // Start 在 Bot 就绪后启动调度器并调度所有已加载任务。由 Awake 调用。
 func (m *clockManager) Start(b bot.Bot) {
 	m.mu.Lock()
