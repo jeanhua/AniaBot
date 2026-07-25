@@ -13,6 +13,7 @@ import (
 	"github.com/jeanhua/AniaBot/bot/component/aichat"
 	"github.com/jeanhua/AniaBot/bot/component/functool"
 	"github.com/jeanhua/AniaBot/bot/component/llmtool"
+	"github.com/jeanhua/AniaBot/bot/component/querylog"
 	"github.com/jeanhua/AniaBot/common/aniaerror"
 	"github.com/jeanhua/AniaBot/common/bot"
 	"github.com/jeanhua/AniaBot/common/model/command"
@@ -61,6 +62,9 @@ type AIChatPlugin struct {
 
 	// memoryManager 长期记忆管理器；为 nil 表示功能未启用
 	memoryManager *memoryManager
+
+	// queryLogger Query 日志记录器（面板「Query 日志」页数据源）；为 nil 表示功能未启用
+	queryLogger *querylog.Logger
 }
 
 const (
@@ -280,7 +284,9 @@ func (p *AIChatPlugin) processChatBatch(ctx context.Context, b bot.Bot, id messa
 	p.configureImageCallbacks(ctx, b, &msgFuncs, batch...)
 
 	chatOpts := p.buildChatOptions()
+	recorder := p.beginQuery(chat, id, isGroup, batch, extraText)
 	resp, usage, err := chat.Chat(ctx, extraText, msgFuncs, chatOpts)
+	p.finishQuery(recorder, chat, usage, resp, err)
 	if err != nil {
 		// 出错或取消时丢弃剩余排队消息，避免连续报错刷屏
 		p.drainPending(id, isGroup)
@@ -510,6 +516,9 @@ func (p *AIChatPlugin) Start(ctx context.Context, cfg *viper.Viper) error {
 	} else {
 		p.Logger.Info("AI长期记忆功能未启用（plugin.ai_chat_bot.memory.enable=false）")
 	}
+
+	// Query 日志：记录每次 AI 回复的完整执行过程（面板「Query 日志」页数据源）
+	p.initQueryLogger()
 
 	return nil
 }

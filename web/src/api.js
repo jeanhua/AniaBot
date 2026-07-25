@@ -69,6 +69,15 @@ export const api = {
   getFriends: () => request('/api/friends'),
   getTaskLogs: () => request('/api/tasklogs'),
   getMsgLogs: () => request('/api/msglogs'),
+  // Query 日志条件查询：{ chat_type, target_id, sender, start, end, keyword, limit }（均可选）
+  getQueryLogs: (params = {}) => {
+    const qs = new URLSearchParams()
+    for (const [k, v] of Object.entries(params)) {
+      if (v !== undefined && v !== null && v !== '') qs.set(k, v)
+    }
+    const s = qs.toString()
+    return request(`/api/querylogs${s ? '?' + s : ''}`)
+  },
   getClocks: () => request('/api/clocks'),
   createClock: (task) =>
     request('/api/clocks', { method: 'POST', body: JSON.stringify(task) }),

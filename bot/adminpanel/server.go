@@ -18,10 +18,12 @@ import (
 	"io/fs"
 	"log/slog"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/jeanhua/AniaBot/bot/component/msglog"
+	"github.com/jeanhua/AniaBot/bot/component/querylog"
 	"github.com/jeanhua/AniaBot/bot/component/tasklog"
 	"github.com/jeanhua/AniaBot/bot/core/configstore"
 	"github.com/jeanhua/AniaBot/common/model/message"
@@ -89,19 +91,26 @@ type MemorySource interface {
 	MemoryDelete(scope, id string) error
 }
 
+// QueryLogSource 可选接口：插件实现后，面板「Query 日志」页可展示每次 AI 回复
+// 的完整执行记录（耗时、token 用量、工具调用详情）（当前由 AI 对话插件实现）。
+type QueryLogSource interface {
+	QueryLogRecent(f querylog.Filter) []querylog.Entry
+}
+
 // Options 面板依赖。
 type Options struct {
-	Listen        string                          // 监听地址，如 127.0.0.1:7700
-	Config        *configstore.Store              // 配置中心
-	Persistent    storage.PersistentStorage       // 根持久化存储（__admin 命名空间存密码哈希）
-	Bot           BotInfo                         // 运行信息来源
-	Adapter       func() string                   // 适配器连接状态描述
-	AdapterDetail func() string                   // 适配器状态详情（最近错误/重试次数，可为 nil）
-	TaskLogs      func(limit int) []tasklog.Entry // AI 定时任务执行日志（可为 nil）
-	Clocks        ClockTaskSource                 // AI 定时任务列表与启停（可为 nil）
-	MsgLogs       func(limit int) []msglog.Entry  // 消息日志（群/好友/通知，可为 nil）
-	Skills        SkillSource                     // AI skill 管理（可为 nil）
-	Memories      MemorySource                    // AI 长期记忆管理（可为 nil）
+	Listen        string                                   // 监听地址，如 127.0.0.1:7700
+	Config        *configstore.Store                       // 配置中心
+	Persistent    storage.PersistentStorage                // 根持久化存储（__admin 命名空间存密码哈希）
+	Bot           BotInfo                                  // 运行信息来源
+	Adapter       func() string                            // 适配器连接状态描述
+	AdapterDetail func() string                            // 适配器状态详情（最近错误/重试次数，可为 nil）
+	TaskLogs      func(limit int) []tasklog.Entry          // AI 定时任务执行日志（可为 nil）
+	Clocks        ClockTaskSource                          // AI 定时任务列表与启停（可为 nil）
+	MsgLogs       func(limit int) []msglog.Entry           // 消息日志（群/好友/通知，可为 nil）
+	Skills        SkillSource                              // AI skill 管理（可为 nil）
+	Memories      MemorySource                             // AI 长期记忆管理（可为 nil）
+	QueryLogs     func(f querylog.Filter) []querylog.Entry // AI Query 日志（可为 nil）
 	Logger        *slog.Logger
 }
 
@@ -158,6 +167,7 @@ func (s *Server) routes() {
 	s.mux.Handle("GET /api/friends", s.requireAuth(http.HandlerFunc(s.handleFriends)))
 	s.mux.Handle("GET /api/tasklogs", s.requireAuth(http.HandlerFunc(s.handleTaskLogs)))
 	s.mux.Handle("GET /api/msglogs", s.requireAuth(http.HandlerFunc(s.handleMsgLogs)))
+	s.mux.Handle("GET /api/querylogs", s.requireAuth(http.HandlerFunc(s.handleQueryLogs)))
 	s.mux.Handle("GET /api/clocks", s.requireAuth(http.HandlerFunc(s.handleClockList)))
 	s.mux.Handle("POST /api/clocks", s.requireAuth(http.HandlerFunc(s.handleClockCreate)))
 	s.mux.Handle("PUT /api/clocks/{id}", s.requireAuth(http.HandlerFunc(s.handleClockUpdate)))
@@ -473,6 +483,61 @@ func (s *Server) handleMsgLogs(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, s.opt.MsgLogs(300))
+}
+
+// handleQueryLogs 按条件查询 AI Query 日志（新在前）。
+// 支持查询参数：chat_type（group/friend）、target_id（群号/QQ）、sender（触发人 QQ）、
+// start / end（RFC3339 或 datetime-local 格式）、keyword（匹配用户输入）、limit（条数上限，默认 200，最大 500）。
+func (s *Server) handleQueryLogs(w http.ResponseWriter, r *http.Request) {
+	if s.opt.QueryLogs == nil {
+		writeJSON(w, http.StatusOK, []any{})
+		return
+	}
+	q := r.URL.Query()
+	f := querylog.Filter{
+		ChatType: q.Get("chat_type"),
+		TargetID: q.Get("target_id"),
+		Sender:   q.Get("sender"),
+		Keyword:  q.Get("keyword"),
+	}
+	if f.ChatType != "" && f.ChatType != "group" && f.ChatType != "friend" {
+		writeError(w, http.StatusBadRequest, "chat_type 仅支持 group / friend")
+		return
+	}
+	if v := q.Get("start"); v != "" {
+		t, err := parseQueryTime(v)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, "start 时间格式错误（支持 RFC3339 或 2006-01-02T15:04）")
+			return
+		}
+		f.Start = t
+	}
+	if v := q.Get("end"); v != "" {
+		t, err := parseQueryTime(v)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, "end 时间格式错误（支持 RFC3339 或 2006-01-02T15:04）")
+			return
+		}
+		f.End = t
+	}
+	if v := q.Get("limit"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			if n > 500 {
+				n = 500
+			}
+			f.Limit = n
+		}
+	}
+	writeJSON(w, http.StatusOK, s.opt.QueryLogs(f))
+}
+
+// parseQueryTime 解析面板传来的时间：RFC3339，或 datetime-local 控件的
+// "2006-01-02T15:04"（按本地时区解释）。
+func parseQueryTime(v string) (time.Time, error) {
+	if t, err := time.Parse(time.RFC3339, v); err == nil {
+		return t, nil
+	}
+	return time.ParseInLocation("2006-01-02T15:04", v, time.Local)
 }
 
 // handleClockList 返回 AI 定时任务列表（功能未启用时返回空数组）。

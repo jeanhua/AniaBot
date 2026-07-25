@@ -57,6 +57,11 @@ type memoryConfig struct {
 	MaxEntries int  `cfg:"max_entries" label:"单会话记忆上限" group:"AI 对话 · 定时与记忆" default:"200"`
 }
 
+type queryLogConfig struct {
+	Enable     bool `cfg:"enable" label:"启用 Query 日志" group:"AI 对话 · 查询日志" help:"在面板记录每次 AI 回复的完整执行过程（耗时、token、工具调用详情）" default:"true"`
+	MaxEntries int  `cfg:"max_entries" label:"日志保留条数" group:"AI 对话 · 查询日志" default:"200"`
+}
+
 type aiChatConfig struct {
 	BaseURL          string `cfg:"plugin.ai_chat_bot.base_url" label:"Base URL" group:"AI 对话 · 模型" help:"兼容 OpenAI 规范的 API 地址" default:"https://api.deepseek.com"`
 	APIKey           string `cfg:"plugin.ai_chat_bot.api_key" label:"API Key" type:"password" sensitive:"true" group:"AI 对话 · 模型"`
@@ -81,8 +86,9 @@ type aiChatConfig struct {
 
 	OCR ocrConfig `cfg:"plugin.ai_chat_bot.ocr"`
 
-	Clock  clockConfig  `cfg:"plugin.ai_chat_bot.clock"`
-	Memory memoryConfig `cfg:"plugin.ai_chat_bot.memory"`
+	Clock    clockConfig    `cfg:"plugin.ai_chat_bot.clock"`
+	Memory   memoryConfig   `cfg:"plugin.ai_chat_bot.memory"`
+	QueryLog queryLogConfig `cfg:"plugin.ai_chat_bot.query_log"`
 }
 
 // ConfigSchema 实现 plugin.ConfigSchemaProvider：返回配置结构体指针，

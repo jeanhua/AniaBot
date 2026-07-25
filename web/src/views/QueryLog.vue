@@ -1,0 +1,242 @@
+<template>
+  <div class="space-y-4">
+    <!-- 筛选与操作栏 -->
+    <div class="flex items-center justify-between flex-wrap gap-3">
+      <div class="flex items-center gap-1 bg-white border border-slate-200/60 rounded-lg p-1 shadow-sm">
+        <button
+          v-for="t in typeTabs"
+          :key="t.value"
+          class="px-3 py-1.5 text-xs rounded-md transition-all"
+          :class="filters.chat_type === t.value
+            ? 'bg-zinc-900 text-white font-medium shadow-sm'
+            : 'text-slate-500 hover:text-slate-800 hover:bg-slate-100'"
+          @click="filters.chat_type = t.value; applyFilters()"
+        >
+          {{ t.label }}
+        </button>
+      </div>
+      <div class="flex items-center gap-3">
+        <label class="flex items-center gap-1.5 text-xs text-slate-500 select-none cursor-pointer">
+          <input v-model="autoRefresh" type="checkbox" class="accent-zinc-800" />
+          自动刷新
+        </label>
+        <button class="text-xs text-zinc-700 hover:text-zinc-900 font-medium transition-colors" @click="load">刷新</button>
+      </div>
+    </div>
+
+    <!-- 条件查询栏 -->
+    <section class="bg-white rounded-xl shadow-sm border border-slate-200/60 px-5 py-4">
+      <div class="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3">
+        <label class="block">
+          <span class="text-[10px] tracking-[0.15em] uppercase text-zinc-400">触发人 QQ</span>
+          <input v-model.trim="filters.sender" type="text" placeholder="精确匹配" :class="inputClass" @keyup.enter="applyFilters" />
+        </label>
+        <label class="block">
+          <span class="text-[10px] tracking-[0.15em] uppercase text-zinc-400">群号 / 对方 QQ</span>
+          <input v-model.trim="filters.target_id" type="text" placeholder="精确匹配" :class="inputClass" @keyup.enter="applyFilters" />
+        </label>
+        <label class="block">
+          <span class="text-[10px] tracking-[0.15em] uppercase text-zinc-400">开始时间</span>
+          <input v-model="filters.start" type="datetime-local" :class="inputClass" />
+        </label>
+        <label class="block">
+          <span class="text-[10px] tracking-[0.15em] uppercase text-zinc-400">结束时间</span>
+          <input v-model="filters.end" type="datetime-local" :class="inputClass" />
+        </label>
+        <label class="block">
+          <span class="text-[10px] tracking-[0.15em] uppercase text-zinc-400">关键词</span>
+          <input v-model.trim="filters.keyword" type="text" placeholder="匹配用户输入" :class="inputClass" @keyup.enter="applyFilters" />
+        </label>
+        <div class="flex items-end gap-2">
+          <button
+            class="px-4 py-1.5 text-[11px] tracking-[0.1em] uppercase bg-zinc-900 text-white rounded-md hover:bg-zinc-700 transition-colors"
+            @click="applyFilters"
+          >
+            查询
+          </button>
+          <button
+            v-if="hasFilter"
+            class="px-3 py-1.5 text-[11px] tracking-[0.1em] uppercase text-zinc-500 hover:bg-zinc-100 rounded-md transition-colors"
+            @click="resetFilters"
+          >
+            重置
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <!-- 日志列表（新在上） -->
+    <section class="space-y-3">
+      <div v-if="logs.length === 0" class="bg-white rounded-xl shadow-sm border border-slate-200/60 py-12 text-sm text-slate-400 text-center">
+        暂无符合条件的 Query 记录（@ 机器人或私聊触发 AI 回复后在此展示）
+      </div>
+
+      <div
+        v-for="log in logs"
+        :key="log.id"
+        class="bg-white rounded-xl shadow-sm border border-slate-200/60 overflow-hidden"
+      >
+        <!-- 摘要行（点击展开详情） -->
+        <button class="w-full text-left px-5 py-3.5 hover:bg-slate-50/60 transition-colors" @click="toggle(log.id)">
+          <div class="flex items-center gap-2 flex-wrap">
+            <span class="text-xs px-2 py-0.5 rounded-full whitespace-nowrap" :class="statusClass(log.status)">
+              {{ statusText(log.status) }}
+            </span>
+            <span class="text-xs px-2 py-0.5 rounded-full whitespace-nowrap bg-zinc-100 text-zinc-600 border border-zinc-200">
+              {{ log.chat_type === 'group' ? '群聊' : '私聊' }} · {{ log.target_id }}
+            </span>
+            <span v-if="log.tool_calls?.length" class="text-xs px-2 py-0.5 rounded-full whitespace-nowrap bg-zinc-100 text-zinc-600 border border-zinc-200">
+              {{ log.tool_calls.length }} 次工具调用
+            </span>
+            <span class="ml-auto text-xs text-slate-400 font-mono whitespace-nowrap">{{ fmtTime(log.time) }}</span>
+          </div>
+          <p class="mt-2 text-sm text-slate-700 whitespace-pre-wrap break-all leading-relaxed line-clamp-3">{{ log.query }}</p>
+          <div class="mt-2 flex items-center gap-3 text-[11px] text-slate-400 font-mono flex-wrap">
+            <span v-if="log.status !== 'running'">用时 {{ fmtDuration(log.duration_ms) }}</span>
+            <span v-if="log.iterations">LLM {{ log.iterations }} 轮</span>
+            <span v-if="log.total_tokens">tokens {{ log.total_tokens }} ({{ log.prompt_tokens }}+{{ log.completion_tokens }})</span>
+            <span v-if="log.senders?.length">来自 {{ log.senders.join(', ') }}</span>
+            <span class="ml-auto text-zinc-400">{{ expanded.has(log.id) ? '收起 ▲' : '详情 ▼' }}</span>
+          </div>
+        </button>
+
+        <!-- 展开详情 -->
+        <div v-if="expanded.has(log.id)" class="border-t border-slate-100 px-5 py-4 space-y-4 bg-slate-50/40">
+          <!-- 错误信息 -->
+          <div v-if="log.error" class="text-xs text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2 whitespace-pre-wrap break-all">
+            {{ log.error }}
+          </div>
+
+          <!-- 工具调用明细 -->
+          <div v-if="log.tool_calls?.length" class="space-y-2">
+            <h3 class="text-[11px] tracking-[0.2em] uppercase text-zinc-400 font-medium">工具调用</h3>
+            <div
+              v-for="(tc, i) in log.tool_calls"
+              :key="i"
+              class="bg-white border border-slate-200/70 rounded-lg overflow-hidden"
+            >
+              <div class="flex items-center gap-2 px-3 py-2 border-b border-slate-100">
+                <span class="text-xs font-mono font-medium text-zinc-800">{{ tc.name }}</span>
+                <span v-if="tc.error" class="text-[11px] px-1.5 py-0.5 rounded bg-red-50 text-red-600 border border-red-100">失败</span>
+                <span class="ml-auto text-[11px] text-slate-400 font-mono">{{ fmtDuration(tc.duration_ms) }}</span>
+              </div>
+              <div class="px-3 py-2 space-y-2">
+                <div v-if="tc.arguments">
+                  <div class="text-[10px] tracking-[0.15em] uppercase text-zinc-400 mb-1">参数</div>
+                  <pre class="text-xs text-slate-600 font-mono whitespace-pre-wrap break-all leading-relaxed">{{ tc.arguments }}</pre>
+                </div>
+                <div v-if="tc.error">
+                  <div class="text-[10px] tracking-[0.15em] uppercase text-red-400 mb-1">错误</div>
+                  <pre class="text-xs text-red-600 font-mono whitespace-pre-wrap break-all leading-relaxed">{{ tc.error }}</pre>
+                </div>
+                <div v-else-if="tc.result">
+                  <div class="text-[10px] tracking-[0.15em] uppercase text-zinc-400 mb-1">结果</div>
+                  <pre class="text-xs text-slate-600 font-mono whitespace-pre-wrap break-all leading-relaxed">{{ tc.result }}</pre>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 最终回复 -->
+          <div v-if="log.reply">
+            <h3 class="text-[11px] tracking-[0.2em] uppercase text-zinc-400 font-medium mb-2">最终回复</h3>
+            <p class="text-sm text-slate-700 whitespace-pre-wrap break-all leading-relaxed bg-white border border-slate-200/70 rounded-lg px-3 py-2">{{ log.reply }}</p>
+          </div>
+        </div>
+      </div>
+    </section>
+  </div>
+</template>
+
+<script setup>
+import { computed, onMounted, onUnmounted, reactive, ref } from 'vue'
+import { api } from '../api.js'
+
+const typeTabs = [
+  { value: '', label: '全部' },
+  { value: 'group', label: '群聊' },
+  { value: 'friend', label: '私聊' },
+]
+
+const inputClass = 'mt-1 w-full border border-zinc-300 rounded-md px-2.5 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-zinc-400 focus:border-zinc-400 transition-shadow bg-white'
+
+// filters 为编辑中的条件，applied 为实际生效（已点查询/切换类型）的条件，
+// 自动刷新沿用 applied，避免输入到一半被轮询带出去
+const emptyFilters = () => ({ chat_type: '', sender: '', target_id: '', start: '', end: '', keyword: '' })
+const filters = reactive(emptyFilters())
+const applied = reactive(emptyFilters())
+
+const logs = ref([])
+const autoRefresh = ref(true)
+const expanded = ref(new Set())
+let timer = null
+
+const hasFilter = computed(() => Object.values(applied).some((v) => v !== ''))
+
+function applyFilters() {
+  Object.assign(applied, filters)
+  load()
+}
+
+function resetFilters() {
+  Object.assign(filters, emptyFilters())
+  Object.assign(applied, filters)
+  load()
+}
+
+function toggle(id) {
+  const s = new Set(expanded.value)
+  if (s.has(id)) s.delete(id)
+  else s.add(id)
+  expanded.value = s
+}
+
+function fmtTime(t) {
+  if (!t) return '-'
+  const d = new Date(t)
+  if (isNaN(d)) return '-'
+  const hm = d.toLocaleTimeString('zh-CN', { hour12: false })
+  if (d.toDateString() === new Date().toDateString()) return hm
+  return `${d.getMonth() + 1}/${d.getDate()} ${hm}`
+}
+
+function fmtDuration(ms) {
+  if (!ms && ms !== 0) return '-'
+  if (ms < 1000) return `${ms}ms`
+  return `${(ms / 1000).toFixed(1)}s`
+}
+
+function statusText(s) {
+  return { running: '执行中', success: '成功', stopped: '已停止', timeout: '超时', error: '出错' }[s] || s
+}
+
+function statusClass(s) {
+  return {
+    running: 'bg-zinc-900 text-white',
+    success: 'bg-white text-zinc-600 border border-zinc-300',
+    stopped: 'bg-zinc-100 text-zinc-500 border border-zinc-200',
+    timeout: 'bg-zinc-100 text-zinc-500 border border-zinc-200',
+    error: 'bg-red-50 text-red-600 border border-red-200',
+  }[s] || 'bg-slate-100 text-slate-600'
+}
+
+async function load() {
+  try { logs.value = await api.getQueryLogs(applied) } catch { return }
+}
+
+// 实时刷新：标签页隐藏时暂停，恢复可见时立即刷新
+function onVisible() {
+  if (!document.hidden && autoRefresh.value) load()
+}
+
+onMounted(() => {
+  load()
+  timer = setInterval(() => { if (!document.hidden && autoRefresh.value) load() }, 4000)
+  document.addEventListener('visibilitychange', onVisible)
+})
+
+onUnmounted(() => {
+  clearInterval(timer)
+  document.removeEventListener('visibilitychange', onVisible)
+})
+</script>

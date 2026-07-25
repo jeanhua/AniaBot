@@ -14,6 +14,7 @@ import (
 	"github.com/go-resty/resty/v2"
 	"github.com/jeanhua/AniaBot/bot/adminpanel"
 	"github.com/jeanhua/AniaBot/bot/component/msglog"
+	"github.com/jeanhua/AniaBot/bot/component/querylog"
 	"github.com/jeanhua/AniaBot/bot/component/tasklog"
 	"github.com/jeanhua/AniaBot/bot/core/configstore"
 	"github.com/jeanhua/AniaBot/bot/utils"
@@ -331,6 +332,7 @@ func (ania *AniaBot) startAdminPanel() {
 	var msgLogFn func(limit int) []msglog.Entry
 	var skillSrc adminpanel.SkillSource
 	var memorySrc adminpanel.MemorySource
+	var queryLogFn func(f querylog.Filter) []querylog.Entry
 	for _, p := range ania.plugins {
 		if src, ok := p.(adminpanel.TaskLogSource); ok {
 			taskLogFn = src.TaskLogRecent
@@ -347,7 +349,10 @@ func (ania *AniaBot) startAdminPanel() {
 		if src, ok := p.(adminpanel.MemorySource); ok {
 			memorySrc = src
 		}
-		if taskLogFn != nil && clockSrc != nil && msgLogFn != nil && skillSrc != nil && memorySrc != nil {
+		if src, ok := p.(adminpanel.QueryLogSource); ok {
+			queryLogFn = src.QueryLogRecent
+		}
+		if taskLogFn != nil && clockSrc != nil && msgLogFn != nil && skillSrc != nil && memorySrc != nil && queryLogFn != nil {
 			break
 		}
 	}
@@ -386,12 +391,13 @@ func (ania *AniaBot) startAdminPanel() {
 			}
 			return ""
 		},
-		TaskLogs: taskLogFn,
-		Clocks:   clockSrc,
-		MsgLogs:  msgLogFn,
-		Skills:   skillSrc,
-		Memories: memorySrc,
-		Logger:   Logger().WithGroup("AdminPanel"),
+		TaskLogs:  taskLogFn,
+		Clocks:    clockSrc,
+		MsgLogs:   msgLogFn,
+		Skills:    skillSrc,
+		Memories:  memorySrc,
+		QueryLogs: queryLogFn,
+		Logger:    Logger().WithGroup("AdminPanel"),
 	})
 	go srv.Run()
 }

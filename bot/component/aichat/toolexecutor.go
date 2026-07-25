@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"time"
 
 	"github.com/jeanhua/AniaBot/bot/component/llmtool"
 )
@@ -18,6 +19,17 @@ type ToolOrchestrator struct {
 	executor      ToolExecutor
 	msgBuilder    *MessageBuilder
 	maxIterations int
+	toolObserver  func(ToolCallInfo)
+}
+
+// ToolCallInfo 一次工具调用的执行记录，供工具调用观察者（SetToolObserver）使用，
+// 例如面板 Query 日志记录 bash 等工具的执行详情。
+type ToolCallInfo struct {
+	Name       string
+	Arguments  string
+	Result     string
+	DurationMs int64
+	Err        error
 }
 
 func NewToolOrchestrator(executor ToolExecutor, msgBuilder *MessageBuilder) *ToolOrchestrator {
@@ -39,10 +51,18 @@ func (o *ToolOrchestrator) SetMaxIterations(max int) {
 	o.maxIterations = max
 }
 
+// SetToolObserver 设置工具调用观察者：每次工具执行完成后回调一次（与执行同 goroutine，
+// 同步调用），传 nil 取消。调用方需保证同一 orchestrator 的 ExecuteWithTools 串行执行。
+func (o *ToolOrchestrator) SetToolObserver(fn func(ToolCallInfo)) {
+	o.toolObserver = fn
+}
+
 type TokenUsage struct {
 	PromptTokens     int
 	CompletionTokens int
 	TotalTokens      int
+	// Iterations 本次请求调用 LLM 的轮数（含无工具直出与末轮总结）
+	Iterations int
 }
 
 func (o *ToolOrchestrator) ExecuteWithTools(
@@ -60,6 +80,7 @@ func (o *ToolOrchestrator) ExecuteWithTools(
 			return "", messages, totalUsage, err
 		}
 		totalUsage = usage
+		totalUsage.Iterations = 1
 		content := resp.Content
 		messages = append(messages, o.msgBuilder.BuildAIMessageWithReasoning(content, nil, resp.ReasoningContent))
 		return content, messages, totalUsage, nil
@@ -77,6 +98,7 @@ func (o *ToolOrchestrator) ExecuteWithTools(
 		totalUsage.PromptTokens += usage.PromptTokens
 		totalUsage.CompletionTokens += usage.CompletionTokens
 		totalUsage.TotalTokens += usage.TotalTokens
+		totalUsage.Iterations++
 
 		if len(resp.ToolCalls) == 0 {
 			messages = append(messages, o.msgBuilder.BuildAIMessageWithReasoning(resp.Content, nil, resp.ReasoningContent))
@@ -114,6 +136,7 @@ func (o *ToolOrchestrator) ExecuteWithTools(
 			totalUsage.PromptTokens += finalUsage.PromptTokens
 			totalUsage.CompletionTokens += finalUsage.CompletionTokens
 			totalUsage.TotalTokens += finalUsage.TotalTokens
+			totalUsage.Iterations++
 			finalContent := finalResp.Content
 			messages = append(messages, o.msgBuilder.BuildAIMessageWithReasoning(finalContent, nil, finalResp.ReasoningContent))
 			return finalContent, messages, totalUsage, nil
@@ -131,7 +154,17 @@ func (o *ToolOrchestrator) executeToolCalls(
 	results := make([]Message, 0, len(toolCalls))
 
 	for _, call := range toolCalls {
+		start := time.Now()
 		result, err := o.executor.Execute(ctx, call, callbacks)
+		if o.toolObserver != nil {
+			o.toolObserver(ToolCallInfo{
+				Name:       call.Name,
+				Arguments:  call.Arguments,
+				Result:     result,
+				DurationMs: time.Since(start).Milliseconds(),
+				Err:        err,
+			})
+		}
 		if err != nil {
 			if ctx.Err() != nil {
 				return nil, ctx.Err()

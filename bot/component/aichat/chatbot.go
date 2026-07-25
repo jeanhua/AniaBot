@@ -89,6 +89,12 @@ func (b *ChatBot) SetToolOrchestrator(orchestrator *ToolOrchestrator) {
 	b.toolOrchestrator = orchestrator
 }
 
+// SetToolObserver 设置工具调用观察者（每次工具执行完成后回调），传 nil 取消。
+// 由调用方保证同一 ChatBot 的 Chat 调用串行（插件层按会话加锁）。
+func (b *ChatBot) SetToolObserver(fn func(ToolCallInfo)) {
+	b.toolOrchestrator.SetToolObserver(fn)
+}
+
 func (b *ChatBot) SetSkillManager(manager *llmtool.SkillManager) {
 	b.msgBuilder.WithSkillManager(manager)
 }
