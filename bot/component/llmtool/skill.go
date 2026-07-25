@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 
 	"gopkg.in/yaml.v3"
 )
@@ -29,6 +30,7 @@ type Skill struct {
 
 // SkillManager 管理所有可用的 Skill
 type SkillManager struct {
+	mu     sync.RWMutex
 	skills map[string]*Skill // key: skill name
 }
 
@@ -44,6 +46,27 @@ func NewSkillManager() *SkillManager {
 //   - skillsDir/skill-name/SKILL.md （可包含附属文件如 reference.md、script.sh 等）
 //   - skillsDir/SKILL.md （单文件模式）
 func (m *SkillManager) LoadFromDir(skillsDir string) error {
+	return m.LoadFromDirWithFilter(skillsDir, nil)
+}
+
+// LoadFromDirWithFilter 从指定目录加载 skill，只加载 names 中指定的 skill
+// names 为空时等同于 LoadFromDir（加载全部）
+func (m *SkillManager) LoadFromDirWithFilter(skillsDir string, names []string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.loadFromDirLocked(skillsDir, names)
+}
+
+// loadFromDirLocked 是 LoadFromDirWithFilter 的无锁内部实现
+func (m *SkillManager) loadFromDirLocked(skillsDir string, names []string) error {
+	var filter map[string]struct{}
+	if len(names) > 0 {
+		filter = make(map[string]struct{}, len(names))
+		for _, n := range names {
+			filter[n] = struct{}{}
+		}
+	}
+
 	entries, err := os.ReadDir(skillsDir)
 	if err != nil {
 		return fmt.Errorf("读取 skills 目录失败: %w", err)
@@ -64,7 +87,11 @@ func (m *SkillManager) LoadFromDir(skillsDir string) error {
 				return fmt.Errorf("加载 skill 失败 [%s]: %w", skillPath, err)
 			}
 
-			m.skills[skill.Meta.Name] = skill
+			if filter == nil {
+				m.skills[skill.Meta.Name] = skill
+			} else if _, ok := filter[skill.Meta.Name]; ok {
+				m.skills[skill.Meta.Name] = skill
+			}
 		} else if strings.ToUpper(entry.Name()) == "SKILL.MD" {
 			// 单文件模式：skillsDir/SKILL.md
 			skillPath := filepath.Join(skillsDir, entry.Name())
@@ -74,61 +101,26 @@ func (m *SkillManager) LoadFromDir(skillsDir string) error {
 				return fmt.Errorf("加载 skill 失败 [%s]: %w", skillPath, err)
 			}
 
-			m.skills[skill.Meta.Name] = skill
+			if filter == nil {
+				m.skills[skill.Meta.Name] = skill
+			} else if _, ok := filter[skill.Meta.Name]; ok {
+				m.skills[skill.Meta.Name] = skill
+			}
 		}
 	}
 
 	return nil
 }
 
-// LoadFromDirWithFilter 从指定目录加载 skill，只加载 names 中指定的 skill
-// names 为空时等同于 LoadFromDir（加载全部）
-func (m *SkillManager) LoadFromDirWithFilter(skillsDir string, names []string) error {
-	if len(names) == 0 {
-		return m.LoadFromDir(skillsDir)
+// Reload 重新从磁盘加载 skill 并原子替换当前注册表（用于面板上传/删除后热更新）
+func (m *SkillManager) Reload(skillsDir string, names []string) error {
+	tmp := NewSkillManager()
+	if err := tmp.loadFromDirLocked(skillsDir, names); err != nil {
+		return err
 	}
-
-	filter := make(map[string]struct{}, len(names))
-	for _, n := range names {
-		filter[n] = struct{}{}
-	}
-
-	entries, err := os.ReadDir(skillsDir)
-	if err != nil {
-		return fmt.Errorf("读取 skills 目录失败: %w", err)
-	}
-
-	for _, entry := range entries {
-		if entry.IsDir() {
-			skillDir := filepath.Join(skillsDir, entry.Name())
-			skillPath := filepath.Join(skillDir, "SKILL.md")
-
-			if _, err := os.Stat(skillPath); os.IsNotExist(err) {
-				continue
-			}
-
-			skill, err := loadSkillFromDir(skillPath, skillDir)
-			if err != nil {
-				return fmt.Errorf("加载 skill 失败 [%s]: %w", skillPath, err)
-			}
-
-			if _, ok := filter[skill.Meta.Name]; ok {
-				m.skills[skill.Meta.Name] = skill
-			}
-		} else if strings.ToUpper(entry.Name()) == "SKILL.MD" {
-			skillPath := filepath.Join(skillsDir, entry.Name())
-
-			skill, err := loadSkillFromFile(skillPath)
-			if err != nil {
-				return fmt.Errorf("加载 skill 失败 [%s]: %w", skillPath, err)
-			}
-
-			if _, ok := filter[skill.Meta.Name]; ok {
-				m.skills[skill.Meta.Name] = skill
-			}
-		}
-	}
-
+	m.mu.Lock()
+	m.skills = tmp.skills
+	m.mu.Unlock()
 	return nil
 }
 
@@ -138,18 +130,24 @@ func (m *SkillManager) Register(skillPath string) error {
 	if err != nil {
 		return err
 	}
+	m.mu.Lock()
 	m.skills[skill.Meta.Name] = skill
+	m.mu.Unlock()
 	return nil
 }
 
 // Get 获取指定名称的 skill
 func (m *SkillManager) Get(name string) (*Skill, bool) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
 	s, ok := m.skills[name]
 	return s, ok
 }
 
 // List 返回所有 skill 的元数据列表
 func (m *SkillManager) List() []*SkillMeta {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
 	result := make([]*SkillMeta, 0, len(m.skills))
 	for _, s := range m.skills {
 		meta := s.Meta // 复制，避免外部修改
@@ -160,6 +158,8 @@ func (m *SkillManager) List() []*SkillMeta {
 
 // BuildAvailableSkillsPrompt 生成注入 system prompt 的 <skills_registry> 块
 func (m *SkillManager) BuildAvailableSkillsPrompt() string {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
 	if len(m.skills) == 0 {
 		return ""
 	}
@@ -185,6 +185,12 @@ func (m *SkillManager) BuildAvailableSkillsPrompt() string {
 // 调用此方法后，Agent 就拥有了读取 SKILL.md 的能力
 func (m *SkillManager) RegisterToExecuter(executer *ToolExecuter) {
 	executer.Register(NewSkillReadTool(m))
+}
+
+// ValidateSkillDir 校验指定目录下的 SKILL.md（含附属文件）能否被正常加载
+func ValidateSkillDir(skillDir string) error {
+	_, err := loadSkillFromDir(filepath.Join(skillDir, "SKILL.md"), skillDir)
+	return err
 }
 
 // loadSkillFromFile 从 SKILL.md 文件路径解析 Skill（单文件模式，无附属文件）

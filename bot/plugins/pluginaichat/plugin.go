@@ -53,6 +53,8 @@ type AIChatPlugin struct {
 	toolExecutor *llmtool.ToolExecuter
 
 	skillManager *llmtool.SkillManager
+	// skillsDir skill 所在目录（供面板管理接口使用）
+	skillsDir string
 
 	// clockManager AI 定时任务调度器；为 nil 表示功能未启用
 	clockManager *clockManager
@@ -439,6 +441,7 @@ func (p *AIChatPlugin) Start(ctx context.Context, cfg *viper.Viper) error {
 	if skillsDir == "" {
 		skillsDir = "./skills"
 	}
+	p.skillsDir = skillsDir
 	bashConfig := functool.BashConfig{
 		Enable:    p.cfg.Bash.Enable,
 		Shell:     p.cfg.Bash.Shell,

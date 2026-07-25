@@ -75,6 +75,29 @@ export const api = {
   deleteClock: (id) =>
     request(`/api/clocks/${encodeURIComponent(id)}`, { method: 'DELETE' }),
 
+  getSkills: () => request('/api/skills'),
+  // 上传 skill（zip 压缩包，multipart 表单，不走 JSON 请求封装）
+  async uploadSkill(file) {
+    const fd = new FormData()
+    fd.append('file', file)
+    const resp = await fetch('/api/skills', {
+      method: 'POST',
+      body: fd,
+      credentials: 'same-origin',
+    })
+    if (resp.status === 401) {
+      auth.loggedIn = false
+      throw new Error('未登录或会话已过期')
+    }
+    const data = await resp.json().catch(() => ({}))
+    if (!resp.ok) {
+      throw new Error(data.error || `请求失败 (${resp.status})`)
+    }
+    return data
+  },
+  deleteSkill: (name) =>
+    request(`/api/skills/${encodeURIComponent(name)}`, { method: 'DELETE' }),
+
   restart: () => request('/api/restart', { method: 'POST' }),
   // 轮询等待 Bot 重启完成（会话持久化在数据库中，重启后仍有效）
   async waitUntilUp(timeoutMs = 60000) {

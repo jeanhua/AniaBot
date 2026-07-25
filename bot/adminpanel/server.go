@@ -14,6 +14,7 @@ package adminpanel
 import (
 	"embed"
 	"encoding/json"
+	"io"
 	"io/fs"
 	"log/slog"
 	"net/http"
@@ -62,6 +63,17 @@ type MsgLogSource interface {
 	MsgLogRecent(limit int) []msglog.Entry
 }
 
+// SkillSource 可选接口：插件实现后，面板可对其 AI skill 做列表 / 上传 / 删除
+// （当前由 AI 对话插件实现）。上传/删除后插件负责热重载 skill 注册表。
+type SkillSource interface {
+	// SkillList 返回当前已加载的 skill 列表、skills 目录与白名单（空表示加载全部）
+	SkillList() (skills []plugininfo.SkillInfo, dir string, whitelist []string)
+	// SkillDelete 按名称删除 skill（同时从磁盘移除）并热重载
+	SkillDelete(name string) error
+	// SkillUpload 从 zip 压缩包内容安装 skill 并热重载，filename 为原始文件名
+	SkillUpload(filename string, data []byte) error
+}
+
 // Options 面板依赖。
 type Options struct {
 	Listen        string                          // 监听地址，如 127.0.0.1:7700
@@ -73,6 +85,7 @@ type Options struct {
 	TaskLogs      func(limit int) []tasklog.Entry // AI 定时任务执行日志（可为 nil）
 	Clocks        ClockTaskSource                 // AI 定时任务列表与启停（可为 nil）
 	MsgLogs       func(limit int) []msglog.Entry  // 消息日志（群/好友/通知，可为 nil）
+	Skills        SkillSource                     // AI skill 管理（可为 nil）
 	Logger        *slog.Logger
 }
 
@@ -132,6 +145,9 @@ func (s *Server) routes() {
 	s.mux.Handle("POST /api/clocks", s.requireAuth(http.HandlerFunc(s.handleClockCreate)))
 	s.mux.Handle("PUT /api/clocks/{id}", s.requireAuth(http.HandlerFunc(s.handleClockUpdate)))
 	s.mux.Handle("DELETE /api/clocks/{id}", s.requireAuth(http.HandlerFunc(s.handleClockDelete)))
+	s.mux.Handle("GET /api/skills", s.requireAuth(http.HandlerFunc(s.handleSkillList)))
+	s.mux.Handle("POST /api/skills", s.requireAuth(http.HandlerFunc(s.handleSkillUpload)))
+	s.mux.Handle("DELETE /api/skills/{name}", s.requireAuth(http.HandlerFunc(s.handleSkillDelete)))
 	s.mux.Handle("POST /api/restart", s.requireAuth(http.HandlerFunc(s.handleRestart)))
 	s.mux.Handle("/", s.spaHandler())
 }
@@ -499,6 +515,76 @@ func (s *Server) handleClockDelete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.opt.Logger.Info("定时任务已通过 Web 面板删除", "task", id)
+	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
+}
+
+// ---- skill handlers（AI skill 管理） ----
+
+// skillUploadMaxBytes 限制上传的 zip 压缩包大小
+const skillUploadMaxBytes = 32 << 20 // 32 MiB
+
+// handleSkillList 返回 skill 列表、skills 目录与白名单（功能未启用时返回空）。
+func (s *Server) handleSkillList(w http.ResponseWriter, _ *http.Request) {
+	if s.opt.Skills == nil {
+		writeJSON(w, http.StatusOK, map[string]any{"skills": []any{}, "dir": "", "whitelist": []string{}})
+		return
+	}
+	skills, dir, whitelist := s.opt.Skills.SkillList()
+	if skills == nil {
+		skills = []plugininfo.SkillInfo{}
+	}
+	if whitelist == nil {
+		whitelist = []string{}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"skills":    skills,
+		"dir":       dir,
+		"whitelist": whitelist,
+	})
+}
+
+// handleSkillUpload 接收 multipart 表单中的 zip 压缩包（字段名 file），安装为 skill。
+func (s *Server) handleSkillUpload(w http.ResponseWriter, r *http.Request) {
+	if s.opt.Skills == nil {
+		writeError(w, http.StatusNotFound, "skill 功能未启用")
+		return
+	}
+	r.Body = http.MaxBytesReader(w, r.Body, skillUploadMaxBytes)
+	if err := r.ParseMultipartForm(skillUploadMaxBytes); err != nil {
+		writeError(w, http.StatusBadRequest, "解析上传内容失败（文件过大？上限 32MB）")
+		return
+	}
+	file, header, err := r.FormFile("file")
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "缺少上传文件（字段名 file）")
+		return
+	}
+	defer file.Close()
+	data, err := io.ReadAll(file)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "读取上传文件失败")
+		return
+	}
+	if err := s.opt.Skills.SkillUpload(header.Filename, data); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	s.opt.Logger.Info("skill 已通过 Web 面板上传", "file", header.Filename)
+	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
+}
+
+// handleSkillDelete 按名称删除 skill（同时从磁盘移除）。
+func (s *Server) handleSkillDelete(w http.ResponseWriter, r *http.Request) {
+	if s.opt.Skills == nil {
+		writeError(w, http.StatusNotFound, "skill 功能未启用")
+		return
+	}
+	name := r.PathValue("name")
+	if err := s.opt.Skills.SkillDelete(name); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	s.opt.Logger.Info("skill 已通过 Web 面板删除", "skill", name)
 	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
 }
 

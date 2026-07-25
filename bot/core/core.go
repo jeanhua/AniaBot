@@ -307,6 +307,7 @@ func (ania *AniaBot) startAdminPanel() {
 	var taskLogFn func(limit int) []tasklog.Entry
 	var clockSrc adminpanel.ClockTaskSource
 	var msgLogFn func(limit int) []msglog.Entry
+	var skillSrc adminpanel.SkillSource
 	for _, p := range ania.plugins {
 		if src, ok := p.(adminpanel.TaskLogSource); ok {
 			taskLogFn = src.TaskLogRecent
@@ -317,7 +318,10 @@ func (ania *AniaBot) startAdminPanel() {
 		if src, ok := p.(adminpanel.MsgLogSource); ok {
 			msgLogFn = src.MsgLogRecent
 		}
-		if taskLogFn != nil && clockSrc != nil && msgLogFn != nil {
+		if src, ok := p.(adminpanel.SkillSource); ok {
+			skillSrc = src
+		}
+		if taskLogFn != nil && clockSrc != nil && msgLogFn != nil && skillSrc != nil {
 			break
 		}
 	}
@@ -359,6 +363,7 @@ func (ania *AniaBot) startAdminPanel() {
 		TaskLogs: taskLogFn,
 		Clocks:   clockSrc,
 		MsgLogs:  msgLogFn,
+		Skills:   skillSrc,
 		Logger:   Logger().WithGroup("AdminPanel"),
 	})
 	go srv.Run()
