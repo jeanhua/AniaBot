@@ -1,10 +1,28 @@
 package napcat
 
 import (
+	"log/slog"
 	"time"
 
 	"github.com/jeanhua/AniaBot/common/adapter"
+	"github.com/spf13/viper"
 )
+
+// NewAdapter 按配置 bot.adapter.mode 创建适配器：ws（默认）或 http。
+// 无法识别的取值回退为 ws 并记录警告。
+func NewAdapter(cfg *viper.Viper) adapter.Adapter {
+	switch cfg.GetString("bot.adapter.mode") {
+	case "http":
+		slog.Info("使用 HTTP 适配器连接 NapCat")
+		return NewNapcatHttpAdapter()
+	case "ws", "":
+		slog.Info("使用 WebSocket 适配器连接 NapCat")
+		return NewNapcatWebSocketAdapter()
+	default:
+		slog.Warn("未知的适配器模式，回退为 WebSocket", "mode", cfg.GetString("bot.adapter.mode"))
+		return NewNapcatWebSocketAdapter()
+	}
+}
 
 func NewNapcatHttpAdapter() adapter.Adapter {
 	return &napcatHttpAdapter{}

@@ -13,6 +13,7 @@ var frameworkConfigFields = []pluginconfig.Field{
 	{Key: "bot.admin_panel.listen", Label: "监听地址", Type: "string", Group: "Web 面板", Help: "如 127.0.0.1:7700；改为 0.0.0.0:7700 可局域网访问（面板有密码保护）", Default: "127.0.0.1:7700"},
 
 	// 适配器
+	{Key: "bot.adapter.mode", Label: "连接模式", Type: "select", Options: []string{"ws", "http"}, Group: "NapCat 适配器", Help: "ws（WebSocket，推荐）或 http（Webhook 上报），重启后生效", Default: "ws"},
 	{Key: "bot.adapter.token", Label: "Token", Type: "password", Group: "NapCat 适配器", Sensitive: true, Help: "NapCat 侧设置了 token 时填写"},
 	{Key: "bot.adapter.ws.address", Label: "WS 地址", Type: "string", Group: "NapCat 适配器", Help: "NapCat WebSocket Server 地址", Default: "ws://localhost:4455"},
 	{Key: "bot.adapter.ws.worker_count", Label: "处理线程数", Type: "int", Group: "NapCat 适配器", Help: "0 为自动调整", Default: 0},

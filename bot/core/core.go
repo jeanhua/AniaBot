@@ -33,8 +33,11 @@ type AniaBot struct {
 	cancel context.CancelFunc
 
 	adapter adapter.Adapter
-	plugins []plugin.Plugin
-	cfg     *viper.Viper
+	// adapterFactory 延迟创建适配器：在配置中心加载完成后按配置选择实现。
+	// 与直接传入 adapter 二选一；两者都未提供时 Run 报错退出。
+	adapterFactory func(cfg *viper.Viper) adapter.Adapter
+	plugins        []plugin.Plugin
+	cfg            *viper.Viper
 
 	configStore *configstore.Store
 
@@ -102,6 +105,15 @@ func WithLogger(logger *slog.Logger) Option {
 	}
 }
 
+// WithAdapterFactory 延迟创建适配器：Run 时配置中心加载完成后调用工厂，
+// 由工厂按配置（如 bot.adapter.mode）选择具体适配器实现。
+// 与 NewAniaBot 直接传入 adapter 二选一。
+func WithAdapterFactory(factory func(cfg *viper.Viper) adapter.Adapter) Option {
+	return func(ania *AniaBot) {
+		ania.adapterFactory = factory
+	}
+}
+
 func NewAniaBot(adapter adapter.Adapter, option ...Option) *AniaBot {
 	ctx, cancel := context.WithCancel(context.Background())
 	ania := &AniaBot{
@@ -143,7 +155,6 @@ func (ania *AniaBot) Run() {
 		OnEssence:           ania.onEssenceEvent,
 		OnGroupCard:         ania.onGroupCardEvent,
 	}
-	ania.adapter.SetTrigger(trigger)
 
 	// 持久化存储（重启不丢失；配置中心的载体，必须最先初始化。
 	// 驱动与位置由环境变量引导：ANIABOT_STORE_DRIVER / ANIABOT_SQLITE_PATH / ANIABOT_MYSQL_DSN）
@@ -197,6 +208,17 @@ func (ania *AniaBot) Run() {
 		cs.EnsureDefaults(pluginconfig.Defaults())
 		ania.cfg = cs.ToViper()
 	}
+
+	// 适配器：直接传入则用之；否则由工厂按已加载的配置延迟创建（如按 bot.adapter.mode 选择 ws/http）。
+	// 创建早于插件 Start，保证 setup_pending 期间插件调用发送接口时适配器已就绪。
+	if ania.adapter == nil && ania.adapterFactory != nil {
+		ania.adapter = ania.adapterFactory(ania.cfg)
+	}
+	if ania.adapter == nil {
+		Logger().Error("未提供适配器：请通过 NewAniaBot 传入适配器或使用 WithAdapterFactory")
+		os.Exit(1)
+	}
+	ania.adapter.SetTrigger(trigger)
 
 	// 自动初始化：把配置填充进各插件声明的配置结构体（Start 之前完成）。
 	// 失败按插件隔离记日志，该插件退化为结构体零值 + Start 内的既有校验兜底。

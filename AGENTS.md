@@ -28,7 +28,7 @@ make clean     # remove build/
 cd cmd && GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -o ../build/AniaBot
 ```
 
-The panel frontend's built `dist/` is committed to the repo, so plain `go build` never requires Node.
+The panel frontend's built `dist/` is gitignored (build artifact). `bot/adminpanel` embeds it via `go:embed`, so run `make web` (or `cd web && npm run build`) at least once before `go build` on a fresh clone.
 
 ### Test
 
@@ -56,14 +56,14 @@ All configuration lives in the **database** (the persistent storage's `ania_kv` 
 - MCP servers and per-group/friend prompt overrides are config keys `files.mcp_json` / `files.prompt_json` (raw JSON text), edited graphically in the panel's 扩展配置 (Files) page with an optional raw-JSON source mode.
 - Panel auth: random initial password printed to console on first run, SHA-256+salt hash in the `__admin` namespace; config changes take effect after restart.
 
-Config is assembled in `bot/core/core.go` `Run()`: persistent storage (env) → configstore init → collect field registrations + `RegisterStruct` plugin schemas → `EnsureDefaults` → `ToViper()` → `Load` each plugin schema struct → cache storage → plugins. Plugins declaring `ConfigSchema()` read typed struct fields in `Start()`; framework-level shared keys (e.g. `files.mcp_json`) are still read from the whole viper passed to `Start()`.
+Config is assembled in `bot/core/core.go` `Run()`: persistent storage (env) → configstore init → collect field registrations + `RegisterStruct` plugin schemas → `EnsureDefaults` → `ToViper()` → create adapter via `WithAdapterFactory` (NapCat adapter picked by `bot.adapter.mode`: ws|http) → `Load` each plugin schema struct → cache storage → plugins. Plugins declaring `ConfigSchema()` read typed struct fields in `Start()`; framework-level shared keys (e.g. `files.mcp_json`) are still read from the whole viper passed to `Start()`.
 
 ## Architecture
 
 ### Layered Structure
 
 ```
-cmd/main.go              Entry point: creates adapter, registers plugins, runs bot
+cmd/main.go              Entry point: registers plugins, runs bot (adapter chosen at runtime via bot.adapter.mode)
 common/                  Shared interfaces and models (adapter, plugin, storage, bot, msgchain)
 bot/core/                AniaBot orchestrator: plugin lifecycle, event dispatch, DI, storage impls
   configstore/             DB-backed config center (seed/migrate/ToViper)

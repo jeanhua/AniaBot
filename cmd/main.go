@@ -29,9 +29,8 @@ func main() {
 		fmt.Println("Web 控制面板密码已重置，请重新启动 Bot")
 		return
 	}
-	// adapter := napcat.NewNapcatHttpAdapter()
-	adapter := napcat.NewNapcatWebSocketAdapter()
-	bot := core.NewAniaBot(adapter)
+	// 适配器按配置 bot.adapter.mode（ws/http）在配置加载后创建
+	bot := core.NewAniaBot(nil, core.WithAdapterFactory(napcat.NewAdapter))
 	// 插件注册
 	bot.AddPlugin(pluginsys.NewPluginSys())
 	bot.AddPlugin(pluginlog.NewPlugin())

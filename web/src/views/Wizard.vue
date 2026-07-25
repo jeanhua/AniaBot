@@ -36,10 +36,29 @@
         <div v-else-if="step === 1" class="space-y-4">
           <h2 class="text-base font-semibold text-slate-800">连接 NapCat</h2>
           <div>
+            <label class="block text-xs font-medium text-slate-600 mb-1.5">连接模式</label>
+            <select v-model="form.mode" :class="inputClass">
+              <option value="ws">WebSocket（推荐）</option>
+              <option value="http">HTTP（Webhook 上报）</option>
+            </select>
+          </div>
+          <div v-if="form.mode === 'ws'">
             <label class="block text-xs font-medium text-slate-600 mb-1.5">WebSocket 地址</label>
             <input v-model="form.wsAddress" type="text" placeholder="ws://localhost:4455" :class="inputClass" />
             <p class="text-xs text-slate-400 mt-1.5">NapCat 的 WebSocket 服务端地址；Docker 部署时把 localhost 换成内网 IP</p>
           </div>
+          <template v-else>
+            <div>
+              <label class="block text-xs font-medium text-slate-600 mb-1.5">HTTP 目标地址</label>
+              <input v-model="form.httpTargetUrl" type="text" placeholder="http://localhost:6680" :class="inputClass" />
+              <p class="text-xs text-slate-400 mt-1.5">NapCat 开放的 HTTP 调用地址；Docker 部署时把 localhost 换成内网 IP</p>
+            </div>
+            <div>
+              <label class="block text-xs font-medium text-slate-600 mb-1.5">HTTP 监听端口</label>
+              <input v-model="form.httpListenPort" type="number" placeholder="6679" :class="inputClass" />
+              <p class="text-xs text-slate-400 mt-1.5">本机端口，NapCat 的 HTTP Client 向此端口上报事件</p>
+            </div>
+          </template>
           <div>
             <label class="block text-xs font-medium text-slate-600 mb-1.5">Access Token（可选）</label>
             <input v-model="form.token" type="password" placeholder="NapCat 端设置了 token 时填写" :class="inputClass" />
@@ -112,7 +131,10 @@ const step = ref(0)
 const error = ref('')
 const restarting = ref(false)
 const form = reactive({
+  mode: 'ws',
   wsAddress: '',
+  httpTargetUrl: '',
+  httpListenPort: '',
   token: '',
   adminId: '',
   baseUrl: '',
@@ -124,7 +146,10 @@ const form = reactive({
 onMounted(async () => {
   try {
     const cfg = await api.getConfig()
+    form.mode = cfg['bot.adapter.mode'] || 'ws'
     form.wsAddress = cfg['bot.adapter.ws.address'] || ''
+    form.httpTargetUrl = cfg['bot.adapter.http.target_url'] || ''
+    form.httpListenPort = cfg['bot.adapter.http.listen_port'] ? String(cfg['bot.adapter.http.listen_port']) : ''
     form.baseUrl = cfg['plugin.ai_chat_bot.base_url'] || ''
     form.model = cfg['plugin.ai_chat_bot.model'] || ''
     const adminId = cfg['bot.admin_id']
@@ -135,7 +160,14 @@ onMounted(async () => {
 async function onSave() {
   error.value = ''
   const updates = {}
-  if (form.wsAddress.trim()) updates['bot.adapter.ws.address'] = form.wsAddress.trim()
+  updates['bot.adapter.mode'] = form.mode
+  if (form.mode === 'ws') {
+    if (form.wsAddress.trim()) updates['bot.adapter.ws.address'] = form.wsAddress.trim()
+  } else {
+    if (form.httpTargetUrl.trim()) updates['bot.adapter.http.target_url'] = form.httpTargetUrl.trim()
+    const port = parseInt(form.httpListenPort, 10)
+    if (!Number.isNaN(port) && port > 0) updates['bot.adapter.http.listen_port'] = port
+  }
   if (form.token.trim()) updates['bot.adapter.token'] = form.token.trim()
   const adminId = parseInt(form.adminId, 10)
   if (!Number.isNaN(adminId) && adminId > 0) updates['bot.admin_id'] = adminId
