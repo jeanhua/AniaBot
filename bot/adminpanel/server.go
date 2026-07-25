@@ -261,13 +261,16 @@ func (s *Server) handleChangePassword(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !s.auth.CheckPassword(req.OldPassword) {
-		writeError(w, http.StatusUnauthorized, "原密码错误")
+		// 注意不能用 401：前端会把 401 当作会话过期处理
+		writeError(w, http.StatusBadRequest, "原密码错误")
 		return
 	}
 	if !s.auth.SetPassword(req.NewPassword) {
 		writeError(w, http.StatusInternalServerError, "密码保存失败")
 		return
 	}
+	// 修改密码后销毁所有会话（含当前），强制使用新密码重新登录
+	s.auth.DropAllSessions()
 	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
 }
 

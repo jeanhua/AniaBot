@@ -4,6 +4,7 @@ export const auth = reactive({
   loggedIn: false,
   checked: false,
   setupRequired: false,
+  notice: '',
 })
 
 async function request(path, options = {}) {

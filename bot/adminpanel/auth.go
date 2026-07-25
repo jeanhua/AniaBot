@@ -162,6 +162,21 @@ func (a *authManager) DropSession(token string) {
 	a.store.Del(context.Background(), sessionKeyPrefix+token)
 }
 
+// DropAllSessions 销毁所有会话（修改密码后调用，强制各端重新登录）。
+func (a *authManager) DropAllSessions() {
+	a.mu.Lock()
+	a.sessions = map[string]time.Time{}
+	a.mu.Unlock()
+	keys, err := a.store.Keys(context.Background(), sessionKeyPrefix)
+	if err != nil {
+		a.logger.Error("清理会话失败", "error", err)
+		return
+	}
+	for _, k := range keys {
+		a.store.Del(context.Background(), k)
+	}
+}
+
 // cleanupExpired 清理内存与存储中过期的会话。
 func (a *authManager) cleanupExpired() {
 	now := time.Now()

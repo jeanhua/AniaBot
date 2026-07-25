@@ -157,9 +157,11 @@ async function onChangePwd() {
   pwdForm.msg = ''
   try {
     await api.changePassword(pwdForm.old, pwdForm.next)
-    pwdForm.ok = true
-    pwdForm.msg = '密码已更新'
+    // 修改密码后服务端会销毁所有会话，退回登录页重新登录
+    showPwd.value = false
     pwdForm.old = pwdForm.next = ''
+    auth.notice = '密码已更新，请使用新密码重新登录'
+    auth.loggedIn = false
   } catch (e) {
     pwdForm.ok = false
     pwdForm.msg = e.message

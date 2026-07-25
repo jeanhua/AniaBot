@@ -23,6 +23,7 @@
         autofocus
         class="w-full bg-white/10 border border-white/10 rounded-lg px-3.5 py-2.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-zinc-400 focus:border-transparent transition-shadow"
       />
+      <p v-if="auth.notice" class="text-sm text-emerald-400">{{ auth.notice }}</p>
       <p v-if="error" class="text-sm text-red-400">{{ error }}</p>
       <button
         type="submit"
@@ -37,7 +38,7 @@
 
 <script setup>
 import { ref } from 'vue'
-import { api } from '../api.js'
+import { api, auth } from '../api.js'
 
 const password = ref('')
 const error = ref('')
@@ -45,6 +46,7 @@ const loading = ref(false)
 
 async function onSubmit() {
   error.value = ''
+  auth.notice = ''
   loading.value = true
   try {
     await api.login(password.value)
