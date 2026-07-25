@@ -82,7 +82,7 @@ AniaBot 内置 Web 控制面板（Vue 3 + Tailwind CSS，构建产物通过 `go:
 
 ```bash
 make web          # 等价于 cd web && npm ci && npm run build
-make windows      # dist 已提交仓库，直接编译即可嵌入
+make windows      # 打包为单一二进制文件
 ```
 
 构建产物输出到 `bot/adminpanel/dist` 并提交到仓库，因此常规 `go build` 无需 Node 环境。开发调试可用 `cd web && npm run dev`（已配置 `/api` 代理到 `127.0.0.1:7700`）。
