@@ -1,43 +1,45 @@
 <template>
-  <div class="space-y-4">
-    <div v-if="saved" class="bg-amber-50 border border-amber-200 text-amber-800 text-sm rounded-lg px-4 py-3">
-      已保存，将在 <b>重启 Bot 后生效</b>。
-    </div>
+  <div class="space-y-5">
+    <Transition name="fade">
+      <div v-if="saved" class="bg-emerald-50 border border-emerald-200 text-emerald-800 text-sm rounded-xl px-4 py-3">
+        已保存，将在 <b>重启 Bot 后生效</b>。
+      </div>
+    </Transition>
 
     <div class="flex items-center justify-between">
-      <div class="flex gap-1 border-b border-slate-200">
+      <div class="flex gap-1 bg-white border border-slate-200 rounded-lg p-1 shadow-sm">
         <button
           v-for="tab in tabs"
           :key="tab.name"
-          class="px-4 py-2 text-sm rounded-t"
-          :class="current === tab.name ? 'bg-white border border-b-white border-slate-200 -mb-px text-indigo-600 font-medium' : 'text-slate-500 hover:text-slate-700'"
+          class="px-4 py-1.5 text-sm rounded-md transition-colors"
+          :class="current === tab.name ? 'bg-zinc-900 text-white font-medium shadow-sm' : 'text-slate-500 hover:text-slate-800'"
           @click="switchTab(tab.name)"
         >
           {{ tab.label }}
         </button>
       </div>
       <div class="flex gap-2">
-        <button class="px-3 py-1.5 text-sm rounded border border-slate-300 text-slate-600 hover:bg-slate-50" @click="toggleRaw">
+        <button class="px-3 py-1.5 text-sm rounded-lg border border-slate-300 text-slate-600 hover:bg-slate-50 transition-colors" @click="toggleRaw">
           {{ rawMode ? '表单模式' : '源码模式 (JSON)' }}
         </button>
-        <button v-if="!rawMode" :disabled="saving" class="px-4 py-1.5 text-sm rounded bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-40" @click="onSave">
+        <button v-if="!rawMode" :disabled="saving" class="px-4 py-1.5 text-sm rounded-lg bg-zinc-900 text-white hover:bg-zinc-800 disabled:opacity-40 transition-colors" @click="onSave">
           {{ saving ? '保存中...' : '保存' }}
         </button>
       </div>
     </div>
 
     <!-- 源码模式：原始 JSON -->
-    <section v-if="rawMode" class="bg-white rounded-lg shadow-sm p-5 space-y-3">
+    <section v-if="rawMode" class="bg-white rounded-xl shadow-sm border border-slate-200/60 p-6 space-y-3">
       <p class="text-xs text-slate-500">{{ currentTab.desc }}</p>
       <textarea
         v-model="rawText"
         rows="20"
         spellcheck="false"
-        class="w-full border border-slate-300 rounded px-3 py-2 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-indigo-400"
+        class="w-full bg-zinc-950 text-slate-200 rounded-lg px-4 py-3 text-xs font-mono leading-relaxed focus:outline-none focus:ring-2 focus:ring-zinc-400"
       />
       <div class="flex items-center gap-3">
-        <button class="px-3 py-1.5 text-sm rounded border border-slate-300 text-slate-600 hover:bg-slate-50" @click="formatRaw">格式化</button>
-        <button :disabled="saving" class="px-4 py-1.5 text-sm rounded bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-40" @click="onSaveRaw">
+        <button class="px-3 py-1.5 text-sm rounded-lg border border-slate-300 text-slate-600 hover:bg-slate-50 transition-colors" @click="formatRaw">格式化</button>
+        <button :disabled="saving" class="px-4 py-1.5 text-sm rounded-lg bg-zinc-900 text-white hover:bg-zinc-800 disabled:opacity-40 transition-colors" @click="onSaveRaw">
           {{ saving ? '保存中...' : '保存' }}
         </button>
         <span v-if="error" class="text-sm text-red-600">{{ error }}</span>
@@ -48,12 +50,15 @@
     <template v-else-if="current === 'mcp'">
       <p class="text-xs text-slate-500">配置 AI 可调用的 MCP 服务器，修改保存后重启生效。</p>
 
-      <section v-for="(srv, i) in mcpServers" :key="i" class="bg-white rounded-lg shadow-sm">
-        <div class="px-5 py-3 border-b border-slate-100 flex items-center justify-between">
-          <h2 class="text-sm font-semibold text-slate-700">{{ srv.name || `服务器 ${i + 1}` }}</h2>
-          <button class="text-xs text-red-500 hover:text-red-700" @click="mcpServers.splice(i, 1)">删除</button>
+      <section v-for="(srv, i) in mcpServers" :key="i" class="bg-white rounded-xl shadow-sm border border-slate-200/60 overflow-hidden">
+        <div class="px-6 py-3.5 border-b border-slate-100 flex items-center justify-between">
+          <h2 class="text-sm font-semibold text-slate-800 flex items-center gap-2">
+            <span class="w-2 h-2 rounded-full" :class="srv.name ? 'bg-emerald-400' : 'bg-slate-300'" />
+            {{ srv.name || `服务器 ${i + 1}` }}
+          </h2>
+          <button class="text-xs text-red-500 hover:text-red-700 transition-colors" @click="mcpServers.splice(i, 1)">删除</button>
         </div>
-        <div class="p-5 grid grid-cols-1 lg:grid-cols-2 gap-x-8 gap-y-4">
+        <div class="p-6 grid grid-cols-1 lg:grid-cols-2 gap-x-8 gap-y-5">
           <div>
             <label :class="labelClass">名称 <span class="text-red-500">*</span></label>
             <input v-model="srv.name" type="text" placeholder="如 weather" :class="inputClass" />
@@ -105,7 +110,7 @@
         </div>
       </section>
 
-      <button class="w-full py-2.5 text-sm rounded-lg border border-dashed border-slate-300 text-slate-500 hover:border-indigo-400 hover:text-indigo-600" @click="addServer">
+      <button class="w-full py-3 text-sm rounded-xl border-2 border-dashed border-slate-300 text-slate-400 hover:border-zinc-500 hover:text-zinc-700 hover:bg-zinc-100 transition-all" @click="addServer">
         + 添加 MCP 服务器
       </button>
       <p v-if="error" class="text-sm text-red-600">{{ error }}</p>
@@ -115,36 +120,36 @@
     <template v-else>
       <p class="text-xs text-slate-500">按群聊 / 好友覆盖 AI 的系统提示词，留空的条目保存时会被忽略。修改保存后重启生效。</p>
 
-      <section class="bg-white rounded-lg shadow-sm">
-        <div class="px-5 py-3 border-b border-slate-100 flex items-center justify-between">
-          <h2 class="text-sm font-semibold text-slate-700">群聊覆盖</h2>
-          <button class="text-xs text-indigo-600 hover:text-indigo-800" @click="promptGroups.push({ id: '', prompt: '' })">+ 添加</button>
+      <section class="bg-white rounded-xl shadow-sm border border-slate-200/60 overflow-hidden">
+        <div class="px-6 py-3.5 border-b border-slate-100 flex items-center justify-between">
+          <h2 class="text-sm font-semibold text-slate-800">群聊覆盖</h2>
+          <button class="text-xs text-zinc-700 hover:text-zinc-900 font-medium transition-colors" @click="promptGroups.push({ id: '', prompt: '' })">+ 添加</button>
         </div>
-        <div class="p-5 space-y-4">
+        <div class="p-6 space-y-5">
           <p v-if="promptGroups.length === 0" class="text-xs text-slate-400">暂无群聊 Prompt 覆盖</p>
-          <div v-for="(item, i) in promptGroups" :key="i" class="space-y-2">
+          <div v-for="(item, i) in promptGroups" :key="i" class="space-y-2 bg-slate-50/60 rounded-lg p-4 border border-slate-100">
             <div class="flex items-center gap-2">
-              <input v-model="item.id" type="text" inputmode="numeric" placeholder="群号" :class="inputClass + ' !w-48'" />
-              <button class="text-xs text-red-500 hover:text-red-700 shrink-0" @click="promptGroups.splice(i, 1)">删除</button>
+              <input v-model="item.id" type="text" inputmode="numeric" placeholder="群号" :class="inputClass + ' !w-48 bg-white'" />
+              <button class="text-xs text-red-500 hover:text-red-700 shrink-0 transition-colors" @click="promptGroups.splice(i, 1)">删除</button>
             </div>
-            <textarea v-model="item.prompt" rows="3" placeholder="该群使用的系统提示词" :class="inputClass" />
+            <textarea v-model="item.prompt" rows="3" placeholder="该群使用的系统提示词" :class="inputClass + ' bg-white'" />
           </div>
         </div>
       </section>
 
-      <section class="bg-white rounded-lg shadow-sm">
-        <div class="px-5 py-3 border-b border-slate-100 flex items-center justify-between">
-          <h2 class="text-sm font-semibold text-slate-700">好友覆盖</h2>
-          <button class="text-xs text-indigo-600 hover:text-indigo-800" @click="promptFriends.push({ id: '', prompt: '' })">+ 添加</button>
+      <section class="bg-white rounded-xl shadow-sm border border-slate-200/60 overflow-hidden">
+        <div class="px-6 py-3.5 border-b border-slate-100 flex items-center justify-between">
+          <h2 class="text-sm font-semibold text-slate-800">好友覆盖</h2>
+          <button class="text-xs text-zinc-700 hover:text-zinc-900 font-medium transition-colors" @click="promptFriends.push({ id: '', prompt: '' })">+ 添加</button>
         </div>
-        <div class="p-5 space-y-4">
+        <div class="p-6 space-y-5">
           <p v-if="promptFriends.length === 0" class="text-xs text-slate-400">暂无好友 Prompt 覆盖</p>
-          <div v-for="(item, i) in promptFriends" :key="i" class="space-y-2">
+          <div v-for="(item, i) in promptFriends" :key="i" class="space-y-2 bg-slate-50/60 rounded-lg p-4 border border-slate-100">
             <div class="flex items-center gap-2">
-              <input v-model="item.id" type="text" inputmode="numeric" placeholder="QQ 号" :class="inputClass + ' !w-48'" />
-              <button class="text-xs text-red-500 hover:text-red-700 shrink-0" @click="promptFriends.splice(i, 1)">删除</button>
+              <input v-model="item.id" type="text" inputmode="numeric" placeholder="QQ 号" :class="inputClass + ' !w-48 bg-white'" />
+              <button class="text-xs text-red-500 hover:text-red-700 shrink-0 transition-colors" @click="promptFriends.splice(i, 1)">删除</button>
             </div>
-            <textarea v-model="item.prompt" rows="3" placeholder="该好友会话使用的系统提示词" :class="inputClass" />
+            <textarea v-model="item.prompt" rows="3" placeholder="该好友会话使用的系统提示词" :class="inputClass + ' bg-white'" />
           </div>
         </div>
       </section>
@@ -157,8 +162,8 @@
 import { computed, defineComponent, h, onMounted, ref } from 'vue'
 import { api } from '../api.js'
 
-const inputClass = 'w-full border border-slate-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400'
-const labelClass = 'block text-xs font-medium text-slate-600 mb-1'
+const inputClass = 'w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-400 focus:border-zinc-400 transition-shadow'
+const labelClass = 'block text-xs font-medium text-slate-600 mb-1.5'
 
 // 键值对编辑器（环境变量 / 请求头）
 const KvEditor = defineComponent({
@@ -193,12 +198,12 @@ const KvEditor = defineComponent({
               value: row.v,
               onInput: (e) => update(i, 'v', e.target.value),
             }),
-            h('button', { class: 'text-xs text-red-500 hover:text-red-700 shrink-0', onClick: () => remove(i) }, '删除'),
+            h('button', { class: 'text-xs text-red-500 hover:text-red-700 shrink-0 transition-colors', onClick: () => remove(i) }, '删除'),
           ])
         ),
         h(
           'button',
-          { class: 'text-xs text-indigo-600 hover:text-indigo-800', onClick: add },
+          { class: 'text-xs text-zinc-700 hover:text-zinc-900 transition-colors', onClick: add },
           '+ 添加一行'
         ),
       ])

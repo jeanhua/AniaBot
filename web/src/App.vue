@@ -1,6 +1,9 @@
 <template>
   <div v-if="!auth.checked" class="min-h-screen flex items-center justify-center bg-slate-100">
-    <p class="text-slate-500">加载中...</p>
+    <div class="flex items-center gap-2 text-slate-400 text-sm">
+      <span class="w-4 h-4 border-2 border-slate-300 border-t-zinc-500 rounded-full animate-spin" />
+      加载中...
+    </div>
   </div>
 
   <Login v-else-if="!auth.loggedIn" />
@@ -9,58 +12,83 @@
 
   <div v-else class="min-h-screen bg-slate-100 flex">
     <!-- 侧边导航 -->
-    <aside class="w-56 bg-slate-900 text-slate-200 flex flex-col shrink-0">
-      <div class="px-5 py-5 text-lg font-bold text-white border-b border-slate-700">
-        AniaBot 控制面板
+    <aside class="w-60 bg-zinc-950 flex flex-col shrink-0 sticky top-0 h-screen">
+      <div class="px-5 pt-6 pb-5 flex items-center gap-3">
+        <div class="w-9 h-9 rounded-xl bg-gradient-to-br from-white to-zinc-300 flex items-center justify-center text-zinc-900 font-bold text-base shadow-lg">
+          A
+        </div>
+        <div>
+          <div class="text-white font-semibold leading-tight">AniaBot</div>
+          <div class="text-[11px] text-slate-500 leading-tight">控制面板</div>
+        </div>
       </div>
-      <nav class="flex-1 py-3">
+
+      <nav class="flex-1 px-3 py-2 space-y-1 overflow-y-auto">
         <RouterLink
           v-for="item in navItems"
           :key="item.to"
           :to="item.to"
-          class="block px-5 py-2.5 text-sm hover:bg-slate-800 transition-colors"
-          :class="{ 'bg-slate-800 text-white border-r-2 border-indigo-400': $route.path === item.to }"
+          class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all"
+          :class="$route.path === item.to
+            ? 'bg-white/10 text-white font-medium'
+            : 'text-slate-400 hover:text-slate-100 hover:bg-white/5'"
         >
+          <span v-html="item.icon" class="shrink-0 [&>svg]:w-[18px] [&>svg]:h-[18px]" />
           {{ item.label }}
+          <span v-if="$route.path === item.to" class="ml-auto w-1.5 h-1.5 rounded-full bg-white" />
         </RouterLink>
       </nav>
-      <div class="px-5 py-4 border-t border-slate-700 space-y-2">
-        <button class="block text-xs text-slate-400 hover:text-white" @click="onRestart">重启 Bot</button>
-        <button class="block text-xs text-slate-400 hover:text-white" @click="showPwd = true">修改密码</button>
-        <button class="block text-xs text-slate-400 hover:text-white" @click="onLogout">退出登录</button>
+
+      <div class="px-3 py-4 border-t border-white/5 space-y-0.5">
+        <button class="nav-foot" @click="onRestart">
+          <span v-html="icons.restart" class="[&>svg]:w-4 [&>svg]:h-4" /> 重启 Bot
+        </button>
+        <button class="nav-foot" @click="showPwd = true">
+          <span v-html="icons.key" class="[&>svg]:w-4 [&>svg]:h-4" /> 修改密码
+        </button>
+        <button class="nav-foot hover:!text-red-300" @click="onLogout">
+          <span v-html="icons.logout" class="[&>svg]:w-4 [&>svg]:h-4" /> 退出登录
+        </button>
       </div>
     </aside>
 
     <!-- 主内容 -->
-    <main class="flex-1 min-w-0">
-      <header class="bg-white border-b border-slate-200 px-6 py-4">
-        <h1 class="text-lg font-semibold text-slate-800">{{ $route.meta.title || '' }}</h1>
+    <main class="flex-1 min-w-0 flex flex-col">
+      <header class="bg-white/80 backdrop-blur border-b border-slate-200 px-8 py-4 sticky top-0 z-30 flex items-center justify-between">
+        <h1 class="text-base font-semibold text-slate-800">{{ $route.meta.title || '' }}</h1>
+        <div class="flex items-center gap-2 text-xs text-slate-400">
+          <span class="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+          AniaBot 运行中
+        </div>
       </header>
-      <div class="p-6">
-        <RouterView />
+      <div class="p-8 flex-1">
+        <RouterView v-slot="{ Component }">
+          <Transition name="fade" mode="out-in">
+            <component :is="Component" />
+          </Transition>
+        </RouterView>
       </div>
     </main>
 
     <!-- 重启中遮罩 -->
-    <div v-if="restarting" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-      <div class="bg-white rounded-lg shadow-xl p-8 w-80 text-center space-y-3">
+    <div v-if="restarting" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-50">
+      <div class="bg-white rounded-2xl shadow-2xl p-8 w-80 text-center space-y-3">
+        <span class="mx-auto block w-8 h-8 border-[3px] border-slate-200 border-t-zinc-500 rounded-full animate-spin" />
         <div class="text-base font-semibold text-slate-800">正在重启 Bot...</div>
         <p class="text-sm text-slate-500">配置修改将在重启后生效，恢复后页面自动刷新</p>
       </div>
     </div>
 
     <!-- 修改密码弹窗 -->
-    <div v-if="showPwd" class="fixed inset-0 bg-black/40 flex items-center justify-center z-50" @click.self="showPwd = false">
-      <form class="bg-white rounded-lg shadow-xl p-6 w-96 space-y-4" @submit.prevent="onChangePwd">
+    <div v-if="showPwd" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-50" @click.self="showPwd = false">
+      <form class="bg-white rounded-2xl shadow-2xl p-6 w-96 space-y-4" @submit.prevent="onChangePwd">
         <h2 class="text-base font-semibold text-slate-800">修改密码</h2>
-        <input v-model="pwdForm.old" type="password" placeholder="原密码" required
-          class="w-full border border-slate-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400" />
-        <input v-model="pwdForm.next" type="password" placeholder="新密码（至少 6 位）" required minlength="6"
-          class="w-full border border-slate-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400" />
+        <input v-model="pwdForm.old" type="password" placeholder="原密码" required :class="inputClass" />
+        <input v-model="pwdForm.next" type="password" placeholder="新密码（至少 6 位）" required minlength="6" :class="inputClass" />
         <p v-if="pwdForm.msg" class="text-sm" :class="pwdForm.ok ? 'text-emerald-600' : 'text-red-600'">{{ pwdForm.msg }}</p>
-        <div class="flex justify-end gap-2">
-          <button type="button" class="px-4 py-2 text-sm text-slate-600 hover:bg-slate-100 rounded" @click="showPwd = false">取消</button>
-          <button type="submit" class="px-4 py-2 text-sm bg-indigo-600 text-white rounded hover:bg-indigo-700">保存</button>
+        <div class="flex justify-end gap-2 pt-1">
+          <button type="button" class="px-4 py-2 text-sm text-slate-600 hover:bg-slate-100 rounded-lg transition-colors" @click="showPwd = false">取消</button>
+          <button type="submit" class="px-4 py-2 text-sm bg-zinc-900 text-white rounded-lg hover:bg-zinc-800 transition-colors">保存</button>
         </div>
       </form>
     </div>
@@ -75,12 +103,25 @@ import Login from './views/Login.vue'
 import Wizard from './views/Wizard.vue'
 
 const router = useRouter()
+
+const icons = {
+  dashboard: '<svg fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M3.75 6A2.25 2.25 0 0 1 6 3.75h2.25A2.25 2.25 0 0 1 10.5 6v2.25a2.25 2.25 0 0 1-2.25 2.25H6a2.25 2.25 0 0 1-2.25-2.25V6ZM3.75 15.75A2.25 2.25 0 0 1 6 13.5h2.25a2.25 2.25 0 0 1 2.25 2.25V18a2.25 2.25 0 0 1-2.25 2.25H6A2.25 2.25 0 0 1 3.75 18v-2.25ZM13.5 6a2.25 2.25 0 0 1 2.25-2.25H18A2.25 2.25 0 0 1 20.25 6v2.25A2.25 2.25 0 0 1 18 10.5h-2.25a2.25 2.25 0 0 1-2.25-2.25V6ZM13.5 15.75a2.25 2.25 0 0 1 2.25-2.25H18a2.25 2.25 0 0 1 2.25 2.25V18A2.25 2.25 0 0 1 18 20.25h-2.25A2.25 2.25 0 0 1 13.5 18v-2.25Z"/></svg>',
+  config: '<svg fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.325.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 0 1 1.37.49l1.296 2.247a1.125 1.125 0 0 1-.26 1.431l-1.003.827c-.293.241-.438.613-.43.992a7.723 7.723 0 0 1 0 .255c-.008.378.137.75.43.991l1.004.827c.424.35.534.955.26 1.43l-1.298 2.247a1.125 1.125 0 0 1-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.47 6.47 0 0 1-.22.128c-.331.183-.581.495-.644.869l-.213 1.281c-.09.543-.56.94-1.11.94h-2.594c-.55 0-1.019-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 0 1-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 0 1-1.369-.49l-1.297-2.247a1.125 1.125 0 0 1 .26-1.431l1.004-.827c.292-.24.437-.613.43-.991a6.932 6.932 0 0 1 0-.255c.007-.38-.138-.751-.43-.992l-1.004-.827a1.125 1.125 0 0 1-.26-1.43l1.297-2.247a1.125 1.125 0 0 1 1.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.086.22-.128.332-.183.582-.495.644-.869l.214-1.28Z"/><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z"/></svg>',
+  files: '<svg fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M17.25 6.75 22.5 12l-5.25 5.25m-10.5 0L1.5 12l5.25-5.25m7.5-3-4.5 16.5"/></svg>',
+  contacts: '<svg fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M15 19.128a9.38 9.38 0 0 0 2.625.372 9.337 9.337 0 0 0 4.121-.952 4.125 4.125 0 0 0-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 0 1 8.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0 1 11.964-3.07M12 6.375a3.375 3.375 0 1 1-6.75 0 3.375 3.375 0 0 1 6.75 0Zm8.25 2.25a2.625 2.625 0 1 1-5.25 0 2.625 2.625 0 0 1 5.25 0Z"/></svg>',
+  restart: '<svg fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182m0-4.991v4.99"/></svg>',
+  key: '<svg fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 5.25a3 3 0 0 1 3 3m3 0a6 6 0 0 1-7.029 5.912c-.563-.097-1.159.026-1.563.43L10.5 17.25H8.25v2.25H6v2.25H2.25v-2.818c0-.597.237-1.17.659-1.591l6.499-6.499c.404-.404.527-1 .43-1.563A6 6 0 1 1 21.75 8.25Z"/></svg>',
+  logout: '<svg fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0 0 13.5 3h-6a2.25 2.25 0 0 0-2.25 2.25v13.5A2.25 2.25 0 0 0 7.5 21h6a2.25 2.25 0 0 0 2.25-2.25V15m3 0 3-3m0 0-3-3m3 3H9"/></svg>',
+}
+
 const navItems = [
-  { to: '/', label: '状态总览' },
-  { to: '/config', label: '配置管理' },
-  { to: '/files', label: '扩展配置' },
-  { to: '/contacts', label: '通讯录' },
+  { to: '/', label: '状态总览', icon: icons.dashboard },
+  { to: '/config', label: '配置管理', icon: icons.config },
+  { to: '/files', label: '扩展配置', icon: icons.files },
+  { to: '/contacts', label: '通讯录', icon: icons.contacts },
 ]
+
+const inputClass = 'w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-400 focus:border-zinc-400 transition-shadow'
 
 const showPwd = ref(false)
 const pwdForm = reactive({ old: '', next: '', msg: '', ok: false })
@@ -121,3 +162,21 @@ async function onChangePwd() {
   }
 }
 </script>
+
+<style scoped>
+.nav-foot {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  width: 100%;
+  padding: 0.5rem 0.75rem;
+  border-radius: 0.5rem;
+  font-size: 0.8125rem;
+  color: rgb(100 116 139);
+  transition: all 0.15s;
+}
+.nav-foot:hover {
+  color: rgb(226 232 240);
+  background: rgb(255 255 255 / 0.05);
+}
+</style>

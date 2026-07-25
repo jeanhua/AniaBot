@@ -30,7 +30,7 @@ var configFields = []pluginconfig.Field{
 	{Key: "plugin.ai_chat_bot.top_p", Label: "Top P", Type: "float", Group: "AI 对话 · 模型", Default: 0.9},
 	{Key: "plugin.ai_chat_bot.top_k", Label: "Top K", Type: "int", Group: "AI 对话 · 模型", Default: 100},
 	{Key: "plugin.ai_chat_bot.thinking.enable", Label: "启用深度思考", Type: "bool", Group: "AI 对话 · 模型", Default: false},
-	{Key: "plugin.ai_chat_bot.thinking.mode", Label: "思考模式", Type: "string", Group: "AI 对话 · 模型", Help: "none / low / medium / high / auto", Default: "auto"},
+	{Key: "plugin.ai_chat_bot.thinking.mode", Label: "思考模式", Type: "select", Options: []string{"none", "low", "medium", "high", "auto"}, Group: "AI 对话 · 模型", Default: "auto"},
 	{Key: "plugin.ai_chat_bot.prompt", Label: "系统提示词", Type: "text", Group: "AI 对话 · 模型", Default: defaultPrompt},
 	{Key: "plugin.ai_chat_bot.search.token", Label: "Jina AI Token", Type: "password", Group: "AI 对话 · 模型", Sensitive: true, Help: "网页浏览与搜索功能"},
 

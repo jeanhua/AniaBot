@@ -21,7 +21,7 @@ var frameworkConfigFields = []pluginconfig.Field{
 	{Key: "bot.adapter.http.target_url", Label: "HTTP 目标地址", Type: "string", Group: "NapCat 适配器", Help: "HTTP 模式下 NapCat 开放的调用地址", Default: "http://localhost:6680"},
 
 	// 缓存存储
-	{Key: "bot.store.cache.driver", Label: "缓存驱动", Type: "string", Group: "缓存存储", Help: "memory（进程内内存，重启清空）或 redis（需 Redis 服务，支持多实例共享）", Default: "memory"},
+	{Key: "bot.store.cache.driver", Label: "缓存驱动", Type: "select", Options: []string{"memory", "redis"}, Group: "缓存存储", Help: "memory（进程内内存，重启清空）或 redis（需 Redis 服务，支持多实例共享）", Default: "memory"},
 	{Key: "bot.store.cache.redis.address", Label: "Redis 地址", Type: "string", Group: "缓存存储", Default: "localhost:6379"},
 	{Key: "bot.store.cache.redis.password", Label: "Redis 密码", Type: "password", Group: "缓存存储", Sensitive: true},
 	{Key: "bot.store.cache.redis.db", Label: "Redis DB", Type: "int", Group: "缓存存储", Default: 0},
