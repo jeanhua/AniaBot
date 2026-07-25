@@ -109,33 +109,51 @@ go run cmd/main.go
 
 群里 @机器人 发送 `/dice`，同时私聊发送 `/help` 可以看到你的插件已经出现在列表中。
 
-## 进阶：读取自己的配置
+## 进阶：声明自己的配置
 
-如果插件需要配置项，在 Web 控制面板的「配置管理 → 高级模式 (JSON)」中添加 `plugin.<插件名>.*` 键（配置存于数据库），然后在 `Start` 中读取：
-
-```yaml
-plugin:
-  dice:
-    max_point: 20   # 掷一个 20 面骰
-```
+插件只需定义一个带 `cfg` 标签的配置结构体，并实现可选接口 `ConfigSchemaProvider`，框架启动时会自动完成三件事：**注册字段到 Web 面板（可视化编辑）→ 补齐默认值到配置中心 → Start 前把配置填充进结构体**。无需手写 `cfg.Get*` 逐个读取。
 
 ```go
+type diceConfig struct {
+	MaxPoint int `cfg:"plugin.dice.max_point" label:"最大点数" group:"掷骰子" help:"掷 N 面骰" default:"6"`
+}
+
 type DicePlugin struct {
 	plugin.Meta
-	maxPoint int
+	cfg diceConfig
+}
+
+// ConfigSchema 返回配置结构体指针（框架在依赖注入前调用，必须每次返回同一指针）
+func (p *DicePlugin) ConfigSchema() any {
+	return &p.cfg
 }
 
 func (p *DicePlugin) Start(ctx context.Context, cfg *viper.Viper) error {
-	p.maxPoint = cfg.GetInt("plugin.dice.max_point")
-	if p.maxPoint <= 0 {
-		p.maxPoint = 6 // 默认值
+	// 配置已自动填充完成，直接用（也可再做校验兜底）
+	if p.cfg.MaxPoint <= 0 {
+		p.cfg.MaxPoint = 6
 	}
-	p.Logger.Info("骰子插件初始化", "maxPoint", p.maxPoint)
+	p.Logger.Info("骰子插件初始化", "maxPoint", p.cfg.MaxPoint)
 	return nil
 }
 ```
 
-`Start()` 返回非 nil 错误会导致插件初始化失败并在日志中报错。
+启动后面板「配置管理」中会自动出现「掷骰子」分组和「最大点数」表单项，改完重启生效。支持的字段标签：
+
+| 标签 | 说明 |
+| --- | --- |
+| `cfg` | 点分配置键（必填）；嵌套结构体作为键前缀递归；`cfg:"-"` 跳过 |
+| `label` / `group` / `help` | 面板显示名 / 分组 / 说明 |
+| `type` | 覆盖类型推断：`password`、`text`（多行文本）、`select`（需配合 `options`） |
+| `options` | select 可选项，逗号分隔 |
+| `sensitive` | `"true"` 时面板不回显（API 密钥等） |
+| `default` | 默认值，按字段类型解析；切片逗号分隔；`\n` 可表达多行文本 |
+
+类型推断：`string`→字符串、`bool`→开关、`int`→整数、`float64`→小数、`[]string`/`[]int`→列表。指针字段（如 `*int`）表示可选参数：配置键不存在时保持 `nil`。`Start()` 返回非 nil 错误会导致插件初始化失败并在日志中报错。
+
+::: tip 底层机制
+配置统一存于数据库（配置中心），框架启动时构建内存 viper 传给 `Start`。框架级共享键（如 `files.mcp_json`）不属于插件结构体，仍可通过 `cfg.GetString("files.mcp_json")` 读取。需要动态生成字段声明的场景，可实现低层接口 `ConfigRegistrar`（返回 `[]pluginconfig.Field`）。
+:::
 
 ## 进阶：使用注入的依赖
 

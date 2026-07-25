@@ -75,7 +75,7 @@ func (p *MyPlugin) OnGroupMsg(ctx context.Context, bot bot.Bot, cmd command.Comm
 AddPlugin() 注册
     │
     ▼
-Start(ctx, cfg)        ← 读取插件配置（cfg 为完整 viper 实例）
+Start(ctx, cfg)        ← 插件初始化（声明了 ConfigSchema 的配置结构体此时已自动填充完毕）
     │
     ▼
 StartCron(ctx, bot, c) ← 注册 cron 定时任务

@@ -26,10 +26,11 @@ import (
 
 type AIChatPlugin struct {
 	plugin.Meta
+	// cfg 插件配置，由框架在 Start 前自动填充（见 ConfigSchema）
+	cfg   aiChatConfig
 	chats sync.Map
 
 	lockStorage storage.Storage
-	rateLimit   int
 	rateCh      chan struct{}
 
 	activeContexts sync.Map
@@ -39,40 +40,14 @@ type AIChatPlugin struct {
 
 	noMentionCount sync.Map
 
-	botConfig struct {
-		baseURL          string
-		apiKey           string
-		model            string
-		maxContextTokens int
-	}
-
-	llmParameter struct {
-		maxToken       *int
-		temperature    *float64
-		top_p          *float64
-		top_k          *int
-		prompt         string
-		searchToken    string
-		enableThinking bool
-		thinkingMode   string
-	}
-
 	// 按群聊/好友独立的 prompt 覆盖配置
 	promptOverrides struct {
 		groups  map[message.QID]string
 		friends map[message.QID]string
 	}
 
-	multimodal   bool
-	ocrEnable    bool
-	ocrModel     *aichat.ChatBot
-	ocrParameter struct {
-		maxToken    *int
-		temperature *float64
-		top_p       *float64
-		top_k       *int
-		prompt      string
-	}
+	// ocrModel 备用图片识别模型；为 nil 表示未启用或初始化失败
+	ocrModel *aichat.ChatBot
 
 	mcpConfigs   []*llmtool.MCPConfig
 	toolExecutor *llmtool.ToolExecuter
@@ -367,34 +342,34 @@ func (p *AIChatPlugin) sendPlainText(b bot.Bot, id message.QID, isGroup bool, te
 
 func (p *AIChatPlugin) buildChatOptions() aichat.ChatOptions {
 	opts := p.thinkingOpts()
-	if p.llmParameter.maxToken != nil {
-		opts.MaxToken = p.llmParameter.maxToken
+	if p.cfg.MaxToken != nil {
+		opts.MaxToken = p.cfg.MaxToken
 	}
-	if p.llmParameter.temperature != nil {
-		opts.Temperature = p.llmParameter.temperature
+	if p.cfg.Temperature != nil {
+		opts.Temperature = p.cfg.Temperature
 	}
-	if p.llmParameter.top_p != nil {
-		opts.TopP = p.llmParameter.top_p
+	if p.cfg.TopP != nil {
+		opts.TopP = p.cfg.TopP
 	}
-	if p.llmParameter.top_k != nil {
-		opts.TopK = p.llmParameter.top_k
+	if p.cfg.TopK != nil {
+		opts.TopK = p.cfg.TopK
 	}
 	return opts
 }
 
 func (p *AIChatPlugin) buildOCRChatOptions() aichat.ChatOptions {
 	opts := aichat.ChatOptions{}
-	if p.ocrParameter.maxToken != nil {
-		opts.MaxToken = p.ocrParameter.maxToken
+	if p.cfg.OCR.MaxToken != nil {
+		opts.MaxToken = p.cfg.OCR.MaxToken
 	}
-	if p.ocrParameter.temperature != nil {
-		opts.Temperature = p.ocrParameter.temperature
+	if p.cfg.OCR.Temperature != nil {
+		opts.Temperature = p.cfg.OCR.Temperature
 	}
-	if p.ocrParameter.top_p != nil {
-		opts.TopP = p.ocrParameter.top_p
+	if p.cfg.OCR.TopP != nil {
+		opts.TopP = p.cfg.OCR.TopP
 	}
-	if p.ocrParameter.top_k != nil {
-		opts.TopK = p.ocrParameter.top_k
+	if p.cfg.OCR.TopK != nil {
+		opts.TopK = p.cfg.OCR.TopK
 	}
 	return opts
 }
@@ -403,108 +378,53 @@ func (p *AIChatPlugin) Start(ctx context.Context, cfg *viper.Viper) error {
 	p.lockStorage = p.Storage.Clone("lock")
 	p.lockStorage.Clear(ctx)
 
-	p.botConfig.baseURL = cfg.GetString("plugin.ai_chat_bot.base_url")
-	p.botConfig.model = cfg.GetString("plugin.ai_chat_bot.model")
-	p.botConfig.apiKey = cfg.GetString("plugin.ai_chat_bot.api_key")
-	p.llmParameter.prompt = cfg.GetString("plugin.ai_chat_bot.prompt")
-
-	if cfg.IsSet("plugin.ai_chat_bot.max_context_tokens") {
-		p.botConfig.maxContextTokens = cfg.GetInt("plugin.ai_chat_bot.max_context_tokens")
-	} else {
-		p.botConfig.maxContextTokens = 128000
+	// 插件配置已由框架自动填充到 p.cfg（见 ConfigSchema），这里只做校验与兜底
+	rateLimit := p.cfg.RateLimit
+	if rateLimit <= 0 {
+		rateLimit = 2
 	}
+	p.rateCh = make(chan struct{}, rateLimit)
 
-	p.rateLimit = cfg.GetInt("plugin.ai_chat_bot.rate_limit")
-	if p.rateLimit <= 0 {
-		p.rateLimit = 2
-	}
-	p.rateCh = make(chan struct{}, p.rateLimit)
-
-	if p.botConfig.baseURL == "" {
+	if p.cfg.BaseURL == "" {
 		p.Logger.Error("初始化失败：未配置 Base Url")
 		return aniaerror.ParameterInitializeError
 	}
-	if p.botConfig.model == "" {
+	if p.cfg.Model == "" {
 		p.Logger.Error("初始化失败：未配置 Model")
 		return aniaerror.ParameterInitializeError
 	}
-	if p.botConfig.apiKey == "" {
+	if p.cfg.APIKey == "" {
 		p.Logger.Error("初始化失败：未配置 API KEY")
 		return aniaerror.ParameterInitializeError
 	}
-	if p.llmParameter.prompt == "" {
+	if p.cfg.Prompt == "" {
 		p.Logger.Warn("未配置 Prompt，将使用预设的默认提示词")
-		p.llmParameter.prompt = "你是一个ai对话机器人，在QQ上和别人聊天，说话不要长篇大论"
+		p.cfg.Prompt = defaultPrompt
 	}
 
-	// 加载群聊/好友独立 prompt 覆盖配置
+	// 加载群聊/好友独立 prompt 覆盖配置（框架级共享键，仍走 viper）
 	p.loadPromptOverrides(cfg)
 
-	if cfg.IsSet("plugin.ai_chat_bot.max_token") {
-		v := cfg.GetInt("plugin.ai_chat_bot.max_token")
-		p.llmParameter.maxToken = &v
+	if p.cfg.Thinking.Mode == "" {
+		p.cfg.Thinking.Mode = "auto"
 	}
-	if cfg.IsSet("plugin.ai_chat_bot.temperature") {
-		v := cfg.GetFloat64("plugin.ai_chat_bot.temperature")
-		p.llmParameter.temperature = &v
-	}
-	if cfg.IsSet("plugin.ai_chat_bot.top_p") {
-		v := cfg.GetFloat64("plugin.ai_chat_bot.top_p")
-		p.llmParameter.top_p = &v
-	}
-	if cfg.IsSet("plugin.ai_chat_bot.top_k") {
-		v := cfg.GetInt("plugin.ai_chat_bot.top_k")
-		p.llmParameter.top_k = &v
-	}
-	p.llmParameter.enableThinking = cfg.GetBool("plugin.ai_chat_bot.thinking.enable")
-	p.llmParameter.thinkingMode = cfg.GetString("plugin.ai_chat_bot.thinking.mode")
-	if p.llmParameter.thinkingMode == "" {
-		p.llmParameter.thinkingMode = "auto"
-	}
-	if p.llmParameter.enableThinking {
-		p.Logger.Info("已启用深度思考模式", "mode", p.llmParameter.thinkingMode)
+	if p.cfg.Thinking.Enable {
+		p.Logger.Info("已启用深度思考模式", "mode", p.cfg.Thinking.Mode)
 	}
 
-	if cfg.IsSet("plugin.ai_chat_bot.search.token") {
-		p.llmParameter.searchToken = cfg.GetString("plugin.ai_chat_bot.search.token")
-	} else {
+	if p.cfg.Search.Token == "" {
 		p.Logger.Warn("Jina AI Token 未设置，将无法使用网页浏览和搜索功能")
 	}
 
-	p.multimodal = cfg.GetBool("plugin.ai_chat_bot.multimodal")
-	if p.multimodal {
+	if p.cfg.Multimodal {
 		p.Logger.Info("主对话模型已配置为支持多模态，将按需直接加载图片")
 	}
 
-	p.ocrEnable = cfg.GetBool("plugin.ai_chat_bot.ocr.enable")
-	if p.ocrEnable {
+	if p.cfg.OCR.Enable {
 		p.Logger.Info("已启用备用图片识别 LLM")
-		ocrBaseUrl := cfg.GetString("plugin.ai_chat_bot.ocr.base_url")
-		ocrAPIKey := cfg.GetString("plugin.ai_chat_bot.ocr.api_key")
-		ocrModel := cfg.GetString("plugin.ai_chat_bot.ocr.model")
-		ocrPrompt := cfg.GetString("plugin.ai_chat_bot.ocr.prompt")
-
-		if cfg.IsSet("plugin.ai_chat_bot.ocr.max_token") {
-			v := cfg.GetInt("plugin.ai_chat_bot.ocr.max_token")
-			p.ocrParameter.maxToken = &v
-		}
-		if cfg.IsSet("plugin.ai_chat_bot.ocr.temperature") {
-			v := cfg.GetFloat64("plugin.ai_chat_bot.ocr.temperature")
-			p.ocrParameter.temperature = &v
-		}
-		if cfg.IsSet("plugin.ai_chat_bot.ocr.top_p") {
-			v := cfg.GetFloat64("plugin.ai_chat_bot.ocr.top_p")
-			p.ocrParameter.top_p = &v
-		}
-		if cfg.IsSet("plugin.ai_chat_bot.ocr.top_k") {
-			v := cfg.GetInt("plugin.ai_chat_bot.ocr.top_k")
-			p.ocrParameter.top_k = &v
-		}
-
-		ocrllm, err := aichat.NewChatBot(ocrBaseUrl, ocrAPIKey, ocrModel, ocrPrompt, 0, nil, nil)
+		ocrllm, err := aichat.NewChatBot(p.cfg.OCR.BaseURL, p.cfg.OCR.APIKey, p.cfg.OCR.Model, p.cfg.OCR.Prompt, 0, nil, nil)
 		if err != nil {
 			p.Logger.Error("无法初始化备用图片识别 LLM", "error", err.Error())
-			p.ocrEnable = false
 		} else {
 			p.ocrModel = ocrllm
 		}
@@ -515,23 +435,21 @@ func (p *AIChatPlugin) Start(ctx context.Context, cfg *viper.Viper) error {
 	}
 
 	p.Logger.Info("初始化工具执行器...")
-	skillsDir := cfg.GetString("plugin.ai_chat_bot.skills_dir")
+	skillsDir := p.cfg.SkillsDir
 	if skillsDir == "" {
 		skillsDir = "./skills"
 	}
-	var skills []string
-	if cfg.IsSet("plugin.ai_chat_bot.skills") {
-		skills = cfg.GetStringSlice("plugin.ai_chat_bot.skills")
-	}
-	var bashConfig functool.BashConfig
-	if cfg.IsSet("plugin.ai_chat_bot.bash") {
-		if err := cfg.UnmarshalKey("plugin.ai_chat_bot.bash", &bashConfig); err != nil {
-			p.Logger.Warn("解析 bash 工具配置失败", "error", err.Error())
-		}
+	bashConfig := functool.BashConfig{
+		Enable:    p.cfg.Bash.Enable,
+		Shell:     p.cfg.Bash.Shell,
+		Env:       p.cfg.Bash.Env,
+		Whitelist: p.cfg.Bash.Whitelist,
+		Blacklist: p.cfg.Bash.Blacklist,
 	}
 	if bashConfig.Enable {
 		p.Logger.Info("已启用bash工具", "shell", bashConfig.Shell, "whitelist", bashConfig.Whitelist, "blacklist", bashConfig.Blacklist)
 	}
+	// file 工具未注册面板字段（无可视配置项），保留手动读取
 	var fileConfig functool.FileConfig
 	if cfg.IsSet("plugin.ai_chat_bot.file") {
 		if err := cfg.UnmarshalKey("plugin.ai_chat_bot.file", &fileConfig); err != nil {
@@ -541,24 +459,19 @@ func (p *AIChatPlugin) Start(ctx context.Context, cfg *viper.Viper) error {
 	if fileConfig.Enable {
 		p.Logger.Info("已启用file工具（可读取宿主机本地文件并发送，请注意安全风险）")
 	}
-	var localImageConfig functool.LocalImageConfig
-	if cfg.IsSet("plugin.ai_chat_bot.local_image") {
-		if err := cfg.UnmarshalKey("plugin.ai_chat_bot.local_image", &localImageConfig); err != nil {
-			p.Logger.Warn("解析 local_image 工具配置失败", "error", err.Error())
-		}
-	}
+	localImageConfig := functool.LocalImageConfig{Enable: p.cfg.LocalImage.Enable}
 	if localImageConfig.Enable {
 		p.Logger.Info("已启用local_image工具（可读取宿主机本地图片供AI查看，请注意安全风险）")
 	}
 	var err error
 	p.toolExecutor, p.skillManager, err = functool.CreateToolsWithSkill(
-		p.llmParameter.searchToken,
+		p.cfg.Search.Token,
 		p.mcpConfigs,
 		skillsDir,
 		bashConfig,
 		fileConfig,
 		localImageConfig,
-		skills,
+		p.cfg.Skills,
 	)
 	if err != nil {
 		p.Logger.Error("创建工具执行器失败", "error", err.Error())
@@ -567,12 +480,12 @@ func (p *AIChatPlugin) Start(ctx context.Context, cfg *viper.Viper) error {
 	p.Logger.Info("工具执行器初始化完成")
 
 	// AI 定时任务（clock）：AI / 用户动态管理的持久化定时任务，独立于框架 cron
-	if cfg.GetBool("plugin.ai_chat_bot.clock.enable") {
-		defaultTimeoutSec := cfg.GetInt("plugin.ai_chat_bot.clock.default_timeout_sec")
+	if p.cfg.Clock.Enable {
+		defaultTimeoutSec := p.cfg.Clock.DefaultTimeoutSec
 		if defaultTimeoutSec <= 0 {
 			defaultTimeoutSec = 120
 		}
-		maxLog := cfg.GetInt("plugin.ai_chat_bot.clock.max_log_entries")
+		maxLog := p.cfg.Clock.MaxLogEntries
 		if maxLog <= 0 {
 			maxLog = 500
 		}
@@ -584,8 +497,8 @@ func (p *AIChatPlugin) Start(ctx context.Context, cfg *viper.Viper) error {
 
 	// AI 长期记忆：由 AI 通过 memory_save/search/forget 工具自行管理的跨会话记忆，
 	// 按群聊/好友 scope 隔离，持久化到 PersistentStorage（memory: 命名空间）
-	if cfg.GetBool("plugin.ai_chat_bot.memory.enable") {
-		maxEntries := cfg.GetInt("plugin.ai_chat_bot.memory.max_entries")
+	if p.cfg.Memory.Enable {
+		maxEntries := p.cfg.Memory.MaxEntries
 		if maxEntries <= 0 {
 			maxEntries = 200
 		}
@@ -655,5 +568,5 @@ func (p *AIChatPlugin) getPromptForID(id message.QID, isGroup bool) string {
 			return prompt
 		}
 	}
-	return p.llmParameter.prompt
+	return p.cfg.Prompt
 }

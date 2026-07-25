@@ -78,7 +78,7 @@ func (p *AIChatPlugin) configureImageCallbacks(ctx context.Context, bot bot.Bot,
 			return "当前消息及其引用消息中没有可加载的图片", nil
 		}
 
-		if p.multimodal {
+		if p.cfg.Multimodal {
 			loadedImages = append(loadedImages, imageURLs...)
 			return fmt.Sprintf("已加载 %d 张图片，图片将在下一轮上下文中提供，请直接查看图片后回答", len(imageURLs)), nil
 		}
@@ -123,7 +123,7 @@ func (p *AIChatPlugin) loadLocalImageInto(ctx context.Context, path string, load
 	}
 	dataURI := "data:" + imageMIME(path) + ";base64," + base64.StdEncoding.EncodeToString(data)
 
-	if p.multimodal {
+	if p.cfg.Multimodal {
 		// data URI 推入待加载队列，下一轮由 TakeLoadedImages 取出并入上下文；
 		// data URI 不依赖外部链接，历史持久化后重启也不会失效
 		*loadedImages = append(*loadedImages, dataURI)
@@ -241,11 +241,11 @@ func (p *AIChatPlugin) loadMCPConfigs(cfg *viper.Viper) error {
 }
 
 func (p *AIChatPlugin) thinkingOpts() aichat.ChatOptions {
-	if !p.llmParameter.enableThinking {
+	if !p.cfg.Thinking.Enable {
 		return aichat.ChatOptions{}
 	}
 
-	effort := p.llmParameter.thinkingMode
+	effort := p.cfg.Thinking.Mode
 	if effort == "" || effort == "auto" {
 		return aichat.ChatOptions{}
 	}

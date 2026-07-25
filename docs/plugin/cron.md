@@ -44,12 +44,15 @@ import (
 	"github.com/jeanhua/AniaBot/common/msgchain"
 	"github.com/jeanhua/AniaBot/common/plugin"
 	"github.com/jeanhua/AniaBot/common/plugininfo"
-	"github.com/spf13/viper"
 )
+
+type hourlyConfig struct {
+	Groups []int `cfg:"plugin.hourly.groups" label:"报时群列表" group:"整点报时" help:"每行一个群号"`
+}
 
 type HourlyPlugin struct {
 	plugin.Meta
-	groups []int // 从配置读取的目标群
+	cfg hourlyConfig // 由框架在 Start 前自动填充
 }
 
 func NewPlugin() *HourlyPlugin {
@@ -63,17 +66,14 @@ func NewPlugin() *HourlyPlugin {
 	}
 }
 
-// Start 读取配置
-func (p *HourlyPlugin) Start(ctx context.Context, cfg *viper.Viper) error {
-	p.groups = cfg.GetIntSlice("plugin.hourly.groups")
-	return nil
-}
+// ConfigSchema 声明配置结构体，框架自动注册面板字段并填充
+func (p *HourlyPlugin) ConfigSchema() any { return &p.cfg }
 
 // StartCron 注册定时任务
 func (p *HourlyPlugin) StartCron(ctx context.Context, b bot.Bot, c plugin.CronManager) error {
 	_, err := c.AddFunc("0 * * * *", func() {
 		text := fmt.Sprintf("⏰ 现在是 %s", time.Now().Format("15:04"))
-		for _, g := range p.groups {
+		for _, g := range p.cfg.Groups {
 			chain := msgchain.Builder().Group()
 			chain.Text(text)
 			if _, ok := b.SendGroupMsg(message.QID(g), chain.Build()); !ok {
@@ -85,14 +85,7 @@ func (p *HourlyPlugin) StartCron(ctx context.Context, b bot.Bot, c plugin.CronMa
 }
 ```
 
-对应配置：
-
-```yaml
-plugin:
-  hourly:
-    groups:
-      - 123456
-```
+配置项（`plugin.hourly.groups`）会在 Web 控制面板「配置管理 → 整点报时」分组中自动出现，可视化编辑，改完重启生效。
 
 ## 注意事项
 

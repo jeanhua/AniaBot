@@ -104,6 +104,23 @@ type SystemConfig struct {
 //
 // 注意：该方法是纯元信息声明，框架在依赖注入（DI）之前调用，
 // 实现中不应依赖 Logger/Storage 等注入字段。
+//
+// 新插件建议优先实现 ConfigSchemaProvider（结构体标签声明 + 自动填充），
+// 本接口保留用于框架自身字段与需要动态生成字段的场景。两者可共存，
+// 键相同时后注册者原位覆盖。
 type ConfigRegistrar interface {
 	ConfigFields() []pluginconfig.Field
+}
+
+// ConfigSchemaProvider 可选接口：插件返回配置结构体指针（字段带
+// pluginconfig 的 cfg 标签），框架启动时自动完成：
+//  1. 反射注册字段元信息（面板渲染 + 默认值补齐，等价于 ConfigRegistrar）；
+//  2. 在 Start 之前把配置中心的值填充进结构体——插件 Start 里直接读
+//     结构体字段，无需再手写 cfg.Get* 逐个读取。
+//
+// 注意：该方法框架在依赖注入（DI）之前调用，实现中不应依赖
+// Logger/Storage 等注入字段；且每次调用必须返回同一指针
+// （推荐返回插件结构体上某个字段的地址，如 return &p.cfg）。
+type ConfigSchemaProvider interface {
+	ConfigSchema() any
 }

@@ -93,11 +93,11 @@ func (p *AIChatPlugin) getChat(b bot.Bot, id message.QID, isGroup bool, prompt s
 			historyStore = newPersistentHistoryStore(p.PersistentStorage, "chat:"+id.String(), p.Logger)
 		}
 		c, err := aichat.NewChatBot(
-			p.botConfig.baseURL,
-			p.botConfig.apiKey,
-			p.botConfig.model,
+			p.cfg.BaseURL,
+			p.cfg.APIKey,
+			p.cfg.Model,
 			prompt,
-			p.botConfig.maxContextTokens,
+			p.cfg.MaxContextTokens,
 			sessionExecutor,
 			historyStore,
 		)

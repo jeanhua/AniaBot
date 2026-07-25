@@ -489,8 +489,8 @@ func (m *clockManager) executeTask(ctx context.Context, task *ClockTask) (string
 	// historyStore 传 nil → 全新一次性上下文，不持久化、执行后丢弃
 	sessionExecutor := p.toolExecutor.NewSessionExecutor()
 	chat, err := aichat.NewChatBot(
-		p.botConfig.baseURL, p.botConfig.apiKey, p.botConfig.model,
-		prompt, p.botConfig.maxContextTokens, sessionExecutor, nil,
+		p.cfg.BaseURL, p.cfg.APIKey, p.cfg.Model,
+		prompt, p.cfg.MaxContextTokens, sessionExecutor, nil,
 	)
 	if err != nil {
 		return "", aichat.TokenUsage{}, fmt.Errorf("创建对话失败: %w", err)
@@ -599,7 +599,7 @@ func (m *clockManager) makeClockCallback(ctx context.Context, task *ClockTask) l
 	}
 
 	// 复用插件本地图片读取逻辑（主模型多模态或配置了备用识别模型时可用）
-	if m.plugin.multimodal || m.plugin.ocrModel != nil {
+	if m.plugin.cfg.Multimodal || m.plugin.ocrModel != nil {
 		p := m.plugin
 		cbs.LoadLocalImage = func(path string) (string, error) {
 			return p.loadLocalImageInto(ctx, path, &loadedImages), nil

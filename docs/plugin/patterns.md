@@ -83,23 +83,31 @@ func (p *InterceptorPlugin) OnGroupMsg(ctx context.Context, b bot.Bot, cmd comma
 }
 ```
 
-## 配置读取与默认值
+## 配置声明与读取
+
+推荐用结构体标签声明配置（实现 `ConfigSchemaProvider` 后框架自动注册面板字段、补默认值并在 Start 前填充）：
 
 ```go
-func (p *MyPlugin) Start(ctx context.Context, cfg *viper.Viper) error {
-    p.api = cfg.GetString("plugin.myPlugin.api")
-    if p.api == "" {
-        p.Logger.Error("读取 myPlugin.api 配置失败")
-        return aniaerror.ParameterInitializeError // 初始化失败，阻止启动
-    }
+type myConfig struct {
+	API     string `cfg:"plugin.myplugin.api" label:"API 地址" group:"我的插件"`
+	Timeout int    `cfg:"plugin.myplugin.timeout" label:"超时(秒)" group:"我的插件" default:"30"`
+}
 
-    p.timeout = cfg.GetInt("plugin.myPlugin.timeout")
-    if p.timeout <= 0 {
-        p.timeout = 30 // 默认值兜底
-    }
-    return nil
+func (p *MyPlugin) ConfigSchema() any { return &p.cfg }
+
+func (p *MyPlugin) Start(ctx context.Context, cfg *viper.Viper) error {
+	if p.cfg.API == "" {
+		p.Logger.Error("未配置 plugin.myplugin.api")
+		return aniaerror.ParameterInitializeError // 初始化失败，阻止启动
+	}
+	if p.cfg.Timeout <= 0 {
+		p.cfg.Timeout = 30 // 防御性兜底
+	}
+	return nil
 }
 ```
+
+标签与类型推断的完整说明见[第一个插件 · 声明自己的配置](/plugin/first-plugin#进阶：声明自己的配置)。
 
 ## 发送失败的处理
 

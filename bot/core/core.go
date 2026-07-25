@@ -155,6 +155,33 @@ func (ania *AniaBot) Run() {
 		ania.persistent = store
 	}
 
+	// 收集配置字段元信息（框架 + 各插件的 ConfigRegistrar / ConfigSchemaProvider
+	// 声明），面板表单基于该注册表动态渲染，新增插件无需改动面板代码。
+	// 实现 ConfigSchemaProvider 的插件：反射注册其结构体标签字段，并缓存
+	// 结构体指针，待配置中心构建完成后统一填充（自动初始化）。
+	pluginconfig.Register(frameworkConfigFields...)
+	var schemas []struct {
+		name   string
+		schema any
+	}
+	for _, p := range ania.plugins {
+		if r, ok := p.(plugin.ConfigRegistrar); ok {
+			pluginconfig.Register(r.ConfigFields()...)
+		}
+		if sp, ok := p.(plugin.ConfigSchemaProvider); ok {
+			if schema := sp.ConfigSchema(); schema != nil {
+				if err := pluginconfig.RegisterStruct(schema); err != nil {
+					Logger().Error("注册插件配置结构体失败", "plugin", p.GetMeta().Name, "error", err)
+				} else {
+					schemas = append(schemas, struct {
+						name   string
+						schema any
+					}{p.GetMeta().Name, schema})
+				}
+			}
+		}
+	}
+
 	// 配置中心：全部配置存于数据库（首启写入默认值并进入设置向导）。
 	// ToViper 构建内存 viper，插件与适配器的读取方式保持不变。
 	if ania.cfg == nil {
@@ -165,17 +192,17 @@ func (ania *AniaBot) Run() {
 		}
 		ania.configStore = cs
 
-		// 收集配置字段元信息（框架 + 各插件的 ConfigRegistrar 声明），
 		// 补齐缺失的默认值后再构建 viper，保证插件 Start 读到的配置已含默认值。
-		// 面板表单也基于该注册表动态渲染，新增插件无需改动面板代码。
-		pluginconfig.Register(frameworkConfigFields...)
-		for _, p := range ania.plugins {
-			if r, ok := p.(plugin.ConfigRegistrar); ok {
-				pluginconfig.Register(r.ConfigFields()...)
-			}
-		}
 		cs.EnsureDefaults(pluginconfig.Defaults())
 		ania.cfg = cs.ToViper()
+	}
+
+	// 自动初始化：把配置填充进各插件声明的配置结构体（Start 之前完成）。
+	// 失败按插件隔离记日志，该插件退化为结构体零值 + Start 内的既有校验兜底。
+	for _, e := range schemas {
+		if err := pluginconfig.Load(ania.cfg, e.schema); err != nil {
+			Logger().Error("加载插件配置失败", "plugin", e.name, "error", err)
+		}
 	}
 
 	// 缓存存储（易失，支持 TTL/列表；默认 redis，可配置 memory）
