@@ -3,8 +3,7 @@
   <h1>AniaBot</h1>
   <p>一个插件驱动型 QQ 机器人框架</p>
   <a href="https://jeanhua.github.io/AniaBot/">📖 文档</a> |
-  <a href="https://github.com/jeanhua/AniaBot">主分支</a> |
-  <a href="https://github.com/jeanhua/AniaBot/tree/dev/deploy">部署分支</a>
+  <a href="https://github.com/jeanhua/AniaBot">GitHub</a>
 </div>
 
 ## 项目介绍
@@ -26,11 +25,13 @@ cd AniaBot
 go mod tidy
 ```
 
-编辑 `config.yaml`，填写协议适配器地址和管理员 QQ 号，然后运行：
+直接运行，首次启动会自动写入默认配置，并在控制台打印 Web 控制面板的随机初始密码：
 
 ```bash
 go run cmd/main.go
 ```
+
+登录 `http://127.0.0.1:7700`，按设置向导填写 NapCat 连接地址、管理员 QQ 与 AI 模型配置即可。
 
 详细配置和插件开发教程请查阅 **[文档站点](https://jeanhua.github.io/AniaBot/)**。
 

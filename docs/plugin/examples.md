@@ -213,4 +213,4 @@ func (p *WelcomePlugin) OnGroupDecrease(ctx context.Context, b bot.Bot, notice m
 ## 更多真实示例
 
 - 内置插件源码：`bot/plugins/` 下的六个插件（复读机、防撤回、每日新闻都是优秀的学习样本）
-- 部署分支示例：[`dev/deploy` 分支](https://github.com/jeanhua/AniaBot/tree/dev/deploy) 的 `custom/plugins/` 下 10 个生产级插件，涵盖多步交互、定时任务、AI 综合运用等进阶模式，见 [部署分支插件](/guide/deploy-plugins)
+- 自定义插件模板：仓库 `custom/` 目录下的 `plugins/pluginexample`（带注释的插件骨架）与 `mvp`（最小可运行示例）

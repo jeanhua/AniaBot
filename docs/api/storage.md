@@ -15,7 +15,7 @@ p.PersistentStorage  // storage.PersistentStorage —— 持久层
 
 ## Storage —— 缓存层
 
-后端：Redis（默认）/ 进程内内存。支持 TTL 与列表语义。
+后端：进程内内存（默认）/ Redis。支持 TTL 与列表语义。
 
 ### KV
 

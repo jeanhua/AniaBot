@@ -30,15 +30,6 @@ jobs:
           ref: main
           fetch-depth: 0
 
-      - name: Checkout deploy branch examples
-        uses: actions/checkout@v4
-        with:
-          ref: dev/deploy
-          path: .deploy-branch
-          sparse-checkout: |
-            custom/plugins
-          sparse-checkout-cone-mode: false
-
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
@@ -52,20 +43,6 @@ jobs:
 
       - name: Copy logo asset
         run: cp docs/logo.png docs/.vitepress/public/logo.png 2>/dev/null || true
-
-      - name: Generate deploy branch plugin list
-        run: |
-          mkdir -p docs/.vitepress/public
-          PLUGIN_DIR=".deploy-branch/custom/plugins"
-          if [ -d "$PLUGIN_DIR" ]; then
-            echo "Found deploy branch plugins:"
-            ls "$PLUGIN_DIR"
-            # Generate a JSON file listing available example plugins
-            plugins=$(ls "$PLUGIN_DIR" 2>/dev/null | jq -R . | jq -s .)
-            echo "{\"plugins\": $plugins}" > docs/.vitepress/public/deploy-plugins.json
-          else
-            echo "{\"plugins\": []}" > docs/.vitepress/public/deploy-plugins.json
-          fi
 
       - name: Build VitePress docs
         working-directory: docs

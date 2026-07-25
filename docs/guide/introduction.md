@@ -67,7 +67,7 @@ LevelLog(-1000)  →  LevelNormal(0)  →  LevelPostHandle(1000)
 
 | 层级 | 接口 | 后端 | 适用场景 |
 | --- | --- | --- | --- |
-| 缓存层 | `Storage` | Redis（默认）/ 内存 | 热数据、TTL、分布式锁、列表 |
+| 缓存层 | `Storage` | 内存（默认）/ Redis | 热数据、TTL、分布式锁、列表 |
 | 持久化层 | `PersistentStorage` | SQLite（默认）/ MySQL | 用户数据、配置、历史记录 |
 
 框架在注入时按插件名自动做命名空间隔离，插件之间永远不会键冲突。所有 SQL 后端均为纯 Go 驱动，交叉编译无忧。

@@ -17,7 +17,7 @@ p.PersistentStorage  // 持久层：重启不丢，纯 KV
 
 ## 缓存层 Storage
 
-后端：`redis`（默认）/ `memory`（进程内）。
+后端：`memory`（默认，进程内）/ `redis`。
 
 ### KV 操作
 

@@ -78,7 +78,7 @@ bot.SendGroupForwardMsg(groupId, fb.Build())
 私聊合并转发同理：`Builder().FriendForward()` + `bot.SendFriendForwardMsg`。
 
 ::: tip 伪造聊天记录？
-`Message(userId, nickname, chain)` 的 userId 和 nickname 完全由你指定 —— 部署分支的「聊天记录伪造插件」就是利用这一点实现趣味玩法的。
+`Message(userId, nickname, chain)` 的 userId 和 nickname 完全由你指定 —— 利用这一点可以实现「伪造聊天记录」等趣味玩法。
 :::
 
 ## 发送接口

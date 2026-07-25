@@ -30,8 +30,7 @@ export default withMermaid(defineConfig({
       {
         text: '链接',
         items: [
-          { text: 'GitHub 主分支', link: 'https://github.com/jeanhua/AniaBot' },
-          { text: '部署分支（示例插件）', link: 'https://github.com/jeanhua/AniaBot/tree/dev/deploy' },
+          { text: 'GitHub', link: 'https://github.com/jeanhua/AniaBot' },
           { text: '提交 Issue', link: 'https://github.com/jeanhua/AniaBot/issues' },
           { text: 'Releases', link: 'https://github.com/jeanhua/AniaBot/releases' },
         ],
@@ -53,7 +52,6 @@ export default withMermaid(defineConfig({
           text: '插件生态',
           items: [
             { text: '内置插件', link: '/guide/builtin-plugins' },
-            { text: '部署分支插件', link: '/guide/deploy-plugins' },
             { text: '常见问题', link: '/guide/faq' },
           ],
         },

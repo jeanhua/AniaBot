@@ -161,7 +161,7 @@ All SQL backends use pure-Go drivers (`modernc.org/sqlite`, `github.com/go-sql-d
 
 Three GitHub Actions workflows in `.github/workflows/`:
 
-- **test.yaml** — runs on push/PR to `main` and `dev/deploy`: `go vet`, `go test -v -race -coverprofile=coverage.out ./...`
+- **test.yaml** — runs on push/PR to `main`: `go vet`, `go test -v -race -coverprofile=coverage.out ./...`
 - **release.yaml** — runs on version tags (`v*.*.*`): tests then auto-generates changelog from conventional commits
 - **docs.yaml** — builds VitePress docs and deploys to GitHub Pages on `main` push
 
