@@ -22,6 +22,18 @@ AniaBot 的全部配置存储在**数据库**中（持久化存储的 `ania_kv` 
 
 其余所有配置（管理员、适配器、缓存、面板、插件）都在数据库中，通过面板编辑。
 
+## 环境变量覆盖（ANIA 前缀）
+
+数据库中的**任意配置键**都可以用环境变量临时覆盖（优先级高于数据库中的值，不写回数据库），适合容器部署或临时调试。命名规则：`ANIA_` + 配置键全大写、点与横线转为下划线：
+
+| 配置键 | 环境变量 |
+| --- | --- |
+| `bot.admin_panel.listen` | `ANIA_BOT_ADMIN_PANEL_LISTEN` |
+| `bot.adapter.ws.address` | `ANIA_BOT_ADAPTER_WS_ADDRESS` |
+| `plugin.ai_chat_bot.api_key` | `ANIA_PLUGIN_AI_CHAT_BOT_API_KEY` |
+
+非字符串类型（int / bool / 数组等）按 JSON 解析，如 `ANIA_BOT_ADMIN_ID=123456789`。覆盖生效时启动日志会打印 `环境变量覆盖配置 key=...`。
+
 ## bot —— 框架配置
 
 ### admin_id

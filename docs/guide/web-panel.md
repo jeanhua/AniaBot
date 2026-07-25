@@ -11,7 +11,7 @@ AniaBot 内置 Web 控制面板（Vue 3 + Tailwind CSS，构建产物通过 `go:
 | `bot.admin_panel.enable` | 是否启用面板 | `true` |
 | `bot.admin_panel.listen` | 监听地址 | `127.0.0.1:7700` |
 
-启动后访问 `http://127.0.0.1:7700`。如需局域网访问，将 `listen` 改为 `0.0.0.0:7700`（面板有密码保护，仍建议仅在内网暴露）。
+启动后访问 `http://127.0.0.1:7700`。如需局域网访问，将 `listen` 改为 `0.0.0.0:7700`（面板有密码保护，仍建议仅在内网暴露）；容器部署时也可直接用环境变量 `ANIA_BOT_ADMIN_PANEL_LISTEN` 覆盖（见 [环境变量覆盖](/guide/configuration#环境变量覆盖-ania-前缀)）。
 
 ## 登录
 
@@ -45,7 +45,15 @@ AniaBot 内置 Web 控制面板（Vue 3 + Tailwind CSS，构建产物通过 `go:
 :::
 
 ::: warning 忘记密码？
-删除数据库中 `ania_kv` 表 `__admin:` 命名空间下的 `password_hash` 行（或直接删除整个数据库重新开始），重启后会重新生成初始密码。
+用命令行重置（无需登录，重置后退出，再正常启动 Bot 即可）：
+
+```bash
+./AniaBot -set-password 新密码
+```
+
+该命令会打开与正常运行一致的持久化存储并覆盖密码哈希，使用 MySQL 存储时同样生效（通过环境变量 `ANIABOT_STORE_DRIVER` / `ANIABOT_MYSQL_DSN` 引导）。建议先停止 Bot 再执行，尤其是默认的 SQLite 存储（单文件写锁）。
+
+兜底方案：删除数据库中 `ania_kv` 表 `__admin:` 命名空间下的 `password_hash` 行（或直接删除整个数据库重新开始），重启后会重新生成初始密码。
 :::
 
 ## 功能页面
