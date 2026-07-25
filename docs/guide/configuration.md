@@ -169,7 +169,7 @@ HTTP 模式下 NapCat 向 `localhost` 上报会失败，请将 NapCat 的 HTTP C
 | 配置键 | 默认值 | 说明 |
 | --- | --- | --- |
 | `plugin.ai_chat_bot.bash.enable` | `false` | 允许 AI 在宿主机执行 shell 命令 |
-| `plugin.ai_chat_bot.bash.shell` | `/bin/bash` | 使用的 shell |
+| `plugin.ai_chat_bot.bash.shell` | 空 | 命令解释器，留空使用系统默认（Linux/macOS 为 `sh`，Windows 为 `cmd`），可填 `/bin/bash`、`/bin/ash` 等 |
 | `plugin.ai_chat_bot.bash.env` | `[]` | 环境变量，如 `["HOME=/root"]` |
 | `plugin.ai_chat_bot.bash.whitelist` | `[]` | 非空时仅允许匹配这些正则的命令 |
 | `plugin.ai_chat_bot.bash.blacklist` | `["^mkfs", "^shutdown"]` | 匹配这些正则的命令被禁止 |

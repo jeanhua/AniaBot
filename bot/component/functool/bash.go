@@ -6,7 +6,10 @@ import (
 	"fmt"
 	"log"
 	"os/exec"
+	"path/filepath"
 	"regexp"
+	"runtime"
+	"strings"
 	"time"
 
 	"github.com/jeanhua/AniaBot/bot/component/llmtool"
@@ -20,29 +23,44 @@ const (
 // BashConfig bash工具配置
 type BashConfig struct {
 	Enable    bool     `json:"enable" mapstructure:"enable"`
-	Shell     string   `json:"shell" mapstructure:"shell"`         // shell 路径，默认 /bin/bash
+	Shell     string   `json:"shell" mapstructure:"shell"`         // shell 路径，留空使用系统默认（Linux/macOS 为 sh，Windows 为 cmd）
 	Env       []string `json:"env" mapstructure:"env"`             // 环境变量，格式 KEY=VALUE
 	Whitelist []string `json:"whitelist" mapstructure:"whitelist"` // 非空时只允许匹配这些正则的命令
 	Blacklist []string `json:"blacklist" mapstructure:"blacklist"` // 匹配这些正则的命令被禁止
 }
 
 type BashParams struct {
-	Command string `json:"command" desc:"要执行的bash命令"`
+	Command string `json:"command" desc:"要执行的 shell 命令"`
 }
 
 type BashTool struct {
 	llmtool.BaseTool[BashParams]
 	shell     string
+	shellArg  string // 命令行包装参数：sh/bash 为 -c，cmd 为 /C
 	env       []string
 	whitelist []*regexp.Regexp
 	blacklist []*regexp.Regexp
 }
 
-func NewBashTool(config BashConfig) (*BashTool, error) {
-	shell := config.Shell
-	if shell == "" {
-		shell = "/bin/bash"
+// resolveShell 解析实际使用的 shell 及其包装参数。
+// 未配置时使用系统默认 shell，命令由该 shell 解释，
+// AI 可在命令中显式调用 bash/ash/python 等其他解释器。
+func resolveShell(configured string) (shell, shellArg string) {
+	if configured == "" {
+		if runtime.GOOS == "windows" {
+			return "cmd", "/C"
+		}
+		return "sh", "-c"
 	}
+	base := strings.ToLower(filepath.Base(configured))
+	if base == "cmd" || base == "cmd.exe" {
+		return configured, "/C"
+	}
+	return configured, "-c"
+}
+
+func NewBashTool(config BashConfig) (*BashTool, error) {
+	shell, shellArg := resolveShell(config.Shell)
 
 	compile := func(patterns []string) ([]*regexp.Regexp, error) {
 		regs := make([]*regexp.Regexp, 0, len(patterns))
@@ -65,9 +83,11 @@ func NewBashTool(config BashConfig) (*BashTool, error) {
 		return nil, err
 	}
 
+	desc := fmt.Sprintf("在宿主机上执行 shell 命令（通过 %s 解释执行，可在命令中显式调用 bash/ash/python 等其他解释器），超时2分钟，输出最大4096字符", shell)
 	return &BashTool{
-		BaseTool:  llmtool.MakeBaseTool("bash", "在宿主机上执行bash命令，超时2分钟，输出最大4096字符", BashParams{}),
+		BaseTool:  llmtool.MakeBaseTool("bash", desc, BashParams{}),
 		shell:     shell,
+		shellArg:  shellArg,
 		env:       config.Env,
 		whitelist: whitelist,
 		blacklist: blacklist,
@@ -115,7 +135,7 @@ func (t *BashTool) Execute(_ context.Context, params any, _ llmtool.CallBackFunc
 	ctx, cancel := context.WithTimeout(context.Background(), bashTimeout)
 	defer cancel()
 
-	cmd := exec.CommandContext(ctx, t.shell, "-c", p.Command)
+	cmd := exec.CommandContext(ctx, t.shell, t.shellArg, p.Command)
 	if len(t.env) > 0 {
 		cmd.Env = t.env
 	}

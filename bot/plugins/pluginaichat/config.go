@@ -23,8 +23,8 @@ type searchConfig struct {
 }
 
 type bashToolConfig struct {
-	Enable    bool     `cfg:"enable" label:"启用 Bash 工具" group:"AI 对话 · 工具" help:"直接在宿主机执行 bash 命令，注意安全风险" default:"false"`
-	Shell     string   `cfg:"shell" label:"Shell 路径" group:"AI 对话 · 工具" default:"/bin/bash"`
+	Enable    bool     `cfg:"enable" label:"启用 Bash 工具" group:"AI 对话 · 工具" help:"直接在宿主机执行 shell 命令，注意安全风险" default:"false"`
+	Shell     string   `cfg:"shell" label:"Shell 路径" group:"AI 对话 · 工具" help:"留空使用系统默认（Linux/macOS 为 sh，Windows 为 cmd），可填 /bin/bash、/bin/ash 等"`
 	Env       []string `cfg:"env" label:"环境变量" group:"AI 对话 · 工具" help:"KEY=VALUE，每行一个"`
 	Whitelist []string `cfg:"whitelist" label:"命令白名单(正则)" group:"AI 对话 · 工具" help:"非空时仅允许匹配的命令，每行一个"`
 	Blacklist []string `cfg:"blacklist" label:"命令黑名单(正则)" group:"AI 对话 · 工具" help:"匹配的命令被禁止，每行一个" default:"config(\\.dev)?\\.(yaml|yml|json),^mkfs,^shutdown,^reboot"`

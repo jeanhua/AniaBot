@@ -114,8 +114,8 @@ func (p *AIChatPlugin) configureImageCallbacks(ctx context.Context, bot bot.Bot,
 // 待加载队列（loadedImages 由调用方持有，下一轮上下文提供），否则交由备用识别模型描述。
 // 与 file 工具一致，禁止读取配置文件以避免凭据等敏感信息经图片通道泄露。
 func (p *AIChatPlugin) loadLocalImageInto(ctx context.Context, path string, loadedImages *[]string) string {
-	if strings.Contains(path, "config.yaml") || strings.Contains(path, "config.dev.yaml") {
-		return "禁止读取配置文件"
+	if strings.Contains(path, "aniabot.db") {
+		return "禁止读取aniabot数据库文件"
 	}
 	data, err := os.ReadFile(path)
 	if err != nil {

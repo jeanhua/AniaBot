@@ -42,8 +42,8 @@ func (t *SendFileTool) Execute(ctx context.Context, params any, callbacks llmtoo
 	p := params.(*SendFileParams)
 	log.Println("执行file... 参数:", p)
 
-	if strings.Contains(p.Path, "config.yaml") || strings.Contains(p.Path, "config.dev.yaml") {
-		return "禁止发送config文件", errToolExecute
+	if strings.Contains(p.Path, "aniabot.db") {
+		return "禁止发送aniabot数据库文件", errToolExecute
 	}
 
 	data, err := os.ReadFile(p.Path)
