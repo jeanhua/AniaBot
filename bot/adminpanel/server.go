@@ -20,6 +20,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/jeanhua/AniaBot/bot/component/msglog"
 	"github.com/jeanhua/AniaBot/bot/component/tasklog"
 	"github.com/jeanhua/AniaBot/bot/core/configstore"
 	"github.com/jeanhua/AniaBot/common/model/message"
@@ -55,6 +56,12 @@ type ClockTaskSource interface {
 	DeleteClockTask(id string) error
 }
 
+// MsgLogSource 可选接口：插件实现后，面板「消息日志」页可展示其记录的
+// 群消息 / 好友消息 / 通知事件（当前由日志打印插件实现，内存环形缓冲）。
+type MsgLogSource interface {
+	MsgLogRecent(limit int) []msglog.Entry
+}
+
 // Options 面板依赖。
 type Options struct {
 	Listen        string                          // 监听地址，如 127.0.0.1:7700
@@ -65,6 +72,7 @@ type Options struct {
 	AdapterDetail func() string                   // 适配器状态详情（最近错误/重试次数，可为 nil）
 	TaskLogs      func(limit int) []tasklog.Entry // AI 定时任务执行日志（可为 nil）
 	Clocks        ClockTaskSource                 // AI 定时任务列表与启停（可为 nil）
+	MsgLogs       func(limit int) []msglog.Entry  // 消息日志（群/好友/通知，可为 nil）
 	Logger        *slog.Logger
 }
 
@@ -119,6 +127,7 @@ func (s *Server) routes() {
 	s.mux.Handle("GET /api/groups", s.requireAuth(http.HandlerFunc(s.handleGroups)))
 	s.mux.Handle("GET /api/friends", s.requireAuth(http.HandlerFunc(s.handleFriends)))
 	s.mux.Handle("GET /api/tasklogs", s.requireAuth(http.HandlerFunc(s.handleTaskLogs)))
+	s.mux.Handle("GET /api/msglogs", s.requireAuth(http.HandlerFunc(s.handleMsgLogs)))
 	s.mux.Handle("GET /api/clocks", s.requireAuth(http.HandlerFunc(s.handleClockList)))
 	s.mux.Handle("POST /api/clocks", s.requireAuth(http.HandlerFunc(s.handleClockCreate)))
 	s.mux.Handle("PUT /api/clocks/{id}", s.requireAuth(http.HandlerFunc(s.handleClockUpdate)))
@@ -409,6 +418,15 @@ func (s *Server) handleTaskLogs(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, s.opt.TaskLogs(200))
+}
+
+// handleMsgLogs 返回最近的消息日志（群/好友/通知，新在前）。
+func (s *Server) handleMsgLogs(w http.ResponseWriter, r *http.Request) {
+	if s.opt.MsgLogs == nil {
+		writeJSON(w, http.StatusOK, []any{})
+		return
+	}
+	writeJSON(w, http.StatusOK, s.opt.MsgLogs(300))
 }
 
 // handleClockList 返回 AI 定时任务列表（功能未启用时返回空数组）。

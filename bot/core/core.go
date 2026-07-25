@@ -13,6 +13,7 @@ import (
 
 	"github.com/go-resty/resty/v2"
 	"github.com/jeanhua/AniaBot/bot/adminpanel"
+	"github.com/jeanhua/AniaBot/bot/component/msglog"
 	"github.com/jeanhua/AniaBot/bot/component/tasklog"
 	"github.com/jeanhua/AniaBot/bot/core/configstore"
 	"github.com/jeanhua/AniaBot/bot/utils"
@@ -305,6 +306,7 @@ func (ania *AniaBot) startAdminPanel() {
 	// 查找提供定时任务执行日志的插件（如 AI 对话插件的 clock 功能）
 	var taskLogFn func(limit int) []tasklog.Entry
 	var clockSrc adminpanel.ClockTaskSource
+	var msgLogFn func(limit int) []msglog.Entry
 	for _, p := range ania.plugins {
 		if src, ok := p.(adminpanel.TaskLogSource); ok {
 			taskLogFn = src.TaskLogRecent
@@ -312,7 +314,10 @@ func (ania *AniaBot) startAdminPanel() {
 		if src, ok := p.(adminpanel.ClockTaskSource); ok {
 			clockSrc = src
 		}
-		if taskLogFn != nil && clockSrc != nil {
+		if src, ok := p.(adminpanel.MsgLogSource); ok {
+			msgLogFn = src.MsgLogRecent
+		}
+		if taskLogFn != nil && clockSrc != nil && msgLogFn != nil {
 			break
 		}
 	}
@@ -353,6 +358,7 @@ func (ania *AniaBot) startAdminPanel() {
 		},
 		TaskLogs: taskLogFn,
 		Clocks:   clockSrc,
+		MsgLogs:  msgLogFn,
 		Logger:   Logger().WithGroup("AdminPanel"),
 	})
 	go srv.Run()

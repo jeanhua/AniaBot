@@ -66,6 +66,7 @@ export const api = {
   getGroups: () => request('/api/groups'),
   getFriends: () => request('/api/friends'),
   getTaskLogs: () => request('/api/tasklogs'),
+  getMsgLogs: () => request('/api/msglogs'),
   getClocks: () => request('/api/clocks'),
   createClock: (task) =>
     request('/api/clocks', { method: 'POST', body: JSON.stringify(task) }),
