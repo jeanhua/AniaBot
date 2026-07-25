@@ -66,6 +66,13 @@ export const api = {
   getGroups: () => request('/api/groups'),
   getFriends: () => request('/api/friends'),
   getTaskLogs: () => request('/api/tasklogs'),
+  getClocks: () => request('/api/clocks'),
+  createClock: (task) =>
+    request('/api/clocks', { method: 'POST', body: JSON.stringify(task) }),
+  updateClock: (id, fields) =>
+    request(`/api/clocks/${encodeURIComponent(id)}`, { method: 'PUT', body: JSON.stringify(fields) }),
+  deleteClock: (id) =>
+    request(`/api/clocks/${encodeURIComponent(id)}`, { method: 'DELETE' }),
 
   restart: () => request('/api/restart', { method: 'POST' }),
   // 轮询等待 Bot 重启完成（会话持久化在数据库中，重启后仍有效）

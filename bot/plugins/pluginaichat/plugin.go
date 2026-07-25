@@ -541,7 +541,7 @@ func (p *AIChatPlugin) loadPromptOverrides(cfg *viper.Viper) {
 			p.Logger.Warn("Prompt 覆盖配置: 无效的群聊ID", "id", k, "error", err.Error())
 			continue
 		}
-		p.promptOverrides.groups[message.QID(id)] = v
+		p.promptOverrides.groups[message.FromUint64(id)] = v
 	}
 	for k, v := range overrideCfg.Friends {
 		id, err := strconv.ParseUint(k, 10, 64)
@@ -549,7 +549,7 @@ func (p *AIChatPlugin) loadPromptOverrides(cfg *viper.Viper) {
 			p.Logger.Warn("Prompt 覆盖配置: 无效的好友ID", "id", k, "error", err.Error())
 			continue
 		}
-		p.promptOverrides.friends[message.QID(id)] = v
+		p.promptOverrides.friends[message.FromUint64(id)] = v
 	}
 
 	count := len(p.promptOverrides.groups) + len(p.promptOverrides.friends)

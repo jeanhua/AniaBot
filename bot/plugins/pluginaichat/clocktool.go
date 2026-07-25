@@ -87,7 +87,7 @@ func (t *clockCreateTool) Execute(_ context.Context, params any, _ llmtool.CallB
 		if err != nil {
 			return "", fmt.Errorf("created_by 必须是QQ号数字: %w", err)
 		}
-		creator = message.QID(n)
+		creator = message.FromUint64(n)
 	}
 	task := &ClockTask{
 		Cron:       p.Cron,

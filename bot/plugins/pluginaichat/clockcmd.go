@@ -33,7 +33,7 @@ func (p *AIChatPlugin) handleClockCommand(ctx context.Context, b bot.Bot, cmd co
 		return false, nil
 	}
 
-	isGroup := msg.GroupId != 0
+	isGroup := msg.GroupId != ""
 	targetType := clockTargetFriend
 	targetID := msg.Sender.UserId.String()
 	if isGroup {
@@ -272,7 +272,7 @@ func (p *AIChatPlugin) cmdLog(targetType string, targetID string, n int, all boo
 
 // replyClock 在当前会话回复文本（群聊不 @，保持简洁）。
 func (p *AIChatPlugin) replyClock(b bot.Bot, msg message.Message, text string) {
-	if msg.GroupId != 0 {
+	if msg.GroupId != "" {
 		builder := msgchain.Builder().Group()
 		builder.Text(text)
 		if _, ok := b.SendGroupMsg(msg.GroupId, builder.Build()); !ok {

@@ -129,7 +129,7 @@ func (n *napcatWebSocketAdapter) SendGroupMsg(groupId message.QID, chain msgchai
 	params := map[string]any{"group_id": groupId, "message": chain.GetGroupMsg()}
 	res, ok := request[message.Message](n, "send_group_msg", params, "ack")
 	if !ok || res == nil {
-		return 0, false
+		return "", false
 	}
 	return res.MessageId, true
 }
@@ -138,7 +138,7 @@ func (n *napcatWebSocketAdapter) SendGroupAIVoiceMsg(groupId message.QID, charac
 	params := message.AiVoiceMsg{GroupId: groupId, Character: character, Text: msg}
 	res, ok := request[message.Message](n, "send_group_ai_record", params, "ack")
 	if !ok || res == nil {
-		return 0, false
+		return "", false
 	}
 	return res.MessageId, true
 }
@@ -147,7 +147,7 @@ func (n *napcatWebSocketAdapter) SendFriendMsg(userId message.QID, chain msgchai
 	params := map[string]any{"user_id": userId, "message": chain.GetFriendMsg()}
 	res, ok := request[message.Message](n, "send_private_msg", params, "ack")
 	if !ok || res == nil {
-		return 0, false
+		return "", false
 	}
 	return res.MessageId, true
 }
@@ -156,7 +156,7 @@ func (n *napcatWebSocketAdapter) SendGroupForwardMsg(groupId message.QID, chain 
 	params := message.GroupForwardMessage{GroupId: groupId, ForwardMessageSegment: chain.GetForwardMsg()}
 	res, ok := request[message.Message](n, "send_forward_msg", params, "ack")
 	if !ok || res == nil {
-		return 0, false
+		return "", false
 	}
 	return res.MessageId, true
 }
@@ -165,7 +165,7 @@ func (n *napcatWebSocketAdapter) SendFriendForwardMsg(userId message.QID, chain 
 	params := message.FriendForwardMessage{UserId: userId, ForwardMessageSegment: chain.GetForwardMsg()}
 	res, ok := request[message.Message](n, "send_forward_msg", params, "ack")
 	if !ok || res == nil {
-		return 0, false
+		return "", false
 	}
 	return res.MessageId, true
 }

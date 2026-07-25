@@ -36,15 +36,15 @@ func TestParseFunctions(t *testing.T) {
 
 	// ParseMention id
 	ok = ParseMention(OB11Segment{Type: SegmentMention, Data: map[string]any{"qq": "123"}}, &mm)
-	if !ok || mm.QQ != 123 {
-		t.Fatalf("ParseMention(id) failed: ok=%v qq=%d", ok, mm.QQ)
+	if !ok || mm.QQ != "123" {
+		t.Fatalf("ParseMention(id) failed: ok=%v qq=%s", ok, mm.QQ)
 	}
 
 	// ParseReply
 	var rm ReplyMessage
 	ok = ParseReply(OB11Segment{Type: SegmentReply, Data: map[string]any{"id": "10"}}, &rm)
-	if !ok || rm.Id != 10 {
-		t.Fatalf("ParseReply failed: ok=%v id=%d", ok, rm.Id)
+	if !ok || rm.Id != "10" {
+		t.Fatalf("ParseReply failed: ok=%v id=%s", ok, rm.Id)
 	}
 
 	// ParseVideo
@@ -87,7 +87,7 @@ func TestParseFunctions(t *testing.T) {
 	// ParseForward
 	var forw ForwardMessage
 	ok = ParseForward(OB11Segment{Type: SegmentForward, Data: map[string]any{"id": "123"}}, &forw)
-	if !ok || forw.Id != 123 {
-		t.Fatalf("ParseForward failed: ok=%v id=%d", ok, forw.Id)
+	if !ok || forw.Id != "123" {
+		t.Fatalf("ParseForward failed: ok=%v id=%s", ok, forw.Id)
 	}
 }

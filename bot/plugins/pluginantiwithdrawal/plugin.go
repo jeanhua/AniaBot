@@ -170,7 +170,7 @@ func (p *AntiWithdrawalPlugin) OnFriendMsg(ctx context.Context, bot bot.Bot, cmd
 					n = num
 				}
 			}
-			queueI, ok := p.msg.Load(message.QID(Gid))
+			queueI, ok := p.msg.Load(message.FromUint64(uint64(Gid)))
 			if !ok {
 				builder := msgchain.Builder().Friend()
 				builder.Text("请输入正确参数:Group ID Error, 语法: /explore [Group ID] [count](option)")

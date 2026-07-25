@@ -104,7 +104,7 @@ func (raw Message) FriendlyText(showUrl bool, opts ...MsgOptFunc) string {
 					result.WriteString("[at:全体成员]")
 				} else {
 					// 无法解析被@用户在本群的真实昵称，仅输出其 id，避免误用发送者昵称造成张冠李戴
-					result.WriteString(fmt.Sprintf("[at:id:%d]", msg.QQ))
+					result.WriteString(fmt.Sprintf("[at:id:%s]", msg.QQ))
 				}
 			}
 		case SegmentMusic:
@@ -141,7 +141,7 @@ func (raw Message) FriendlyText(showUrl bool, opts ...MsgOptFunc) string {
 							if nickname == "" {
 								nickname = msg.Sender.Nickname
 							}
-							result.WriteString(fmt.Sprintf("\n[nickname: %s id: %d]: %s\n", nickname, msg.Sender.UserId, msg.FriendlyText(showUrl)))
+							result.WriteString(fmt.Sprintf("\n[nickname: %s id: %s]: %s\n", nickname, msg.Sender.UserId, msg.FriendlyText(showUrl)))
 						}
 						result.WriteString("</合并转发消息>\n")
 					} else {

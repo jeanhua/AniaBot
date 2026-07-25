@@ -73,12 +73,11 @@ func ParseMention(s OB11Segment, m *MentionMessage) bool {
 		return true
 	}
 
-	id, err := strconv.Atoi(qq)
-	if err != nil {
+	if _, err := strconv.Atoi(qq); err != nil {
 		return false
 	}
 
-	m.QQ = QID(id)
+	m.QQ = QID(qq)
 	return true
 }
 
@@ -92,12 +91,11 @@ func ParseReply(s OB11Segment, r *ReplyMessage) bool {
 		return false
 	}
 
-	id, err := strconv.Atoi(idStr)
-	if err != nil {
+	if _, err := strconv.Atoi(idStr); err != nil {
 		return false
 	}
 
-	r.Id = QID(id)
+	r.Id = QID(idStr)
 	return true
 }
 
@@ -194,10 +192,7 @@ func ParseForward(s OB11Segment, f *ForwardMessage) bool {
 		return false
 	}
 
-	qid, err := FromString(id)
-	if err != nil {
-		return false
-	}
+	qid := FromString(id)
 	f.Id = qid
 	return true
 }

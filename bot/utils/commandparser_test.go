@@ -29,7 +29,7 @@ func TestParseCommand(t *testing.T) {
 	}
 
 	// mention detection
-	self := message.QID(999)
+	self := message.QID("999")
 	msg = message.Message{SelfId: self, Message: []message.OB11Segment{{Type: "at", Data: map[string]any{"qq": "999"}}}}
 	cmd = ParseCommand(msg)
 	if !cmd.Mention {

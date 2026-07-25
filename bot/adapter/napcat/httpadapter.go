@@ -136,7 +136,7 @@ func (n *napcatHttpAdapter) SendGroupMsg(groupId message.QID, chain msgchain.Gro
 
 	var resp message.Response[message.Message]
 	if !n.postAndCheck(n.baseUrl+"/send_group_msg", data, &resp) {
-		return 0, false
+		return "", false
 	}
 	return resp.Data.MessageId, checkResponseStatus(&resp)
 }
@@ -149,7 +149,7 @@ func (n *napcatHttpAdapter) SendFriendMsg(userId message.QID, chain msgchain.Fri
 
 	var resp message.Response[message.Message]
 	if !n.postAndCheck(n.baseUrl+"/send_private_msg", data, &resp) {
-		return 0, false
+		return "", false
 	}
 	return resp.Data.MessageId, checkResponseStatus(&resp)
 }
@@ -162,7 +162,7 @@ func (n *napcatHttpAdapter) SendGroupAIVoiceMsg(groupId message.QID, character, 
 	}
 	var resp message.Response[message.Message]
 	if !n.postAndCheck(n.baseUrl+"/send_group_ai_record", data, &resp) {
-		return 0, false
+		return "", false
 	}
 	return resp.Data.MessageId, checkResponseStatus(&resp)
 }
@@ -183,7 +183,7 @@ func (n *napcatHttpAdapter) SendGroupForwardMsg(groupId message.QID, chain msgch
 	}
 	var resp message.Response[message.Message]
 	if !n.postAndCheck(n.baseUrl+"/send_forward_msg", data, &resp) {
-		return 0, false
+		return "", false
 	}
 	return resp.Data.MessageId, checkResponseStatus(&resp)
 }
@@ -195,7 +195,7 @@ func (n *napcatHttpAdapter) SendFriendForwardMsg(userId message.QID, chain msgch
 	}
 	var resp message.Response[message.Message]
 	if !n.postAndCheck(n.baseUrl+"/send_forward_msg", data, &resp) {
-		return 0, false
+		return "", false
 	}
 	return resp.Data.MessageId, checkResponseStatus(&resp)
 }

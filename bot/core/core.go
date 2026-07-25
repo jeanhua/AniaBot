@@ -232,7 +232,7 @@ func (ania *AniaBot) Run() {
 			p.SetRestyClient(ania.restyClient)
 			p.SetLogger(Logger().WithGroup(p.GetMeta().Name))
 			p.SetConfig(plugin.SystemConfig{
-				AdminId: message.QID(ania.cfg.GetInt64("bot.admin_id")),
+				AdminId: message.FromUint64(uint64(ania.cfg.GetInt64("bot.admin_id"))),
 			})
 
 			// start
@@ -304,9 +304,15 @@ func (ania *AniaBot) Run() {
 func (ania *AniaBot) startAdminPanel() {
 	// 查找提供定时任务执行日志的插件（如 AI 对话插件的 clock 功能）
 	var taskLogFn func(limit int) []tasklog.Entry
+	var clockSrc adminpanel.ClockTaskSource
 	for _, p := range ania.plugins {
 		if src, ok := p.(adminpanel.TaskLogSource); ok {
 			taskLogFn = src.TaskLogRecent
+		}
+		if src, ok := p.(adminpanel.ClockTaskSource); ok {
+			clockSrc = src
+		}
+		if taskLogFn != nil && clockSrc != nil {
 			break
 		}
 	}
@@ -346,6 +352,7 @@ func (ania *AniaBot) startAdminPanel() {
 			return ""
 		},
 		TaskLogs: taskLogFn,
+		Clocks:   clockSrc,
 		Logger:   Logger().WithGroup("AdminPanel"),
 	})
 	go srv.Run()

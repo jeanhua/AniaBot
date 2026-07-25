@@ -87,7 +87,7 @@ func (p *NewsPlugin) sendNews(bot bot.Bot) {
 	for _, group := range p.groups {
 		builder := msgchain.Builder().Group()
 		builder.ImageUrl(p.api)
-		_, ok := bot.SendGroupMsg(message.QID(group), builder.Build())
+		_, ok := bot.SendGroupMsg(message.FromUint64(uint64(group)), builder.Build())
 		if ok {
 			p.Logger.Info("发送消息", "groupId", group, "message", "[每日新闻]")
 		} else {

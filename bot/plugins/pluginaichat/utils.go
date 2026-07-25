@@ -31,7 +31,7 @@ func collectImageURLs(bot bot.Bot, msgs ...message.Message) []string {
 
 	var collect func(message.Message)
 	collect = func(current message.Message) {
-		if current.MessageId != 0 {
+		if current.MessageId != "" {
 			if _, ok := seenMessages[current.MessageId]; ok {
 				return
 			}

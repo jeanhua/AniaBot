@@ -17,6 +17,7 @@ import (
 	"github.com/jeanhua/AniaBot/common/bot"
 	"github.com/jeanhua/AniaBot/common/model/message"
 	"github.com/jeanhua/AniaBot/common/msgchain"
+	"github.com/jeanhua/AniaBot/common/plugininfo"
 	"github.com/jeanhua/AniaBot/common/storage"
 	"github.com/robfig/cron/v3"
 )
@@ -116,6 +117,84 @@ func (p *AIChatPlugin) TaskLogRecent(limit int) []tasklog.Entry {
 		return nil
 	}
 	return p.clockManager.recentLogs(limit)
+}
+
+// taskInfos 返回所有任务的面板展示信息（供 Web 控制面板）。
+func (m *clockManager) taskInfos() []plugininfo.ClockTaskInfo {
+	tasks := m.List()
+	out := make([]plugininfo.ClockTaskInfo, 0, len(tasks))
+	for _, t := range tasks {
+		out = append(out, plugininfo.ClockTaskInfo{
+			ID:         t.ID,
+			Title:      t.Title,
+			Content:    t.Content,
+			Note:       t.Note,
+			Cron:       t.Cron,
+			TargetType: t.TargetType,
+			TargetID:   t.TargetID,
+			Enabled:    t.Enabled,
+			RunOnce:    t.RunOnce,
+			TimeoutSec: t.TimeoutSec,
+			CreatedBy:  t.CreatedBy.Uint64(),
+			CreatedAt:  t.CreatedAt,
+			LastRunAt:  t.LastRunAt,
+			NextRunAt:  t.NextRunAt,
+		})
+	}
+	return out
+}
+
+// ClockTasks 供 Web 控制面板查询 AI 定时任务列表（clock 未启用时返回 nil）。
+func (p *AIChatPlugin) ClockTasks() []plugininfo.ClockTaskInfo {
+	if p.clockManager == nil {
+		return nil
+	}
+	return p.clockManager.taskInfos()
+}
+
+// CreateClockTask 供 Web 控制面板新建定时任务，返回新任务 ID。
+func (p *AIChatPlugin) CreateClockTask(c plugininfo.ClockTaskCreate) (string, error) {
+	if p.clockManager == nil {
+		return "", fmt.Errorf("定时任务功能未启用")
+	}
+	return p.clockManager.Add(&ClockTask{
+		Cron:       c.Cron,
+		Title:      c.Title,
+		Content:    c.Content,
+		TargetType: c.TargetType,
+		TargetID:   c.TargetID,
+		Enabled:    c.Enabled,
+		RunOnce:    c.RunOnce,
+		TimeoutSec: c.TimeoutSec,
+		Note:       c.Note,
+	})
+}
+
+// UpdateClockTask 供 Web 控制面板编辑定时任务（仅更新提供的字段）。
+func (p *AIChatPlugin) UpdateClockTask(id string, f plugininfo.ClockTaskUpdate) error {
+	if p.clockManager == nil {
+		return fmt.Errorf("定时任务功能未启用")
+	}
+	_, err := p.clockManager.Update(id, ClockUpdateFields{
+		Cron:       f.Cron,
+		Title:      f.Title,
+		Content:    f.Content,
+		Note:       f.Note,
+		TimeoutSec: f.TimeoutSec,
+		Enabled:    f.Enabled,
+	})
+	return err
+}
+
+// DeleteClockTask 供 Web 控制面板删除定时任务。
+func (p *AIChatPlugin) DeleteClockTask(id string) error {
+	if p.clockManager == nil {
+		return fmt.Errorf("定时任务功能未启用")
+	}
+	if !p.clockManager.Delete(id) {
+		return fmt.Errorf("定时任务不存在: %s", id)
+	}
+	return nil
 }
 
 // Start 在 Bot 就绪后启动调度器并调度所有已加载任务。由 Awake 调用。
@@ -483,7 +562,7 @@ func (m *clockManager) executeTask(ctx context.Context, task *ClockTask) (string
 	isGroup := task.TargetType == clockTargetGroup
 	targetQID, _ := strconv.ParseUint(task.TargetID, 10, 64)
 	// 注入对话场景（群聊/私聊），触发时 AI 同样清楚自己面对的场景
-	prompt := p.getPromptForID(message.QID(targetQID), isGroup) + p.buildScenePrompt(m.bot, message.QID(targetQID), isGroup)
+	prompt := p.getPromptForID(message.FromUint64(targetQID), isGroup) + p.buildScenePrompt(m.bot, message.FromUint64(targetQID), isGroup)
 
 	// 每次触发独立的 SessionToolExecutor（动态 MCP 工具互不影响）；
 	// historyStore 传 nil → 全新一次性上下文，不持久化、执行后丢弃
@@ -539,7 +618,7 @@ func (m *clockManager) makeClockCallback(ctx context.Context, task *ClockTask) l
 	logger := m.logger
 	var loadedImages []string
 
-	qid := message.QID(targetID)
+	qid := message.FromUint64(targetID)
 	cbs := llmtool.CallBackFuncs{
 		// SendText 是多轮工具循环中模型中间轮文本的自动回执通道。
 		// 定时任务不自动回显——数字人要主动发消息必须显式调用 send_message 工具；
@@ -631,24 +710,24 @@ func (m *clockManager) sendText(task *ClockTask, text string) bool {
 	targetID, _ := strconv.ParseUint(task.TargetID, 10, 64)
 	if task.TargetType == clockTargetGroup {
 		builder := msgchain.Builder().Group()
-		if task.CreatedBy != 0 {
+		if task.CreatedBy != "" {
 			builder.Mention(task.CreatedBy)
 			builder.Text(" " + text)
 		} else {
 			builder.Text(text)
 		}
-		_, ok := m.bot.SendGroupMsg(message.QID(targetID), builder.Build())
+		_, ok := m.bot.SendGroupMsg(message.FromUint64(targetID), builder.Build())
 		return ok
 	}
 	builder := msgchain.Builder().Friend()
 	builder.Text(text)
-	_, ok := m.bot.SendFriendMsg(message.QID(targetID), builder.Build())
+	_, ok := m.bot.SendFriendMsg(message.FromUint64(targetID), builder.Build())
 	return ok
 }
 
 func (m *clockManager) parseTargetID(task *ClockTask) message.QID {
 	n, _ := strconv.ParseUint(task.TargetID, 10, 64)
-	return message.QID(n)
+	return message.FromUint64(n)
 }
 
 func (m *clockManager) sendImage(task *ClockTask, bs64 string) bool {

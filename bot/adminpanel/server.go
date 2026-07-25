@@ -2,7 +2,7 @@
 //
 // 面板由后端 API（纯 net/http，零额外依赖）与内嵌的 Vue SPA（go:embed dist）
 // 组成，功能包括：配置管理（读取/修改配置中心，重启后生效）、运行状态总览、
-// 插件列表、群/好友列表与 AI 定时任务执行日志。
+// 插件列表、群/好友列表与 AI 定时任务管理（列表 / 启停）与执行日志。
 //
 // 认证：首次启动生成随机初始密码打印到控制台，SHA-256+salt 哈希存于持久化
 // 存储的 __admin 命名空间；登录后签发内存会话（HttpOnly Cookie，24h 过期）。
@@ -46,6 +46,15 @@ type TaskLogSource interface {
 	TaskLogRecent(limit int) []tasklog.Entry
 }
 
+// ClockTaskSource 可选接口：插件实现后，面板可对其定时任务做增删改查与启停
+// （当前由 AI 对话插件的 clock 功能实现）。
+type ClockTaskSource interface {
+	ClockTasks() []plugininfo.ClockTaskInfo
+	CreateClockTask(t plugininfo.ClockTaskCreate) (string, error)
+	UpdateClockTask(id string, f plugininfo.ClockTaskUpdate) error
+	DeleteClockTask(id string) error
+}
+
 // Options 面板依赖。
 type Options struct {
 	Listen        string                          // 监听地址，如 127.0.0.1:7700
@@ -55,6 +64,7 @@ type Options struct {
 	Adapter       func() string                   // 适配器连接状态描述
 	AdapterDetail func() string                   // 适配器状态详情（最近错误/重试次数，可为 nil）
 	TaskLogs      func(limit int) []tasklog.Entry // AI 定时任务执行日志（可为 nil）
+	Clocks        ClockTaskSource                 // AI 定时任务列表与启停（可为 nil）
 	Logger        *slog.Logger
 }
 
@@ -109,6 +119,10 @@ func (s *Server) routes() {
 	s.mux.Handle("GET /api/groups", s.requireAuth(http.HandlerFunc(s.handleGroups)))
 	s.mux.Handle("GET /api/friends", s.requireAuth(http.HandlerFunc(s.handleFriends)))
 	s.mux.Handle("GET /api/tasklogs", s.requireAuth(http.HandlerFunc(s.handleTaskLogs)))
+	s.mux.Handle("GET /api/clocks", s.requireAuth(http.HandlerFunc(s.handleClockList)))
+	s.mux.Handle("POST /api/clocks", s.requireAuth(http.HandlerFunc(s.handleClockCreate)))
+	s.mux.Handle("PUT /api/clocks/{id}", s.requireAuth(http.HandlerFunc(s.handleClockUpdate)))
+	s.mux.Handle("DELETE /api/clocks/{id}", s.requireAuth(http.HandlerFunc(s.handleClockDelete)))
 	s.mux.Handle("POST /api/restart", s.requireAuth(http.HandlerFunc(s.handleRestart)))
 	s.mux.Handle("/", s.spaHandler())
 }
@@ -395,6 +409,79 @@ func (s *Server) handleTaskLogs(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, s.opt.TaskLogs(200))
+}
+
+// handleClockList 返回 AI 定时任务列表（功能未启用时返回空数组）。
+func (s *Server) handleClockList(w http.ResponseWriter, _ *http.Request) {
+	if s.opt.Clocks == nil {
+		writeJSON(w, http.StatusOK, []any{})
+		return
+	}
+	tasks := s.opt.Clocks.ClockTasks()
+	if tasks == nil {
+		tasks = []plugininfo.ClockTaskInfo{}
+	}
+	writeJSON(w, http.StatusOK, tasks)
+}
+
+// handleClockCreate 新建定时任务。
+func (s *Server) handleClockCreate(w http.ResponseWriter, r *http.Request) {
+	if s.opt.Clocks == nil {
+		writeError(w, http.StatusNotFound, "定时任务功能未启用")
+		return
+	}
+	var req plugininfo.ClockTaskCreate
+	if err := readJSON(r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, "请求格式错误")
+		return
+	}
+	id, err := s.opt.Clocks.CreateClockTask(req)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	s.opt.Logger.Info("定时任务已通过 Web 面板创建", "task", id, "title", req.Title)
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "id": id})
+}
+
+// handleClockUpdate 编辑定时任务（仅更新请求体中提供的字段，含启用/停用）。
+func (s *Server) handleClockUpdate(w http.ResponseWriter, r *http.Request) {
+	if s.opt.Clocks == nil {
+		writeError(w, http.StatusNotFound, "定时任务功能未启用")
+		return
+	}
+	var req plugininfo.ClockTaskUpdate
+	if err := readJSON(r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, "请求格式错误")
+		return
+	}
+	if req.Cron == nil && req.Title == nil && req.Content == nil && req.Note == nil &&
+		req.TimeoutSec == nil && req.Enabled == nil {
+		writeError(w, http.StatusBadRequest, "没有需要更新的字段")
+		return
+	}
+	id := r.PathValue("id")
+	if err := s.opt.Clocks.UpdateClockTask(id, req); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	s.opt.Logger.Info("定时任务已通过 Web 面板更新", "task", id)
+	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
+}
+
+// handleClockDelete 删除定时任务。
+func (s *Server) handleClockDelete(w http.ResponseWriter, r *http.Request) {
+	if s.opt.Clocks == nil {
+		writeError(w, http.StatusNotFound, "定时任务功能未启用")
+		return
+	}
+	id := r.PathValue("id")
+	if err := s.opt.Clocks.DeleteClockTask(id); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	s.opt.Logger.Info("定时任务已通过 Web 面板删除", "task", id)
+	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
 }
 
 // handleRestart 自重启 Bot：先响应请求，再延迟以相同命令行参数重启进程。
