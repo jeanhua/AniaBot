@@ -47,3 +47,5 @@ custom/plugins/*
 docs/node_modules/
 docs/.vitepress/dist/
 docs/.vitepress/cache/
+
+node_modules/
