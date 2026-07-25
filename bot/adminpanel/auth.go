@@ -102,6 +102,11 @@ func (a *authManager) SetPassword(password string) bool {
 	return a.store.SetString(context.Background(), passwordHashKey, hashPassword(password))
 }
 
+// ResetPassword 直接覆盖面板密码哈希（供命令行找回密码使用，无需校验旧密码）。
+func ResetPassword(root storage.PersistentStorage, password string) bool {
+	return root.Clone(adminNamespace).SetString(context.Background(), passwordHashKey, hashPassword(password))
+}
+
 // CheckPassword 校验密码。
 func (a *authManager) CheckPassword(password string) bool {
 	stored, ok := a.store.GetString(context.Background(), passwordHashKey)

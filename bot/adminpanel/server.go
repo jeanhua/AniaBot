@@ -23,6 +23,7 @@ import (
 	"github.com/jeanhua/AniaBot/bot/component/tasklog"
 	"github.com/jeanhua/AniaBot/bot/core/configstore"
 	"github.com/jeanhua/AniaBot/common/model/message"
+	"github.com/jeanhua/AniaBot/common/pluginconfig"
 	"github.com/jeanhua/AniaBot/common/plugininfo"
 	"github.com/jeanhua/AniaBot/common/storage"
 )
@@ -47,13 +48,14 @@ type TaskLogSource interface {
 
 // Options 面板依赖。
 type Options struct {
-	Listen     string                          // 监听地址，如 127.0.0.1:7700
-	Config     *configstore.Store              // 配置中心
-	Persistent storage.PersistentStorage       // 根持久化存储（__admin 命名空间存密码哈希）
-	Bot        BotInfo                         // 运行信息来源
-	Adapter    func() string                   // 适配器连接状态描述
-	TaskLogs   func(limit int) []tasklog.Entry // AI 定时任务执行日志（可为 nil）
-	Logger     *slog.Logger
+	Listen        string                          // 监听地址，如 127.0.0.1:7700
+	Config        *configstore.Store              // 配置中心
+	Persistent    storage.PersistentStorage       // 根持久化存储（__admin 命名空间存密码哈希）
+	Bot           BotInfo                         // 运行信息来源
+	Adapter       func() string                   // 适配器连接状态描述
+	AdapterDetail func() string                   // 适配器状态详情（最近错误/重试次数，可为 nil）
+	TaskLogs      func(limit int) []tasklog.Entry // AI 定时任务执行日志（可为 nil）
+	Logger        *slog.Logger
 }
 
 // Server 面板 HTTP 服务。
@@ -233,18 +235,20 @@ func (s *Server) handleChangePassword(w http.ResponseWriter, r *http.Request) {
 // ---- config handlers ----
 
 func (s *Server) handleConfigSchema(w http.ResponseWriter, _ *http.Request) {
-	writeJSON(w, http.StatusOK, configSchema)
+	// 表单元信息来自配置注册表（框架 + 各插件 ConfigRegistrar 动态注册），
+	// 新增/移除插件无需改动面板代码。
+	writeJSON(w, http.StatusOK, pluginconfig.Fields())
 }
 
 func (s *Server) handleConfigGet(w http.ResponseWriter, _ *http.Request) {
 	all := s.opt.Config.All()
-	for _, f := range configSchema {
+	for _, f := range pluginconfig.Fields() {
 		if !f.Sensitive {
 			continue
 		}
-		if v, ok := all[strings.ToLower(f.Key)]; ok {
+		if v, ok := all[f.Key]; ok {
 			if str, ok2 := v.(string); ok2 && str != "" {
-				all[strings.ToLower(f.Key)] = maskPlaceholder
+				all[f.Key] = maskPlaceholder
 			}
 		}
 	}
@@ -340,12 +344,17 @@ func (s *Server) handleStatus(w http.ResponseWriter, _ *http.Request) {
 	if s.opt.Adapter != nil {
 		adapterStatus = s.opt.Adapter()
 	}
+	adapterDetail := ""
+	if s.opt.AdapterDetail != nil {
+		adapterDetail = s.opt.AdapterDetail()
+	}
 	uptime := time.Since(s.opt.Bot.StartTime())
 	writeJSON(w, http.StatusOK, map[string]any{
 		"uptime_sec":     int64(uptime.Seconds()),
 		"started_at":     s.opt.Bot.StartTime().Format(time.RFC3339),
 		"goroutines":     s.opt.Bot.GoroutineNum(),
 		"adapter_status": adapterStatus,
+		"adapter_detail": adapterDetail,
 		"plugin_count":   len(s.opt.Bot.GetPluginList()),
 	})
 }

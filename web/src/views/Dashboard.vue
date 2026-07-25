@@ -1,5 +1,17 @@
 <template>
   <div class="space-y-6">
+    <!-- 适配器未连接提示 -->
+    <div
+      v-if="status.adapter_status && status.adapter_status !== 'connected'"
+      class="bg-amber-50 border border-amber-200 text-amber-700 rounded-lg px-4 py-3 text-sm flex items-center justify-between gap-4"
+    >
+      <span>
+        ⚠️ NapCat 未连接<template v-if="status.adapter_detail">：{{ status.adapter_detail }}</template>。
+        Bot 会持续重试，不会退出。
+      </span>
+      <RouterLink to="/config" class="text-indigo-600 hover:underline shrink-0">修改配置并重启 →</RouterLink>
+    </div>
+
     <!-- 状态卡片 -->
     <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
       <div class="bg-white rounded-lg shadow-sm p-5">
@@ -10,6 +22,9 @@
         <p class="text-xs text-slate-500">适配器状态</p>
         <p class="text-xl font-semibold mt-1" :class="status.adapter_status === 'connected' ? 'text-emerald-600' : 'text-amber-600'">
           {{ adapterText }}
+        </p>
+        <p v-if="status.adapter_detail" class="text-xs text-slate-400 mt-0.5 truncate" :title="status.adapter_detail">
+          {{ status.adapter_detail }}
         </p>
       </div>
       <div class="bg-white rounded-lg shadow-sm p-5">
@@ -109,7 +124,10 @@ const uptime = computed(() => {
 
 const adapterText = computed(() => ({
   connected: '已连接',
+  connecting: '连接中',
   reconnecting: '重连中',
+  setup_pending: '等待首次配置',
+  not_started: '未连接',
   unknown: '未知',
 }[status.value.adapter_status] || status.value.adapter_status || '-'))
 

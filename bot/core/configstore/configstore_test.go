@@ -107,14 +107,8 @@ func TestSeedDefaults(t *testing.T) {
 		t.Fatal(err)
 	}
 	v := s.ToViper()
-	if got := v.GetString("plugin.ai_chat_bot.model"); got != "deepseek-chat" {
-		t.Fatalf("model = %q", got)
-	}
-	if got := v.GetInt("plugin.ai_chat_bot.max_token"); got != 8192 {
-		t.Fatalf("max_token = %d", got)
-	}
-	if got := v.GetFloat64("plugin.ai_chat_bot.temperature"); got != 1.2 {
-		t.Fatalf("temperature = %v", got)
+	if got := v.GetString("bot.adapter.ws.address"); got != "ws://localhost:4455" {
+		t.Fatalf("ws.address = %q", got)
 	}
 	if got := v.GetStringSlice("plugin.interceptor.whitelist.users"); len(got) != 1 || got[0] != "all" {
 		t.Fatalf("whitelist.users = %v", got)
@@ -136,6 +130,45 @@ func TestSeedDefaults(t *testing.T) {
 	// 再次 Init 应幂等
 	if err := s.Init(); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestEnsureDefaults(t *testing.T) {
+	s := newTestStore(t)
+	if err := s.Init(); err != nil {
+		t.Fatal(err)
+	}
+	// 键不存在时写入默认值
+	s.EnsureDefaults(map[string]any{
+		"plugin.test.model":       "deepseek-chat",
+		"plugin.test.max_token":   8192,
+		"plugin.test.temperature": 1.2,
+		"plugin.test.tags":        []string{"a", "b"},
+		"plugin.test.nodefault":   nil, // nil 默认值跳过
+	})
+	v := s.ToViper()
+	if got := v.GetString("plugin.test.model"); got != "deepseek-chat" {
+		t.Fatalf("model = %q", got)
+	}
+	if got := v.GetInt("plugin.test.max_token"); got != 8192 {
+		t.Fatalf("max_token = %d", got)
+	}
+	if got := v.GetFloat64("plugin.test.temperature"); got != 1.2 {
+		t.Fatalf("temperature = %v", got)
+	}
+	if got := v.GetStringSlice("plugin.test.tags"); len(got) != 2 || got[0] != "a" {
+		t.Fatalf("tags = %v", got)
+	}
+	if v.IsSet("plugin.test.nodefault") {
+		t.Fatal("nil 默认值不应写入")
+	}
+	// 已存在的键不覆盖
+	if err := s.Set("plugin.test.model", "gpt-4o"); err != nil {
+		t.Fatal(err)
+	}
+	s.EnsureDefaults(map[string]any{"plugin.test.model": "other"})
+	if got := s.ToViper().GetString("plugin.test.model"); got != "gpt-4o" {
+		t.Fatalf("已存在的键被覆盖: %q", got)
 	}
 }
 

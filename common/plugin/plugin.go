@@ -8,6 +8,7 @@ import (
 	"github.com/jeanhua/AniaBot/common/bot"
 	"github.com/jeanhua/AniaBot/common/model/command"
 	"github.com/jeanhua/AniaBot/common/model/message"
+	"github.com/jeanhua/AniaBot/common/pluginconfig"
 	"github.com/jeanhua/AniaBot/common/storage"
 	"github.com/robfig/cron/v3"
 	"github.com/spf13/viper"
@@ -95,4 +96,14 @@ type PanicEvent interface {
 
 type SystemConfig struct {
 	AdminId message.QID
+}
+
+// ConfigRegistrar 可选接口：插件实现后，框架启动时会收集其声明的配置字段
+// （键、显示名、类型、默认值等元信息），自动补齐缺失的默认值，
+// 并让 Web 控制面板动态渲染对应表单——新增插件无需改动面板代码。
+//
+// 注意：该方法是纯元信息声明，框架在依赖注入（DI）之前调用，
+// 实现中不应依赖 Logger/Storage 等注入字段。
+type ConfigRegistrar interface {
+	ConfigFields() []pluginconfig.Field
 }

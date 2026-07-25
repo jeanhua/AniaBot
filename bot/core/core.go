@@ -20,6 +20,7 @@ import (
 	"github.com/jeanhua/AniaBot/common/model/message"
 	"github.com/jeanhua/AniaBot/common/msgchain"
 	"github.com/jeanhua/AniaBot/common/plugin"
+	"github.com/jeanhua/AniaBot/common/pluginconfig"
 	"github.com/jeanhua/AniaBot/common/plugininfo"
 	"github.com/jeanhua/AniaBot/common/storage"
 	"github.com/robfig/cron/v3"
@@ -50,6 +51,9 @@ type AniaBot struct {
 
 	// 启动时间
 	startTime time.Time
+
+	// 适配器是否已开始连接（首次启动等待向导时不会启动）
+	adapterStarted atomic.Bool
 }
 
 const (
@@ -160,6 +164,17 @@ func (ania *AniaBot) Run() {
 			os.Exit(1)
 		}
 		ania.configStore = cs
+
+		// 收集配置字段元信息（框架 + 各插件的 ConfigRegistrar 声明），
+		// 补齐缺失的默认值后再构建 viper，保证插件 Start 读到的配置已含默认值。
+		// 面板表单也基于该注册表动态渲染，新增插件无需改动面板代码。
+		pluginconfig.Register(frameworkConfigFields...)
+		for _, p := range ania.plugins {
+			if r, ok := p.(plugin.ConfigRegistrar); ok {
+				pluginconfig.Register(r.ConfigFields()...)
+			}
+		}
+		cs.EnsureDefaults(pluginconfig.Defaults())
 		ania.cfg = cs.ToViper()
 	}
 
@@ -217,25 +232,44 @@ func (ania *AniaBot) Run() {
 	fmt.Println(LogoASCII)
 	Logger().Info("Bot启动完成...")
 
-	timer := time.NewTimer(time.Second)
-	defer timer.Stop()
-	go func() {
-		<-timer.C
-		Logger().Info("Awake...")
-		for _, p := range ania.plugins {
-			safeExecute("Awake", p, func(p plugin.Plugin) {
-				awakeCtx, cancel := context.WithTimeout(ania.ctx, AwakeEventTimeout)
-				p.Awake(awakeCtx, ania)
-				cancel()
-			})
-		}
-	}()
+	// 首次启动（设置向导未完成）时适配器不会连接，跳过 Awake：
+	// 插件的 Awake 多依赖 QQ 连接（启动通知、定时任务触发），此时触发只会发送失败；
+	// 向导完成重启后会正常执行。
+	setupPending := ania.configStore != nil && ania.configStore.SetupPending()
+	if !setupPending {
+		timer := time.NewTimer(time.Second)
+		defer timer.Stop()
+		go func() {
+			<-timer.C
+			Logger().Info("Awake...")
+			for _, p := range ania.plugins {
+				safeExecute("Awake", p, func(p plugin.Plugin) {
+					awakeCtx, cancel := context.WithTimeout(ania.ctx, AwakeEventTimeout)
+					p.Awake(awakeCtx, ania)
+					cancel()
+				})
+			}
+		}()
+	}
 
 	// Web 控制面板（配置修改重启后生效）
 	if ania.configStore != nil && ania.cfg.GetBool("bot.admin_panel.enable") {
 		ania.startAdminPanel()
 	}
 
+	// 首次启动（设置向导未完成）时不连接适配器：保持面板可访问，
+	// 等用户在向导中填写连接配置并重启后再连接，避免控制台刷重连日志。
+	if setupPending {
+		listen := ania.cfg.GetString("bot.admin_panel.listen")
+		if listen == "" {
+			listen = "127.0.0.1:7700"
+		}
+		Logger().Info("首次启动：暂不连接 NapCat，请在 Web 控制面板完成设置向导（完成后重启 Bot 生效）", "url", "http://"+listen)
+		<-ania.ctx.Done()
+		return
+	}
+
+	ania.adapterStarted.Store(true)
 	ania.adapter.Serve(ania.cfg)
 }
 
@@ -256,6 +290,17 @@ func (ania *AniaBot) startAdminPanel() {
 		Persistent: ania.persistent,
 		Bot:        ania,
 		Adapter: func() string {
+			if ania.configStore != nil && ania.configStore.SetupPending() {
+				return "setup_pending"
+			}
+			if !ania.adapterStarted.Load() {
+				return "not_started"
+			}
+			type statuser interface{ AdapterStatus() (string, string) }
+			if s, ok := ania.adapter.(statuser); ok {
+				state, _ := s.AdapterStatus()
+				return state
+			}
 			type connChecker interface{ Connected() bool }
 			if c, ok := ania.adapter.(connChecker); ok {
 				if c.Connected() {
@@ -264,6 +309,14 @@ func (ania *AniaBot) startAdminPanel() {
 				return "reconnecting"
 			}
 			return "unknown"
+		},
+		AdapterDetail: func() string {
+			type statuser interface{ AdapterStatus() (string, string) }
+			if s, ok := ania.adapter.(statuser); ok {
+				_, detail := s.AdapterStatus()
+				return detail
+			}
+			return ""
 		},
 		TaskLogs: taskLogFn,
 		Logger:   Logger().WithGroup("AdminPanel"),

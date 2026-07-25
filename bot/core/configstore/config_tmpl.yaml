@@ -14,7 +14,6 @@ bot:
     # token: 如果设置token，请设置该字段
     ws:
       address: ws://localhost:4455 # websocket 地址，napcat的ws server地址
-      max_retries: 5 # 连接失败时最大重连次数
       worker_count: 0 # 处理线程数，设置为0自动调整
       worker_queue_size: 1024 # 消息队列，消息超出此限制则丢弃消息
     http:
@@ -37,86 +36,6 @@ files:
 
 # 插件自定义配置
 plugin:
-  # AniaBot系统AI对话插件配置
-  ai_chat_bot:
-    base_url: "https://api.deepseek.com" # 示例deepseek，支持所有兼容OpenAI规范的厂商
-    api_key: "" # 这里填写apikey
-    model: "deepseek-chat" # 选择的模型
-    multimodal: false # 主对话模型是否支持图片输入；开启后由模型按需调用工具直接加载图片
-    rate_limit: 2 # 速率限制，每秒最多调用次数
-
-    # 工具调用
-    search:
-      token: "xxx" # jina ai token
-    # 模型参数
-    max_context_tokens: 128000
-    temperature: 1.2
-    top_p: 0.9
-    top_k: 100
-    max_token: 8192
-    # 深度思考配置
-    thinking:
-      enable: false  # 是否启用深度思考
-      mode: "auto"   # 思考模式：none / low / medium / high / auto
-    prompt: |-
-      你是一个ai对话机器人，在QQ上和别人聊天，说话不要长篇大论
-
-      ## 注意
-      - 当你不理解用户的问题时，要先获取用户最近的历史消息，再根据历史消息回答用户的问题
-
-    skills_dir: "./skills"
-    skills: []           # 指定加载的 skill 名称列表，为空则加载全部
-
-    # bash 工具配置（直接在宿主机执行bash命令）
-    bash:
-      enable: false           # 是否启用bash工具
-      shell: "/bin/bash"      # shell 路径
-      env: []                 # 环境变量，格式 KEY=VALUE，如 ["HOME=/root", "LANG=zh_CN.UTF-8"]
-      whitelist: []           # 非空时只允许匹配这些正则的命令，如 ["^ls", "^cat"]
-      blacklist:              # 匹配这些正则的命令被禁止
-        - config(\.dev)?\.(yaml|yml|json)  # 旧版配置文件（含敏感信息）
-        - "^mkfs"
-        - "^shutdown"
-        - "^reboot"
-
-    # 备用图片识别模型。主模型不支持多模态时，按需将图片转换为文字；不配置则明确告知模型无法加载图片
-    ocr:
-      enable: false
-      base_url: "https://api.siliconflow.cn/v1" # 示例deepseek，支持所有兼容OpenAI规范的厂商
-      api_key: "" # 这里填写apikey
-      model: "Qwen/Qwen3-VL-8B-Instruct" # 选择的模型
-      # 模型参数
-      temperature: 0.6
-      top_p: 0.95
-      top_k: 20
-      max_token: 600
-      prompt: |-
-        你负责将看到的图片用markdown格式描述出来，不要有无关的其他对话
-
-    # local_image 工具配置（读取宿主机本地图片供AI查看）
-    local_image:
-      enable: false           # 是否启用本地图片读取工具
-
-    # AI 定时任务（clock）配置
-    clock:
-      enable: true                # 是否启用定时任务功能
-      default_timeout_sec: 120    # 单次触发默认超时（秒），超时会记录到执行日志并中止
-      max_log_entries: 500        # 执行日志保留条数（滚动覆盖）
-
-    # AI 长期记忆（memory）配置
-    memory:
-      enable: true                # 是否启用长期记忆功能
-      max_entries: 200            # 单个会话（群/好友）的记忆条数上限，写满后 AI 需先清理旧记忆
-
-  # 每日新闻插件
-  dailyNews:
-    api: "https://60s.viki.moe/v2/60s?encoding=image-proxy" # api端点
-    cron: "0 18 * * *" # cron表达式, 每天18点触发
-    groups: # 指定需要定时播报的群聊
-      - 123456
-      - 7891011
-
-
 
   # 拦截器插件
   interceptor: # 优先级: 黑名单 > 白名单 > 其他

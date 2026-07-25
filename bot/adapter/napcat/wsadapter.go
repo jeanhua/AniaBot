@@ -24,6 +24,11 @@ type napcatWebSocketAdapter struct {
 	workerWg    sync.WaitGroup
 	workerCount int
 	queueSize   int
+
+	// 连接状态（供 Web 面板展示）
+	connState string // connecting | connected | reconnecting
+	lastErr   string
+	failCount int
 }
 
 type ackManager struct {
@@ -42,6 +47,29 @@ func (n *napcatWebSocketAdapter) Connected() bool {
 	n.mu.Lock()
 	defer n.mu.Unlock()
 	return n.wsConn != nil
+}
+
+// setStatus 更新连接状态（供 Web 面板展示）。
+func (n *napcatWebSocketAdapter) setStatus(state, errDetail string, failCount int) {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	n.connState = state
+	n.lastErr = errDetail
+	n.failCount = failCount
+}
+
+// AdapterStatus 返回连接状态（connecting/connected/reconnecting）与详情（最近错误或重试次数）。
+func (n *napcatWebSocketAdapter) AdapterStatus() (state string, detail string) {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	state = n.connState
+	if state == "" {
+		state = "connecting"
+	}
+	if state == "reconnecting" && n.failCount > 0 {
+		return state, fmt.Sprintf("第 %d 次重试: %s", n.failCount, n.lastErr)
+	}
+	return state, n.lastErr
 }
 
 func request[T any](n *napcatWebSocketAdapter, action string, params any, prefix string) (*T, bool) {
@@ -281,12 +309,7 @@ func (n *napcatWebSocketAdapter) GetGroupList() (*[]message.GroupInfo, bool) {
 }
 
 func (n *napcatWebSocketAdapter) Serve(v *viper.Viper) {
-	n.ackMng = &ackManager{timeout: time.Second * 10}
 	url := v.GetString("bot.adapter.ws.address")
-	maxRetries := v.GetInt("bot.adapter.ws.max_retries")
-	if maxRetries <= 0 {
-		maxRetries = 5
-	}
 
 	// worker pool configuration
 	n.workerCount = v.GetInt("bot.adapter.ws.worker_count")
@@ -299,28 +322,32 @@ func (n *napcatWebSocketAdapter) Serve(v *viper.Viper) {
 	}
 
 	log.Println("已启用 napcat websocket adapter")
+	n.setStatus("connecting", "", 0)
 
+	// 连接失败不退出：无限重试（指数退避，封顶 30s），
+	// 连接状态与最近错误通过 AdapterStatus 暴露给 Web 面板，
+	// 用户可在面板修改连接配置后重启生效。
+	const maxBackoff = 30 * time.Second
+	failCount := 0
 	for {
 		var conn *websocket.Conn
 		var err error
-		for i := 0; i < maxRetries; i++ {
-			if v.IsSet("bot.adapter.token") {
-				token := v.GetString("bot.adapter.token")
-				conn, _, err = websocket.DefaultDialer.Dial(url+"?access_token="+token, nil)
-			} else {
-				conn, _, err = websocket.DefaultDialer.Dial(url, nil)
-			}
-			if err == nil {
-				break
-			}
-			waitTime := time.Second * time.Duration(1<<i)
-			log.Printf("连接失败 [%d/%d]: %v. %v 后重连...", i+1, maxRetries, err, waitTime)
-			time.Sleep(waitTime)
+		if v.IsSet("bot.adapter.token") {
+			token := v.GetString("bot.adapter.token")
+			conn, _, err = websocket.DefaultDialer.Dial(url+"?access_token="+token, nil)
+		} else {
+			conn, _, err = websocket.DefaultDialer.Dial(url, nil)
 		}
 		if err != nil {
-			log.Println("无法连接至服务器，程序退出")
-			break
+			failCount++
+			n.setStatus("reconnecting", err.Error(), failCount)
+			backoff := min(time.Second*time.Duration(1<<min(failCount-1, 5)), maxBackoff)
+			log.Printf("连接失败（第 %d 次）: %v. %v 后重试...（可在 Web 面板修改连接配置后重启）", failCount, err, backoff)
+			time.Sleep(backoff)
+			continue
 		}
+		failCount = 0
+		n.setStatus("connected", "", 0)
 		log.Println("WebSocket 连接成功！")
 		n.mu.Lock()
 		n.wsConn = conn
@@ -331,10 +358,9 @@ func (n *napcatWebSocketAdapter) Serve(v *viper.Viper) {
 		n.mu.Lock()
 		n.wsConn = nil
 		n.mu.Unlock()
+		n.setStatus("reconnecting", "连接已断开", 0)
 		log.Println("连接断开，准备重连...")
 	}
-
-	log.Println("Websocket正在退出")
 }
 
 func (n *napcatWebSocketAdapter) readLoop(conn *websocket.Conn) {

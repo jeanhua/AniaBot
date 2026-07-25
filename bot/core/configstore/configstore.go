@@ -123,6 +123,27 @@ func (s *Store) CompleteSetup() {
 	s.store.Del(context.Background(), metaSetupPending)
 }
 
+// EnsureDefaults 写入缺失的默认配置（已存在的键不覆盖）。
+// 用于插件注册配置字段（pluginconfig）后填充默认值——
+// 插件升级新增的配置键也能在下次启动时自动补齐。
+func (s *Store) EnsureDefaults(defaults map[string]any) {
+	ctx := context.Background()
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for k, v := range defaults {
+		if v == nil {
+			continue
+		}
+		key := strings.ToLower(k)
+		if s.store.Has(ctx, key) {
+			continue
+		}
+		if err := s.setLocked(key, v); err != nil {
+			s.logger.Warn("写入默认配置失败", "key", key, "error", err)
+		}
+	}
+}
+
 // Set 写入一个配置键（值 JSON 编码）。键统一转小写存储，与 viper 的
 // 大小写不敏感语义保持一致（避免同一逻辑键因大小写不同出现两份）。
 func (s *Store) Set(key string, val any) error {
