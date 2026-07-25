@@ -3,7 +3,7 @@
     <!-- 适配器未连接提示 -->
     <div
       v-if="status.adapter_status && status.adapter_status !== 'connected'"
-      class="tcard !border-amber-300 !bg-amber-50 px-5 py-3.5 flex items-center justify-between gap-4"
+      class="tcard border-amber-300! bg-amber-50! px-5 py-3.5 flex items-center justify-between gap-4"
     >
       <span class="flex items-center gap-3 text-xs text-amber-800">
         <span class="[&>svg]:w-4 [&>svg]:h-4 text-amber-500 shrink-0" v-html="icons.warn" />
@@ -74,7 +74,7 @@
           <div class="tlabel mt-2">NapCat · OneBot v11</div>
         </div>
 
-        <div class="flex gap-[3px]">
+        <div class="flex gap-0.75">
           <div
             v-for="i in 12"
             :key="i"
@@ -122,7 +122,7 @@
           <div class="text-4xl font-semibold tracking-tight text-zinc-900">
             {{ cpuText }}<span class="text-xl text-zinc-400 font-medium">%</span>
           </div>
-          <span class="tlabel !text-zinc-400 pb-1">Sample 5s</span>
+          <span class="tlabel text-zinc-400! pb-1">Sample 5s</span>
         </div>
 
         <svg viewBox="0 0 100 32" preserveAspectRatio="none" class="w-full h-12 block">
@@ -156,10 +156,10 @@
           <div class="text-4xl font-semibold tracking-tight text-zinc-900">
             {{ fmtBytes(host.mem_used) }}<span class="text-xl text-zinc-400 font-medium">/{{ fmtBytes(host.mem_total) }}</span>
           </div>
-          <span class="tlabel !text-zinc-400 pb-1">Phys RAM</span>
+          <span class="tlabel text-zinc-400! pb-1">Phys RAM</span>
         </div>
 
-        <div class="flex gap-[3px]">
+        <div class="flex gap-0.75">
           <div v-for="i in 14" :key="i" class="seg" :class="i <= memSegs ? 'on' : ''" />
         </div>
 
@@ -200,7 +200,7 @@
     <!-- 插件列表 -->
     <section class="tcard overflow-hidden">
       <div class="px-6 py-4 flex items-center justify-between border-b border-zinc-100">
-        <h2 class="tlabel !text-zinc-800">Plugin Registry</h2>
+        <h2 class="tlabel text-zinc-800!">Plugin Registry</h2>
         <span class="text-[10px] tracking-[0.15em] uppercase text-zinc-400">{{ plugins.length }} Modules</span>
       </div>
       <table class="w-full text-xs">
@@ -220,7 +220,7 @@
             <td class="px-6 py-3 text-zinc-600">{{ p.author }}</td>
             <td class="px-6 py-3 text-zinc-500">{{ p.version }}</td>
             <td class="px-6 py-3">
-              <span v-if="p.admin_only" class="tpill !py-0.5"><span class="tdot bg-amber-500" />Admin</span>
+              <span v-if="p.admin_only" class="tpill py-0.5!"><span class="tdot bg-amber-500" />Admin</span>
               <span v-else class="text-[10px] tracking-[0.15em] uppercase text-zinc-400">All</span>
             </td>
           </tr>
@@ -231,7 +231,7 @@
     <!-- AI 定时任务 -->
     <section class="tcard overflow-hidden">
       <div class="px-6 py-4 border-b border-zinc-100 flex items-center justify-between">
-        <h2 class="tlabel !text-zinc-800">AI Cron Jobs</h2>
+        <h2 class="tlabel text-zinc-800!">AI Cron Jobs</h2>
         <div class="flex items-center gap-3">
           <button class="text-[10px] tracking-[0.15em] uppercase text-zinc-500 hover:text-zinc-900 font-medium transition-colors" @click="loadClocks">刷新</button>
           <button class="text-[10px] tracking-[0.15em] uppercase bg-zinc-900 text-white px-3 py-1.5 rounded-md hover:bg-zinc-700 font-medium transition-colors" @click="openCreate">新建任务</button>
@@ -327,7 +327,7 @@
     <!-- 定时任务执行日志 -->
     <section class="tcard overflow-hidden">
       <div class="px-6 py-4 border-b border-zinc-100 flex items-center justify-between">
-        <h2 class="tlabel !text-zinc-800">Execution Log</h2>
+        <h2 class="tlabel text-zinc-800!">Execution Log</h2>
         <button class="text-[10px] tracking-[0.15em] uppercase text-zinc-500 hover:text-zinc-900 font-medium transition-colors" @click="loadLogs">刷新</button>
       </div>
       <p v-if="logs.length === 0" class="px-6 py-8 text-xs text-zinc-400 text-center tracking-wide">暂无执行记录</p>
@@ -349,7 +349,7 @@
             <td class="px-6 py-3 text-zinc-600">{{ log.target_type === 'group' ? '群' : '好友' }} {{ log.target_id }}</td>
             <td class="px-6 py-3 text-zinc-600 whitespace-nowrap">{{ fmtTime(log.trigger_time) }}</td>
             <td class="px-6 py-3">
-              <span class="tpill !py-0.5"><span class="tdot" :class="statusDot(log.status)" />{{ statusText(log.status) }}</span>
+              <span class="tpill py-0.5!"><span class="tdot" :class="statusDot(log.status)" />{{ statusText(log.status) }}</span>
             </td>
             <td class="px-6 py-3 text-zinc-600">{{ log.duration_ms ? (log.duration_ms / 1000).toFixed(1) + 's' : '—' }}</td>
             <td class="px-6 py-3 text-zinc-600">{{ log.total_tokens || '—' }}</td>
@@ -364,7 +364,7 @@
       <div v-if="clockForm" class="fixed inset-0 z-50 flex items-center justify-center bg-zinc-950/40 p-4" @click.self="clockForm = null">
         <div class="tcard w-full max-w-lg max-h-[90vh] overflow-y-auto">
           <div class="px-6 py-4 border-b border-zinc-100 flex items-center justify-between">
-            <h3 class="tlabel !text-zinc-800">{{ clockForm.id ? '编辑定时任务' : '新建定时任务' }}</h3>
+            <h3 class="tlabel text-zinc-800!">{{ clockForm.id ? '编辑定时任务' : '新建定时任务' }}</h3>
             <button class="text-zinc-400 hover:text-zinc-700 transition-colors" @click="clockForm = null">✕</button>
           </div>
           <form class="px-6 py-5 space-y-4" @submit.prevent="saveClock">
@@ -409,8 +409,8 @@
             </label>
             <p v-if="clockFormError" class="text-xs text-red-600">{{ clockFormError }}</p>
             <div class="flex justify-end gap-2 pt-1">
-              <button type="button" class="px-4 py-2 text-[11px] tracking-[0.1em] uppercase text-zinc-500 hover:text-zinc-800 font-medium transition-colors" @click="clockForm = null">取消</button>
-              <button type="submit" class="px-4 py-2 text-[11px] tracking-[0.1em] uppercase bg-zinc-900 text-white rounded-md hover:bg-zinc-700 font-medium transition-colors disabled:opacity-50" :disabled="clockSaving">
+              <button type="button" class="px-4 py-2 text-[11px] tracking-widest uppercase text-zinc-500 hover:text-zinc-800 font-medium transition-colors" @click="clockForm = null">取消</button>
+              <button type="submit" class="px-4 py-2 text-[11px] tracking-widest uppercase bg-zinc-900 text-white rounded-md hover:bg-zinc-700 font-medium transition-colors disabled:opacity-50" :disabled="clockSaving">
                 {{ clockSaving ? '保存中…' : '保存' }}
               </button>
             </div>
