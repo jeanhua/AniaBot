@@ -152,6 +152,7 @@ func (s *Server) routes() {
 	s.mux.Handle("GET /api/files/{name}", s.requireAuth(http.HandlerFunc(s.handleFileGet)))
 	s.mux.Handle("PUT /api/files/{name}", s.requireAuth(http.HandlerFunc(s.handleFilePut)))
 	s.mux.Handle("GET /api/status", s.requireAuth(http.HandlerFunc(s.handleStatus)))
+	s.mux.Handle("GET /api/host", s.requireAuth(http.HandlerFunc(s.handleHost)))
 	s.mux.Handle("GET /api/plugins", s.requireAuth(http.HandlerFunc(s.handlePlugins)))
 	s.mux.Handle("GET /api/groups", s.requireAuth(http.HandlerFunc(s.handleGroups)))
 	s.mux.Handle("GET /api/friends", s.requireAuth(http.HandlerFunc(s.handleFriends)))
@@ -420,6 +421,11 @@ func (s *Server) handleStatus(w http.ResponseWriter, _ *http.Request) {
 		"adapter_detail": adapterDetail,
 		"plugin_count":   len(s.opt.Bot.GetPluginList()),
 	})
+}
+
+// handleHost 返回主机硬件配置与运行状态（CPU / 内存占用、系统信息等）。
+func (s *Server) handleHost(w http.ResponseWriter, _ *http.Request) {
+	writeJSON(w, http.StatusOK, collectHost())
 }
 
 func (s *Server) handlePlugins(w http.ResponseWriter, _ *http.Request) {

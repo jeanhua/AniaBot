@@ -63,6 +63,7 @@ export const api = {
     request(`/api/files/${name}`, { method: 'PUT', body: JSON.stringify({ content }) }),
 
   getStatus: () => request('/api/status'),
+  getHost: () => request('/api/host'),
   getPlugins: () => request('/api/plugins'),
   getGroups: () => request('/api/groups'),
   getFriends: () => request('/api/friends'),

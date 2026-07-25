@@ -1,7 +1,10 @@
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&display=swap');
 @import "tailwindcss";
 
 @theme {
-  --font-sans: "Inter", "PingFang SC", "Microsoft YaHei", "Noto Sans SC", system-ui, sans-serif;
+  /* 仪器面板风格：等宽字体优先，中文回退到系统中文字体 */
+  --font-sans: "IBM Plex Mono", "JetBrains Mono", "Cascadia Mono", ui-monospace, SFMono-Regular, Consolas, "PingFang SC", "Microsoft YaHei", "Noto Sans SC", monospace;
+  --font-mono: "IBM Plex Mono", "JetBrains Mono", "Cascadia Mono", ui-monospace, SFMono-Regular, Consolas, "PingFang SC", "Microsoft YaHei", "Noto Sans SC", monospace;
 }
 
 html {
@@ -23,11 +26,11 @@ body {
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: rgb(148 163 184 / 0.35);
+  background: rgb(161 161 170 / 0.4);
   border-radius: 999px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: rgb(148 163 184 / 0.6);
+  background: rgb(161 161 170 / 0.7);
 }
 
 /* 页面切换淡入 */
@@ -42,4 +45,82 @@ body {
 /* 锚点滚动平滑 */
 html {
   scroll-behavior: smooth;
+}
+
+/* ============ 仪器面板风格共享组件 ============ */
+
+/* 卡片 */
+.tcard {
+  background: #fff;
+  border: 1px solid #e4e4e7;
+  border-radius: 10px;
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.03);
+}
+
+/* 小号大写技术标签 */
+.tlabel {
+  font-size: 10px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: #71717a;
+  font-weight: 500;
+}
+
+/* 状态药丸（带圆点） */
+.tpill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid #d4d4d8;
+  border-radius: 999px;
+  padding: 3px 10px;
+  font-size: 9px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #52525b;
+  white-space: nowrap;
+}
+.tdot {
+  width: 5px;
+  height: 5px;
+  border-radius: 999px;
+  flex-shrink: 0;
+}
+
+/* 点阵分隔线 */
+.dotline {
+  height: 5px;
+  background-image: radial-gradient(circle, #d4d4d8 1px, transparent 1px);
+  background-size: 6px 5px;
+  background-repeat: repeat-x;
+  background-position: center;
+}
+
+/* 点阵装饰块 */
+.dotgrid {
+  background-image: radial-gradient(circle, #d4d4d8 1.5px, transparent 1.5px);
+  background-size: 9px 9px;
+}
+
+/* 分段条单元格 */
+.seg {
+  height: 14px;
+  flex: 1;
+  border-radius: 2px;
+  background: #e4e4e7;
+}
+.seg.on {
+  background: #18181b;
+}
+.seg.on-ok {
+  background: #10b981;
+}
+
+/* 时钟冒号闪烁 */
+@keyframes blink {
+  0%, 54% { opacity: 1; }
+  55%, 100% { opacity: 0.25; }
+}
+.blink {
+  animation: blink 1s steps(1) infinite;
 }

@@ -10,36 +10,37 @@
 
   <Wizard v-else-if="auth.setupRequired" />
 
-  <div v-else class="min-h-screen bg-slate-100 flex">
+  <div v-else class="min-h-screen bg-[#f3f3f2] flex">
     <!-- 侧边导航 -->
     <aside class="w-60 bg-zinc-950 flex flex-col shrink-0 sticky top-0 h-screen">
       <div class="px-5 pt-6 pb-5 flex items-center gap-3">
-        <div class="w-9 h-9 rounded-xl bg-gradient-to-br from-white to-zinc-300 flex items-center justify-center text-zinc-900 font-bold text-base shadow-lg">
+        <div class="w-9 h-9 rounded-md bg-white flex items-center justify-center text-zinc-950 font-bold text-base shadow-lg">
           A
         </div>
         <div>
-          <div class="text-white font-semibold leading-tight">AniaBot</div>
-          <div class="text-[11px] text-slate-500 leading-tight">控制面板</div>
+          <div class="text-white font-semibold leading-tight tracking-[0.2em]">ANIABOT</div>
+          <div class="text-[10px] text-zinc-500 leading-tight tracking-[0.15em] uppercase mt-0.5">Console · 控制面板</div>
         </div>
       </div>
+      <div class="mx-5 h-px bg-white/10" />
 
-      <nav class="flex-1 px-3 py-2 space-y-1 overflow-y-auto">
+      <nav class="flex-1 px-3 py-3 space-y-1 overflow-y-auto">
         <RouterLink
           v-for="item in navItems"
           :key="item.to"
           :to="item.to"
-          class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all"
+          class="flex items-center gap-3 px-3 py-2.5 rounded-md text-[11px] tracking-[0.15em] transition-all"
           :class="$route.path === item.to
-            ? 'bg-white/10 text-white font-medium'
-            : 'text-slate-400 hover:text-slate-100 hover:bg-white/5'"
+            ? 'bg-white text-zinc-950 font-semibold'
+            : 'text-zinc-500 hover:text-zinc-200 hover:bg-white/5'"
         >
-          <span v-html="item.icon" class="shrink-0 [&>svg]:w-[18px] [&>svg]:h-[18px]" />
+          <span v-html="item.icon" class="shrink-0 [&>svg]:w-[16px] [&>svg]:h-[16px]" />
           {{ item.label }}
-          <span v-if="$route.path === item.to" class="ml-auto w-1.5 h-1.5 rounded-full bg-white" />
+          <span v-if="$route.path === item.to" class="ml-auto w-1.5 h-1.5 bg-zinc-950" />
         </RouterLink>
       </nav>
 
-      <div class="px-3 py-4 border-t border-white/5 space-y-0.5">
+      <div class="px-3 py-4 border-t border-white/10 space-y-0.5">
         <button class="nav-foot" @click="onRestart">
           <span v-html="icons.restart" class="[&>svg]:w-4 [&>svg]:h-4" /> 重启 Bot
         </button>
@@ -54,12 +55,11 @@
 
     <!-- 主内容 -->
     <main class="flex-1 min-w-0 flex flex-col">
-      <header class="bg-white/80 backdrop-blur border-b border-slate-200 px-8 py-4 sticky top-0 z-30 flex items-center justify-between">
-        <h1 class="text-base font-semibold text-slate-800">{{ $route.meta.title || '' }}</h1>
-        <div class="flex items-center gap-2 text-xs text-slate-400">
-          <span class="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-          AniaBot 运行中
-        </div>
+      <header class="bg-white/85 backdrop-blur border-b border-zinc-200 px-8 py-4 sticky top-0 z-30 flex items-center justify-between">
+        <h1 class="text-[11px] tracking-[0.22em] uppercase text-zinc-500 font-medium">
+          <span class="text-zinc-300 mr-2">//</span>{{ $route.meta.title || '' }}
+        </h1>
+        <span class="tpill"><span class="tdot bg-emerald-500" />Bot Online</span>
       </header>
       <div class="p-8 flex-1">
         <RouterView v-slot="{ Component }">
@@ -71,24 +71,24 @@
     </main>
 
     <!-- 重启中遮罩 -->
-    <div v-if="restarting" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-50">
-      <div class="bg-white rounded-2xl shadow-2xl p-8 w-80 text-center space-y-3">
-        <span class="mx-auto block w-8 h-8 border-[3px] border-slate-200 border-t-zinc-500 rounded-full animate-spin" />
-        <div class="text-base font-semibold text-slate-800">正在重启 Bot...</div>
-        <p class="text-sm text-slate-500">配置修改将在重启后生效，恢复后页面自动刷新</p>
+    <div v-if="restarting" class="fixed inset-0 bg-zinc-950/60 backdrop-blur-sm flex items-center justify-center z-50">
+      <div class="tcard p-8 w-80 text-center space-y-3">
+        <span class="mx-auto block w-8 h-8 border-[3px] border-zinc-200 border-t-zinc-800 rounded-full animate-spin" />
+        <div class="text-sm font-semibold text-zinc-900 tracking-[0.15em] uppercase">Rebooting</div>
+        <p class="text-xs text-zinc-500">配置修改将在重启后生效，恢复后页面自动刷新</p>
       </div>
     </div>
 
     <!-- 修改密码弹窗 -->
-    <div v-if="showPwd" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-50" @click.self="showPwd = false">
-      <form class="bg-white rounded-2xl shadow-2xl p-6 w-96 space-y-4" @submit.prevent="onChangePwd">
-        <h2 class="text-base font-semibold text-slate-800">修改密码</h2>
+    <div v-if="showPwd" class="fixed inset-0 bg-zinc-950/50 backdrop-blur-sm flex items-center justify-center z-50" @click.self="showPwd = false">
+      <form class="tcard p-6 w-96 space-y-4" @submit.prevent="onChangePwd">
+        <h2 class="text-[11px] tracking-[0.22em] uppercase text-zinc-500 font-medium">修改密码</h2>
         <input v-model="pwdForm.old" type="password" placeholder="原密码" required :class="inputClass" />
         <input v-model="pwdForm.next" type="password" placeholder="新密码（至少 6 位）" required minlength="6" :class="inputClass" />
-        <p v-if="pwdForm.msg" class="text-sm" :class="pwdForm.ok ? 'text-emerald-600' : 'text-red-600'">{{ pwdForm.msg }}</p>
+        <p v-if="pwdForm.msg" class="text-xs" :class="pwdForm.ok ? 'text-emerald-600' : 'text-red-600'">{{ pwdForm.msg }}</p>
         <div class="flex justify-end gap-2 pt-1">
-          <button type="button" class="px-4 py-2 text-sm text-slate-600 hover:bg-slate-100 rounded-lg transition-colors" @click="showPwd = false">取消</button>
-          <button type="submit" class="px-4 py-2 text-sm bg-zinc-900 text-white rounded-lg hover:bg-zinc-800 transition-colors">保存</button>
+          <button type="button" class="px-4 py-2 text-[11px] tracking-[0.1em] uppercase text-zinc-500 hover:bg-zinc-100 rounded-md transition-colors" @click="showPwd = false">取消</button>
+          <button type="submit" class="px-4 py-2 text-[11px] tracking-[0.1em] uppercase bg-zinc-900 text-white rounded-md hover:bg-zinc-700 transition-colors">保存</button>
         </div>
       </form>
     </div>
@@ -127,7 +127,7 @@ const navItems = [
   { to: '/contacts', label: '通讯录', icon: icons.contacts },
 ]
 
-const inputClass = 'w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-400 focus:border-zinc-400 transition-shadow'
+const inputClass = 'w-full border border-zinc-300 rounded-md px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-zinc-400 focus:border-zinc-400 transition-shadow bg-white'
 
 const showPwd = ref(false)
 const pwdForm = reactive({ old: '', next: '', msg: '', ok: false })
@@ -178,13 +178,15 @@ async function onChangePwd() {
   gap: 0.625rem;
   width: 100%;
   padding: 0.5rem 0.75rem;
-  border-radius: 0.5rem;
-  font-size: 0.8125rem;
-  color: rgb(100 116 139);
+  border-radius: 0.375rem;
+  font-size: 11px;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: rgb(113 113 122);
   transition: all 0.15s;
 }
 .nav-foot:hover {
-  color: rgb(226 232 240);
+  color: rgb(228 228 231);
   background: rgb(255 255 255 / 0.05);
 }
 </style>
