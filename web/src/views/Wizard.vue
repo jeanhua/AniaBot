@@ -67,7 +67,7 @@
             <h1 class="text-xl font-bold text-slate-800">配置完成 ✅</h1>
             <p class="text-sm text-slate-500 leading-relaxed">
               配置已保存到数据库，<b>重启后生效</b>。<br />
-              插件、MCP 服务器、Prompt 覆盖等更多配置可在「配置管理」与「文件编辑」页继续完善。
+              插件、MCP 服务器、Prompt 覆盖等更多配置可在「配置管理」与「扩展配置」页继续完善。
             </p>
           </template>
           <template v-else>

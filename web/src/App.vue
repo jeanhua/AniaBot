@@ -78,7 +78,7 @@ const router = useRouter()
 const navItems = [
   { to: '/', label: '状态总览' },
   { to: '/config', label: '配置管理' },
-  { to: '/files', label: '文件编辑' },
+  { to: '/files', label: '扩展配置' },
   { to: '/contacts', label: '通讯录' },
 ]
 
