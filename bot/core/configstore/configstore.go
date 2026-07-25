@@ -15,6 +15,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"os"
 	"strings"
 	"sync"
 
@@ -224,12 +225,42 @@ func (s *Store) All() map[string]any {
 	return out
 }
 
+// envPrefix 环境变量覆盖前缀：配置键 bot.admin_panel.listen 对应
+// 环境变量 ANIA_BOT_ADMIN_PANEL_LISTEN（点与横线转为下划线，全大写）。
+const envPrefix = "ANIA_"
+
+var envKeyReplacer = strings.NewReplacer(".", "_", "-", "_")
+
 // ToViper 将配置中心的全部配置构建为内存 viper，
 // 供框架与插件按既有方式读取（Get*/IsSet/UnmarshalKey 语义不变）。
+// 环境变量（ANIA_ 前缀）优先级高于数据库中的配置值，便于容器部署时覆盖。
 func (s *Store) ToViper() *viper.Viper {
 	v := viper.New()
 	for k, val := range s.All() {
 		v.Set(k, val)
 	}
+	s.applyEnvOverrides(v)
 	return v
+}
+
+// applyEnvOverrides 用 ANIA_ 前缀的环境变量覆盖对应配置键。
+// viper 的显式 Set 优先级高于 AutomaticEnv，故需手动覆盖。
+func (s *Store) applyEnvOverrides(v *viper.Viper) {
+	for _, k := range v.AllKeys() {
+		envKey := envPrefix + strings.ToUpper(envKeyReplacer.Replace(k))
+		raw, ok := os.LookupEnv(envKey)
+		if !ok {
+			continue
+		}
+		var val any = raw
+		// 保持原值类型：非字符串类型按 JSON 解析（如 int/bool/数组）
+		if _, isStr := v.Get(k).(string); !isStr {
+			var decoded any
+			if err := json.Unmarshal([]byte(raw), &decoded); err == nil {
+				val = decoded
+			}
+		}
+		v.Set(k, val)
+		s.logger.Info("环境变量覆盖配置", "key", k, "env", envKey)
+	}
 }
