@@ -135,7 +135,7 @@
                 >
                   <span
                     class="inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow transition-transform"
-                    :class="t.enabled ? 'translate-x-[1.125rem]' : 'translate-x-[0.1875rem]'"
+                    :class="t.enabled ? 'translate-x-4.5' : 'translate-x-0.75'"
                   />
                 </button>
               </td>
