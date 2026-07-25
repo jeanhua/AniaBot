@@ -30,6 +30,10 @@ type bashToolConfig struct {
 	Blacklist []string `cfg:"blacklist" label:"命令黑名单(正则)" group:"AI 对话 · 工具" help:"匹配的命令被禁止，每行一个" default:"config(\\.dev)?\\.(yaml|yml|json),^mkfs,^shutdown,^reboot"`
 }
 
+type fileToolConfig struct {
+	Enable bool `cfg:"enable" label:"启用文件发送工具" group:"AI 对话 · 工具" help:"可读取宿主机任意文件并发送给用户，默认关闭" default:"false"`
+}
+
 type localImageToolConfig struct {
 	Enable bool `cfg:"enable" label:"启用本地图片工具" group:"AI 对话 · 工具" help:"可读取宿主机本地图片，默认关闭" default:"false"`
 }
@@ -82,6 +86,7 @@ type aiChatConfig struct {
 	SkillsDir  string               `cfg:"plugin.ai_chat_bot.skills_dir" label:"Skills 目录" group:"AI 对话 · 工具" default:"./skills"`
 	Skills     []string             `cfg:"plugin.ai_chat_bot.skills" label:"Skills 白名单" group:"AI 对话 · 工具" help:"为空则加载全部，每行一个"`
 	Bash       bashToolConfig       `cfg:"plugin.ai_chat_bot.bash"`
+	File       fileToolConfig       `cfg:"plugin.ai_chat_bot.file"`
 	LocalImage localImageToolConfig `cfg:"plugin.ai_chat_bot.local_image"`
 
 	OCR ocrConfig `cfg:"plugin.ai_chat_bot.ocr"`

@@ -458,13 +458,7 @@ func (p *AIChatPlugin) Start(ctx context.Context, cfg *viper.Viper) error {
 	if bashConfig.Enable {
 		p.Logger.Info("已启用bash工具", "shell", bashConfig.Shell, "whitelist", bashConfig.Whitelist, "blacklist", bashConfig.Blacklist)
 	}
-	// file 工具未注册面板字段（无可视配置项），保留手动读取
-	var fileConfig functool.FileConfig
-	if cfg.IsSet("plugin.ai_chat_bot.file") {
-		if err := cfg.UnmarshalKey("plugin.ai_chat_bot.file", &fileConfig); err != nil {
-			p.Logger.Warn("解析 file 工具配置失败", "error", err.Error())
-		}
-	}
+	fileConfig := functool.FileConfig{Enable: p.cfg.File.Enable}
 	if fileConfig.Enable {
 		p.Logger.Info("已启用file工具（可读取宿主机本地文件并发送，请注意安全风险）")
 	}
