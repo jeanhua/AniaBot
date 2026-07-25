@@ -83,7 +83,7 @@
                 >
                   <span
                     class="absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-all duration-200"
-                    :class="form[field.key] ? 'left-[18px]' : 'left-0.5'"
+                    :class="form[field.key] ? 'left-4.5' : 'left-0.5'"
                   />
                 </span>
                 <span class="text-sm" :class="form[field.key] ? 'text-slate-700' : 'text-slate-400'">{{ form[field.key] ? '已启用' : '已关闭' }}</span>
