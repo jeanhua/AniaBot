@@ -60,6 +60,7 @@ func (p *LogPlugin) OnGroupMsg(ctx context.Context, bot bot.Bot, cmd command.Com
 	text := msg.FriendlyText(false,
 		message.WithGetMsgFunc(bot.GetMsgDetail),
 		message.WithGetForwardMsgFunc(bot.GetForwardMsg),
+		message.WithNoSenderPrefix(),
 	)
 	p.Logger.Info("[收<-群]", "groupId", msg.GroupId, "userId", msg.Sender.UserId, "message", text)
 	p.recorder.Add(msglog.Entry{
@@ -76,6 +77,7 @@ func (p *LogPlugin) OnFriendMsg(ctx context.Context, bot bot.Bot, cmd command.Co
 	text := msg.FriendlyText(false,
 		message.WithGetMsgFunc(bot.GetMsgDetail),
 		message.WithGetForwardMsgFunc(bot.GetForwardMsg),
+		message.WithNoSenderPrefix(),
 	)
 	p.Logger.Info("[收<-好友]", "userId", msg.Sender.UserId, "message", text)
 	p.recorder.Add(msglog.Entry{

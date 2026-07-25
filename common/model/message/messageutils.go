@@ -10,6 +10,7 @@ type msgHandleOpt struct {
 	getMsgFunc        func(msgId QID) (*Message, bool)
 	getImageOCRFunc   func(url string) string
 	getForwardMsgFunc func(msgId QID) (*[]Message, bool)
+	noSenderPrefix    bool
 }
 
 type MsgOptFunc func(*msgHandleOpt)
@@ -32,13 +33,21 @@ func WithGetImageOCRFunc(f func(url string) string) MsgOptFunc {
 	}
 }
 
+// WithNoSenderPrefix 不输出开头的 [nickname:… id:…] 发送者前缀。
+// 用于日志展示等已单独展示发送者信息的场景。
+func WithNoSenderPrefix() MsgOptFunc {
+	return func(o *msgHandleOpt) {
+		o.noSenderPrefix = true
+	}
+}
+
 func (raw Message) FriendlyText(showUrl bool, opts ...MsgOptFunc) string {
 	msgFuncs := msgHandleOpt{}
 	for _, f := range opts {
 		f(&msgFuncs)
 	}
 	var result strings.Builder
-	{
+	if !msgFuncs.noSenderPrefix {
 		nickname := raw.Sender.Card
 		if nickname == "" {
 			nickname = raw.Sender.Nickname
