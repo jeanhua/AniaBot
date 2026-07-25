@@ -50,31 +50,4 @@ plugin:
       groups:
         - "all"
 
-  # 群刊插件
-  group_newsletter:
-    fmt: "md" # 输出格式 md或jpg, jpg需要先启动md2img-api容器: docker run -d -p 3000:3000 --name md2img-api jeanhua/md2img-api:latest
-    model:
-      base_url: "https://api.openai.com/v1"
-      api_key: "your-api-key"
-      model: "gpt-4"
-      prompt: ""  # 可选，留空使用默认prompt
-    msg_threshold: 100  # 消息阈值
-    max_messages: 500   # 最大保存消息数
-    enabled_groups: []  # 留空表示所有群启用，或填写群号列表
 
-  # gdmusic插件
-  gdmusic:
-    base_url: "https://music-api.gdstudio.xyz/api.php"  # 留空使用默认
-
-  # url解析插件
-  url_parser:
-    cache_ttl: 60 # 缓存时间，单位分钟
-    token: "xxx" # jina ai token
-    llm:
-      base_url: "https://open.bigmodel.cn/api/paas/v4"
-      api_key: ""
-      model: "GLM-4-Flash-250414"
-
-component:
-  md2img:
-    apipoint: "http://localhost:3000"
