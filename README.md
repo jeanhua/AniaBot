@@ -34,6 +34,8 @@ go run cmd/main.go
 
 登录 `http://127.0.0.1:7700`，按设置向导填写 NapCat 连接地址、管理员 QQ 与 AI 模型配置即可。
 
+![pannel](./README/pannel.png)
+
 详细配置和插件开发教程请查阅 **[文档站点](https://jeanhua.github.io/AniaBot/)**。
 
 ## 许可证
