@@ -467,15 +467,28 @@ async function removeClock(t) {
   }
 }
 
-onMounted(async () => {
+// 实时刷新：状态 / 定时任务 / 执行日志统一轮询；标签页隐藏时暂停，恢复可见时立即刷新
+function poll() {
   loadStatus()
   loadLogs()
   loadClocks()
+}
+
+function onVisible() {
+  if (!document.hidden) poll()
+}
+
+onMounted(async () => {
+  poll()
   try { plugins.value = await api.getPlugins() } catch { /* 忽略 */ }
-  timer = setInterval(loadStatus, 10000)
+  timer = setInterval(() => { if (!document.hidden) poll() }, 5000)
+  document.addEventListener('visibilitychange', onVisible)
 })
 
-onUnmounted(() => clearInterval(timer))
+onUnmounted(() => {
+  clearInterval(timer)
+  document.removeEventListener('visibilitychange', onVisible)
+})
 </script>
 
 <style scoped>
