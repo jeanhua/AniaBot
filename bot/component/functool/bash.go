@@ -137,7 +137,9 @@ func (t *BashTool) Execute(_ context.Context, params any, _ llmtool.CallBackFunc
 
 	cmd := exec.CommandContext(ctx, t.shell, t.shellArg, p.Command)
 	if len(t.env) > 0 {
-		cmd.Env = t.env
+		// 追加而非替换：直接赋值 cmd.Env 会丢弃进程继承的 PATH/HOME 等变量，
+		// 配置任意一个自定义变量就会破坏依赖继承环境的命令查找
+		cmd.Env = append(cmd.Environ(), t.env...)
 	}
 
 	var stdout, stderr bytes.Buffer
