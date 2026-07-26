@@ -49,26 +49,23 @@ make windows
 
 镜像内置 Go / Node.js / git 工具链，面板的「自动更新」在容器内可直接使用。
 
-使用 Docker Compose（推荐）：
+使用 Docker Compose：
 
 ```bash
-# 编辑 docker-compose.yml：改用 Docker Hub 镜像，或保留 build: . 本地构建
+git clone https://github.com/jeanhua/AniaBot.git && cd ./AniaBot
 docker compose up -d
 ```
 
 或直接使用镜像：
 
 ```bash
+cd ~/Bot/
 docker run -d --name aniabot \
   -p 7700:7700 \
   -v ./data:/app/aniabot/data \
   -v ./skills:/app/aniabot/skills \
   jeanhua/aniabot:latest
 ```
-
-只需持久化两个目录：`data`（SQLite 数据库，含全部配置与聊天历史）和 `skills`（AI skills）。自动更新的源码目录填容器内任意路径即可（如 `/app/source`），无需挂载——容器重建后首次更新会自动重新克隆。
-
-镜像随版本标签发布到 Docker Hub（`v*.*.*` 标签触发 GitHub Actions 构建），面板访问 `http://<宿主机IP>:7700`。
 
 详细配置和插件开发教程请查阅 **[文档站点](https://jeanhua.github.io/AniaBot/)**。
 
