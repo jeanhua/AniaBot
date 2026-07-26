@@ -98,3 +98,8 @@ func (b *ChatBot) SetToolObserver(fn func(ToolCallInfo)) {
 func (b *ChatBot) SetSkillManager(manager *llmtool.SkillManager) {
 	b.msgBuilder.WithSkillManager(manager)
 }
+
+// SetMaxIterations 设置工具调用循环的最大轮数（子代理等场景使用比主对话更小的上限）。
+func (b *ChatBot) SetMaxIterations(max int) {
+	b.toolOrchestrator.SetMaxIterations(max)
+}

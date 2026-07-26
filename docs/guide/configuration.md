@@ -196,6 +196,17 @@ HTTP 模式下 NapCat 向 `localhost` 上报会失败，请将 NapCat 的 HTTP C
 
 记忆按群聊 / 好友隔离、持久化保存、重启不丢。详见 [AI 对话插件](/guide/builtin-plugins#ai-对话插件)。
 
+### AI 子代理（subagent）
+
+| 配置键 | 默认值 | 说明 |
+| --- | --- | --- |
+| `plugin.ai_chat_bot.subagent.enable` | `true` | 启用后 AI 可通过 `subagent_run` 工具委派子任务 |
+| `plugin.ai_chat_bot.subagent.timeout_sec` | `300` | 单次执行默认超时（秒），单次调用可覆盖（上限 1800；实际还会按框架单次消息处理预算自动收缩，为主请求预留收尾时间） |
+| `plugin.ai_chat_bot.subagent.max_iterations` | `10` | 子代理工具调用循环的最大轮数 |
+| `plugin.ai_chat_bot.subagent.max_result_len` | `4000` | 返回结果最大字符数，超出截断以防污染主对话上下文 |
+
+子代理以全新一次性上下文运行、拥有与主 AI 一致的工具能力，但**不能再委派子代理**。详见 [AI 对话插件](/guide/builtin-plugins#ai-对话插件)。
+
 ## plugin.interceptor —— 请求拦截插件
 
 | 配置键 | 默认值 | 说明 |

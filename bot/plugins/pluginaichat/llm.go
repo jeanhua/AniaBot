@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/jeanhua/AniaBot/bot/component/aichat"
+	"github.com/jeanhua/AniaBot/bot/component/llmtool"
 	"github.com/jeanhua/AniaBot/common/bot"
 	"github.com/jeanhua/AniaBot/common/model/message"
 )
@@ -57,32 +58,45 @@ func (p *AIChatPlugin) buildScenePrompt(b bot.Bot, id message.QID, isGroup bool)
 	return sb.String()
 }
 
+// registerScopedTools 注册绑定当前会话的工具（定时任务 + 长期记忆）。
+// 主会话与子代理的一次性会话共用（子代理拥有与主 AI 一致的会话级能力），
+// 但不包含 subagent 工具自身——防止子代理递归委派。
+func (p *AIChatPlugin) registerScopedTools(sessionExecutor *llmtool.SessionToolExecutor, id message.QID, isGroup bool) {
+	// 注册定时任务管理工具，默认触发对象为当前会话（群聊/好友）
+	if p.clockManager != nil {
+		targetType := clockTargetFriend
+		if isGroup {
+			targetType = clockTargetGroup
+		}
+		for _, tool := range newClockTools(p.clockManager, targetType, id.String()) {
+			sessionExecutor.RegisterSession(tool)
+		}
+	}
+	// 注册长期记忆工具，scope 绑定当前会话（群聊 g:群号 / 私聊 f:QQ号），
+	// 从机制上保证记忆不会跨会话泄露
+	if p.memoryManager != nil {
+		scope := "f:" + id.String()
+		sessionDesc := "私聊（对方QQ " + id.String() + "）"
+		if isGroup {
+			scope = "g:" + id.String()
+			sessionDesc = "群聊（群号 " + id.String() + "）"
+		}
+		for _, tool := range newMemoryTools(p.memoryManager, scope, sessionDesc) {
+			sessionExecutor.RegisterSession(tool)
+		}
+	}
+}
+
 func (p *AIChatPlugin) getChat(b bot.Bot, id message.QID, isGroup bool, prompt string) *aichat.ChatBot {
 	key := sessionKey(id, isGroup)
 	chat, ok := p.chats.Load(key)
 	if !ok {
 		// 每个会话创建独立的 SessionToolExecutor，动态加载的工具互不影响
 		sessionExecutor := p.toolExecutor.NewSessionExecutor()
-		// 注册定时任务管理工具，默认触发对象为当前会话（群聊/好友）
-		if p.clockManager != nil {
-			targetType := clockTargetFriend
-			if isGroup {
-				targetType = clockTargetGroup
-			}
-			for _, tool := range newClockTools(p.clockManager, targetType, id.String()) {
-				sessionExecutor.RegisterSession(tool)
-			}
-		}
-		// 注册长期记忆工具，scope 绑定当前会话（群聊 g:群号 / 私聊 f:QQ号），
-		// 从机制上保证记忆不会跨会话泄露
-		if p.memoryManager != nil {
-			scope := "f:" + id.String()
-			sessionDesc := "私聊（对方QQ " + id.String() + "）"
-			if isGroup {
-				scope = "g:" + id.String()
-				sessionDesc = "群聊（群号 " + id.String() + "）"
-			}
-			for _, tool := range newMemoryTools(p.memoryManager, scope, sessionDesc) {
+		p.registerScopedTools(sessionExecutor, id, isGroup)
+		// 注册子代理委派工具（仅主会话；子代理的一次性会话不注册，防止递归委派）
+		if p.cfg.Subagent.Enable {
+			for _, tool := range newSubagentTools(p, b, id, isGroup) {
 				sessionExecutor.RegisterSession(tool)
 			}
 		}

@@ -511,6 +511,17 @@ func (p *AIChatPlugin) Start(ctx context.Context, cfg *viper.Viper) error {
 		p.Logger.Info("AI长期记忆功能未启用（plugin.ai_chat_bot.memory.enable=false）")
 	}
 
+	// AI 子代理：主 AI 可通过 subagent_run 工具把复杂子任务委派给一次性子代理
+	// （全新上下文 + 全部工具能力），执行结果返回给主 AI，避免污染主对话上下文
+	if p.cfg.Subagent.Enable {
+		p.Logger.Info("已启用子代理功能",
+			"timeout_sec", p.subagentTimeout().Seconds(),
+			"max_iterations", p.subagentMaxIterations(),
+			"max_result_len", p.subagentMaxResultLen())
+	} else {
+		p.Logger.Info("子代理功能未启用（plugin.ai_chat_bot.subagent.enable=false）")
+	}
+
 	// Query 日志：记录每次 AI 回复的完整执行过程（面板「Query 日志」页数据源）
 	p.initQueryLogger()
 
