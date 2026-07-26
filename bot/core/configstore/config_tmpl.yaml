@@ -39,16 +39,14 @@ files:
 plugin:
 
   # 拦截器插件
-  interceptor: # 优先级: 黑名单 > 白名单 > 其他
-    # 黑名单
-    blacklist:
-      users: []
-      groups: []
-    # 白名单
-    whitelist:
-      users:
-        - "all"
-      groups:
-        - "all"
+  interceptor:
+    # 是否启用请求拦截，关闭时放行全部消息
+    enable: false
+    # 名单模式：blacklist=名单内屏蔽；whitelist=仅名单内放行
+    mode: blacklist
+    # 群号名单（每行一个群号）
+    groups: []
+    # QQ号名单（每行一个 QQ 号，对私聊及群聊消息发送者均生效）
+    friends: []
 
 

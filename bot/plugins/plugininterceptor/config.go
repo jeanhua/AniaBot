@@ -8,7 +8,7 @@ type interceptorConfig struct {
 	// 名单留空的语义：blacklist 模式下表示不屏蔽任何会话；
 	// whitelist 模式下表示拦截所有会话（任何群/好友都无法触发后续插件）
 	Groups  []int `cfg:"plugin.interceptor.groups" label:"群号名单" group:"请求拦截插件" help:"每行一个群号"`
-	Friends []int `cfg:"plugin.interceptor.friends" label:"QQ号名单" group:"请求拦截插件" help:"每行一个 QQ 号"`
+	Friends []int `cfg:"plugin.interceptor.friends" label:"QQ号名单" group:"请求拦截插件" help:"每行一个 QQ 号，对私聊及群聊消息发送者均生效"`
 }
 
 // ConfigSchema 实现 plugin.ConfigSchemaProvider：返回配置结构体指针，

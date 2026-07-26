@@ -88,6 +88,10 @@ func (p *InterceptorPlugin) OnGroupMsg(ctx context.Context, bot bot.Bot, cmd com
 		p.Logger.Info("拦截群聊消息", "mode", p.cfg.Mode, "groupId", msg.GroupId, "userId", msg.Sender.UserId)
 		return false, nil
 	}
+	if !p.allow(msg.Sender.UserId, p.friends) {
+		p.Logger.Info("拦截群内成员消息", "mode", p.cfg.Mode, "groupId", msg.GroupId, "userId", msg.Sender.UserId)
+		return false, nil
+	}
 	return true, nil
 }
 

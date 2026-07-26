@@ -203,7 +203,7 @@ HTTP 模式下 NapCat 向 `localhost` 上报会失败，请将 NapCat 的 HTTP C
 | `plugin.interceptor.enable` | `false` | 是否启用请求拦截，关闭时放行全部消息 |
 | `plugin.interceptor.mode` | `blacklist` | 名单模式：`blacklist` 名单内屏蔽 / `whitelist` 仅名单内放行 |
 | `plugin.interceptor.groups` | `[]` | 群号名单，每行一个 |
-| `plugin.interceptor.friends` | `[]` | QQ 号名单，每行一个 |
+| `plugin.interceptor.friends` | `[]` | QQ 号名单，每行一个，对私聊及群聊消息发送者均生效 |
 
 被拦截的会话消息不再传播到后续插件（AI 对话插件收不到，不产生 AI 请求）。注意 `whitelist` 模式下名单留空会拦截所有会话。详见 [请求拦截插件](/guide/builtin-plugins#请求拦截插件)。
 
