@@ -20,9 +20,7 @@ type LogPlugin struct {
 }
 
 func NewPlugin() *LogPlugin {
-	p := &LogPlugin{
-		recorder: msglog.New(0),
-	}
+	p := &LogPlugin{}
 	p.Name = "日志打印插件"
 	p.HelpWords = "用于在控制台打印日志信息"
 	p.Author = "jeanhua"
@@ -34,6 +32,10 @@ func NewPlugin() *LogPlugin {
 }
 
 func (p *LogPlugin) Start(ctx context.Context, cfg *viper.Viper) error {
+	// 消息日志记录器挂在缓存存储上：memory 驱动时重启清空（同旧版内存环形缓冲），
+	// redis 驱动时重启后仍可回看。Storage 由 core 在 Start 前注入。
+	p.recorder = msglog.New(p.Storage, 0)
+
 	lastStartTime, ok := p.Storage.GetString(ctx, "last_start_time")
 	if !ok {
 		lastStartTime = "未保存"
@@ -45,7 +47,18 @@ func (p *LogPlugin) Start(ctx context.Context, cfg *viper.Viper) error {
 
 // MsgLogRecent 供 Web 控制面板读取最近的消息日志（实现 adminpanel.MsgLogSource）。
 func (p *LogPlugin) MsgLogRecent(limit int) []msglog.Entry {
+	if p.recorder == nil {
+		return nil
+	}
 	return p.recorder.Recent(limit)
+}
+
+// add 记录一条消息日志；recorder 未初始化（Start 之前）时忽略。
+func (p *LogPlugin) add(e msglog.Entry) {
+	if p.recorder == nil {
+		return
+	}
+	p.recorder.Add(e)
 }
 
 // senderName 群名片优先，其次昵称。
@@ -63,7 +76,7 @@ func (p *LogPlugin) OnGroupMsg(ctx context.Context, bot bot.Bot, cmd command.Com
 		message.WithNoSenderPrefix(),
 	)
 	p.Logger.Info("[收<-群]", "groupId", msg.GroupId, "userId", msg.Sender.UserId, "message", text)
-	p.recorder.Add(msglog.Entry{
+	p.add(msglog.Entry{
 		Type:     msglog.TypeGroup,
 		GroupId:  msg.GroupId.String(),
 		UserId:   msg.Sender.UserId.String(),
@@ -80,7 +93,7 @@ func (p *LogPlugin) OnFriendMsg(ctx context.Context, bot bot.Bot, cmd command.Co
 		message.WithNoSenderPrefix(),
 	)
 	p.Logger.Info("[收<-好友]", "userId", msg.Sender.UserId, "message", text)
-	p.recorder.Add(msglog.Entry{
+	p.add(msglog.Entry{
 		Type:     msglog.TypeFriend,
 		UserId:   msg.Sender.UserId.String(),
 		Nickname: msg.Sender.Nickname,
@@ -91,7 +104,7 @@ func (p *LogPlugin) OnFriendMsg(ctx context.Context, bot bot.Bot, cmd command.Co
 
 // notice 记录一条通知事件日志。
 func (p *LogPlugin) notice(groupId, userId message.QID, title, text string) {
-	p.recorder.Add(msglog.Entry{
+	p.add(msglog.Entry{
 		Type:    msglog.TypeNotice,
 		GroupId: groupId.String(),
 		UserId:  userId.String(),
