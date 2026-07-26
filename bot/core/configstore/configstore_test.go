@@ -110,8 +110,8 @@ func TestSeedDefaults(t *testing.T) {
 	if got := v.GetString("bot.adapter.ws.address"); got != "ws://localhost:4455" {
 		t.Fatalf("ws.address = %q", got)
 	}
-	if got := v.GetStringSlice("plugin.interceptor.whitelist.users"); len(got) != 1 || got[0] != "all" {
-		t.Fatalf("whitelist.users = %v", got)
+	if got := v.GetString("plugin.interceptor.mode"); got != "blacklist" {
+		t.Fatalf("interceptor.mode = %q", got)
 	}
 	if !v.GetBool("bot.admin_panel.enable") {
 		t.Fatal("bot.admin_panel.enable should default to true")
