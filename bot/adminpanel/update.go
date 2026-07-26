@@ -182,24 +182,67 @@ func (s *Server) handleUpdateInfo(w http.ResponseWriter, r *http.Request) {
 		},
 	}
 
-	// 已配置源码目录时，尝试对比本地与远端 commit
+	// 已配置源码目录时，按目录状态分别处理：
+	// 是 git 仓库 → 对比本地与远端 commit；空目录/不存在 → 标记待克隆，
+	// 直接用 git ls-remote 检查远端；非空非仓库 → 报目录错误。
 	if srcDir != "" {
-		if out, err := runGit(ctx, srcDir, "rev-parse", "--short", "HEAD"); err == nil {
-			info["currentCommit"] = strings.TrimSpace(out)
-		}
-		if out, err := runGit(ctx, srcDir, "ls-remote", "origin", branch); err == nil {
-			fields := strings.Fields(out)
-			if len(fields) > 0 && len(fields[0]) >= 7 {
-				remote := fields[0][:7]
-				info["remoteCommit"] = remote
-				cur, _ := info["currentCommit"].(string)
-				info["updateAvailable"] = cur != "" && cur != remote
+		if isGitRepoDir(ctx, srcDir) {
+			if out, err := runGit(ctx, srcDir, "rev-parse", "--short", "HEAD"); err == nil {
+				info["currentCommit"] = strings.TrimSpace(out)
+			}
+			if out, err := runGit(ctx, srcDir, "ls-remote", "origin", branch); err == nil {
+				fields := strings.Fields(out)
+				if len(fields) > 0 && len(fields[0]) >= 7 {
+					remote := fields[0][:7]
+					info["remoteCommit"] = remote
+					cur, _ := info["currentCommit"].(string)
+					info["updateAvailable"] = cur != "" && cur != remote
+				}
+			} else {
+				info["remoteError"] = "无法访问远端仓库（网络或认证问题）"
+			}
+		} else if empty, _ := dirIsEmpty(srcDir); empty {
+			info["needClone"] = true
+			if gitURL == "" {
+				info["remoteError"] = "源码目录为空且未配置 git 地址（bot.update.git_url），无法克隆"
+			} else if out, err := gitLsRemoteURL(ctx, gitURL, branch); err == nil {
+				fields := strings.Fields(out)
+				if len(fields) > 0 && len(fields[0]) >= 7 {
+					info["remoteCommit"] = fields[0][:7]
+				}
+			} else {
+				info["remoteError"] = "无法访问远端仓库（网络或认证问题）"
 			}
 		} else {
-			info["remoteError"] = "无法访问远端仓库（网络或认证问题）"
+			info["dirError"] = "源码目录已存在且非空，但不是 git 仓库（请更换目录或清空，空目录将自动克隆）"
 		}
 	}
 	writeJSON(w, http.StatusOK, info)
+}
+
+// isGitRepoDir 判断目录是否为 git 仓库。
+func isGitRepoDir(ctx context.Context, dir string) bool {
+	_, err := runGit(ctx, dir, "rev-parse", "--git-dir")
+	return err == nil
+}
+
+// dirIsEmpty 报告目录不存在或为空目录。
+func dirIsEmpty(dir string) (bool, error) {
+	entries, err := os.ReadDir(dir)
+	if os.IsNotExist(err) {
+		return true, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	return len(entries) == 0, nil
+}
+
+// gitLsRemoteURL 不依赖本地仓库，直接查询远端地址的分支引用。
+func gitLsRemoteURL(ctx context.Context, url, branch string) (string, error) {
+	cmd := exec.CommandContext(ctx, "git", "ls-remote", url, branch)
+	out, err := cmd.CombinedOutput()
+	return string(out), err
 }
 
 // runGit 在指定目录执行 git 命令并返回输出（不经过更新日志）。
@@ -295,8 +338,24 @@ func (s *Server) runUpdate(srcDir, gitURL, branch string) {
 		}
 		upd.appendLog("  " + ver)
 	}
-	if _, err := runGit(ctx, srcDir, "rev-parse", "--git-dir"); err != nil {
-		fail("环境缺失", fmt.Errorf("源码目录 %s 不存在或不是 git 仓库", srcDir))
+	// 源码目录为空/不存在 → 自动克隆；非空但不是 git 仓库 → 报错中止
+	if empty, _ := dirIsEmpty(srcDir); empty {
+		if gitURL == "" {
+			fail("环境缺失", fmt.Errorf("源码目录 %s 为空且未配置 git 地址（bot.update.git_url），无法克隆", srcDir))
+			return
+		}
+		upd.appendLog("  源码目录为空，自动克隆仓库")
+		parent := filepath.Dir(srcDir)
+		if err := os.MkdirAll(parent, 0o755); err != nil {
+			fail("系统错误", fmt.Errorf("创建源码目录失败: %w", err))
+			return
+		}
+		if err := stepCmd(ctx, parent, "git", "clone", "--branch", branch, gitURL, srcDir); err != nil {
+			fail("仓库错误", fmt.Errorf("git clone 失败（检查 git 地址、网络与认证）: %w", err))
+			return
+		}
+	} else if !isGitRepoDir(ctx, srcDir) {
+		fail("环境缺失", fmt.Errorf("源码目录 %s 非空但不是 git 仓库，请更换目录或清空后重试（空目录将自动克隆）", srcDir))
 		return
 	}
 

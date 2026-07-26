@@ -73,7 +73,7 @@ ANIA_BOT_ADMIN_PANEL_ENABLE=true ./AniaBot
 
 | 键 | 说明 | 默认值 |
 | --- | --- | --- |
-| `bot.update.source_dir` | AniaBot 仓库的克隆路径（独立于运行目录的源码目录），留空则禁用自动更新 | 空 |
+| `bot.update.source_dir` | AniaBot 仓库的克隆路径（独立于运行目录的源码目录）；目录为空或不存在时将按 `bot.update.git_url` 自动克隆；留空则禁用自动更新 | 空 |
 | `bot.update.git_url` | 非空时更新前覆盖源码目录的 origin 地址 | 空 |
 | `bot.update.branch` | 跟踪的远端分支 | `main` |
 
@@ -81,7 +81,7 @@ ANIA_BOT_ADMIN_PANEL_ENABLE=true ./AniaBot
 
 点击「开始更新」后依次执行（任一阶段失败即中止，面板显示错误分类与详情，**当前运行的版本不受影响**）：
 
-1. **环境检查** —— git / go / node / npm 可用性、源码目录是否为 git 仓库（错误分类：环境缺失）
+1. **环境检查** —— git / go / node / npm 可用性；源码目录为空或不存在时自动 `git clone`（需配置 `bot.update.git_url`），非空但不是 git 仓库则报错（错误分类：环境缺失 / 仓库错误）
 2. **拉取代码** —— `git fetch` + `git reset --hard origin/<branch>`（错误分类：仓库错误，检查网络 / 地址 / 认证）
 3. **拉取依赖** —— `go mod tidy`，新代码引入的依赖在此下载（错误分类：依赖错误）
 4. **构建前端** —— `npm ci` + `npm run build`，保证面板前端也是最新（错误分类：前端构建错误）

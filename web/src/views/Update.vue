@@ -51,6 +51,14 @@
           <span class="font-mono text-zinc-700">{{ info.env[t.key] || '未安装' }}</span>
         </span>
       </div>
+      <div v-if="info && info.needClone" class="mt-4 pt-4 border-t border-zinc-100 flex items-start gap-2 text-[11px] text-amber-600">
+        <span class="tdot bg-amber-400 mt-1 shrink-0" />
+        源码目录为空或不存在，开始更新时将自动从 git 地址克隆仓库
+      </div>
+      <div v-if="info && info.dirError" class="mt-4 pt-4 border-t border-zinc-100 flex items-start gap-2 text-[11px] text-red-600">
+        <span class="tdot bg-red-400 mt-1 shrink-0" />
+        {{ info.dirError }}
+      </div>
     </div>
 
     <!-- 操作 -->
@@ -142,7 +150,13 @@ const logEl = ref(null)
 const status = reactive({ running: false, phase: '', logs: [], error: '', errKind: '' })
 
 const canUpdate = computed(() =>
-  info.value && info.value.mode === 'binary' && info.value.configured && !status.running && !rebooting.value,
+  info.value
+  && info.value.mode === 'binary'
+  && info.value.configured
+  && !info.value.dirError
+  && !(info.value.needClone && !info.value.gitUrl)
+  && !status.running
+  && !rebooting.value,
 )
 
 let timer = null
