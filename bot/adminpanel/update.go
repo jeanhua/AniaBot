@@ -187,16 +187,20 @@ func (s *Server) handleUpdateInfo(w http.ResponseWriter, r *http.Request) {
 	// 直接用 git ls-remote 检查远端；非空非仓库 → 报目录错误。
 	if srcDir != "" {
 		if isGitRepoDir(ctx, srcDir) {
-			if out, err := runGit(ctx, srcDir, "rev-parse", "--short", "HEAD"); err == nil {
-				info["currentCommit"] = strings.TrimSpace(out)
+			// 用完整哈希做比较：git rev-parse --short 的长度随仓库对象数增长
+			// （可能是 8 位以上），与固定截断 7 位的远端哈希永不相等，
+			// 会导致面板恒久误报"有新版本"。短哈希仅用于展示
+			var localFull string
+			if out, err := runGit(ctx, srcDir, "rev-parse", "HEAD"); err == nil {
+				localFull = strings.TrimSpace(out)
+				info["currentCommit"] = shortCommit(localFull)
 			}
 			if out, err := runGit(ctx, srcDir, "ls-remote", "origin", branch); err == nil {
 				fields := strings.Fields(out)
 				if len(fields) > 0 && len(fields[0]) >= 7 {
-					remote := fields[0][:7]
-					info["remoteCommit"] = remote
-					cur, _ := info["currentCommit"].(string)
-					info["updateAvailable"] = cur != "" && cur != remote
+					remoteFull := fields[0]
+					info["remoteCommit"] = shortCommit(remoteFull)
+					info["updateAvailable"] = localFull != "" && localFull != remoteFull
 				}
 			} else {
 				info["remoteError"] = "无法访问远端仓库（网络或认证问题）"
@@ -208,7 +212,7 @@ func (s *Server) handleUpdateInfo(w http.ResponseWriter, r *http.Request) {
 			} else if out, err := gitLsRemoteURL(ctx, gitURL, branch); err == nil {
 				fields := strings.Fields(out)
 				if len(fields) > 0 && len(fields[0]) >= 7 {
-					info["remoteCommit"] = fields[0][:7]
+					info["remoteCommit"] = shortCommit(fields[0])
 				}
 			} else {
 				info["remoteError"] = "无法访问远端仓库（网络或认证问题）"
@@ -221,6 +225,14 @@ func (s *Server) handleUpdateInfo(w http.ResponseWriter, r *http.Request) {
 }
 
 // isGitRepoDir 判断目录是否为 git 仓库。
+// shortCommit 返回用于展示的 7 位短哈希（比较一律用完整哈希）。
+func shortCommit(hash string) string {
+	if len(hash) > 7 {
+		return hash[:7]
+	}
+	return hash
+}
+
 func isGitRepoDir(ctx context.Context, dir string) bool {
 	_, err := runGit(ctx, dir, "rev-parse", "--git-dir")
 	return err == nil
