@@ -371,6 +371,11 @@ func (n *napcatWebSocketAdapter) readLoop(conn *websocket.Conn) {
 			log.Println("读取数据失败:", err)
 			return
 		}
+		// ACK 必须在 readLoop 直接投递而不能进 worker 池：worker 可能全部
+		// 阻塞在 request() 等待 ACK，若 ACK 也排队等空闲 worker 会互相饿死直到超时
+		if n.deliverAck(msg) {
+			continue
+		}
 		if n.msgCh != nil {
 			select {
 			case n.msgCh <- msg:
@@ -381,6 +386,24 @@ func (n *napcatWebSocketAdapter) readLoop(conn *websocket.Conn) {
 			go n.onMsg(msg)
 		}
 	}
+}
+
+// deliverAck 识别带 echo 的响应帧并直接派发给等待中的 request()，
+// 返回是否为响应帧（事件帧无 echo 字段，返回 false 交由 worker 池处理）。
+func (n *napcatWebSocketAdapter) deliverAck(data []byte) bool {
+	var frame struct {
+		Echo string `json:"echo"`
+	}
+	if err := json.Unmarshal(data, &frame); err != nil || frame.Echo == "" {
+		return false
+	}
+	if chIf, exists := n.ackMng.pendingAcks.Load(frame.Echo); exists {
+		select {
+		case chIf.(chan []byte) <- data:
+		default:
+		}
+	}
+	return true
 }
 
 func (n *napcatWebSocketAdapter) SetTrigger(trigger adapter.TriggerWrapper) {
@@ -418,16 +441,6 @@ func (n *napcatWebSocketAdapter) stopWorkerPool() {
 func (n *napcatWebSocketAdapter) onMsg(data []byte) {
 	var callBack map[string]any
 	if err := json.Unmarshal(data, &callBack); err != nil {
-		return
-	}
-
-	if echo, ok := callBack["echo"].(string); ok && echo != "" {
-		if chIf, exists := n.ackMng.pendingAcks.Load(echo); exists {
-			select {
-			case chIf.(chan []byte) <- data:
-			default:
-			}
-		}
 		return
 	}
 
