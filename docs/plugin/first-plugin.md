@@ -90,8 +90,7 @@ func (p *DicePlugin) OnGroupMsg(ctx context.Context, b bot.Bot, cmd command.Comm
 import "github.com/jeanhua/AniaBot/custom/plugins/plugindice"
 
 func main() {
-	adapter := napcat.NewNapcatWebSocketAdapter()
-	bot := core.NewAniaBot(adapter)
+	bot := core.NewAniaBot(nil, core.WithAdapterFactory(napcat.NewAdapter))
 
 	bot.AddPlugin(pluginsys.NewPluginSys())
 	// ... 其他插件
@@ -100,6 +99,8 @@ func main() {
 	bot.Run()
 }
 ```
+
+适配器模式由配置键 `bot.adapter.mode`（`ws` / `http`）在运行时决定，参考 `cmd/main.go`。
 
 ## 第五步：运行测试
 

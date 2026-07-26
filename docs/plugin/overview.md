@@ -124,14 +124,15 @@ OnPanic(ctx, bot, name, err)  ← 任何插件 panic 时触发
 在 `cmd/main.go` 中：
 
 ```go
-adapter := napcat.NewNapcatWebSocketAdapter()
-bot := core.NewAniaBot(adapter)
+bot := core.NewAniaBot(nil, core.WithAdapterFactory(napcat.NewAdapter))
 
 bot.AddPlugin(pluginsys.NewPluginSys())
 bot.AddPlugin(myplugin.NewPlugin())   // ← 你的插件
 
 bot.Run()
 ```
+
+适配器模式由配置键 `bot.adapter.mode`（`ws` / `http`）在运行时决定，参考 `cmd/main.go`。
 
 ## 下一步
 

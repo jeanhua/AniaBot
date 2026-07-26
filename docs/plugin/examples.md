@@ -212,5 +212,5 @@ func (p *WelcomePlugin) OnGroupDecrease(ctx context.Context, b bot.Bot, notice m
 
 ## 更多真实示例
 
-- 内置插件源码：`bot/plugins/` 下的六个插件（复读机、防撤回、每日新闻都是优秀的学习样本）
+- 内置插件源码：`bot/plugins/` 下的七个插件（系统、日志、复读机、防撤回、请求拦截、AI 对话、每日新闻都是优秀的学习样本）
 - 自定义插件模板：仓库 `custom/` 目录下的 `plugins/pluginexample`（带注释的插件骨架）与 `mvp`（最小可运行示例）
