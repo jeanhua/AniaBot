@@ -501,6 +501,8 @@ func (store *AniaMemoryStorage) Expire(ctx context.Context, key string, ttl time
 	return false
 }
 
+// matchPattern 实现与 Redis 后端一致的 '*' 通配匹配语义：
+// 首段锚定开头、尾段锚定结尾，中间字面段须按顺序且不重叠地出现。
 func matchPattern(s, pattern string) (bool, error) {
 	if pattern == "*" {
 		return true, nil
@@ -511,17 +513,27 @@ func matchPattern(s, pattern string) (bool, error) {
 	}
 
 	parts := strings.Split(pattern, "*")
-	if len(parts) == 1 {
-		return s == pattern, nil
-	}
 
 	if !strings.HasPrefix(s, parts[0]) {
 		return false, nil
 	}
+	s = s[len(parts[0]):]
 
-	if !strings.HasSuffix(s, parts[len(parts)-1]) {
+	last := parts[len(parts)-1]
+	if !strings.HasSuffix(s, last) {
 		return false, nil
 	}
+	s = s[:len(s)-len(last)]
 
+	for _, part := range parts[1 : len(parts)-1] {
+		if part == "" {
+			continue
+		}
+		idx := strings.Index(s, part)
+		if idx < 0 {
+			return false, nil
+		}
+		s = s[idx+len(part):]
+	}
 	return true, nil
 }
