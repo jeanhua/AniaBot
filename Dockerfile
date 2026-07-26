@@ -28,7 +28,7 @@ RUN CGO_ENABLED=0 go build -ldflags="-s -w" -o /out/AniaBot ./cmd/
 # ---------- 阶段 3：运行时 ----------
 # 保留 golang 基础镜像：自动更新需要在容器内执行 go build
 FROM golang:1.25-alpine
-RUN apk add --no-cache ca-certificates tzdata git nodejs npm
+RUN apk add --no-cache ca-certificates tzdata git nodejs npm bash
 
 WORKDIR /app/aniabot
 COPY --from=go-builder /out/AniaBot ./AniaBot
