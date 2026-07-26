@@ -1,6 +1,6 @@
 module github.com/jeanhua/AniaBot
 
-go 1.26.0
+go 1.25.0
 
 require (
 	github.com/go-resty/resty/v2 v2.17.1

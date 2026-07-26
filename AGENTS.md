@@ -16,7 +16,7 @@ go run cmd/main.go
 
 ### Build (cross-compile)
 
-Requires Go 1.26+ (see `go.mod`).
+Requires Go 1.25+ (see `go.mod`).
 
 ```bash
 make linux     # → build/AniaBot     (GOOS=linux GOARCH=amd64)

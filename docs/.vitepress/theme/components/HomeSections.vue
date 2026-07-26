@@ -41,7 +41,7 @@ const plugins = [
 const steps = [
   {
     title: '克隆项目',
-    desc: 'git clone 后 go mod tidy，需要 Go 1.26+',
+    desc: 'git clone 后 go mod tidy，需要 Go 1.25+',
   },
   {
     title: '部署 NapCat',
