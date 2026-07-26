@@ -9,8 +9,8 @@ import (
 )
 
 type MsgHistoryParams struct {
-	Count      int `json:"count" jsonschema:"description=要获取的历史消息数量，默认10条"`
-	MessageSeq int `json:"message_seq,omitempty"  jsonschema:"description=翻页游标，填写某条消息的message_seq，即可获取该条消息之前的历史记录，不填默认从最新消息开始"`
+	Count      int `json:"count,omitempty" desc:"要获取的历史消息数量，默认10条"`
+	MessageSeq int `json:"message_seq,omitempty" desc:"翻页游标，填写某条消息的message_seq，即可获取该条消息之前的历史记录，不填默认从最新消息开始"`
 }
 
 type MsgHistoryTool struct {
