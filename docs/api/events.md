@@ -25,7 +25,7 @@ type Message struct {
     MessageId   QID             // 消息 ID
     MessageSeq  int             // 消息序号
     UserId      QID             // 发送者 QQ
-    GroupId     QID             // 群号（私聊为 0）
+    GroupId     QID             // 群号（私聊为空字符串）
     Message     []OB11Segment   // OneBot v11 消息段
     RawMessage  string          // 纯文本
     Sender      MessageSender   // 发送者信息
@@ -46,7 +46,7 @@ type OB11Segment struct {
 }
 ```
 
-`message.QID` 是 `uint64` 的封装，提供 `String()` / `Uint64()` 方法与 `FromString()` 构造函数。
+`message.QID` 是 `string`（十进制数字字符串）的封装，提供 `String()` / `Uint64()` 方法与 `FromString()` / `FromUint64()` 构造函数。用整数构造 QID 时**不要**使用 `message.QID(x)`（这会把 int 转成 Unicode 码点），应使用 `message.FromUint64(uint64(x))`。
 
 ### command.Command
 
