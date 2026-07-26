@@ -4,8 +4,8 @@ CONTAINER_NAME="ania_sandbox"
 IMAGE="alpine:latest"
 
 # 资源限制
-MEM_LIMIT="256m"
-CPU_LIMIT="0.5"
+MEM_LIMIT="1024m"
+CPU_LIMIT="2"
 
 if [ "$(docker ps -aq -f name=^/${CONTAINER_NAME}$)" ]; then
     echo "容器 $CONTAINER_NAME 已存在。"

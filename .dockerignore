@@ -1,0 +1,13 @@
+.git
+.github
+build/
+data/
+docs/
+web/node_modules/
+bot/adminpanel/dist/
+**/node_modules/
+*.md
+!README.md
+Dockerfile
+docker-compose.yml
+manage-container.sh

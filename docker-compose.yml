@@ -1,0 +1,17 @@
+services:
+  aniabot:
+    # 使用 Docker Hub 镜像时取消下一行注释并改为自己的用户名，同时删掉 build
+    # image: <dockerhub用户名>/aniabot:latest
+    build: .
+    container_name: aniabot
+    restart: unless-stopped
+    ports:
+      - "7700:7700"
+    volumes:
+      - ./data:/app/aniabot/data        # 持久化数据（SQLite 等）
+      - ./skills:/app/aniabot/skills    # AI skills 目录
+    environment:
+      TZ: Asia/Shanghai
+      # 如需 MySQL 作为持久化存储：
+      # ANIABOT_STORE_DRIVER: mysql
+      # ANIABOT_MYSQL_DSN: user:pass@tcp(mysql:3306)/aniabot
