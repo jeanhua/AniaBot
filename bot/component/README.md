@@ -20,7 +20,7 @@ component/
 | `chatbot.go` | 入口，组装各子组件，暴露 `Chat()` / `GetSingleImageDesc()` 等方法 |
 | `llmclient.go` | 封装 openai-go SDK，提供 `Generate()` / `GenerateSingle()` |
 | `messagebuilder.go` | 构建每轮请求的消息列表（system prompt + 历史 + 用户输入），支持 Skill 注入 |
-| `memorywindow.go` | 滑动窗口对话历史，按轮次裁剪，完整保留工具调用链 |
+| `memorywindow.go` | 对话历史窗口：按 token 预算管理，prompt token 超过 `max_context_tokens` 的 80% 时用 LLM 将旧历史摘要压缩（工具调用细节不进入摘要），并负责历史持久化与回放 |
 | `toolexecutor.go` | Agent 循环：LLM → 工具调用 → 结果 → LLM，追踪 `TokenUsage` |
 
 **调用流程：**
@@ -46,21 +46,28 @@ ChatBot.Chat()
 | `time.go` | `time` | 返回当前时间 |
 | `jina.go` | `webSearch` / `webExplore` | 基于 Jina API 的网页搜索与浏览 |
 | `meme.go` | `meme` | 根据文本描述发送表情包图片 |
-| `sendfile.go` | `file` | 向用户发送生成的文件 |
+| `sendfile.go` | `file` | 向用户发送生成的文件（需启用 file 配置）|
+| `bash.go` | `bash` | 在宿主机执行 shell 命令（需启用 bash 配置，支持黑白名单）|
+| `loadimages.go` | `load_images` | 加载消息中的图片供模型查看 |
+| `localimage.go` | `local_image` | 读取本地图片（需启用 local_image 配置）|
+| `msghistory.go` | `get_msg_history` | 获取当前会话历史消息（支持翻页）|
+| `privatefile.go` | `get_private_file_url` | 获取私聊文件的下载链接 |
 | `tools.go` | — | 工厂函数，按需组合工具执行器 |
 
 **工厂函数（按需选用）：**
 
 ```go
 // 仅内置工具
-CreateDefaultTools(searchToken)
+CreateDefaultTools(searchToken, bashConfig, fileConfig, localImageConfig)
 
 // 内置工具 + MCP（工具发现模式）
-CreateToolsWithMCP(searchToken, mcpConfigs)
+CreateToolsWithMCP(searchToken, mcpConfigs, bashConfig, fileConfig, localImageConfig)
 
-// 内置工具 + MCP + Skill
-CreateToolsWithSkill(searchToken, mcpConfigs, skillsDir)
+// 内置工具 + MCP + Skill（skills 非空时只加载指定名称的 skill）
+CreateToolsWithSkill(searchToken, mcpConfigs, skillsDir, bashConfig, fileConfig, localImageConfig, skills)
 ```
+
+三个工厂函数均返回 `error`（`CreateToolsWithSkill` 返回 `(*ToolExecuter, *SkillManager, error)`）。
 
 ---
 
