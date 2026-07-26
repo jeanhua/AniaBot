@@ -20,9 +20,13 @@ func NewToolExecuter() *ToolExecuter {
 	}
 }
 
+// Register 注册工具；同名工具已存在时跳过并记录日志。
+// 不能 panic：重名可能来自用户配置（如 files.mcp_json 中重复的服务器名），
+// panic 会越过注册循环的容错逻辑，中断插件的整个初始化流程。
 func (e *ToolExecuter) Register(tool Tool) {
 	if _, ok := e.tools[tool.Name()]; ok {
-		panic("tool already registered")
+		log.Printf("[ToolExecuter] 工具 '%s' 已注册，跳过重复注册", tool.Name())
+		return
 	}
 	e.tools[tool.Name()] = tool
 }
