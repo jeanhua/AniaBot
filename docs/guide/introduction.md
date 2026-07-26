@@ -24,6 +24,7 @@ flowchart TB
         Log[日志插件]
         Repeat[复读机]
         Anti[防撤回]
+        Interceptor[请求拦截]
         AI[AI 对话]
         News[每日新闻]
     end

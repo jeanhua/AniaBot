@@ -72,15 +72,15 @@ AI 可在对话中自主调用：
 | 工具 | 说明 |
 | --- | --- |
 | `time` | 获取当前时间 |
-| `web_search` / `web_explore` | 联网搜索 / 抓取网页（需配置 Jina token） |
+| `webSearch` / `webExplore` | 联网搜索 / 抓取网页（需配置 Jina token） |
 | `meme` | 发送梗图 |
-| `msg_history` | 读取群/私聊最近消息 |
+| `get_msg_history` | 读取群/私聊最近消息 |
 | `load_images` | 加载用户消息中的图片（多模态或 OCR 识别） |
-| `private_file` / `send_file` / `file` | 文件读写与发送（`file`/`send_file` 需配置开启） |
+| `get_private_file_url` / `file` | 私聊文件链接获取与发送生成的文件（`file` 需配置开启） |
 | `bash` | 执行宿主机命令（默认关闭，有黑白名单） |
 | `local_image` | 读取宿主机本地图片（默认关闭） |
 
-此外还有 MCP 发现/加载工具与 `skill_read`，见 [配置详解](/guide/configuration#aniabot-mcp-json-mcp-服务定义)。
+此外还有 MCP 发现/加载工具与 `skill_read`，见 [配置详解](/guide/configuration#filesmcp_json-mcp-服务定义)。
 
 ### AI 定时任务（clock）
 

@@ -82,7 +82,7 @@ AniaBot/
 │   ├── adminpanel/        # Web 控制面板后端（配置/状态 API + 内嵌前端）
 │   ├── adapter/napcat/    # NapCat WebSocket / HTTP 适配器
 │   ├── component/         # AI 引擎：aichat / llmtool / functool
-│   ├── plugins/           # 六个内置插件
+│   ├── plugins/           # 七个内置插件（系统/日志/复读/防撤回/请求拦截/AI/每日新闻）
 │   └── utils/             # 命令解析、消息提取等工具
 └── custom/                # 自定义插件示例与模板
 ```
