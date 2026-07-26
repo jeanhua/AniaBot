@@ -272,8 +272,8 @@ func TestNewSubagentTools(t *testing.T) {
 	p := &AIChatPlugin{}
 
 	groupTools := newSubagentTools(p, nil, message.FromUint64(12345), true)
-	if len(groupTools) != 1 {
-		t.Fatalf("应只有 1 个子代理工具, got %d", len(groupTools))
+	if len(groupTools) != 3 {
+		t.Fatalf("应有 3 个子代理工具（run/list/cancel）, got %d", len(groupTools))
 	}
 	tool := groupTools[0]
 	if tool.Name() != "subagent_run" {

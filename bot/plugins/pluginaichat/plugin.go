@@ -36,6 +36,9 @@ type AIChatPlugin struct {
 
 	activeContexts sync.Map
 
+	// asyncSubagents 异步子代理管理，按会话（群/好友）隔离
+	asyncSubagents sync.Map
+
 	// pendingMsgs AI 响应期间到达的消息排队队列，按会话（群/好友）隔离
 	pendingMsgs sync.Map
 
@@ -125,7 +128,8 @@ func (p *AIChatPlugin) OnGroupMsg(ctx context.Context, bot bot.Bot, cmd command.
 	}
 
 	if cmd.Name == "stop" {
-		// 停止当前请求的同时丢弃排队消息，避免停止后又自动回复
+		// 停止当前请求、取消异步子代理，同时丢弃排队消息
+		p.cancelAsyncSubagents(msg.GroupId, true)
 		p.drainPending(msg.GroupId, true)
 		if p.stopRequest(msg.GroupId, true) {
 			builder := msgchain.Builder().Group()
@@ -187,7 +191,8 @@ func (p *AIChatPlugin) OnFriendMsg(ctx context.Context, bot bot.Bot, cmd command
 	}
 
 	if cmd.Name == "stop" {
-		// 停止当前请求的同时丢弃排队消息，避免停止后又自动回复
+		// 停止当前请求、取消异步子代理，同时丢弃排队消息
+		p.cancelAsyncSubagents(msg.Sender.UserId, false)
 		p.drainPending(msg.Sender.UserId, false)
 		if p.stopRequest(msg.Sender.UserId, false) {
 			builder := msgchain.Builder().Friend()
