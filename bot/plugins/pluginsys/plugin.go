@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/jeanhua/AniaBot/common/bot"
@@ -18,6 +19,9 @@ import (
 type PluginSys struct {
 	plugin.Meta
 
+	// panicMu 保护 lastPanicTime：OnPanic 可能被多个 goroutine（如并发的
+	// 定时任务）同时触发，无锁的读改写是数据竞争
+	panicMu       sync.Mutex
 	lastPanicTime *time.Time
 }
 
@@ -116,8 +120,13 @@ func (p *PluginSys) OnGroupMsg(ctx context.Context, bot bot.Bot, cmd command.Com
 func (p *PluginSys) OnPanic(ctx context.Context, bot bot.Bot, name string, err any) {
 	p.Logger.Error("插件运行时panic", "name", name, "err", err)
 	now := time.Now()
-	if p.lastPanicTime == nil || now.Sub(*p.lastPanicTime) > time.Minute {
+	p.panicMu.Lock()
+	shouldNotify := p.lastPanicTime == nil || now.Sub(*p.lastPanicTime) > time.Minute
+	if shouldNotify {
 		p.lastPanicTime = &now
+	}
+	p.panicMu.Unlock()
+	if shouldNotify {
 		builder := msgchain.Builder().Friend()
 		builder.Text(fmt.Sprintf("线程 %s 运行时panic: %v", name, err))
 		_, ok := bot.SendFriendMsg(p.SystemConfig.AdminId, builder.Build())
