@@ -132,11 +132,9 @@ func (c *LLMClient) convertMessage(msg Message) (openai.ChatCompletionMessagePar
 		}
 
 		if !hasImage {
-			text := ""
-			if len(msg.Parts) > 0 && msg.Parts[0].Type == ContentPartText {
-				text = msg.Parts[0].Text
-			}
-			return openai.UserMessage(text), nil
+			// 拼接全部文本片段：多片段的用户消息（如回放历史时图片片段被
+			// degradeImagesToText 降级为文本标记）只取首段会静默丢内容
+			return openai.UserMessage(ExtractMessageText(msg)), nil
 		}
 
 		parts := make([]openai.ChatCompletionContentPartUnionParam, 0, len(msg.Parts))
