@@ -63,7 +63,7 @@ docker run -d --name aniabot \
   -p 7700:7700 \
   -v ./data:/app/aniabot/data \
   -v ./skills:/app/aniabot/skills \
-  <dockerhub用户名>/aniabot:latest
+  jeanhua/aniabot:latest
 ```
 
 只需持久化两个目录：`data`（SQLite 数据库，含全部配置与聊天历史）和 `skills`（AI skills）。自动更新的源码目录填容器内任意路径即可（如 `/app/source`），无需挂载——容器重建后首次更新会自动重新克隆。
