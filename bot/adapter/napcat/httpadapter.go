@@ -231,7 +231,7 @@ func (n *napcatHttpAdapter) GetGroupUserInfo(groupId, userId message.QID) (*mess
 		"no_cache": true,
 	}
 	resp := message.Response[message.GroupUserInfo]{}
-	if !n.postAndCheck(n.baseUrl+"/get_group_member_info", data, &resp) {
+	if !n.postAndCheck(n.baseUrl+"/get_group_member_info", data, &resp) || !checkResponseStatus(&resp) {
 		return nil, false
 	}
 	return &resp.Data, true
@@ -239,7 +239,7 @@ func (n *napcatHttpAdapter) GetGroupUserInfo(groupId, userId message.QID) (*mess
 
 func (n *napcatHttpAdapter) GetNCrkey() ([]message.NCrkey, bool) {
 	resp := message.Response[[]message.NCrkey]{}
-	if !n.postAndCheck(n.baseUrl+"/nc_get_rkey", nil, &resp) {
+	if !n.postAndCheck(n.baseUrl+"/nc_get_rkey", nil, &resp) || !checkResponseStatus(&resp) {
 		return nil, false
 	}
 	return resp.Data, true
@@ -247,7 +247,7 @@ func (n *napcatHttpAdapter) GetNCrkey() ([]message.NCrkey, bool) {
 
 func (n *napcatHttpAdapter) GetFriendList() (*[]message.Friend, bool) {
 	resp := message.Response[[]message.Friend]{}
-	if !n.postAndCheck(n.baseUrl+"/get_friend_list", nil, &resp) {
+	if !n.postAndCheck(n.baseUrl+"/get_friend_list", nil, &resp) || !checkResponseStatus(&resp) {
 		return nil, false
 	}
 	return &resp.Data, true
@@ -256,7 +256,7 @@ func (n *napcatHttpAdapter) GetFriendList() (*[]message.Friend, bool) {
 func (n *napcatHttpAdapter) GetGroupDetail(groupId message.QID) (*message.GroupInfo, bool) {
 	data := map[string]message.QID{"group_id": groupId}
 	resp := message.Response[message.GroupInfo]{}
-	if !n.postAndCheck(n.baseUrl+"/get_group_detail_info", data, &resp) {
+	if !n.postAndCheck(n.baseUrl+"/get_group_detail_info", data, &resp) || !checkResponseStatus(&resp) {
 		return nil, false
 	}
 	return &resp.Data, true
@@ -278,7 +278,7 @@ func (n *napcatHttpAdapter) SetMsgEmojiLike(msgId message.QID, emojiId int, like
 func (n *napcatHttpAdapter) SendGroupSign(groupId message.QID) bool {
 	data := map[string]message.QID{"group_id": groupId}
 	resp := message.Response[json.RawMessage]{}
-	return n.postAndCheck(n.baseUrl+"/send_group_sign", data, &resp)
+	return n.postAndCheck(n.baseUrl+"/send_group_sign", data, &resp) && checkResponseStatus(&resp)
 }
 
 func (n *napcatHttpAdapter) GetGroupMsgHistory(groupId message.QID, count int, message_seq int) (*[]message.Message, bool) {
@@ -315,7 +315,7 @@ func (n *napcatHttpAdapter) GetFriendMsgHistory(userId message.QID, count int, m
 
 func (n *napcatHttpAdapter) GetAIChatacter() (*[]message.AIChatacter, bool) {
 	resp := message.Response[message.AIChatacterResp]{}
-	if !n.postAndCheck(n.baseUrl+"/get_ai_chatacter", nil, &resp) {
+	if !n.postAndCheck(n.baseUrl+"/get_ai_chatacter", nil, &resp) || !checkResponseStatus(&resp) {
 		return nil, false
 	}
 	return &resp.Data.Characters, true
@@ -330,7 +330,7 @@ func (n *napcatHttpAdapter) GetPrivateFileURL(userId message.QID, fileId string)
 		URL string `json:"url"`
 	}
 	var resp message.Response[privateFileData]
-	if !n.postAndCheck(n.baseUrl+"/get_private_file_url", data, &resp) {
+	if !n.postAndCheck(n.baseUrl+"/get_private_file_url", data, &resp) || !checkResponseStatus(&resp) {
 		return "", false
 	}
 	return resp.Data.URL, true
@@ -338,7 +338,7 @@ func (n *napcatHttpAdapter) GetPrivateFileURL(userId message.QID, fileId string)
 
 func (n *napcatHttpAdapter) GetGroupList() (*[]message.GroupInfo, bool) {
 	resp := message.Response[[]message.GroupInfo]{}
-	if !n.postAndCheck(n.baseUrl+"/get_group_list", nil, &resp) {
+	if !n.postAndCheck(n.baseUrl+"/get_group_list", nil, &resp) || !checkResponseStatus(&resp) {
 		return nil, false
 	}
 	return &resp.Data, true
