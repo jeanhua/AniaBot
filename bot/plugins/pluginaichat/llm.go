@@ -10,9 +10,9 @@ import (
 	"github.com/jeanhua/AniaBot/common/model/message"
 )
 
-// stopRequest 停止指定 ID 的 AI 请求
-func (p *AIChatPlugin) stopRequest(id message.QID) bool {
-	if cancel, ok := p.activeContexts.LoadAndDelete(id); ok {
+// stopRequest 停止指定会话的 AI 请求
+func (p *AIChatPlugin) stopRequest(id message.QID, isGroup bool) bool {
+	if cancel, ok := p.activeContexts.LoadAndDelete(sessionKey(id, isGroup)); ok {
 		cancel.(context.CancelFunc)()
 		return true
 	}
@@ -20,13 +20,13 @@ func (p *AIChatPlugin) stopRequest(id message.QID) bool {
 }
 
 // setActiveContext 设置活跃的请求上下文
-func (p *AIChatPlugin) setActiveContext(id message.QID, cancel context.CancelFunc) {
-	p.activeContexts.Store(id, cancel)
+func (p *AIChatPlugin) setActiveContext(id message.QID, isGroup bool, cancel context.CancelFunc) {
+	p.activeContexts.Store(sessionKey(id, isGroup), cancel)
 }
 
 // clearActiveContext 清除活跃的请求上下文
-func (p *AIChatPlugin) clearActiveContext(id message.QID) {
-	p.activeContexts.Delete(id)
+func (p *AIChatPlugin) clearActiveContext(id message.QID, isGroup bool) {
+	p.activeContexts.Delete(sessionKey(id, isGroup))
 }
 
 // buildScenePrompt 生成当前对话场景描述，注入到 system prompt 末尾，
@@ -58,7 +58,8 @@ func (p *AIChatPlugin) buildScenePrompt(b bot.Bot, id message.QID, isGroup bool)
 }
 
 func (p *AIChatPlugin) getChat(b bot.Bot, id message.QID, isGroup bool, prompt string) *aichat.ChatBot {
-	chat, ok := p.chats.Load(id)
+	key := sessionKey(id, isGroup)
+	chat, ok := p.chats.Load(key)
 	if !ok {
 		// 每个会话创建独立的 SessionToolExecutor，动态加载的工具互不影响
 		sessionExecutor := p.toolExecutor.NewSessionExecutor()
@@ -90,7 +91,10 @@ func (p *AIChatPlugin) getChat(b bot.Bot, id message.QID, isGroup bool, prompt s
 		// 每个会话独立的历史持久化存储；g:/f: 前缀避免群聊与好友 id 相同导致历史串扰
 		var historyStore aichat.HistoryStore
 		if p.PersistentStorage != nil {
-			historyStore = newPersistentHistoryStore(p.PersistentStorage, "chat:"+id.String(), p.Logger)
+			histKey := "chat:" + key
+			// 旧版历史键不带 g:/f: 前缀，首次访问时迁移到新键
+			migrateLegacyHistory(p.PersistentStorage, "chat:"+id.String(), histKey)
+			historyStore = newPersistentHistoryStore(p.PersistentStorage, histKey, p.Logger)
 		}
 		c, err := aichat.NewChatBot(
 			p.cfg.BaseURL,
@@ -111,7 +115,7 @@ func (p *AIChatPlugin) getChat(b bot.Bot, id message.QID, isGroup bool, prompt s
 		}
 		// 回放持久化的历史，使对话跨重启延续
 		c.LoadHistory(context.Background())
-		p.chats.Store(id, c)
+		p.chats.Store(key, c)
 		return c
 	}
 	return chat.(*aichat.ChatBot)

@@ -105,13 +105,13 @@ func (p *AIChatPlugin) OnGroupMsg(ctx context.Context, bot bot.Bot, cmd command.
 		cnt++
 		p.noMentionCount.Store(msg.GroupId, cnt)
 		if cnt > 30 {
-			if c, ok := p.chats.Load(msg.GroupId); ok && c != nil {
+			if c, ok := p.chats.Load(sessionKey(msg.GroupId, true)); ok && c != nil {
 				chat := c.(*aichat.ChatBot)
 				// 与 mention 路径的 chat.Chat 共用 per-group 锁，避免自动清理与进行中的对话
 				// 并发访问 messageWindow.messages 及 SessionToolExecutor.sessionTools
 				// （并发 map 读写会触发不可恢复的 fatal error 导致整个进程崩溃）
-				if p.tryLock(msg.GroupId) {
-					defer p.unLock(msg.GroupId)
+				if p.tryLock(msg.GroupId, true) {
+					defer p.unLock(msg.GroupId, true)
 					chat.ClearHistory(ctx)
 					p.Logger.Info("自动清理AI对话信息", "group", msg.GroupId, "reason", "超过30条未@消息")
 					if cleared := chat.ClearDynamicTools(); cleared > 0 {
@@ -127,7 +127,7 @@ func (p *AIChatPlugin) OnGroupMsg(ctx context.Context, bot bot.Bot, cmd command.
 	if cmd.Name == "stop" {
 		// 停止当前请求的同时丢弃排队消息，避免停止后又自动回复
 		p.drainPending(msg.GroupId, true)
-		if p.stopRequest(msg.GroupId) {
+		if p.stopRequest(msg.GroupId, true) {
 			builder := msgchain.Builder().Group()
 			builder.Text("用户停止AI响应")
 			bot.SendGroupMsg(msg.GroupId, builder.Build())
@@ -140,7 +140,7 @@ func (p *AIChatPlugin) OnGroupMsg(ctx context.Context, bot bot.Bot, cmd command.
 		return false, nil
 	}
 
-	if !p.tryLock(msg.GroupId) {
+	if !p.tryLock(msg.GroupId, true) {
 		// 当前正在响应：消息进入排队队列，响应结束后自动合并处理
 		first, ok := p.enqueuePending(msg.GroupId, true, msg)
 		if !ok {
@@ -154,8 +154,8 @@ func (p *AIChatPlugin) OnGroupMsg(ctx context.Context, bot bot.Bot, cmd command.
 		}
 		return true, nil
 	}
-	defer p.unLock(msg.GroupId)
-	defer p.clearActiveContext(msg.GroupId)
+	defer p.unLock(msg.GroupId, true)
+	defer p.clearActiveContext(msg.GroupId, true)
 	p.noMentionCount.Store(msg.GroupId, 0)
 	chat := p.getChat(bot, msg.GroupId, true, p.getPromptForID(msg.GroupId, true))
 	if chat == nil {
@@ -167,7 +167,7 @@ func (p *AIChatPlugin) OnGroupMsg(ctx context.Context, bot bot.Bot, cmd command.
 
 	chatCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
-	p.setActiveContext(msg.GroupId, cancel)
+	p.setActiveContext(msg.GroupId, true, cancel)
 
 	// 先取出可能遗留的排队消息（上一响应结束瞬间到达、未来得及处理的），与本次消息合并；
 	// 之后每轮响应结束继续排空队列，直到没有新消息为止
@@ -189,7 +189,7 @@ func (p *AIChatPlugin) OnFriendMsg(ctx context.Context, bot bot.Bot, cmd command
 	if cmd.Name == "stop" {
 		// 停止当前请求的同时丢弃排队消息，避免停止后又自动回复
 		p.drainPending(msg.Sender.UserId, false)
-		if p.stopRequest(msg.Sender.UserId) {
+		if p.stopRequest(msg.Sender.UserId, false) {
 			builder := msgchain.Builder().Friend()
 			builder.Text("用户停止AI响应")
 			bot.SendFriendMsg(msg.Sender.UserId, builder.Build())
@@ -202,7 +202,7 @@ func (p *AIChatPlugin) OnFriendMsg(ctx context.Context, bot bot.Bot, cmd command
 		return false, nil
 	}
 
-	if !p.tryLock(msg.Sender.UserId) {
+	if !p.tryLock(msg.Sender.UserId, false) {
 		// 当前正在响应：消息进入排队队列，响应结束后自动合并处理
 		first, ok := p.enqueuePending(msg.Sender.UserId, false, msg)
 		if !ok {
@@ -216,8 +216,8 @@ func (p *AIChatPlugin) OnFriendMsg(ctx context.Context, bot bot.Bot, cmd command
 		}
 		return true, nil
 	}
-	defer p.unLock(msg.Sender.UserId)
-	defer p.clearActiveContext(msg.Sender.UserId)
+	defer p.unLock(msg.Sender.UserId, false)
+	defer p.clearActiveContext(msg.Sender.UserId, false)
 
 	chat := p.getChat(bot, msg.Sender.UserId, false, p.getPromptForID(msg.Sender.UserId, false))
 	if chat == nil {
@@ -229,7 +229,7 @@ func (p *AIChatPlugin) OnFriendMsg(ctx context.Context, bot bot.Bot, cmd command
 
 	chatCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
-	p.setActiveContext(msg.Sender.UserId, cancel)
+	p.setActiveContext(msg.Sender.UserId, false, cancel)
 
 	// 先取出可能遗留的排队消息（上一响应结束瞬间到达、未来得及处理的），与本次消息合并；
 	// 之后每轮响应结束继续排空队列，直到没有新消息为止

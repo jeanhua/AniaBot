@@ -15,8 +15,10 @@ type pendingQueue struct {
 	items []message.Message
 }
 
-// pendingKey 群聊与好友的 QID 数值空间可能重叠，加前缀区分队列
-func pendingKey(id message.QID, isGroup bool) string {
+// sessionKey 群聊与好友的 QID 数值空间可能重叠，加 g:/f: 前缀区分会话。
+// 所有会话级状态（排队队列、ChatBot 实例、活跃上下文、并发锁、持久化历史）
+// 统一以该键索引，避免同号群聊与私聊互串。
+func sessionKey(id message.QID, isGroup bool) string {
 	if isGroup {
 		return "g:" + id.String()
 	}
@@ -24,7 +26,7 @@ func pendingKey(id message.QID, isGroup bool) string {
 }
 
 func (p *AIChatPlugin) getPendingQueue(id message.QID, isGroup bool) *pendingQueue {
-	q, _ := p.pendingMsgs.LoadOrStore(pendingKey(id, isGroup), &pendingQueue{})
+	q, _ := p.pendingMsgs.LoadOrStore(sessionKey(id, isGroup), &pendingQueue{})
 	return q.(*pendingQueue)
 }
 

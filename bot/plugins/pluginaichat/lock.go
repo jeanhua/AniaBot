@@ -8,7 +8,7 @@ import (
 	"github.com/jeanhua/AniaBot/common/storage"
 )
 
-func (p *AIChatPlugin) tryLock(id message.QID) bool {
+func (p *AIChatPlugin) tryLock(id message.QID, isGroup bool) bool {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
 	defer cancel()
 	select {
@@ -16,7 +16,7 @@ func (p *AIChatPlugin) tryLock(id message.QID) bool {
 	default:
 		return false
 	}
-	locked := p.lockStorage.SetString(ctx, id.String(), "1", storage.WithCheckExist(), storage.WithTTL(LockExpTime))
+	locked := p.lockStorage.SetString(ctx, sessionKey(id, isGroup), "1", storage.WithCheckExist(), storage.WithTTL(LockExpTime))
 	if !locked {
 		select {
 		case <-p.rateCh:
@@ -26,12 +26,12 @@ func (p *AIChatPlugin) tryLock(id message.QID) bool {
 	return locked
 }
 
-func (p *AIChatPlugin) unLock(id message.QID) {
+func (p *AIChatPlugin) unLock(id message.QID, isGroup bool) {
 	unlockCtx, cancel := context.WithTimeout(context.Background(), time.Second*5)
 	defer cancel()
 	select {
 	case <-p.rateCh:
 	default:
 	}
-	p.lockStorage.Del(unlockCtx, id.String())
+	p.lockStorage.Del(unlockCtx, sessionKey(id, isGroup))
 }

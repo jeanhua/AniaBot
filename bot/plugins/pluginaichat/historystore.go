@@ -28,6 +28,22 @@ func newPersistentHistoryStore(store storage.PersistentStorage, key string, logg
 	}
 }
 
+// migrateLegacyHistory 将旧版不带 g:/f: 前缀的历史键迁移到新键。
+// 新键已有数据或旧键不存在时不做任何事；迁移成功后删除旧键。
+// 同号群聊与私聊在旧版共享同一条记录，迁移归先创建会话的一方。
+func migrateLegacyHistory(root storage.PersistentStorage, legacyKey, newKey string) {
+	store := root.Clone("history:")
+	ctx := context.Background()
+	if store.Has(ctx, newKey) || !store.Has(ctx, legacyKey) {
+		return
+	}
+	if raw, ok := store.GetString(ctx, legacyKey); ok {
+		if store.SetString(ctx, newKey, raw) {
+			store.Del(ctx, legacyKey)
+		}
+	}
+}
+
 func (h *persistentHistoryStore) Load(ctx context.Context) ([]aichat.Message, error) {
 	var msgs []aichat.Message
 	if ok := h.store.Get(ctx, h.key, &msgs); !ok {
