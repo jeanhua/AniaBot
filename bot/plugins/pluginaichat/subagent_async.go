@@ -139,32 +139,31 @@ func (p *AIChatPlugin) launchAsyncSubagent(
 	b.Go("subagent:"+sessionKey(id, isGroup)+":"+launchID, func() {
 		defer p.getAsyncGroup(id, isGroup).remove(launchID)
 		result, runErr := p.runSubagent(asyncCtx, b, id, isGroup, task, timeoutSec, parentCbs)
-		p.onSubagentComplete(b, id, isGroup, task, result, runErr)
+		p.onSubagentComplete(b, id, isGroup, launchID, task, result, runErr)
 	})
 
-	return fmt.Sprintf("✅ 子代理已启动（ID: %s），正在后台执行任务\n任务内容: %s",
-		launchID, task)
+	return fmt.Sprintf("✅ 子代理已启动（ID: %s），正在后台执行任务", launchID)
 }
 
 // onSubagentComplete 子代理完成后的回调（在子代理 goroutine 中执行）。
 //
-// 1. 格式化结果文本
+// 1. 格式化结果文本（携带 launchID，便于 AI 与启动时分配的 ID 对应）
 // 2. 构造合成消息并入队 pending 队列
 // 3. 若会话空闲则自动触发 AI 处理
-func (p *AIChatPlugin) onSubagentComplete(b bot.Bot, id message.QID, isGroup bool, task string, result string, err error) {
+func (p *AIChatPlugin) onSubagentComplete(b bot.Bot, id message.QID, isGroup bool, launchID string, task string, result string, err error) {
 	var text string
 	if err != nil {
 		switch {
 		case strings.Contains(err.Error(), "超时"):
-			text = fmt.Sprintf("【子代理执行超时】\n任务: %s\n%s", task, err.Error())
+			text = fmt.Sprintf("【子代理执行超时】\nID: %s\n任务: %s\n%s", launchID, task, err.Error())
 		case errors.Is(err, context.Canceled) || strings.Contains(err.Error(), "canceled"):
-			p.Logger.Info("异步子代理已被取消", "id", id, "is_group", isGroup, "task", task)
+			p.Logger.Info("异步子代理已被取消", "id", id, "is_group", isGroup, "launch_id", launchID, "task", task)
 			return // 被 /stop 取消，不注入结果
 		default:
-			text = fmt.Sprintf("【子代理执行失败】\n任务: %s\n错误: %s", task, err.Error())
+			text = fmt.Sprintf("【子代理执行失败】\nID: %s\n任务: %s\n错误: %s", launchID, task, err.Error())
 		}
 	} else {
-		text = fmt.Sprintf("【子代理执行完成】\n任务: %s\n\n%s", task, result)
+		text = fmt.Sprintf("【子代理执行完成】\nID: %s\n任务: %s\n\n%s", launchID, task, result)
 	}
 
 	// 构造合成消息
@@ -181,14 +180,14 @@ func (p *AIChatPlugin) onSubagentComplete(b bot.Bot, id message.QID, isGroup boo
 	// 入队
 	first, ok := p.enqueuePending(id, isGroup, syntheticMsg)
 	if !ok {
-		p.Logger.Warn("异步子代理结果入队失败（队列已满）", "id", id, "is_group", isGroup)
+		p.Logger.Warn("异步子代理结果入队失败（队列已满）", "id", id, "is_group", isGroup, "launch_id", launchID)
 		return
 	}
 
 	if first {
-		p.Logger.Info("异步子代理结果已入队（队列首条）", "id", id, "is_group", isGroup, "task", task)
+		p.Logger.Info("异步子代理结果已入队（队列首条）", "id", id, "is_group", isGroup, "launch_id", launchID, "task", task)
 	} else {
-		p.Logger.Info("异步子代理结果已入队", "id", id, "is_group", isGroup, "task", task)
+		p.Logger.Info("异步子代理结果已入队", "id", id, "is_group", isGroup, "launch_id", launchID, "task", task)
 	}
 
 	// 尝试触发处理：若会话空闲（锁可用）则立即处理排队消息

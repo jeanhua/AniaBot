@@ -320,6 +320,9 @@ func (p *AIChatPlugin) processChatBatch(ctx context.Context, b bot.Bot, id messa
 		seen := make(map[message.QID]struct{}, len(batch))
 		for i := range batch {
 			uid := batch[i].Sender.UserId
+			if uid == message.FromUint64(0) {
+				continue // 跳过子代理结果等合成消息，避免 @ 到无效用户
+			}
 			if _, ok := seen[uid]; ok {
 				continue
 			}

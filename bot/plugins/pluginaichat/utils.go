@@ -18,10 +18,16 @@ import (
 )
 
 func (p *AIChatPlugin) extraMsg(bot bot.Bot, msg message.Message) string {
-	return msg.FriendlyText(false,
+	opts := []message.MsgOptFunc{
 		message.WithGetMsgFunc(bot.GetMsgDetail),
 		message.WithGetForwardMsgFunc(bot.GetForwardMsg),
-	)
+	}
+	// 合成消息（如子代理结果，UserId 为 0）不附加 [nickname:… id:…] 发送者前缀，
+	// 其正文已自带身份标识
+	if msg.Sender.UserId == message.FromUint64(0) {
+		opts = append(opts, message.WithNoSenderPrefix())
+	}
+	return msg.FriendlyText(false, opts...)
 }
 
 func collectImageURLs(bot bot.Bot, msgs ...message.Message) []string {
