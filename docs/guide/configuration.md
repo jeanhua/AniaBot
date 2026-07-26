@@ -104,7 +104,7 @@ HTTP 模式下 NapCat 向 `localhost` 上报会失败，请将 NapCat 的 HTTP C
 | 配置键 | 默认值 | 说明 |
 | --- | --- | --- |
 | `plugin.ai_chat_bot.base_url` | `https://api.deepseek.com` | 任意 OpenAI 兼容 API 地址 |
-| `plugin.ai_chat_bot.api_key` | `sk-xxxx` | API 密钥 |
+| `plugin.ai_chat_bot.api_key` | 空（必填） | API 密钥 |
 | `plugin.ai_chat_bot.model` | `deepseek-chat` | 主模型名称 |
 | `plugin.ai_chat_bot.multimodal` | `false` | 主模型是否支持图片输入 |
 | `plugin.ai_chat_bot.rate_limit` | `2` | 每秒最多调用次数 |
@@ -120,7 +120,7 @@ HTTP 模式下 NapCat 向 `localhost` 上报会失败，请将 NapCat 的 HTTP C
 | `plugin.ai_chat_bot.max_token` | `8192` | 单次回复最大 token |
 | `plugin.ai_chat_bot.thinking.enable` | `false` | 深度思考开关 |
 | `plugin.ai_chat_bot.thinking.mode` | `auto` | `none` / `low` / `medium` / `high` / `auto` |
-| `plugin.ai_chat_bot.prompt` | `你是一个ai对话机器人，在QQ上和别人聊天，说话不要长篇大论` | 系统提示词（system prompt） |
+| `plugin.ai_chat_bot.prompt` | 你是一个ai对话机器人，在QQ上和别人聊天，说话不要长篇大论<br><br>## 注意<br>- 当你不理解用户的问题时，要先获取用户最近的历史消息，再根据历史消息回答用户的问题 | 系统提示词（system prompt） |
 
 ::: tip 按群/按人定制人格
 在面板的「文件编辑 → Prompt 覆盖」页（配置键 `files.prompt_json`，原 `aniabot.prompt.json`），可为特定群聊或好友覆盖 system prompt：
@@ -174,7 +174,7 @@ HTTP 模式下 NapCat 向 `localhost` 上报会失败，请将 NapCat 的 HTTP C
 | `plugin.ai_chat_bot.bash.shell` | 空 | 命令解释器，留空使用系统默认（Linux/macOS 为 `sh`，Windows 为 `cmd`），可填 `/bin/bash`、`/bin/ash` 等 |
 | `plugin.ai_chat_bot.bash.env` | `[]` | 环境变量，如 `["HOME=/root"]` |
 | `plugin.ai_chat_bot.bash.whitelist` | `[]` | 非空时仅允许匹配这些正则的命令 |
-| `plugin.ai_chat_bot.bash.blacklist` | `["^mkfs", "^shutdown"]` | 匹配这些正则的命令被禁止 |
+| `plugin.ai_chat_bot.bash.blacklist` | `["config(\\.dev)?\\.(yaml|yml|json)", "^mkfs", "^shutdown", "^reboot"]` | 匹配这些正则的命令被禁止 |
 | `plugin.ai_chat_bot.local_image.enable` | `false` | 允许 AI 读取宿主机本地图片 |
 
 ### AI 定时任务（clock）
@@ -205,7 +205,13 @@ HTTP 模式下 NapCat 向 `localhost` 上报会失败，请将 NapCat 的 HTTP C
 | `plugin.interceptor.groups` | `[]` | 群号名单，每行一个 |
 | `plugin.interceptor.friends` | `[]` | QQ 号名单，每行一个，对私聊及群聊消息发送者均生效 |
 
-被拦截的会话消息不再传播到后续插件（AI 对话插件收不到，不产生 AI 请求）。注意 `whitelist` 模式下名单留空会拦截所有会话。详见 [请求拦截插件](/guide/builtin-plugins#请求拦截插件)。
+被拦截的会话消息不再传播到后续插件（AI 对话插件收不到，不产生 AI 请求）。
+
+::: warning `whitelist` 模式下的放行逻辑
+群聊消息必须同时满足「群号在 `groups` 名单」且「发送者 QQ 在 `friends` 名单」才会放行；只填 `groups` 不会放行该群内其他成员的消息。`whitelist` 模式下名单留空会拦截所有会话。
+:::
+
+详见 [请求拦截插件](/guide/builtin-plugins#请求拦截插件)。
 
 ## plugin.dailyNews —— 每日新闻插件
 
