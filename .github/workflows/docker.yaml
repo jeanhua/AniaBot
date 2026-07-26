@@ -1,9 +1,9 @@
 name: docker
 
-# 推送 main 分支 → 更新 latest 标签；打 v*.*.* 标签 → 推送对应版本号镜像
+# 打 v*.*.* 标签 → 构建并推送版本号镜像 + latest；
+# 手动触发（Actions 页 workflow_dispatch，选 main）→ 仅更新 latest
 on:
   push:
-    branches: [main]
     tags: ["v*.*.*"]
   workflow_dispatch:
 
