@@ -44,6 +44,7 @@ export default withMermaid(defineConfig({
           items: [
             { text: '项目介绍', link: '/guide/introduction' },
             { text: '快速开始', link: '/guide/getting-started' },
+            { text: '容器部署', link: '/guide/docker' },
             { text: '配置详解', link: '/guide/configuration' },
             { text: 'Web 控制面板', link: '/guide/web-panel' },
           ],

@@ -91,6 +91,7 @@ AniaBot/
 
 ## 下一步
 
+- [容器部署](/guide/docker) —— 生产环境推荐：Docker + Fork 工作流，面板一键更新自己的版本
 - [配置详解](/guide/configuration) —— 每一个配置项的含义
 - [内置插件](/guide/builtin-plugins) —— 各插件的命令与用法
 - [第一个插件](/plugin/first-plugin) —— 开始写你自己的功能
