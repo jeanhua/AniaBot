@@ -76,7 +76,7 @@ func (p *HourlyPlugin) StartCron(ctx context.Context, b bot.Bot, c plugin.CronMa
 		for _, g := range p.cfg.Groups {
 			chain := msgchain.Builder().Group()
 			chain.Text(text)
-			if _, ok := b.SendGroupMsg(message.QID(g), chain.Build()); !ok {
+			if _, ok := b.SendGroupMsg(message.FromUint64(uint64(g)), chain.Build()); !ok {
 				p.Logger.Error("报时发送失败", "group", g)
 			}
 		}
