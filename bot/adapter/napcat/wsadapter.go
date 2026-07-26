@@ -6,6 +6,7 @@ import (
 	"log"
 	"runtime"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/gorilla/websocket"
@@ -72,9 +73,12 @@ func (n *napcatWebSocketAdapter) AdapterStatus() (state string, detail string) {
 	return state, n.lastErr
 }
 
+// echoSeq 全局递增序号，保证并发请求在同一纳秒时间戳下 echo 仍唯一
+var echoSeq atomic.Uint64
+
 func request[T any](n *napcatWebSocketAdapter, action string, params any, prefix string) (*T, bool) {
 
-	echo := fmt.Sprintf("%s:%d", prefix, time.Now().UnixNano())
+	echo := fmt.Sprintf("%s:%d:%d", prefix, time.Now().UnixNano(), echoSeq.Add(1))
 
 	req := wsPushData[any]{
 		Action: action,
