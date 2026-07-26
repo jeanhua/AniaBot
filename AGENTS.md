@@ -73,7 +73,7 @@ bot/component/           AI chat engine
   aichat/                  ChatBot, LLMClient, MessageBuilder, ToolOrchestrator, messageWindow
   llmtool/                 Tool interface, ToolExecuter, MCP client, SkillManager, schema parser
   functool/                Built-in tools (time, web search, meme, file, msg history, image loading)
-bot/plugins/             Six built-in plugins (sys, log, repeat, antiwithdrawal, aichat, news)
+bot/plugins/             Seven built-in plugins (sys, log, repeat, antiwithdrawal, interceptor, aichat, news)
 bot/utils/               Command parsing, message extraction, URL helpers, time formatting
 custom/                  User-created plugin examples and templates
 web/                     Admin panel frontend (Vite + Vue 3 + Tailwind v4, builds into bot/adminpanel/dist)

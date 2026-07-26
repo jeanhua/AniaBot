@@ -1,12 +1,13 @@
 # 内置插件
 
-AniaBot 自带六个插件，在 `cmd/main.go` 中注册。它们既是开箱即用的功能，也是插件开发的最佳参考实现。
+AniaBot 自带七个插件，在 `cmd/main.go` 中注册。它们既是开箱即用的功能，也是插件开发的最佳参考实现。
 
 ```go
 bot.AddPlugin(pluginsys.NewPluginSys())          // 系统插件
 bot.AddPlugin(pluginlog.NewPlugin())             // 日志插件
 bot.AddPlugin(pluginrepeat.NewPlugin())          // 复读机
 bot.AddPlugin(pluginantiwithdrawal.NewPlugin())  // 防撤回
+bot.AddPlugin(plugininterceptor.NewPlugin())     // 请求拦截
 bot.AddPlugin(pluginaichat.NewAIChatPlugin())    // AI 对话
 bot.AddPlugin(pluginnews.NewNewsPlugin())        // 每日新闻
 ```
@@ -15,6 +16,7 @@ bot.AddPlugin(pluginnews.NewNewsPlugin())        // 每日新闻
   { icon: '⚙️', name: '系统插件', desc: '帮助、远程退出、panic 告警', cmds: ['/help', '/exit'] },
   { icon: '🤖', name: 'AI 对话', desc: '大模型对话 · 工具调用 · 定时任务', cmds: ['#新对话', '/stop', '/clock'] },
   { icon: '🛡️', name: '防撤回', desc: '消息缓存与合并转发回顾', cmds: ['/explore [n]'] },
+  { icon: '🚧', name: '请求拦截', desc: '黑白名单放行或屏蔽 AI 请求', cmds: [] },
   { icon: '🔁', name: '复读机', desc: '三连同样消息自动跟读', cmds: ['/close repeat', '/enable repeat'] },
   { icon: '📰', name: '每日新闻', desc: '定时推送 60s 新闻图', cmds: ['/news', '/news force'] },
   { icon: '📝', name: '日志插件', desc: '控制台消息流水打印', cmds: [] },
@@ -132,6 +134,25 @@ AI 可在对话中自主调用：
 
 - 图片/文件消息通过 NapCat rkey 自动续期；无法续期时超过 3 分钟显示「已过期」占位
 - 语音消息显示 `[语音消息]`，转发消息显示 `[转发消息，暂不支持查看]`
+
+## 请求拦截插件
+
+`plugininterceptor` · Order = 900（普通插件之后、AI 对话插件之前）· 群聊 + 私聊
+
+按**白名单 / 黑名单**模式放行或屏蔽指定群聊、好友的消息：被拦截的消息不再向后续插件传播（AI 对话插件收不到，也就不会产生 AI 请求），而排在其前面的复读机、防撤回等插件不受影响。
+
+无命令，全部在 Web 控制面板配置：
+
+| 配置 | 说明 |
+| --- | --- |
+| 启用请求拦截 | 默认关闭，关闭时放行全部消息 |
+| 名单模式 | `blacklist`：名单内的群/好友被屏蔽；`whitelist`：仅名单内的群/好友放行 |
+| 群号名单 | 每行一个群号 |
+| QQ号名单 | 每行一个 QQ 号 |
+
+::: warning 白名单模式注意
+`whitelist` 模式下名单留空表示**拦截所有会话**——任何群和私聊都无法触发 AI 回复。
+:::
 
 ## 复读机插件
 
