@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os/exec"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -251,6 +252,7 @@ func (t *MCPTool) GetMCPToolDefinition() *mcp.Tool {
 // MCPToolManager 管理 MCP 工具的延迟加载
 type MCPToolManager struct {
 	client          *MCPClient
+	mu              sync.Mutex // 保护 toolCache：多个并发 AI 会话共享同一个 manager
 	toolCache       map[string]*MCPTool
 	toolDefinitions []*mcp.Tool
 }
@@ -287,6 +289,9 @@ func (m *MCPToolManager) GetToolNames() []map[string]string {
 
 // LoadTool 按需加载具体工具
 func (m *MCPToolManager) LoadTool(toolName string) (*MCPTool, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
 	// 检查缓存
 	if tool, ok := m.toolCache[toolName]; ok {
 		return tool, nil
