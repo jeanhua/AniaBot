@@ -30,7 +30,8 @@ func ExtraMessageStr(msg message.Message) (string, bool) {
 func HasMention(msg message.Message) bool {
 	for _, m := range msg.Message {
 		if m.Type == "at" {
-			if m.Type == "at" && m.Data["qq"].(string) == msg.SelfId.String() {
+			// Data 来自外部 JSON，qq 字段可能缺失或非字符串，必须用 comma-ok 断言
+			if qq, ok := m.Data["qq"].(string); ok && qq == msg.SelfId.String() {
 				return true
 			}
 		}
