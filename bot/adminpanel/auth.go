@@ -103,8 +103,20 @@ func (a *authManager) SetPassword(password string) bool {
 }
 
 // ResetPassword 直接覆盖面板密码哈希（供命令行找回密码使用，无需校验旧密码）。
+// 同时吊销所有已签发的会话：与面板内改密（DropAllSessions）行为一致，
+// 否则重置后旧会话 cookie 仍在 TTL 内有效，无法把可疑登录踢下线。
 func ResetPassword(root storage.PersistentStorage, password string) bool {
-	return root.Clone(adminNamespace).SetString(context.Background(), passwordHashKey, hashPassword(password))
+	store := root.Clone(adminNamespace)
+	ctx := context.Background()
+	if !store.SetString(ctx, passwordHashKey, hashPassword(password)) {
+		return false
+	}
+	if keys, err := store.Keys(ctx, sessionKeyPrefix); err == nil {
+		for _, k := range keys {
+			store.Del(ctx, k)
+		}
+	}
+	return true
 }
 
 // CheckPassword 校验密码。
