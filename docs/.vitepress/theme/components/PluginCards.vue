@@ -1,6 +1,9 @@
 <script setup lang="ts">
+import { icons } from './icons'
+
 defineProps<{
   plugins: Array<{
+    /** 图标：icons.ts 中的短名渲染线性 SVG，其余按文本（如 emoji）渲染 */
     icon: string
     name: string
     desc: string
@@ -13,7 +16,8 @@ defineProps<{
   <div class="ania-plugin-grid">
     <div v-for="p in plugins" :key="p.name" class="ania-plugin-card">
       <div class="pc-head">
-        <span class="pc-icon">{{ p.icon }}</span>
+        <span v-if="icons[p.icon]" class="pc-icon" v-html="icons[p.icon]" />
+        <span v-else class="pc-icon pc-icon-text">{{ p.icon }}</span>
         <span class="pc-name">{{ p.name }}</span>
       </div>
       <div class="pc-desc">{{ p.desc }}</div>

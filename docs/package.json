@@ -8,6 +8,7 @@
     "docs:preview": "vitepress preview"
   },
   "devDependencies": {
+    "@fontsource/ibm-plex-mono": "^5.3.0",
     "vitepress": "^1.6.3"
   },
   "dependencies": {

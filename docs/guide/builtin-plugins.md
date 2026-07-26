@@ -13,13 +13,13 @@ bot.AddPlugin(pluginnews.NewNewsPlugin())        // 每日新闻
 ```
 
 <PluginCards :plugins="[
-  { icon: '⚙️', name: '系统插件', desc: '帮助、远程退出、panic 告警', cmds: ['/help', '/exit'] },
-  { icon: '🤖', name: 'AI 对话', desc: '大模型对话 · 工具调用 · 定时任务', cmds: ['#新对话', '/stop', '/clock'] },
-  { icon: '🛡️', name: '防撤回', desc: '消息缓存与合并转发回顾', cmds: ['/explore [n]'] },
-  { icon: '🚧', name: '请求拦截', desc: '黑白名单放行或屏蔽 AI 请求', cmds: [] },
-  { icon: '🔁', name: '复读机', desc: '三连同样消息自动跟读', cmds: ['/close repeat', '/enable repeat'] },
-  { icon: '📰', name: '每日新闻', desc: '定时推送 60s 新闻图', cmds: ['/news', '/news force'] },
-  { icon: '📝', name: '日志插件', desc: '控制台消息流水打印', cmds: [] },
+  { icon: 'gear', name: '系统插件', desc: '帮助、远程退出、panic 告警', cmds: ['/help', '/exit'] },
+  { icon: 'chat', name: 'AI 对话', desc: '大模型对话 · 工具调用 · 定时任务', cmds: ['#新对话', '/stop', '/clock'] },
+  { icon: 'shield', name: '防撤回', desc: '消息缓存与合并转发回顾', cmds: ['/explore [n]'] },
+  { icon: 'ban', name: '请求拦截', desc: '黑白名单放行或屏蔽 AI 请求', cmds: [] },
+  { icon: 'repeat', name: '复读机', desc: '三连同样消息自动跟读', cmds: ['/close repeat', '/enable repeat'] },
+  { icon: 'news', name: '每日新闻', desc: '定时推送 60s 新闻图', cmds: ['/news', '/news force'] },
+  { icon: 'log', name: '日志插件', desc: '控制台消息流水打印', cmds: [] },
 ]" />
 
 ::: tip 命令中的 @ 约定

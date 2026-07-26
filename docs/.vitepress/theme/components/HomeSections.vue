@@ -1,37 +1,72 @@
 <script setup lang="ts">
+import { icons } from './icons'
+
+const features = [
+  {
+    icon: 'bolt',
+    title: '高性能',
+    desc: '基于 Go 语言开发，工作池 + 协程模型处理消息事件，轻松应对高并发群聊场景。',
+  },
+  {
+    icon: 'grid',
+    title: '插件驱动',
+    desc: '一切功能皆为插件。中间件链式执行、生命周期管理、panic 自动恢复，扩展只需实现一个接口。',
+  },
+  {
+    icon: 'chat',
+    title: 'AI 对话引擎',
+    desc: '内置完整 Agent 能力：工具调用、MCP 协议、Skill 系统、多模态识图、token 预算上下文窗口。',
+  },
+  {
+    icon: 'clock',
+    title: 'AI 定时任务',
+    desc: 'AI 与用户均可动态创建 cron 任务，持久化保存、重启不丢，到点自动以完整工具链执行。',
+  },
+  {
+    icon: 'link',
+    title: '协议兼容',
+    desc: '基于 OneBot v11 协议，支持 NapCat WebSocket / HTTP 双适配器，自由切换接入方式。',
+  },
+  {
+    icon: 'database',
+    title: '双层存储',
+    desc: '缓存层（Redis / 内存）+ 持久化层（SQLite / MySQL），纯 Go 无 CGO，插件数据自动按命名空间隔离。',
+  },
+]
+
 const plugins = [
   {
-    icon: '🤖',
+    icon: 'chat',
     name: 'AI 对话',
     desc: '接入任意 OpenAI 兼容大模型，支持工具调用、MCP、Skill、多模态识图与 AI 定时任务，上下文按 token 预算自动压缩。',
     cmds: ['@机器人 聊天', '#新对话', '/stop', '/clock'],
   },
   {
-    icon: '🛡️',
+    icon: 'shield',
     name: '防撤回',
     desc: '缓存群内最近 100 条消息，撤回也能通过合并转发回顾，图片/文件自动续期链接。',
     cmds: ['/explore [n]'],
   },
   {
-    icon: '🔁',
+    icon: 'repeat',
     name: '复读机',
     desc: '群内 +1 文化守护者：同一消息出现 3 次自动跟读，管理员可随时开关。',
     cmds: ['/close repeat', '/enable repeat'],
   },
   {
-    icon: '📰',
+    icon: 'news',
     name: '每日新闻',
     desc: '按 cron 表达式定时向指定群推送 60s 新闻图，也可随时手动获取。',
     cmds: ['/news', '/news force'],
   },
   {
-    icon: '⚙️',
+    icon: 'gear',
     name: '系统插件',
     desc: '启动通知、/help 插件列表、远程退出与 panic 告警，管理员的贴心助手。',
     cmds: ['/help', '/exit'],
   },
   {
-    icon: '📝',
+    icon: 'log',
     name: '日志插件',
     desc: '在控制台美观地打印每一条收发消息，调试期的好帮手。',
     cmds: [],
@@ -59,6 +94,16 @@ const steps = [
 </script>
 
 <template>
+  <div class="ania-section ania-features-section">
+    <div class="ania-feature-grid">
+      <div v-for="f in features" :key="f.title" class="ania-feature">
+        <span class="ft-icon" v-html="icons[f.icon]" />
+        <div class="ft-title">{{ f.title }}</div>
+        <div class="ft-desc">{{ f.desc }}</div>
+      </div>
+    </div>
+  </div>
+
   <div class="ania-section">
     <h2 class="ania-section-title">内置插件，开箱即用</h2>
     <p class="ania-section-sub">六个内置插件覆盖常见场景，注册即用，也可以作为你开发插件的参考实现</p>
