@@ -111,8 +111,8 @@ func (w logWriter) Write(p []byte) (int, error) {
 // isDevRun 检测是否为 go run 开发模式（可执行文件在临时编译目录中），
 // 开发模式下禁用自动更新。
 func isDevRun() bool {
-	exe, err := os.Executable()
-	if err != nil {
+	exe := selfExe
+	if exe == "" {
 		return false
 	}
 	tmp := os.TempDir()
@@ -159,7 +159,7 @@ func (s *Server) handleUpdateInfo(w http.ResponseWriter, r *http.Request) {
 	if isDevRun() {
 		mode = "dev"
 	}
-	exe, _ := os.Executable()
+	exe := selfExe
 	srcDir := s.cfgStr("bot.update.source_dir")
 	branch := s.cfgStr("bot.update.branch")
 	if branch == "" {
@@ -420,11 +420,13 @@ func (s *Server) runUpdate(srcDir, gitURL, branch string) {
 	}
 
 	// 6. 替换二进制：拷贝为 <exe>.new → 重命名当前 exe 为 <exe>.old → 重命名 .new 为原名
+	// 注意必须使用启动时缓存的 selfExe：Linux 下此时再取 os.Executable()
+	// 会读到已被 rename 的旧二进制路径（/proc/self/exe 跟随 inode）。
 	upd.setPhase(upPhaseSwap)
 	upd.appendLog("== 替换二进制 ==")
-	exe, err := os.Executable()
-	if err != nil {
-		fail("系统错误", fmt.Errorf("无法获取当前可执行文件路径: %w", err))
+	exe := selfExe
+	if exe == "" {
+		fail("系统错误", fmt.Errorf("无法获取当前可执行文件路径"))
 		return
 	}
 	tmpNew := exe + ".new"
