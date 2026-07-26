@@ -3,7 +3,6 @@ package functool
 import (
 	"bytes"
 	"context"
-	"errors"
 	"fmt"
 	"log"
 	"os/exec"
@@ -165,17 +164,19 @@ func (t *BashTool) Execute(_ context.Context, params any, _ llmtool.CallBackFunc
 
 	if err != nil {
 		if exitErr, ok := err.(*exec.ExitError); ok {
+			// 非零退出码不是工具层错误：返回 error 会导致 stdout/stderr 被执行器
+			// 丢弃、模型只看到"退出码 N"。把输出与退出码一并作为结果返回
+			if result != "" {
+				result += "\n"
+			}
 			if exitErr.ExitCode() == 127 {
 				// 127 只表示"命令未找到"，具体是哪个命令缺失应以 stderr 为准（如 "sh: curl: not found"），
 				// 不要臆断为某个特定解释器缺失
-				hint := "bash: 命令退出码 127（命令未找到）"
-				if s := strings.TrimSpace(stderr.String()); s != "" {
-					hint += fmt.Sprintf("，stderr: %s", s)
-				}
-				hint += "。请根据 stderr 确认缺失的命令或解释器，可用 `command -v <命令> || echo missing` 验证后重试"
-				return result, errors.New(hint)
+				result += "(命令退出码 127：命令未找到。请根据 stderr 确认缺失的命令或解释器，可用 `command -v <命令> || echo missing` 验证后重试)"
+			} else {
+				result += fmt.Sprintf("(命令退出码 %d)", exitErr.ExitCode())
 			}
-			return result, fmt.Errorf("bash: 命令退出码 %d", exitErr.ExitCode())
+			return result, nil
 		}
 		return result, fmt.Errorf("bash: 执行失败: %w", err)
 	}
