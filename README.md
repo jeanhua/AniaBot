@@ -61,7 +61,7 @@ docker compose up -d
 ```bash
 cd ~/Bot/
 docker run -d --name aniabot \
-  -p 7700:7700 \
+  --net=host \
   -v ./data:/app/aniabot/data \
   -v ./skills:/app/aniabot/skills \
   jeanhua/aniabot:latest
