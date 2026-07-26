@@ -113,7 +113,11 @@ func (w *messageWindow) clear() {
 }
 
 func (w *messageWindow) RecordUsage(usage TokenUsage) {
-	if usage.PromptTokens > 0 {
+	// 压缩判断需要的是当前上下文的真实大小（最后一次调用的 prompt token），
+	// 而非跨工具轮次累加的 PromptTokens——累加值会虚高，导致过早触发有损压缩
+	if usage.LastPromptTokens > 0 {
+		w.lastPromptTokens = usage.LastPromptTokens
+	} else if usage.PromptTokens > 0 {
 		w.lastPromptTokens = usage.PromptTokens
 	}
 }

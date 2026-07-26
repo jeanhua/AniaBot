@@ -61,6 +61,10 @@ type TokenUsage struct {
 	PromptTokens     int
 	CompletionTokens int
 	TotalTokens      int
+	// LastPromptTokens 本次请求最后一次 LLM 调用的 prompt token 数，
+	// 即当前上下文的真实大小。PromptTokens 是多轮工具调用的累加值，
+	// 会远超单次上下文，仅适合计费统计，不能用于压缩判断
+	LastPromptTokens int
 	// Iterations 本次请求调用 LLM 的轮数（含无工具直出与末轮总结）
 	Iterations int
 }
@@ -80,6 +84,7 @@ func (o *ToolOrchestrator) ExecuteWithTools(
 			return "", messages, totalUsage, err
 		}
 		totalUsage = usage
+		totalUsage.LastPromptTokens = usage.PromptTokens
 		totalUsage.Iterations = 1
 		content := resp.Content
 		messages = append(messages, o.msgBuilder.BuildAIMessageWithReasoning(content, nil, resp.ReasoningContent))
@@ -98,6 +103,7 @@ func (o *ToolOrchestrator) ExecuteWithTools(
 		totalUsage.PromptTokens += usage.PromptTokens
 		totalUsage.CompletionTokens += usage.CompletionTokens
 		totalUsage.TotalTokens += usage.TotalTokens
+		totalUsage.LastPromptTokens = usage.PromptTokens
 		totalUsage.Iterations++
 
 		if len(resp.ToolCalls) == 0 {
@@ -136,6 +142,7 @@ func (o *ToolOrchestrator) ExecuteWithTools(
 			totalUsage.PromptTokens += finalUsage.PromptTokens
 			totalUsage.CompletionTokens += finalUsage.CompletionTokens
 			totalUsage.TotalTokens += finalUsage.TotalTokens
+			totalUsage.LastPromptTokens = finalUsage.PromptTokens
 			totalUsage.Iterations++
 			finalContent := finalResp.Content
 			messages = append(messages, o.msgBuilder.BuildAIMessageWithReasoning(finalContent, nil, finalResp.ReasoningContent))
