@@ -169,8 +169,10 @@ func (store *AniaMemoryStorage) Clear(ctx context.Context) bool {
 }
 
 func (store *AniaMemoryStorage) ScanKeys(ctx context.Context, pattern string, count int64) ([]string, error) {
-	store.mu.RLock()
-	defer store.mu.RUnlock()
+	// cleanExpired 会删除共享 map 中的过期键，必须持写锁：
+	// RLock 下写 map 会触发 runtime 级 fatal（recover 无法捕获）
+	store.mu.Lock()
+	defer store.mu.Unlock()
 
 	store.cleanExpired()
 
