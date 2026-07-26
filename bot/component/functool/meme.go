@@ -6,11 +6,15 @@ import (
 	"fmt"
 	"log"
 	"math/rand/v2"
+	"time"
 
 	"github.com/go-resty/resty/v2"
 	"github.com/jeanhua/AniaBot/bot/component/llmtool"
 	"github.com/jeanhua/AniaBot/bot/utils"
 )
+
+// memeHTTPTimeout 表情包接口与图片下载的请求超时
+const memeHTTPTimeout = 30 * time.Second
 
 type MemeParams struct {
 	Text string `json:"text" desc:"表情包的文本描述,比如开心、生气、为什么、你真是的...等等短句"`
@@ -40,8 +44,10 @@ func (t *MemeTool) Execute(ctx context.Context, params any, callbacks llmtool.Ca
 		} `json:"data"`
 	}
 	result := responseTy{}
-	client := resty.New()
-	_, err := client.R().SetResult(&result).Get(modifier.String())
+	// 传入 ctx 并设置超时：否则接口挂起时请求永久阻塞，
+	// 泄漏 goroutine 并占死一个全局速率限制槽位，/stop 也无法中断
+	client := resty.New().SetTimeout(memeHTTPTimeout)
+	_, err := client.R().SetContext(ctx).SetResult(&result).Get(modifier.String())
 	if err != nil {
 		return "", err
 	}
@@ -55,8 +61,8 @@ func (t *MemeTool) Execute(ctx context.Context, params any, callbacks llmtool.Ca
 	imageUrl := result.Data[id].ImageUrl
 
 	// 下载图片
-	downloadClient := resty.New()
-	resp2, err := downloadClient.R().Get(imageUrl)
+	downloadClient := resty.New().SetTimeout(memeHTTPTimeout)
+	resp2, err := downloadClient.R().SetContext(ctx).Get(imageUrl)
 	if err != nil {
 		return fmt.Sprintf("下载表情包失败: %v", err), err
 	}
