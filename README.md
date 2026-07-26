@@ -32,6 +32,13 @@ cd web && npm ci && npm build
 go run cmd/main.go
 ```
 
+交叉编译
+
+```bash
+make linux
+make windows
+```
+
 登录 `http://127.0.0.1:7700`，按设置向导填写 NapCat 连接地址、管理员 QQ 与 AI 模型配置即可。
 
 ![pannel](./README/pannel.png)
