@@ -39,10 +39,6 @@ build/
 # dev config
 config.dev.yaml
 
-# custom plugin
-custom/plugins/*
-!custom/plugins/pluginexample/
-
 # docs
 docs/node_modules/
 docs/.vitepress/dist/
