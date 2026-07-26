@@ -119,6 +119,10 @@ export const api = {
     request(`/api/memory?scope=${encodeURIComponent(scope)}&id=${encodeURIComponent(id)}`, { method: 'DELETE' }),
 
   restart: () => request('/api/restart', { method: 'POST' }),
+
+  getUpdateInfo: () => request('/api/update/info'),
+  startUpdate: () => request('/api/update/start', { method: 'POST' }),
+  getUpdateStatus: () => request('/api/update/status'),
   // 轮询等待 Bot 重启完成（会话持久化在数据库中，重启后仍有效）
   async waitUntilUp(timeoutMs = 60000) {
     const deadline = Date.now() + timeoutMs

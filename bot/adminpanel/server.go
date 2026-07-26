@@ -181,6 +181,9 @@ func (s *Server) routes() {
 	s.mux.Handle("PUT /api/memory", s.requireAuth(http.HandlerFunc(s.handleMemoryUpdate)))
 	s.mux.Handle("DELETE /api/memory", s.requireAuth(http.HandlerFunc(s.handleMemoryDelete)))
 	s.mux.Handle("POST /api/restart", s.requireAuth(http.HandlerFunc(s.handleRestart)))
+	s.mux.Handle("GET /api/update/info", s.requireAuth(http.HandlerFunc(s.handleUpdateInfo)))
+	s.mux.Handle("POST /api/update/start", s.requireAuth(http.HandlerFunc(s.handleUpdateStart)))
+	s.mux.Handle("GET /api/update/status", s.requireAuth(http.HandlerFunc(s.handleUpdateStatus)))
 	s.mux.Handle("/", s.spaHandler())
 }
 
