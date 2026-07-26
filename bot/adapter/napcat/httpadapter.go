@@ -103,13 +103,15 @@ func (n *napcatHttpAdapter) onMsg(data []byte) {
 			log.Println("解析HTTP消息失败:", err)
 			return
 		}
+		// 过滤规则与 WS 适配器保持一致：私聊仅投递好友消息（sub_type=friend，
+		// 排除群临时会话等），且忽略 raw_message 为空的事件
 		switch msg.MessageType {
 		case "group":
-			if n.trigger.OnGroupMsg != nil {
+			if n.trigger.OnGroupMsg != nil && msg.RawMessage != "" {
 				n.trigger.OnGroupMsg(msg)
 			}
 		case "private":
-			if n.trigger.OnFriendMsg != nil {
+			if n.trigger.OnFriendMsg != nil && msg.SubType == "friend" && msg.RawMessage != "" {
 				n.trigger.OnFriendMsg(msg)
 			}
 		}
