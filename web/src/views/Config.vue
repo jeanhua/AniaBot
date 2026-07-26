@@ -93,6 +93,14 @@
               <textarea v-else-if="field.type === 'strings' || field.type === 'ints'" v-model="form[field.key]" rows="3" placeholder="每行一个" :class="inputClass + ' font-mono'" />
 
               <p v-if="field.help" class="text-xs text-slate-400 mt-1.5">{{ field.help }}</p>
+              <p
+                v-if="field.key === 'bot.admin_panel.enable' && form[field.key] === false"
+                class="text-xs text-amber-600 mt-1.5"
+              >
+                关闭并重启后将无法访问本面板。如需重新开启，可设置环境变量
+                <code class="font-mono bg-amber-50 px-1 rounded">ANIA_BOT_ADMIN_PANEL_ENABLE=true</code>
+                覆盖配置后重启 Bot。
+              </p>
             </div>
           </div>
         </section>

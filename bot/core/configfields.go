@@ -9,7 +9,7 @@ var frameworkConfigFields = []pluginconfig.Field{
 	{Key: "bot.admin_id", Label: "管理员 QQ", Type: "int", Group: "Bot 基础", Help: "接收启动/异常通知的管理员 QQ 号"},
 
 	// Web 面板
-	{Key: "bot.admin_panel.enable", Label: "启用面板", Type: "bool", Group: "Web 面板", Help: "是否启用 Web 控制面板", Default: true},
+	{Key: "bot.admin_panel.enable", Label: "启用面板", Type: "bool", Group: "Web 面板", Help: "是否启用 Web 控制面板；关闭后可用环境变量 ANIA_BOT_ADMIN_PANEL_ENABLE=true 覆盖重新开启", Default: true},
 	{Key: "bot.admin_panel.listen", Label: "监听地址", Type: "string", Group: "Web 面板", Help: "如 127.0.0.1:7700；改为 0.0.0.0:7700 可局域网访问（面板有密码保护）", Default: "127.0.0.1:7700"},
 
 	// 适配器
