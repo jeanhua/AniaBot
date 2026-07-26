@@ -1,8 +1,6 @@
 services:
   aniabot:
-    # 使用 Docker Hub 镜像时取消下一行注释并改为自己的用户名，同时删掉 build
-    # image: <dockerhub用户名>/aniabot:latest
-    build: .
+    image: jeanhua/aniabot:latest
     container_name: aniabot
     restart: unless-stopped
     ports:
