@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"strings"
-	"unicode"
 )
 
 type CompressorFunc func(ctx context.Context, client *LLMClient, oldMsgs []Message) ([]Message, error)
@@ -146,25 +145,6 @@ func (w *messageWindow) MaybeCompress(ctx context.Context) error {
 	return nil
 }
 
-// EstimateTokens 基于字符数估算 token 数（中文约 1.5 token/字，英文约 0.25 token/字）
-func EstimateTokens(msgs []Message) int {
-	chineseCount := 0
-	nonChineseCount := 0
-	for _, m := range msgs {
-		for _, p := range m.Parts {
-			c, nc := countRunes(p.Text)
-			chineseCount += c
-			nonChineseCount += nc
-		}
-		for _, tc := range m.ToolCalls {
-			c, nc := countRunes(tc.Name + tc.Arguments)
-			chineseCount += c
-			nonChineseCount += nc
-		}
-	}
-	return int(float64(chineseCount)*1.5 + float64(nonChineseCount)*0.25)
-}
-
 // ExtractMessageText 提取消息中的纯文本内容
 func ExtractMessageText(msg Message) string {
 	var parts []string
@@ -227,16 +207,4 @@ func NewContextCompressor(basePrompt string) CompressorFunc {
 		combinedPrompt := basePrompt + "\n\n[对话摘要]\n" + summary
 		return []Message{TextMessage(RoleSystem, combinedPrompt)}, nil
 	}
-}
-
-// countRunes 统计文本中的 rune 数量（中文字符计数用）
-func countRunes(text string) (chinese int, nonChinese int) {
-	for _, r := range text {
-		if unicode.Is(unicode.Han, r) {
-			chinese++
-		} else {
-			nonChinese++
-		}
-	}
-	return
 }
