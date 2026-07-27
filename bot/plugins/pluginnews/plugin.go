@@ -36,6 +36,10 @@ func NewNewsPlugin() *NewsPlugin {
 
 func (p *NewsPlugin) Start(ctx context.Context, cfg *viper.Viper) error {
 	// 配置已由框架自动填充到 p.cfg（见 ConfigSchema）
+	if !p.cfg.Enable {
+		p.Logger.Info("每日新闻插件已加载（未启用，跳过初始化）")
+		return nil
+	}
 	p.cronExpress = p.cfg.Cron
 	if p.cronExpress == "" {
 		p.Logger.Error("读取daily news cron表达式错误")
@@ -54,6 +58,9 @@ func (p *NewsPlugin) Start(ctx context.Context, cfg *viper.Viper) error {
 }
 
 func (p *NewsPlugin) StartCron(ctx context.Context, bot bot.Bot, c plugin.CronManager) error {
+	if !p.cfg.Enable {
+		return nil
+	}
 	c.AddFunc(p.cronExpress, func() {
 		p.sendNews(bot)
 	})
@@ -61,6 +68,9 @@ func (p *NewsPlugin) StartCron(ctx context.Context, bot bot.Bot, c plugin.CronMa
 }
 
 func (p *NewsPlugin) OnGroupMsg(ctx context.Context, bot bot.Bot, cmd command.Command, msg message.Message) (bool, error) {
+	if !p.cfg.Enable {
+		return true, nil
+	}
 	if cmd.Mention && cmd.Name == "news" {
 		builder := msgchain.Builder().Group()
 		builder.ImageUrl(p.api)
@@ -76,6 +86,9 @@ func (p *NewsPlugin) OnGroupMsg(ctx context.Context, bot bot.Bot, cmd command.Co
 }
 
 func (p *NewsPlugin) OnFriendMsg(ctx context.Context, bot bot.Bot, cmd command.Command, msg message.Message) (bool, error) {
+	if !p.cfg.Enable {
+		return true, nil
+	}
 	if msg.Sender.UserId == p.SystemConfig.AdminId && cmd.Name == "news" && len(cmd.Args) > 0 && cmd.Args[0] == "force" {
 		p.sendNews(bot)
 		return false, nil
