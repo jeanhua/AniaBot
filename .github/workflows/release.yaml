@@ -73,10 +73,31 @@ jobs:
             echo "prev=${PREV_TAG}" >> "$GITHUB_OUTPUT"
           fi
 
+      # 优先从 CHANGELOG.md 提取当前版本段落；缺失时回退到基于 git log 的自动生成
       - name: Generate changelog
         id: changelog
         run: |
+          VERSION="${GITHUB_REF_NAME#v}"
           RANGE="${{ steps.prev_tag.outputs.range }}"
+
+          SECTION=$(awk -v v="$VERSION" '
+            (index($0, "## [" v "]") == 1 || index($0, "## [v" v "]") == 1) { found=1; next }
+            found && substr($0, 1, 4) == "## [" { exit }
+            found
+          ' CHANGELOG.md | sed -e '/./,$!d' -e :a -e '/^\n*$/{$d;N;ba}')
+
+          if [ -n "$SECTION" ]; then
+            {
+              echo "body<<EOF"
+              echo "$SECTION"
+              echo ""
+              echo "**Full Changelog**: https://github.com/${{ github.repository }}/compare/${{ steps.prev_tag.outputs.prev }}...${GITHUB_REF_NAME}"
+              echo "EOF"
+            } >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "CHANGELOG.md 中未找到 ${GITHUB_REF_NAME} 段落，回退到 git log 生成" >&2
 
           FEATURES=$(git log "$RANGE" --pretty="- %s (%h)" \
             | grep -E '^- feat(\(.+\))?!?:' || true)

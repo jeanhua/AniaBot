@@ -163,9 +163,9 @@ All SQL backends use pure-Go drivers (`modernc.org/sqlite`, `github.com/go-sql-d
 Four GitHub Actions workflows in `.github/workflows/`:
 
 - **test.yaml** — runs on push/PR to `main`: `go vet`, `go test -v -race -coverprofile=coverage.out ./...`
-- **release.yaml** — runs on version tags (`v*.*.*`): tests then auto-generates changelog from conventional commits
+- **release.yaml** — runs on version tags (`v*.*.*`): tests, then creates the GitHub Release with the body extracted from the tag's section in `CHANGELOG.md` (falls back to conventional-commit generation if the section is missing) — update `CHANGELOG.md` before tagging
 - **docs.yaml** — builds VitePress docs and deploys to GitHub Pages on `main` push
-- **docker.yaml** — builds and pushes the AniaBot Docker image: version + short-sha tags on `v*.*.*` tag pushes, and `latest` on manual `workflow_dispatch`
+- **docker.yaml** — builds and pushes the AniaBot Docker image: version + short-sha tags on `v*.*.*` tag pushes, and `latest` on manual `workflow_dispatch`; the image's `org.opencontainers.image.description` label is taken from the corresponding `CHANGELOG.md` section
 
 ## External Dependencies
 
