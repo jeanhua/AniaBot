@@ -207,7 +207,7 @@ func (l *Logger) Recent(limit int) []Entry {
 	return out
 }
 
-// RecentForTask 返回指定任务的最近 limit 条日志（新在前）。
+// RecentForTask 返回指定任务的最近 limit 条日志（新在前）。limit<=0 时返回全部。
 func (l *Logger) RecentForTask(taskID string, limit int) []Entry {
 	all := l.load(context.Background())
 	if limit <= 0 {
@@ -220,6 +220,64 @@ func (l *Logger) RecentForTask(taskID string, limit int) []Entry {
 			if len(out) >= limit {
 				break
 			}
+		}
+	}
+	return out
+}
+
+// Filter 执行日志的查询条件，零值字段不参与过滤。
+type Filter struct {
+	TargetType string    // group / friend
+	TargetID   string    // 群号 / 好友 QQ（精确匹配）
+	TaskID     string    // 任务 ID（精确匹配）
+	Status     Status    // 执行状态（精确匹配）
+	Start      time.Time // 触发起始时间（含），零值不限
+	End        time.Time // 触发截止时间（含），零值不限
+	Keyword    string    // 任务标题包含的关键词（不区分大小写）
+	Limit      int       // 返回条数上限，<=0 时取默认值
+}
+
+// match 判断一条日志是否满足过滤条件。
+func (f Filter) match(e Entry) bool {
+	if f.TargetType != "" && e.TargetType != f.TargetType {
+		return false
+	}
+	if f.TargetID != "" && e.TargetID != f.TargetID {
+		return false
+	}
+	if f.TaskID != "" && e.TaskID != f.TaskID {
+		return false
+	}
+	if f.Status != "" && e.Status != f.Status {
+		return false
+	}
+	if !f.Start.IsZero() && e.TriggerTime.Before(f.Start) {
+		return false
+	}
+	if !f.End.IsZero() && e.TriggerTime.After(f.End) {
+		return false
+	}
+	if f.Keyword != "" && !strings.Contains(strings.ToLower(e.TaskTitle), strings.ToLower(f.Keyword)) {
+		return false
+	}
+	return true
+}
+
+// Query 按条件过滤日志（新在前），最多返回 f.Limit 条（<=0 时取默认值）。
+func (l *Logger) Query(f Filter) []Entry {
+	limit := f.Limit
+	if limit <= 0 {
+		limit = defaultMax
+	}
+	entries := l.load(context.Background())
+	out := make([]Entry, 0, limit)
+	for _, e := range entries {
+		if !f.match(e) {
+			continue
+		}
+		out = append(out, e)
+		if len(out) >= limit {
+			break
 		}
 	}
 	return out

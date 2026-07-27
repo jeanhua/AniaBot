@@ -233,6 +233,7 @@
       <div class="px-6 py-4 border-b border-zinc-100 flex items-center justify-between">
         <h2 class="tlabel text-zinc-800!">AI Cron Jobs</h2>
         <div class="flex items-center gap-3">
+          <RouterLink to="/tasklogs" class="text-[10px] tracking-[0.15em] uppercase text-zinc-500 hover:text-zinc-900 font-medium transition-colors">执行日志 ⤢</RouterLink>
           <button class="text-[10px] tracking-[0.15em] uppercase text-zinc-500 hover:text-zinc-900 font-medium transition-colors" @click="loadClocks">刷新</button>
           <button class="text-[10px] tracking-[0.15em] uppercase bg-zinc-900 text-white px-3 py-1.5 rounded-md hover:bg-zinc-700 font-medium transition-colors" @click="openCreate">新建任务</button>
         </div>
@@ -324,41 +325,6 @@
       </table>
     </section>
 
-    <!-- 定时任务执行日志 -->
-    <section class="tcard overflow-hidden">
-      <div class="px-6 py-4 border-b border-zinc-100 flex items-center justify-between">
-        <h2 class="tlabel text-zinc-800!">Execution Log</h2>
-        <button class="text-[10px] tracking-[0.15em] uppercase text-zinc-500 hover:text-zinc-900 font-medium transition-colors" @click="loadLogs">刷新</button>
-      </div>
-      <p v-if="logs.length === 0" class="px-6 py-8 text-xs text-zinc-400 text-center tracking-wide">暂无执行记录</p>
-      <table v-else class="w-full text-xs">
-        <thead>
-          <tr class="text-left text-[10px] tracking-[0.15em] uppercase text-zinc-400 bg-zinc-50/60 border-b border-zinc-100">
-            <th class="px-6 py-3 font-medium">任务</th>
-            <th class="px-6 py-3 font-medium">目标</th>
-            <th class="px-6 py-3 font-medium">触发时间</th>
-            <th class="px-6 py-3 font-medium">状态</th>
-            <th class="px-6 py-3 font-medium">耗时</th>
-            <th class="px-6 py-3 font-medium">Token</th>
-            <th class="px-6 py-3 font-medium">错误</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-for="log in logs" :key="log.id" class="border-b border-dashed border-zinc-100 last:border-0 hover:bg-zinc-50/70 transition-colors">
-            <td class="px-6 py-3 text-zinc-800 max-w-48 truncate font-medium" :title="log.task_title">{{ log.task_title }}</td>
-            <td class="px-6 py-3 text-zinc-600">{{ log.target_type === 'group' ? '群' : '好友' }} {{ log.target_id }}</td>
-            <td class="px-6 py-3 text-zinc-600 whitespace-nowrap">{{ fmtTime(log.trigger_time) }}</td>
-            <td class="px-6 py-3">
-              <span class="tpill py-0.5!"><span class="tdot" :class="statusDot(log.status)" />{{ statusText(log.status) }}</span>
-            </td>
-            <td class="px-6 py-3 text-zinc-600">{{ log.duration_ms ? (log.duration_ms / 1000).toFixed(1) + 's' : '—' }}</td>
-            <td class="px-6 py-3 text-zinc-600">{{ log.total_tokens || '—' }}</td>
-            <td class="px-6 py-3 text-red-600 max-w-40 truncate" :title="log.error">{{ log.error || '' }}</td>
-          </tr>
-        </tbody>
-      </table>
-    </section>
-
     <!-- 新建 / 编辑定时任务弹窗 -->
     <Teleport to="body">
       <div v-if="clockForm" class="fixed inset-0 z-50 flex items-center justify-center bg-zinc-950/40 p-4" @click.self="clockForm = null">
@@ -433,7 +399,6 @@ const icons = {
 const status = ref({})
 const host = ref({})
 const plugins = ref([])
-const logs = ref([])
 const clocks = ref([])
 const toggling = ref(new Set())
 const expanded = ref(new Set())
@@ -553,19 +518,6 @@ function fmtTime(t) {
   return d.toLocaleString('zh-CN', { hour12: false })
 }
 
-function statusText(s) {
-  return { running: '执行中', success: '成功', timeout: '超时', error: '失败' }[s] || s
-}
-
-function statusDot(s) {
-  return {
-    running: 'bg-blue-500',
-    success: 'bg-emerald-500',
-    timeout: 'bg-amber-500',
-    error: 'bg-red-500',
-  }[s] || 'bg-zinc-400'
-}
-
 async function loadStatus() {
   try { status.value = await api.getStatus() } catch { /* 忽略轮询错误 */ }
 }
@@ -579,10 +531,6 @@ async function loadHost() {
       cpuHistory.value = hist.length > 48 ? hist.slice(hist.length - 48) : hist
     }
   } catch { /* 忽略轮询错误 */ }
-}
-
-async function loadLogs() {
-  try { logs.value = await api.getTaskLogs() } catch { /* 忽略 */ }
 }
 
 async function loadClocks() {
@@ -710,11 +658,10 @@ async function removeClock(t) {
   }
 }
 
-// 实时刷新：状态 / 定时任务 / 执行日志统一轮询；标签页隐藏时暂停，恢复可见时立即刷新
+// 实时刷新：状态 / 定时任务统一轮询；标签页隐藏时暂停，恢复可见时立即刷新
 function poll() {
   loadStatus()
   loadHost()
-  loadLogs()
   loadClocks()
 }
 

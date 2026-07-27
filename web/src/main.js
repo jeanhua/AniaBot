@@ -7,6 +7,7 @@ const routes = [
   { path: '/', name: 'dashboard', component: () => import('./views/Dashboard.vue'), meta: { title: '状态总览' } },
   { path: '/msglogs', name: 'msglogs', component: () => import('./views/MsgLog.vue'), meta: { title: '消息日志' } },
   { path: '/querylogs', name: 'querylogs', component: () => import('./views/QueryLog.vue'), meta: { title: 'Query 日志' } },
+  { path: '/tasklogs', name: 'tasklogs', component: () => import('./views/TaskLog.vue'), meta: { title: '任务日志' } },
   { path: '/skills', name: 'skills', component: () => import('./views/Skills.vue'), meta: { title: '技能管理' } },
   { path: '/memory', name: 'memory', component: () => import('./views/Memory.vue'), meta: { title: '记忆管理' } },
   { path: '/config', name: 'config', component: () => import('./views/Config.vue'), meta: { title: '配置管理' } },

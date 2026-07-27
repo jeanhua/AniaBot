@@ -67,8 +67,16 @@ export const api = {
   getPlugins: () => request('/api/plugins'),
   getGroups: () => request('/api/groups'),
   getFriends: () => request('/api/friends'),
-  getTaskLogs: () => request('/api/tasklogs'),
   getMsgLogs: () => request('/api/msglogs'),
+  // 定时任务执行日志条件查询：{ target_type, target_id, task_id, status, start, end, keyword, limit }（均可选）
+  getTaskLogs: (params = {}) => {
+    const qs = new URLSearchParams()
+    for (const [k, v] of Object.entries(params)) {
+      if (v !== undefined && v !== null && v !== '') qs.set(k, v)
+    }
+    const s = qs.toString()
+    return request(`/api/tasklogs${s ? '?' + s : ''}`)
+  },
   // Query 日志条件查询：{ chat_type, target_id, sender, start, end, keyword, limit }（均可选）
   getQueryLogs: (params = {}) => {
     const qs = new URLSearchParams()

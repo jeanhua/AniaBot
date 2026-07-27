@@ -106,17 +106,18 @@ func newClockManager(p *AIChatPlugin, defaultTimeout time.Duration, maxLog int) 
 	return m
 }
 
-// recentLogs 返回最近的执行日志（新在前），供 /clock 命令与 Web 控制面板查询。
+// recentLogs 返回最近的执行日志（新在前），供 /clock 命令查询。
 func (m *clockManager) recentLogs(limit int) []tasklog.Entry {
 	return m.log.Recent(limit)
 }
 
-// TaskLogRecent 供 Web 控制面板查询 AI 定时任务执行日志（clock 未启用时返回 nil）。
-func (p *AIChatPlugin) TaskLogRecent(limit int) []tasklog.Entry {
+// TaskLogQuery 按条件查询 AI 定时任务执行日志（clock 未启用时返回 nil），
+// 实现 adminpanel.TaskLogSource，供 Web 控制面板「任务日志」页使用。
+func (p *AIChatPlugin) TaskLogQuery(f tasklog.Filter) []tasklog.Entry {
 	if p.clockManager == nil {
 		return nil
 	}
-	return p.clockManager.recentLogs(limit)
+	return p.clockManager.log.Query(f)
 }
 
 // taskInfos 返回所有任务的面板展示信息（供 Web 控制面板）。

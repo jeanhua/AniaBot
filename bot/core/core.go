@@ -327,7 +327,7 @@ func (ania *AniaBot) Run() {
 // startAdminPanel 启动 Web 控制面板（goroutine 内运行 HTTP 服务）。
 func (ania *AniaBot) startAdminPanel() {
 	// 查找提供定时任务执行日志的插件（如 AI 对话插件的 clock 功能）
-	var taskLogFn func(limit int) []tasklog.Entry
+	var taskLogFn func(f tasklog.Filter) []tasklog.Entry
 	var clockSrc adminpanel.ClockTaskSource
 	var msgLogFn func(limit int) []msglog.Entry
 	var skillSrc adminpanel.SkillSource
@@ -335,7 +335,7 @@ func (ania *AniaBot) startAdminPanel() {
 	var queryLogFn func(f querylog.Filter) []querylog.Entry
 	for _, p := range ania.plugins {
 		if src, ok := p.(adminpanel.TaskLogSource); ok {
-			taskLogFn = src.TaskLogRecent
+			taskLogFn = src.TaskLogQuery
 		}
 		if src, ok := p.(adminpanel.ClockTaskSource); ok {
 			clockSrc = src

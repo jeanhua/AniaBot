@@ -44,10 +44,10 @@ type BotInfo interface {
 	StartTime() time.Time
 }
 
-// TaskLogSource 可选接口：插件实现后，其定时任务执行日志会展示在面板上
-// （当前由 AI 对话插件的 clock 功能实现）。
+// TaskLogSource 可选接口：插件实现后，面板「任务日志」页可按条件查询其定时任务
+// 执行日志（当前由 AI 对话插件的 clock 功能实现）。
 type TaskLogSource interface {
-	TaskLogRecent(limit int) []tasklog.Entry
+	TaskLogQuery(f tasklog.Filter) []tasklog.Entry
 }
 
 // ClockTaskSource 可选接口：插件实现后，面板可对其定时任务做增删改查与启停
@@ -105,7 +105,7 @@ type Options struct {
 	Bot           BotInfo                                  // 运行信息来源
 	Adapter       func() string                            // 适配器连接状态描述
 	AdapterDetail func() string                            // 适配器状态详情（最近错误/重试次数，可为 nil）
-	TaskLogs      func(limit int) []tasklog.Entry          // AI 定时任务执行日志（可为 nil）
+	TaskLogs      func(f tasklog.Filter) []tasklog.Entry   // AI 定时任务执行日志（可为 nil）
 	Clocks        ClockTaskSource                          // AI 定时任务列表与启停（可为 nil）
 	MsgLogs       func(limit int) []msglog.Entry           // 消息日志（群/好友/通知，可为 nil）
 	Skills        SkillSource                              // AI skill 管理（可为 nil）
@@ -471,12 +471,58 @@ func (s *Server) handleFriends(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusOK, friends)
 }
 
+// handleTaskLogs 按条件查询定时任务执行日志（新在前）。
+// 支持查询参数：target_type（group/friend）、target_id（群号/QQ）、task_id（任务 ID）、
+// status（running/success/timeout/error）、start / end（RFC3339 或 datetime-local 格式）、
+// keyword（匹配任务标题）、limit（条数上限，默认 200，最大 500）。
 func (s *Server) handleTaskLogs(w http.ResponseWriter, r *http.Request) {
 	if s.opt.TaskLogs == nil {
 		writeJSON(w, http.StatusOK, []any{})
 		return
 	}
-	writeJSON(w, http.StatusOK, s.opt.TaskLogs(200))
+	q := r.URL.Query()
+	f := tasklog.Filter{
+		TargetType: q.Get("target_type"),
+		TargetID:   q.Get("target_id"),
+		TaskID:     q.Get("task_id"),
+		Status:     tasklog.Status(q.Get("status")),
+		Keyword:    q.Get("keyword"),
+	}
+	if f.TargetType != "" && f.TargetType != "group" && f.TargetType != "friend" {
+		writeError(w, http.StatusBadRequest, "target_type 仅支持 group / friend")
+		return
+	}
+	switch f.Status {
+	case "", tasklog.StatusRunning, tasklog.StatusSuccess, tasklog.StatusTimeout, tasklog.StatusError:
+	default:
+		writeError(w, http.StatusBadRequest, "status 仅支持 running / success / timeout / error")
+		return
+	}
+	if v := q.Get("start"); v != "" {
+		t, err := parseQueryTime(v)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, "start 时间格式错误（支持 RFC3339 或 2006-01-02T15:04）")
+			return
+		}
+		f.Start = t
+	}
+	if v := q.Get("end"); v != "" {
+		t, err := parseQueryTime(v)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, "end 时间格式错误（支持 RFC3339 或 2006-01-02T15:04）")
+			return
+		}
+		f.End = t
+	}
+	if v := q.Get("limit"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			if n > 500 {
+				n = 500
+			}
+			f.Limit = n
+		}
+	}
+	writeJSON(w, http.StatusOK, s.opt.TaskLogs(f))
 }
 
 // handleMsgLogs 返回最近的消息日志（群/好友/通知，新在前）。

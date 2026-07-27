@@ -1,0 +1,258 @@
+<template>
+  <div class="space-y-4">
+    <!-- 筛选与操作栏 -->
+    <div class="flex items-center justify-between flex-wrap gap-3">
+      <div class="flex items-center gap-1 bg-white border border-slate-200/60 rounded-lg p-1 shadow-sm">
+        <button
+          v-for="t in typeTabs"
+          :key="t.value"
+          class="px-3 py-1.5 text-xs rounded-md transition-all"
+          :class="filters.target_type === t.value
+            ? 'bg-zinc-900 text-white font-medium shadow-sm'
+            : 'text-slate-500 hover:text-slate-800 hover:bg-slate-100'"
+          @click="filters.target_type = t.value; applyFilters()"
+        >
+          {{ t.label }}
+        </button>
+      </div>
+      <div class="flex items-center gap-3">
+        <label class="flex items-center gap-1.5 text-xs text-slate-500 select-none cursor-pointer">
+          <input v-model="autoRefresh" type="checkbox" class="accent-zinc-800" />
+          自动刷新
+        </label>
+        <button class="text-xs text-zinc-700 hover:text-zinc-900 font-medium transition-colors" @click="load">刷新</button>
+      </div>
+    </div>
+
+    <!-- 条件查询栏 -->
+    <section class="bg-white rounded-xl shadow-sm border border-slate-200/60 px-5 py-4">
+      <div class="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3">
+        <label class="block">
+          <span class="text-[10px] tracking-[0.15em] uppercase text-zinc-400">状态</span>
+          <select v-model="filters.status" :class="inputClass" @change="applyFilters">
+            <option value="">全部</option>
+            <option value="running">执行中</option>
+            <option value="success">成功</option>
+            <option value="timeout">超时</option>
+            <option value="error">出错</option>
+          </select>
+        </label>
+        <label class="block">
+          <span class="text-[10px] tracking-[0.15em] uppercase text-zinc-400">群号 / 对方 QQ</span>
+          <input v-model.trim="filters.target_id" type="text" placeholder="精确匹配" :class="inputClass" @keyup.enter="applyFilters" />
+        </label>
+        <label class="block">
+          <span class="text-[10px] tracking-[0.15em] uppercase text-zinc-400">开始时间</span>
+          <input v-model="filters.start" type="datetime-local" :class="inputClass" />
+        </label>
+        <label class="block">
+          <span class="text-[10px] tracking-[0.15em] uppercase text-zinc-400">结束时间</span>
+          <input v-model="filters.end" type="datetime-local" :class="inputClass" />
+        </label>
+        <label class="block">
+          <span class="text-[10px] tracking-[0.15em] uppercase text-zinc-400">关键词</span>
+          <input v-model.trim="filters.keyword" type="text" placeholder="匹配任务标题" :class="inputClass" @keyup.enter="applyFilters" />
+        </label>
+        <div class="flex items-end gap-2">
+          <button
+            class="px-4 py-1.5 text-[11px] tracking-[0.1em] uppercase bg-zinc-900 text-white rounded-md hover:bg-zinc-700 transition-colors"
+            @click="applyFilters"
+          >
+            查询
+          </button>
+          <button
+            v-if="hasFilter"
+            class="px-3 py-1.5 text-[11px] tracking-[0.1em] uppercase text-zinc-500 hover:bg-zinc-100 rounded-md transition-colors"
+            @click="resetFilters"
+          >
+            重置
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <!-- 日志列表（新在上） -->
+    <section class="space-y-3">
+      <div v-if="logs.length === 0" class="bg-white rounded-xl shadow-sm border border-slate-200/60 py-12 text-sm text-slate-400 text-center">
+        暂无符合条件的执行记录（定时任务触发后在此展示）
+      </div>
+
+      <div
+        v-for="log in logs"
+        :key="log.id"
+        class="bg-white rounded-xl shadow-sm border border-slate-200/60 overflow-hidden"
+      >
+        <!-- 摘要行（点击弹出详情窗口） -->
+        <button class="w-full text-left px-5 py-3.5 hover:bg-slate-50/60 transition-colors" @click="detail = log">
+          <div class="flex items-center gap-2 flex-wrap">
+            <span class="text-xs px-2 py-0.5 rounded-full whitespace-nowrap" :class="statusClass(log.status)">
+              {{ statusText(log.status) }}
+            </span>
+            <span class="text-xs px-2 py-0.5 rounded-full whitespace-nowrap bg-zinc-100 text-zinc-600 border border-zinc-200">
+              {{ log.target_type === 'group' ? '群聊' : '私聊' }} · {{ log.target_id }}
+            </span>
+            <span class="ml-auto text-xs text-slate-400 font-mono whitespace-nowrap">{{ fmtTime(log.trigger_time) }}</span>
+          </div>
+          <p class="mt-2 text-sm text-slate-700 font-medium truncate">{{ log.task_title || '(无标题)' }}</p>
+          <div class="mt-2 flex items-center gap-3 text-[11px] text-slate-400 font-mono flex-wrap">
+            <span v-if="log.status !== 'running'">用时 {{ fmtDuration(log.duration_ms) }}</span>
+            <span v-if="log.total_tokens">tokens {{ log.total_tokens }} ({{ log.prompt_tokens }}+{{ log.completion_tokens }})</span>
+            <span v-if="log.error" class="text-red-500 truncate max-w-80">{{ log.error }}</span>
+            <span class="ml-auto text-zinc-400">详情 ⤢</span>
+          </div>
+        </button>
+      </div>
+    </section>
+
+    <!-- 详情弹窗：点遮罩 / 右上角关闭 / Esc 均可关闭 -->
+    <div
+      v-if="detail"
+      class="fixed inset-0 bg-zinc-950/50 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+      @click.self="detail = null"
+    >
+      <div class="bg-white rounded-xl shadow-2xl border border-zinc-200 w-full max-w-3xl max-h-[85vh] flex flex-col">
+        <!-- 弹窗头部 -->
+        <div class="flex items-center gap-2 flex-wrap px-5 py-3.5 border-b border-zinc-100 shrink-0">
+          <span class="text-xs px-2 py-0.5 rounded-full whitespace-nowrap" :class="statusClass(detail.status)">
+            {{ statusText(detail.status) }}
+          </span>
+          <span class="text-xs px-2 py-0.5 rounded-full whitespace-nowrap bg-zinc-100 text-zinc-600 border border-zinc-200">
+            {{ detail.target_type === 'group' ? '群聊' : '私聊' }} · {{ detail.target_id }}
+          </span>
+          <span class="text-sm text-zinc-800 font-medium truncate">{{ detail.task_title || '(无标题)' }}</span>
+          <button
+            class="ml-auto w-7 h-7 flex items-center justify-center rounded-md text-zinc-400 hover:text-zinc-800 hover:bg-zinc-100 transition-colors"
+            title="关闭"
+            @click="detail = null"
+          >
+            ✕
+          </button>
+        </div>
+
+        <!-- 弹窗内容（可滚动） -->
+        <div class="px-5 py-4 space-y-4 overflow-y-auto">
+          <!-- 概要指标 -->
+          <dl class="grid grid-cols-1 sm:grid-cols-[auto_1fr] gap-x-6 gap-y-2 text-xs">
+            <dt class="text-[10px] tracking-[0.15em] uppercase text-zinc-400 self-center">任务 ID</dt>
+            <dd class="text-zinc-700 font-mono">{{ detail.task_id || '—' }}</dd>
+            <dt class="text-[10px] tracking-[0.15em] uppercase text-zinc-400 self-center">触发时间</dt>
+            <dd class="text-zinc-700 font-mono">{{ fmtTimeFull(detail.trigger_time) }}</dd>
+            <dt class="text-[10px] tracking-[0.15em] uppercase text-zinc-400 self-center">完成时间</dt>
+            <dd class="text-zinc-700 font-mono">{{ fmtTimeFull(detail.finished_at) }}</dd>
+            <dt class="text-[10px] tracking-[0.15em] uppercase text-zinc-400 self-center">耗时</dt>
+            <dd class="text-zinc-700 font-mono">{{ detail.status !== 'running' ? fmtDuration(detail.duration_ms) : '—' }}</dd>
+            <dt class="text-[10px] tracking-[0.15em] uppercase text-zinc-400 self-center">Token 用量</dt>
+            <dd class="text-zinc-700 font-mono">
+              {{ detail.total_tokens ? `${detail.total_tokens} (${detail.prompt_tokens}+${detail.completion_tokens})` : '—' }}
+            </dd>
+          </dl>
+
+          <!-- 错误信息 -->
+          <div v-if="detail.error" class="text-xs text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2 whitespace-pre-wrap break-all">
+            {{ detail.error }}
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</template>
+
+<script setup>
+import { computed, onMounted, onUnmounted, reactive, ref } from 'vue'
+import { api } from '../api.js'
+
+const typeTabs = [
+  { value: '', label: '全部' },
+  { value: 'group', label: '群聊' },
+  { value: 'friend', label: '私聊' },
+]
+
+const inputClass = 'mt-1 w-full border border-zinc-300 rounded-md px-2.5 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-zinc-400 focus:border-zinc-400 transition-shadow bg-white'
+
+// filters 为编辑中的条件，applied 为实际生效（已点查询/切换类型）的条件，
+// 自动刷新沿用 applied，避免输入到一半被轮询带出去
+const emptyFilters = () => ({ target_type: '', target_id: '', status: '', start: '', end: '', keyword: '' })
+const filters = reactive(emptyFilters())
+const applied = reactive(emptyFilters())
+
+const logs = ref([])
+const autoRefresh = ref(true)
+// detail 为当前弹窗展示的日志（null 表示弹窗关闭）
+const detail = ref(null)
+let timer = null
+
+const hasFilter = computed(() => Object.values(applied).some((v) => v !== ''))
+
+function applyFilters() {
+  Object.assign(applied, filters)
+  load()
+}
+
+function resetFilters() {
+  Object.assign(filters, emptyFilters())
+  Object.assign(applied, filters)
+  load()
+}
+
+// Esc 关闭详情弹窗
+function onKeydown(e) {
+  if (e.key === 'Escape') detail.value = null
+}
+
+function fmtTime(t) {
+  if (!t) return '-'
+  const d = new Date(t)
+  if (isNaN(d)) return '-'
+  const hm = d.toLocaleTimeString('zh-CN', { hour12: false })
+  if (d.toDateString() === new Date().toDateString()) return hm
+  return `${d.getMonth() + 1}/${d.getDate()} ${hm}`
+}
+
+function fmtTimeFull(t) {
+  if (!t) return '—'
+  const d = new Date(t)
+  if (isNaN(d) || d.getFullYear() < 2000) return '—' // Go 零值时间
+  return d.toLocaleString('zh-CN', { hour12: false })
+}
+
+function fmtDuration(ms) {
+  if (!ms && ms !== 0) return '-'
+  if (ms < 1000) return `${ms}ms`
+  return `${(ms / 1000).toFixed(1)}s`
+}
+
+function statusText(s) {
+  return { running: '执行中', success: '成功', timeout: '超时', error: '出错' }[s] || s
+}
+
+function statusClass(s) {
+  return {
+    running: 'bg-zinc-900 text-white',
+    success: 'bg-white text-zinc-600 border border-zinc-300',
+    timeout: 'bg-zinc-100 text-zinc-500 border border-zinc-200',
+    error: 'bg-red-50 text-red-600 border border-red-200',
+  }[s] || 'bg-slate-100 text-slate-600'
+}
+
+async function load() {
+  try { logs.value = await api.getTaskLogs(applied) } catch { return }
+}
+
+// 实时刷新：标签页隐藏时暂停，恢复可见时立即刷新
+function onVisible() {
+  if (!document.hidden && autoRefresh.value) load()
+}
+
+onMounted(() => {
+  load()
+  timer = setInterval(() => { if (!document.hidden && autoRefresh.value) load() }, 4000)
+  document.addEventListener('visibilitychange', onVisible)
+  document.addEventListener('keydown', onKeydown)
+})
+
+onUnmounted(() => {
+  clearInterval(timer)
+  document.removeEventListener('visibilitychange', onVisible)
+  document.removeEventListener('keydown', onKeydown)
+})
+</script>
