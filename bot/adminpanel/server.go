@@ -120,6 +120,7 @@ type Server struct {
 	auth    *authManager
 	mux     *http.ServeMux
 	started time.Time
+	balance balanceCache
 }
 
 // NewServer 创建面板服务。Options.Listen 为空时默认 127.0.0.1:7700。
@@ -169,6 +170,7 @@ func (s *Server) routes() {
 	s.mux.Handle("GET /api/msglogs", s.requireAuth(http.HandlerFunc(s.handleMsgLogs)))
 	s.mux.Handle("GET /api/querylogs", s.requireAuth(http.HandlerFunc(s.handleQueryLogs)))
 	s.mux.Handle("GET /api/tokenstats", s.requireAuth(http.HandlerFunc(s.handleTokenStats)))
+	s.mux.Handle("GET /api/balance", s.requireAuth(http.HandlerFunc(s.handleBalance)))
 	s.mux.Handle("GET /api/tokenstats/detail", s.requireAuth(http.HandlerFunc(s.handleTokenStatsDetail)))
 	s.mux.Handle("GET /api/clocks", s.requireAuth(http.HandlerFunc(s.handleClockList)))
 	s.mux.Handle("POST /api/clocks", s.requireAuth(http.HandlerFunc(s.handleClockCreate)))

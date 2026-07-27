@@ -16,6 +16,7 @@
 - 面板新增「Token 统计」独立页面：按来源（对话/定时任务）、会话类型（群聊/私聊）、执行状态、消耗目标排行（Top 10）、24 小时分布与最近 30 天分来源每日序列等多维度统计 token 用量
 - 主对话最大工具调用轮数支持面板配置：新增配置项 `plugin.ai_chat_bot.max_iterations`（默认 20），主对话与定时任务统一生效
 - 每日新闻插件新增启用/禁用开关：新增配置项 `plugin.dailynews.enable`（默认 true），关闭后停止定时播报并忽略 `/news` 命令
+- 面板概览页新增 AI API 余额卡片：启用配置项 `bot.balance.enable` 后，后端用 goja 执行用户在 `bot.balance.js` 中自定义的 JS 脚本（注入 `cfg`（AI 对话插件的 base_url/api_key/model）、同步 `fetch()` 与 `console.log`）查询余额，结果按 `bot.balance.cache_sec`（默认 300 秒）缓存，支持手动强制刷新；脚本改动即时生效无需重启
 
 ### 变更
 

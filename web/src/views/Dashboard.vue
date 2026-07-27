@@ -231,7 +231,7 @@
       </section>
 
       <!-- DAILY -->
-      <section class="tcard xl:col-span-8 p-6 flex flex-col">
+      <section class="tcard p-6 flex flex-col" :class="balanceEnabled ? 'xl:col-span-5' : 'xl:col-span-8'">
         <div class="flex items-center justify-between">
           <span class="tlabel">Daily Tokens</span>
           <span class="flex items-center gap-3">
@@ -261,6 +261,35 @@
           Source: query &amp; cron logs (retained)
           <span class="mx-2 text-zinc-300">//</span>
           Cache metrics depend on upstream API
+        </div>
+      </section>
+
+      <!-- API BALANCE -->
+      <section v-if="balanceEnabled" class="tcard xl:col-span-3 p-6 flex flex-col">
+        <div class="flex items-center justify-between">
+          <span class="tlabel">API Balance</span>
+          <button
+            class="tpill cursor-pointer hover:bg-zinc-100 transition-colors"
+            :class="{ 'opacity-50 pointer-events-none': balanceLoading }"
+            title="强制刷新（绕过服务端缓存）"
+            @click="loadBalance(true)"
+          >
+            <span class="tdot" :class="balance?.error ? 'bg-amber-500' : 'bg-emerald-500'" />
+            {{ balanceLoading ? '查询中' : '刷新' }}
+          </button>
+        </div>
+
+        <div class="flex-1 py-5">
+          <div class="text-3xl font-semibold tracking-tight text-zinc-900 break-all">{{ balance?.value || '—' }}</div>
+          <div class="tlabel mt-2">LLM API 余额</div>
+        </div>
+
+        <div class="border-t border-dotted border-zinc-300 pt-3">
+          <div v-if="balance?.error" class="text-[11px] text-amber-600 truncate" :title="balance.error">查询失败：{{ balance.error }}</div>
+          <div class="flex items-center justify-between mt-1 text-[10px] tracking-[0.12em] uppercase text-zinc-400">
+            <span>Updated {{ balanceUpdatedText }}</span>
+            <span class="shrink-0 ml-2">{{ balance?.cached ? 'Cached' : 'Live' }} · {{ balance?.ttl ?? 0 }}s</span>
+          </div>
         </div>
       </section>
     </div>
@@ -312,6 +341,8 @@ const host = ref({})
 const plugins = ref([])
 const clocks = ref([])
 const tokenStats = ref({ summary: {}, today: {}, daily: [] })
+const balance = ref(null)
+const balanceLoading = ref(false)
 const now = ref(new Date())
 const cpuHistory = ref([]) // CPU 占用率历史（最近 48 个采样点）
 let timer = null
@@ -393,6 +424,25 @@ function fmtTokens(n) {
 
 function dayTip(d) {
   return `${d.date} · ${d.total_tokens} tok (prompt ${d.prompt_tokens} / completion ${d.completion_tokens} / cached ${d.cached_tokens}) · ${d.requests} runs`
+}
+
+// ---- API 余额（服务端执行自定义 JS 查询，结果有缓存） ----
+
+const balanceEnabled = computed(() => balance.value?.enabled === true)
+
+const balanceUpdatedText = computed(() => {
+  const t = balance.value?.updated_at
+  if (!t) return '—'
+  const d = new Date(t)
+  if (isNaN(d)) return '—'
+  const pad = n => String(n).padStart(2, '0')
+  return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
+})
+
+async function loadBalance(refresh = false) {
+  if (refresh) balanceLoading.value = true
+  try { balance.value = await api.getBalance(refresh) } catch { /* 忽略轮询错误 */ }
+  finally { balanceLoading.value = false }
 }
 
 // ---- 主机监控 ----
@@ -480,6 +530,7 @@ function poll() {
   loadHost()
   loadClocks()
   loadTokenStats()
+  loadBalance()
 }
 
 function onVisible() {

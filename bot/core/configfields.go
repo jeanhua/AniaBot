@@ -1,6 +1,9 @@
 package core
 
-import "github.com/jeanhua/AniaBot/common/pluginconfig"
+import (
+	"github.com/jeanhua/AniaBot/bot/adminpanel"
+	"github.com/jeanhua/AniaBot/common/pluginconfig"
+)
 
 // frameworkConfigFields 框架自身的配置字段元信息（bot.*）。
 // 插件的字段由插件各自通过 plugin.ConfigRegistrar 注册，面板动态展示。
@@ -31,4 +34,9 @@ var frameworkConfigFields = []pluginconfig.Field{
 	{Key: "bot.update.source_dir", Label: "源码目录", Type: "string", Group: "自动更新", Help: "AniaBot 仓库的克隆路径（独立目录），自动更新在此拉取并编译；留空则禁用自动更新"},
 	{Key: "bot.update.git_url", Label: "Git 地址", Type: "string", Group: "自动更新", Help: "非空时更新前覆盖源码目录的 origin 地址"},
 	{Key: "bot.update.branch", Label: "跟踪分支", Type: "string", Group: "自动更新", Default: "main"},
+
+	// API 余额查询（面板概览页展示，修改后即时生效，无需重启）
+	{Key: "bot.balance.enable", Label: "启用余额查询", Type: "bool", Group: "API 余额查询", Help: "在面板概览页显示 AI API 余额；通过下方自定义 JS 代码请求余额接口", Default: false},
+	{Key: "bot.balance.cache_sec", Label: "缓存时间(秒)", Type: "int", Group: "API 余额查询", Help: "余额查询结果的缓存时长，避免频繁请求余额接口", Default: 300},
+	{Key: "bot.balance.js", Label: "查询脚本(JS)", Type: "text", Group: "API 余额查询", Help: "自定义 JS 代码，由后端执行。可用全局变量：cfg.base_url / cfg.api_key / cfg.model（AI 对话插件的 API 配置）、fetch(url, {method, headers, body})（同步 HTTP 请求，返回 {status, body, json()}）、console.log。最后一条表达式的值作为余额显示", Default: adminpanel.DefaultBalanceJS},
 }
