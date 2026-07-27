@@ -296,162 +296,6 @@
       </table>
     </section>
 
-    <!-- AI 定时任务 -->
-    <section class="tcard overflow-hidden">
-      <div class="px-6 py-4 border-b border-zinc-100 flex items-center justify-between">
-        <h2 class="tlabel text-zinc-800!">AI Cron Jobs</h2>
-        <div class="flex items-center gap-3">
-          <RouterLink to="/tasklogs" class="text-[10px] tracking-[0.15em] uppercase text-zinc-500 hover:text-zinc-900 font-medium transition-colors">执行日志 ⤢</RouterLink>
-          <button class="text-[10px] tracking-[0.15em] uppercase text-zinc-500 hover:text-zinc-900 font-medium transition-colors" @click="loadClocks">刷新</button>
-          <button class="text-[10px] tracking-[0.15em] uppercase bg-zinc-900 text-white px-3 py-1.5 rounded-md hover:bg-zinc-700 font-medium transition-colors" @click="openCreate">新建任务</button>
-        </div>
-      </div>
-      <p v-if="clocks.length === 0" class="px-6 py-8 text-xs text-zinc-400 text-center tracking-wide">暂无定时任务，点击右上角「新建任务」创建（也可在群聊/私聊中使用 /clock）</p>
-      <table v-else class="w-full text-xs">
-        <thead>
-          <tr class="text-left text-[10px] tracking-[0.15em] uppercase text-zinc-400 bg-zinc-50/60 border-b border-zinc-100">
-            <th class="px-6 py-3 font-medium">任务</th>
-            <th class="px-6 py-3 font-medium">目标</th>
-            <th class="px-6 py-3 font-medium">Cron</th>
-            <th class="px-6 py-3 font-medium">下次执行</th>
-            <th class="px-6 py-3 font-medium">上次执行</th>
-            <th class="px-6 py-3 font-medium">启用</th>
-          </tr>
-        </thead>
-        <tbody>
-          <template v-for="t in clocks" :key="t.id">
-            <tr
-              class="border-b border-dashed border-zinc-100 last:border-0 hover:bg-zinc-50/70 transition-colors cursor-pointer"
-              :class="{ 'bg-zinc-50/70': expanded.has(t.id) }"
-              @click="toggleExpand(t.id)"
-            >
-              <td class="px-6 py-3 text-zinc-800 max-w-48">
-                <span class="flex items-center gap-1.5">
-                  <span
-                    class="[&>svg]:w-3 [&>svg]:h-3 text-zinc-400 transition-transform shrink-0"
-                    :class="{ 'rotate-90': expanded.has(t.id) }"
-                    v-html="icons.chevron"
-                  />
-                  <span class="truncate font-medium" :title="t.title">{{ t.title || '(无标题)' }}</span>
-                </span>
-                <span v-if="t.run_once" class="text-[9px] tracking-[0.12em] uppercase border border-zinc-300 text-zinc-500 px-1.5 py-0.5 rounded ml-4">单次</span>
-              </td>
-              <td class="px-6 py-3 text-zinc-600 whitespace-nowrap">{{ t.target_type === 'group' ? '群' : '好友' }} {{ t.target_id }}</td>
-              <td class="px-6 py-3 text-zinc-500 whitespace-nowrap">{{ t.cron }}</td>
-              <td class="px-6 py-3 text-zinc-600 whitespace-nowrap">{{ t.enabled ? fmtTime(t.next_run_at) : '—' }}</td>
-              <td class="px-6 py-3 text-zinc-600 whitespace-nowrap">{{ fmtTime(t.last_run_at) }}</td>
-              <td class="px-6 py-3" @click.stop>
-                <button
-                  type="button"
-                  role="switch"
-                  :aria-checked="t.enabled"
-                  :disabled="toggling.has(t.id)"
-                  class="relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors disabled:opacity-50"
-                  :class="t.enabled ? 'bg-zinc-900' : 'bg-zinc-200'"
-                  @click="toggleClock(t)"
-                >
-                  <span
-                    class="inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow transition-transform"
-                    :class="t.enabled ? 'translate-x-4.5' : 'translate-x-0.75'"
-                  />
-                </button>
-              </td>
-            </tr>
-            <!-- 任务详情 -->
-            <tr v-if="expanded.has(t.id)" class="border-b border-dashed border-zinc-100 last:border-0 bg-zinc-50/40">
-              <td colspan="6" class="px-6 py-4">
-                <dl class="grid grid-cols-1 sm:grid-cols-[auto_1fr] gap-x-6 gap-y-2 text-xs">
-                  <dt class="tlabel">任务内容</dt>
-                  <dd class="text-zinc-700 whitespace-pre-wrap break-all">{{ t.content }}</dd>
-                  <template v-if="t.note">
-                    <dt class="tlabel">备注</dt>
-                    <dd class="text-zinc-700 whitespace-pre-wrap break-all">{{ t.note }}</dd>
-                  </template>
-                  <dt class="tlabel">超时时间</dt>
-                  <dd class="text-zinc-700">{{ t.timeout_sec > 0 ? t.timeout_sec + ' 秒' : '默认' }}</dd>
-                  <dt class="tlabel">创建者</dt>
-                  <dd class="text-zinc-700">{{ t.created_by ? 'QQ ' + t.created_by : '—' }}</dd>
-                  <dt class="tlabel">创建时间</dt>
-                  <dd class="text-zinc-700">{{ fmtTime(t.created_at) }}</dd>
-                </dl>
-                <div class="mt-4 flex items-center gap-2">
-                  <button
-                    class="text-[10px] tracking-[0.15em] uppercase bg-zinc-900 text-white px-3 py-1.5 rounded-md hover:bg-zinc-700 font-medium transition-colors disabled:opacity-50"
-                    :disabled="toggling.has(t.id)"
-                    @click="openEdit(t)"
-                  >编辑</button>
-                  <button
-                    class="text-[10px] tracking-[0.15em] uppercase border border-zinc-300 text-zinc-600 px-3 py-1.5 rounded-md hover:bg-zinc-100 hover:text-red-600 hover:border-red-300 font-medium transition-colors disabled:opacity-50"
-                    :disabled="toggling.has(t.id)"
-                    @click="removeClock(t)"
-                  >删除</button>
-                </div>
-              </td>
-            </tr>
-          </template>
-        </tbody>
-      </table>
-    </section>
-
-    <!-- 新建 / 编辑定时任务弹窗 -->
-    <Teleport to="body">
-      <div v-if="clockForm" class="fixed inset-0 z-50 flex items-center justify-center bg-zinc-950/40 p-4" @click.self="clockForm = null">
-        <div class="tcard w-full max-w-lg max-h-[90vh] overflow-y-auto">
-          <div class="px-6 py-4 border-b border-zinc-100 flex items-center justify-between">
-            <h3 class="tlabel text-zinc-800!">{{ clockForm.id ? '编辑定时任务' : '新建定时任务' }}</h3>
-            <button class="text-zinc-400 hover:text-zinc-700 transition-colors" @click="clockForm = null">✕</button>
-          </div>
-          <form class="px-6 py-5 space-y-4" @submit.prevent="saveClock">
-            <div>
-              <label class="form-label">任务标题</label>
-              <input v-model.trim="clockForm.title" type="text" class="form-input" placeholder="如：每日晨报" />
-            </div>
-            <div>
-              <label class="form-label">任务内容 <span class="text-red-500">*</span></label>
-              <textarea v-model.trim="clockForm.content" rows="3" class="form-input" placeholder="触发时发送给 AI 的内容"></textarea>
-            </div>
-            <div class="grid grid-cols-2 gap-4">
-              <div>
-                <label class="form-label">Cron 表达式 <span class="text-red-500">*</span></label>
-                <input v-model.trim="clockForm.cron" type="text" class="form-input" placeholder="0 8 * * * 或 @every 1h" />
-              </div>
-              <div>
-                <label class="form-label">超时时间（秒，0 为默认）</label>
-                <input v-model.number="clockForm.timeout_sec" type="number" min="0" class="form-input" />
-              </div>
-            </div>
-            <div class="grid grid-cols-2 gap-4">
-              <div>
-                <label class="form-label">触发对象 <span class="text-red-500">*</span></label>
-                <select v-model="clockForm.target_type" class="form-input" :disabled="!!clockForm.id">
-                  <option value="group">群聊</option>
-                  <option value="friend">好友</option>
-                </select>
-              </div>
-              <div>
-                <label class="form-label">{{ clockForm.target_type === 'group' ? '群号' : 'QQ 号' }} <span class="text-red-500">*</span></label>
-                <input v-model.trim="clockForm.target_id" type="text" class="form-input" :disabled="!!clockForm.id" placeholder="数字" />
-              </div>
-            </div>
-            <div>
-              <label class="form-label">备注</label>
-              <input v-model.trim="clockForm.note" type="text" class="form-input" placeholder="可选，触发时附带给 AI" />
-            </div>
-            <label class="flex items-center gap-2 text-xs text-zinc-700 select-none">
-              <input v-model="clockForm.run_once" type="checkbox" class="accent-zinc-900" :disabled="!!clockForm.id" />
-              单次任务（触发一次后自动删除）
-            </label>
-            <p v-if="clockFormError" class="text-xs text-red-600">{{ clockFormError }}</p>
-            <div class="flex justify-end gap-2 pt-1">
-              <button type="button" class="px-4 py-2 text-[11px] tracking-widest uppercase text-zinc-500 hover:text-zinc-800 font-medium transition-colors" @click="clockForm = null">取消</button>
-              <button type="submit" class="px-4 py-2 text-[11px] tracking-widest uppercase bg-zinc-900 text-white rounded-md hover:bg-zinc-700 font-medium transition-colors disabled:opacity-50" :disabled="clockSaving">
-                {{ clockSaving ? '保存中…' : '保存' }}
-              </button>
-            </div>
-          </form>
-        </div>
-      </div>
-    </Teleport>
   </div>
 </template>
 
@@ -461,7 +305,6 @@ import { api } from '../api.js'
 
 const icons = {
   warn: '<svg fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126ZM12 15.75h.007v.008H12v-.008Z"/></svg>',
-  chevron: '<svg fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5"/></svg>',
 }
 
 const status = ref({})
@@ -469,8 +312,6 @@ const host = ref({})
 const plugins = ref([])
 const clocks = ref([])
 const tokenStats = ref({ summary: {}, today: {}, daily: [] })
-const toggling = ref(new Set())
-const expanded = ref(new Set())
 const now = ref(new Date())
 const cpuHistory = ref([]) // CPU 占用率历史（最近 48 个采样点）
 let timer = null
@@ -610,13 +451,6 @@ const nextRunText = computed(() => {
   return `${next.toLocaleString('zh-CN', { hour12: false })}${title ? ' · ' + title : ''}`
 })
 
-function fmtTime(t) {
-  if (!t) return '—'
-  const d = new Date(t)
-  if (isNaN(d) || d.getFullYear() < 2000) return '—' // Go 零值时间
-  return d.toLocaleString('zh-CN', { hour12: false })
-}
-
 async function loadStatus() {
   try { status.value = await api.getStatus() } catch { /* 忽略轮询错误 */ }
 }
@@ -638,127 +472,6 @@ async function loadClocks() {
 
 async function loadTokenStats() {
   try { tokenStats.value = await api.getTokenStats() } catch { /* 忽略轮询错误 */ }
-}
-
-function toggleExpand(id) {
-  const s = new Set(expanded.value)
-  if (s.has(id)) s.delete(id)
-  else s.add(id)
-  expanded.value = s
-}
-
-// 乐观更新开关状态，失败时回滚
-async function toggleClock(t) {
-  if (toggling.value.has(t.id)) return
-  toggling.value = new Set(toggling.value).add(t.id)
-  const prev = t.enabled
-  t.enabled = !prev
-  try {
-    await api.updateClock(t.id, { enabled: t.enabled })
-  } catch (e) {
-    t.enabled = prev
-    alert(e.message || '操作失败')
-  } finally {
-    const s = new Set(toggling.value)
-    s.delete(t.id)
-    toggling.value = s
-  }
-}
-
-// ---- 新建 / 编辑 / 删除 ----
-
-const clockForm = ref(null) // 非 null 时显示弹窗；id 为空表示新建
-const clockFormError = ref('')
-const clockSaving = ref(false)
-
-function blankClockForm() {
-  return {
-    id: '',
-    title: '',
-    content: '',
-    cron: '',
-    target_type: 'group',
-    target_id: '',
-    timeout_sec: 0,
-    note: '',
-    run_once: false,
-  }
-}
-
-function openCreate() {
-  clockFormError.value = ''
-  clockForm.value = blankClockForm()
-}
-
-function openEdit(t) {
-  clockFormError.value = ''
-  clockForm.value = {
-    id: t.id,
-    title: t.title,
-    content: t.content,
-    cron: t.cron,
-    target_type: t.target_type,
-    target_id: t.target_id,
-    timeout_sec: t.timeout_sec || 0,
-    note: t.note || '',
-    run_once: t.run_once,
-  }
-}
-
-async function saveClock() {
-  const f = clockForm.value
-  if (!f.content) { clockFormError.value = '任务内容不能为空'; return }
-  if (!f.cron) { clockFormError.value = 'Cron 表达式不能为空'; return }
-  if (!f.id) {
-    if (!f.target_id) { clockFormError.value = '目标 ID 不能为空'; return }
-    if (!/^\d+$/.test(f.target_id)) { clockFormError.value = '目标 ID 必须是数字'; return }
-  }
-  clockFormError.value = ''
-  clockSaving.value = true
-  try {
-    if (f.id) {
-      await api.updateClock(f.id, {
-        title: f.title,
-        content: f.content,
-        cron: f.cron,
-        note: f.note,
-        timeout_sec: f.timeout_sec || 0,
-      })
-    } else {
-      await api.createClock({
-        title: f.title,
-        content: f.content,
-        cron: f.cron,
-        target_type: f.target_type,
-        target_id: f.target_id,
-        enabled: true,
-        run_once: f.run_once,
-        timeout_sec: f.timeout_sec || 0,
-        note: f.note,
-      })
-    }
-    clockForm.value = null
-    await loadClocks()
-  } catch (e) {
-    clockFormError.value = e.message || '保存失败'
-  } finally {
-    clockSaving.value = false
-  }
-}
-
-async function removeClock(t) {
-  if (!confirm(`确定删除定时任务「${t.title || t.id}」吗？`)) return
-  toggling.value = new Set(toggling.value).add(t.id)
-  try {
-    await api.deleteClock(t.id)
-    await loadClocks()
-  } catch (e) {
-    alert(e.message || '删除失败')
-  } finally {
-    const s = new Set(toggling.value)
-    s.delete(t.id)
-    toggling.value = s
-  }
 }
 
 // 实时刷新：状态 / 定时任务统一轮询；标签页隐藏时暂停，恢复可见时立即刷新
@@ -822,31 +535,5 @@ onUnmounted(() => {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-}
-.form-label {
-  display: block;
-  font-size: 10px;
-  letter-spacing: 0.15em;
-  text-transform: uppercase;
-  color: rgb(113 113 122);
-  margin-bottom: 0.375rem;
-}
-.form-input {
-  width: 100%;
-  border: 1px solid rgb(212 212 216);
-  border-radius: 0.375rem;
-  padding: 0.5rem 0.75rem;
-  font-size: 0.75rem;
-  color: rgb(39 39 42);
-  outline: none;
-  transition: border-color 0.15s;
-  background: white;
-}
-.form-input:focus {
-  border-color: rgb(113 113 122);
-}
-.form-input:disabled {
-  background: rgb(244 244 245);
-  color: rgb(161 161 170);
 }
 </style>

@@ -128,7 +128,7 @@ const navItems = [
   { to: '/msglogs', label: '消息日志', icon: icons.chat },
   { to: '/querylogs', label: 'Query 日志', icon: icons.query },
   { to: '/tokenstats', label: 'Token 统计', icon: icons.chart },
-  { to: '/tasklogs', label: '任务日志', icon: icons.task },
+  { to: '/tasklogs', label: '定时任务', icon: icons.task },
   { to: '/skills', label: '技能管理', icon: icons.skills },
   { to: '/memory', label: '记忆管理', icon: icons.memory },
   { to: '/config', label: '配置管理', icon: icons.config },
