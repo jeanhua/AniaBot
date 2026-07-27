@@ -469,6 +469,31 @@ func (m *clockManager) RunNow(id string) bool {
 
 // ---- 触发执行 ----
 
+// taskRecorder 一次定时任务执行的工具调用收集器。工具观测回调与 Chat 同 goroutine
+// 串行执行，因此无需加锁。参考 querylog.queryRecorder。
+type taskRecorder struct {
+	toolCalls      []tasklog.ToolCallRecord
+	toolCallsTotal int // 工具调用总数（含超出上限被丢弃的）
+}
+
+// observe 工具调用观察回调：追加一条执行记录，明细最多保留 MaxToolCallRecords 条。
+func (r *taskRecorder) observe(info aichat.ToolCallInfo) {
+	r.toolCallsTotal++
+	if len(r.toolCalls) >= tasklog.MaxToolCallRecords {
+		return
+	}
+	rec := tasklog.ToolCallRecord{
+		Name:       info.Name,
+		Arguments:  tasklog.Truncate(info.Arguments, tasklog.MaxArgsRunes),
+		Result:     tasklog.Truncate(info.Result, tasklog.MaxResultRunes),
+		DurationMs: info.DurationMs,
+	}
+	if info.Err != nil {
+		rec.Error = info.Err.Error()
+	}
+	r.toolCalls = append(r.toolCalls, rec)
+}
+
 // runTask 在独立的可恢复 goroutine 中执行一次任务。
 func (m *clockManager) runTask(task *ClockTask) {
 	if m.bot == nil {
@@ -478,12 +503,13 @@ func (m *clockManager) runTask(task *ClockTask) {
 	m.bot.Go("clock:"+task.ID, func() {
 		start := time.Now()
 		logEntry := m.log.Record(tasklog.Entry{
-			TaskID:      task.ID,
-			TaskTitle:   task.Title,
-			TargetType:  task.TargetType,
-			TargetID:    task.TargetID,
-			TriggerTime: start,
-			Status:      tasklog.StatusRunning,
+			TaskID:         task.ID,
+			TaskTitle:      task.Title,
+			TargetType:     task.TargetType,
+			TargetID:       task.TargetID,
+			TriggerTime:    start,
+			TriggerContent: tasklog.Truncate(m.buildTriggerPrompt(task), tasklog.MaxContentRunes),
+			Status:         tasklog.StatusRunning,
 		})
 
 		// 记录 LastRunAt
@@ -515,8 +541,23 @@ func (m *clockManager) runTask(task *ClockTask) {
 		ctx, cancel := context.WithTimeout(context.Background(), timeout)
 		defer cancel()
 
-		resp, usage, runErr := m.executeTask(ctx, task)
+		rec := &taskRecorder{}
+		resp, usage, runErr := m.executeTask(ctx, task, rec)
 		duration := time.Since(start)
+
+		// fillExecution 回填执行过程明细（LLM 轮数 / 工具调用 / 最终回复 / token 用量）
+		fillExecution := func(e *tasklog.Entry) {
+			e.DurationMs = duration.Milliseconds()
+			e.Iterations = usage.Iterations
+			e.ToolCalls = rec.toolCalls
+			e.ToolCallsTotal = rec.toolCallsTotal
+			e.Reply = tasklog.Truncate(resp, tasklog.MaxReplyRunes)
+			e.PromptTokens = usage.PromptTokens
+			e.CompletionTokens = usage.CompletionTokens
+			e.TotalTokens = usage.TotalTokens
+			e.CachedTokens = usage.CachedTokens
+			e.FinishedAt = time.Now()
+		}
 
 		if runErr != nil {
 			status := tasklog.StatusError
@@ -526,13 +567,8 @@ func (m *clockManager) runTask(task *ClockTask) {
 			}
 			m.log.Update(logEntry.ID, func(e *tasklog.Entry) {
 				e.Status = status
-				e.DurationMs = duration.Milliseconds()
 				e.Error = errMsg
-				e.PromptTokens = usage.PromptTokens
-				e.CompletionTokens = usage.CompletionTokens
-				e.TotalTokens = usage.TotalTokens
-				e.CachedTokens = usage.CachedTokens
-				e.FinishedAt = time.Now()
+				fillExecution(e)
 			})
 			finished = true
 			m.logger.Warn("定时任务执行结束（非成功）", "task", task.ID, "title", task.Title,
@@ -545,12 +581,7 @@ func (m *clockManager) runTask(task *ClockTask) {
 
 		m.log.Update(logEntry.ID, func(e *tasklog.Entry) {
 			e.Status = tasklog.StatusSuccess
-			e.DurationMs = duration.Milliseconds()
-			e.PromptTokens = usage.PromptTokens
-			e.CompletionTokens = usage.CompletionTokens
-			e.TotalTokens = usage.TotalTokens
-			e.CachedTokens = usage.CachedTokens
-			e.FinishedAt = time.Now()
+			fillExecution(e)
 		})
 		finished = true
 		m.logger.Info("定时任务执行成功", "task", task.ID, "title", task.Title,
@@ -560,7 +591,8 @@ func (m *clockManager) runTask(task *ClockTask) {
 }
 
 // executeTask 构建一次性上下文执行任务并返回最终回复与 token 用量。
-func (m *clockManager) executeTask(ctx context.Context, task *ClockTask) (string, aichat.TokenUsage, error) {
+// rec 非空时挂载工具调用观察者，执行过程中的工具明细追加到 rec。
+func (m *clockManager) executeTask(ctx context.Context, task *ClockTask, rec *taskRecorder) (string, aichat.TokenUsage, error) {
 	p := m.plugin
 	isGroup := task.TargetType == clockTargetGroup
 	targetQID, _ := strconv.ParseUint(task.TargetID, 10, 64)
@@ -579,6 +611,9 @@ func (m *clockManager) executeTask(ctx context.Context, task *ClockTask) (string
 	}
 	if p.skillManager != nil {
 		chat.SetSkillManager(p.skillManager)
+	}
+	if rec != nil {
+		chat.SetToolObserver(rec.observe)
 	}
 
 	cbs := m.makeClockCallback(ctx, task)

@@ -91,11 +91,15 @@
             <span class="text-xs px-2 py-0.5 rounded-full whitespace-nowrap bg-zinc-100 text-zinc-600 border border-zinc-200">
               {{ log.target_type === 'group' ? '群聊' : '私聊' }} · {{ log.target_id }}
             </span>
+            <span v-if="log.tool_calls?.length" class="text-xs px-2 py-0.5 rounded-full whitespace-nowrap bg-zinc-100 text-zinc-600 border border-zinc-200">
+              {{ log.tool_calls.length }} 次工具调用
+            </span>
             <span class="ml-auto text-xs text-slate-400 font-mono whitespace-nowrap">{{ fmtTime(log.trigger_time) }}</span>
           </div>
           <p class="mt-2 text-sm text-slate-700 font-medium truncate">{{ log.task_title || '(无标题)' }}</p>
           <div class="mt-2 flex items-center gap-3 text-[11px] text-slate-400 font-mono flex-wrap">
             <span v-if="log.status !== 'running'">用时 {{ fmtDuration(log.duration_ms) }}</span>
+            <span v-if="log.iterations">LLM {{ log.iterations }} 轮</span>
             <span v-if="log.total_tokens">tokens {{ log.total_tokens }} ({{ log.prompt_tokens }}+{{ log.completion_tokens }})</span>
             <span v-if="log.error" class="text-red-500 truncate max-w-80">{{ log.error }}</span>
             <span class="ml-auto text-zinc-400">详情 ⤢</span>
@@ -141,15 +145,64 @@
             <dd class="text-zinc-700 font-mono">{{ fmtTimeFull(detail.finished_at) }}</dd>
             <dt class="text-[10px] tracking-[0.15em] uppercase text-zinc-400 self-center">耗时</dt>
             <dd class="text-zinc-700 font-mono">{{ detail.status !== 'running' ? fmtDuration(detail.duration_ms) : '—' }}</dd>
+            <dt class="text-[10px] tracking-[0.15em] uppercase text-zinc-400 self-center">LLM 轮数</dt>
+            <dd class="text-zinc-700 font-mono">{{ detail.iterations || '—' }}</dd>
             <dt class="text-[10px] tracking-[0.15em] uppercase text-zinc-400 self-center">Token 用量</dt>
             <dd class="text-zinc-700 font-mono">
               {{ detail.total_tokens ? `${detail.total_tokens} (${detail.prompt_tokens}+${detail.completion_tokens})` : '—' }}
             </dd>
           </dl>
 
+          <!-- 任务内容（触发时发送给 AI 的内容） -->
+          <div v-if="detail.trigger_content">
+            <h3 class="text-[11px] tracking-[0.2em] uppercase text-zinc-400 font-medium mb-2">任务内容</h3>
+            <p class="text-sm text-slate-700 whitespace-pre-wrap break-all leading-relaxed bg-slate-50 border border-slate-200/70 rounded-lg px-3 py-2">{{ detail.trigger_content }}</p>
+          </div>
+
           <!-- 错误信息 -->
           <div v-if="detail.error" class="text-xs text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2 whitespace-pre-wrap break-all">
             {{ detail.error }}
+          </div>
+
+          <!-- 工具调用明细 -->
+          <div v-if="detail.tool_calls?.length" class="space-y-2">
+            <h3 class="text-[11px] tracking-[0.2em] uppercase text-zinc-400 font-medium">
+              工具调用
+              <span v-if="detail.tool_calls_total > detail.tool_calls.length" class="normal-case tracking-normal text-zinc-300">
+                （共 {{ detail.tool_calls_total }} 次，仅保留前 {{ detail.tool_calls.length }} 条）
+              </span>
+            </h3>
+            <div
+              v-for="(tc, i) in detail.tool_calls"
+              :key="i"
+              class="bg-white border border-slate-200/70 rounded-lg overflow-hidden"
+            >
+              <div class="flex items-center gap-2 px-3 py-2 border-b border-slate-100">
+                <span class="text-xs font-mono font-medium text-zinc-800">{{ tc.name }}</span>
+                <span v-if="tc.error" class="text-[11px] px-1.5 py-0.5 rounded bg-red-50 text-red-600 border border-red-100">失败</span>
+                <span class="ml-auto text-[11px] text-slate-400 font-mono">{{ fmtDuration(tc.duration_ms) }}</span>
+              </div>
+              <div class="px-3 py-2 space-y-2">
+                <div v-if="tc.arguments">
+                  <div class="text-[10px] tracking-[0.15em] uppercase text-zinc-400 mb-1">参数</div>
+                  <pre class="text-xs text-slate-600 font-mono whitespace-pre-wrap break-all leading-relaxed">{{ tc.arguments }}</pre>
+                </div>
+                <div v-if="tc.error">
+                  <div class="text-[10px] tracking-[0.15em] uppercase text-red-400 mb-1">错误</div>
+                  <pre class="text-xs text-red-600 font-mono whitespace-pre-wrap break-all leading-relaxed">{{ tc.error }}</pre>
+                </div>
+                <div v-else-if="tc.result">
+                  <div class="text-[10px] tracking-[0.15em] uppercase text-zinc-400 mb-1">结果</div>
+                  <pre class="text-xs text-slate-600 font-mono whitespace-pre-wrap break-all leading-relaxed">{{ tc.result }}</pre>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 最终回复 -->
+          <div v-if="detail.reply">
+            <h3 class="text-[11px] tracking-[0.2em] uppercase text-zinc-400 font-medium mb-2">最终回复</h3>
+            <p class="text-sm text-slate-700 whitespace-pre-wrap break-all leading-relaxed bg-slate-50 border border-slate-200/70 rounded-lg px-3 py-2">{{ detail.reply }}</p>
           </div>
         </div>
       </div>

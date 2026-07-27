@@ -17,6 +17,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 
 	"github.com/jeanhua/AniaBot/common/storage"
 )
@@ -31,22 +32,48 @@ const (
 	StatusError   Status = "error"   // 执行出错
 )
 
+// 字段截断上限（符文数），避免单条日志体积失控
+const (
+	MaxContentRunes = 500  // 触发时发送给 AI 的内容
+	MaxReplyRunes   = 1000 // 最终回复
+	MaxArgsRunes    = 500  // 工具调用参数
+	MaxResultRunes  = 1000 // 工具执行结果
+)
+
+// MaxToolCallRecords 单条日志最多保留的工具调用明细条数。
+// 超出部分丢弃，实际总数见 Entry.ToolCallsTotal。
+const MaxToolCallRecords = 20
+
+// ToolCallRecord 一次工具调用的执行记录（如 bash 命令的执行详情）
+type ToolCallRecord struct {
+	Name       string `json:"name"`
+	Arguments  string `json:"arguments,omitempty"`
+	Result     string `json:"result,omitempty"`
+	DurationMs int64  `json:"duration_ms"`
+	Error      string `json:"error,omitempty"`
+}
+
 // Entry 一条执行日志
 type Entry struct {
-	ID               string    `json:"id"` // 日志 ID（自增序号的 base36）
-	TaskID           string    `json:"task_id"`
-	TaskTitle        string    `json:"task_title"`
-	TargetType       string    `json:"target_type"` // group / friend
-	TargetID         string    `json:"target_id"`
-	TriggerTime      time.Time `json:"trigger_time"`
-	Status           Status    `json:"status"`
-	DurationMs       int64     `json:"duration_ms"`
-	Error            string    `json:"error,omitempty"`
-	PromptTokens     int       `json:"prompt_tokens,omitempty"`
-	CompletionTokens int       `json:"completion_tokens,omitempty"`
-	TotalTokens      int       `json:"total_tokens,omitempty"`
-	CachedTokens     int       `json:"cached_tokens,omitempty"` // 命中上游 prompt 缓存的 token 数（提供方支持时才有）
-	FinishedAt       time.Time `json:"finished_at,omitempty"`
+	ID               string           `json:"id"` // 日志 ID（自增序号的 base36）
+	TaskID           string           `json:"task_id"`
+	TaskTitle        string           `json:"task_title"`
+	TargetType       string           `json:"target_type"` // group / friend
+	TargetID         string           `json:"target_id"`
+	TriggerTime      time.Time        `json:"trigger_time"`
+	TriggerContent   string           `json:"trigger_content,omitempty"` // 触发时发送给 AI 的内容（截断）
+	Status           Status           `json:"status"`
+	DurationMs       int64            `json:"duration_ms"`
+	Iterations       int              `json:"iterations,omitempty"` // LLM 调用轮数
+	ToolCalls        []ToolCallRecord `json:"tool_calls,omitempty"`
+	ToolCallsTotal   int              `json:"tool_calls_total,omitempty"` // 工具调用总数（超过 MaxToolCallRecords 时大于 len(ToolCalls)）
+	Error            string           `json:"error,omitempty"`
+	Reply            string           `json:"reply,omitempty"` // 最终回复（截断）
+	PromptTokens     int              `json:"prompt_tokens,omitempty"`
+	CompletionTokens int              `json:"completion_tokens,omitempty"`
+	TotalTokens      int              `json:"total_tokens,omitempty"`
+	CachedTokens     int              `json:"cached_tokens,omitempty"` // 命中上游 prompt 缓存的 token 数（提供方支持时才有）
+	FinishedAt       time.Time        `json:"finished_at,omitempty"`
 }
 
 const (
@@ -55,6 +82,15 @@ const (
 	legacyEntriesKey = "entries" // 旧版整体 JSON 数组键，仅用于迁移
 	defaultMax       = 500
 )
+
+// Truncate 按符文数截断字符串，超出时追加省略标记。max<=0 时不截断。
+func Truncate(s string, max int) string {
+	if max <= 0 || utf8.RuneCountInString(s) <= max {
+		return s
+	}
+	runes := []rune(s)
+	return string(runes[:max]) + "…"
+}
 
 // entryKey 由序号生成日志记录键。
 func entryKey(seq uint64) string {
