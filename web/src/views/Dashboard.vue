@@ -234,7 +234,10 @@
       <section class="tcard xl:col-span-8 p-6 flex flex-col">
         <div class="flex items-center justify-between">
           <span class="tlabel">Daily Tokens</span>
-          <span class="tpill"><span class="tdot bg-zinc-800" />14 Days</span>
+          <span class="flex items-center gap-3">
+            <RouterLink to="/tokenstats" class="text-[10px] tracking-[0.15em] uppercase text-zinc-500 hover:text-zinc-900 font-medium transition-colors">详细统计 ⤢</RouterLink>
+            <span class="tpill"><span class="tdot bg-zinc-800" />14 Days</span>
+          </span>
         </div>
 
         <div class="flex-1 flex items-end gap-1.5 pt-5 pb-1 h-36">

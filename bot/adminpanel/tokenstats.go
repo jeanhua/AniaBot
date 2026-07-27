@@ -2,6 +2,7 @@ package adminpanel
 
 import (
 	"net/http"
+	"sort"
 	"time"
 
 	"github.com/jeanhua/AniaBot/bot/component/querylog"
@@ -93,5 +94,181 @@ func (s *Server) handleTokenStats(w http.ResponseWriter, _ *http.Request) {
 		"summary": summary,
 		"today":   today,
 		"daily":   daily,
+	})
+}
+
+// tokenDetailDailyDays 详细统计 daily 序列覆盖的天数（含今天）
+const tokenDetailDailyDays = 30
+
+// tokenTopTargets 详细统计中按目标（群/好友）排行的条目数上限
+const tokenTopTargets = 10
+
+// tokenDayDetail 单日用量（按来源拆分：对话 / 定时任务）。
+type tokenDayDetail struct {
+	Date  string       `json:"date"`
+	Query tokenStatAcc `json:"query"`
+	Task  tokenStatAcc `json:"task"`
+	Total tokenStatAcc `json:"total"`
+}
+
+// tokenTargetStat 按会话目标（群号 / QQ）聚合的用量。
+type tokenTargetStat struct {
+	tokenStatAcc
+	ChatType string `json:"chat_type"` // group / friend
+	TargetID string `json:"target_id"`
+}
+
+// tokenStatSummary tokenStatAcc 的扁平展示结构（供详细统计的拆分维度使用）。
+type tokenStatSummary struct {
+	Requests         int     `json:"requests"`
+	PromptTokens     int     `json:"prompt_tokens"`
+	CompletionTokens int     `json:"completion_tokens"`
+	TotalTokens      int     `json:"total_tokens"`
+	CachedTokens     int     `json:"cached_tokens"`
+	CacheHitRate     float64 `json:"cache_hit_rate"`
+	// 单次请求平均消耗（无请求时为 0）
+	AvgTotalTokens float64 `json:"avg_total_tokens"`
+}
+
+func summarize(a *tokenStatAcc) tokenStatSummary {
+	s := tokenStatSummary{
+		Requests:         a.Requests,
+		PromptTokens:     a.PromptTokens,
+		CompletionTokens: a.CompletionTokens,
+		TotalTokens:      a.TotalTokens,
+		CachedTokens:     a.CachedTokens,
+		CacheHitRate:     a.CacheHitRate,
+	}
+	if a.Requests > 0 {
+		s.AvgTotalTokens = float64(a.TotalTokens) / float64(a.Requests)
+	}
+	return s
+}
+
+// handleTokenStatsDetail 返回更细粒度的 token 统计维度：按来源（对话 / 定时任务）、
+// 会话类型（群聊 / 私聊）、执行状态、消耗目标排行（Top 10）、24 小时分布与
+// 最近 30 天分来源的每日序列。数据源与 handleTokenStats 相同（留存日志，非全量历史）。
+func (s *Server) handleTokenStatsDetail(w http.ResponseWriter, _ *http.Request) {
+	now := time.Now()
+	todayStr := now.Format("2006-01-02")
+
+	// 预建最近 N 天的桶（分来源，含无数据的日期）
+	daily := make([]tokenDayDetail, 0, tokenDetailDailyDays)
+	buckets := make(map[string]*tokenDayDetail, tokenDetailDailyDays)
+	for i := tokenDetailDailyDays - 1; i >= 0; i-- {
+		ds := now.AddDate(0, 0, -i).Format("2006-01-02")
+		daily = append(daily, tokenDayDetail{Date: ds})
+		buckets[ds] = &daily[len(daily)-1]
+	}
+
+	var summary, today, byQuery, byTask, byGroup, byFriend tokenStatAcc
+	hourly := make([]tokenStatAcc, 24)
+	statusCount := map[string]int{}
+	targets := make(map[string]*tokenTargetStat)
+	var iterations int
+
+	addEntry := func(t time.Time, source, chatType, targetID, status string, iters, prompt, completion, total, cached int) {
+		summary.add(prompt, completion, total, cached)
+		lt := t.Local()
+		ds := lt.Format("2006-01-02")
+		if ds == todayStr {
+			today.add(prompt, completion, total, cached)
+		}
+		if b, ok := buckets[ds]; ok {
+			b.Total.add(prompt, completion, total, cached)
+			if source == "task" {
+				b.Task.add(prompt, completion, total, cached)
+			} else {
+				b.Query.add(prompt, completion, total, cached)
+			}
+		}
+		if source == "task" {
+			byTask.add(prompt, completion, total, cached)
+		} else {
+			byQuery.add(prompt, completion, total, cached)
+		}
+		switch chatType {
+		case "group":
+			byGroup.add(prompt, completion, total, cached)
+		case "friend":
+			byFriend.add(prompt, completion, total, cached)
+		}
+		hourly[lt.Hour()].add(prompt, completion, total, cached)
+		if status != "" && status != "running" {
+			// running 中的执行尚未产生最终用量，不计入状态分布
+			statusCount[status]++
+		}
+		iterations += iters
+		if targetID != "" {
+			key := chatType + ":" + targetID
+			ts, ok := targets[key]
+			if !ok {
+				ts = &tokenTargetStat{ChatType: chatType, TargetID: targetID}
+				targets[key] = ts
+			}
+			ts.add(prompt, completion, total, cached)
+		}
+	}
+
+	if s.opt.QueryLogs != nil {
+		for _, e := range s.opt.QueryLogs(querylog.Filter{Limit: 500}) {
+			addEntry(e.Time, "query", e.ChatType, e.TargetID, string(e.Status),
+				e.Iterations, e.PromptTokens, e.CompletionTokens, e.TotalTokens, e.CachedTokens)
+		}
+	}
+	if s.opt.TaskLogs != nil {
+		for _, e := range s.opt.TaskLogs(tasklog.Filter{Limit: 500}) {
+			addEntry(e.TriggerTime, "task", e.TargetType, e.TargetID, string(e.Status),
+				e.Iterations, e.PromptTokens, e.CompletionTokens, e.TotalTokens, e.CachedTokens)
+		}
+	}
+
+	summary.finish()
+	today.finish()
+	byQuery.finish()
+	byTask.finish()
+	byGroup.finish()
+	byFriend.finish()
+	for i := range hourly {
+		hourly[i].finish()
+	}
+	for i := range daily {
+		daily[i].Query.finish()
+		daily[i].Task.finish()
+		daily[i].Total.finish()
+	}
+
+	// 目标排行：按总消耗降序取 Top N
+	type targetView struct {
+		tokenStatSummary
+		ChatType string `json:"chat_type"`
+		TargetID string `json:"target_id"`
+	}
+	ranked := make([]targetView, 0, len(targets))
+	for _, ts := range targets {
+		ts.finish()
+		ranked = append(ranked, targetView{summarize(&ts.tokenStatAcc), ts.ChatType, ts.TargetID})
+	}
+	sort.Slice(ranked, func(i, j int) bool { return ranked[i].TotalTokens > ranked[j].TotalTokens })
+	if len(ranked) > tokenTopTargets {
+		ranked = ranked[:tokenTopTargets]
+	}
+
+	avgIterations := 0.0
+	if summary.Requests > 0 {
+		avgIterations = float64(iterations) / float64(summary.Requests)
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"summary":        summarize(&summary),
+		"today":          summarize(&today),
+		"by_source":      map[string]tokenStatSummary{"query": summarize(&byQuery), "task": summarize(&byTask)},
+		"by_chat_type":   map[string]tokenStatSummary{"group": summarize(&byGroup), "friend": summarize(&byFriend)},
+		"by_status":      statusCount,
+		"top_targets":    ranked,
+		"hourly":         hourly,
+		"daily":          daily,
+		"iterations":     iterations,
+		"avg_iterations": avgIterations,
 	})
 }

@@ -89,6 +89,8 @@ export const api = {
   getClocks: () => request('/api/clocks'),
   // token 消耗监控指标：{ summary, today, daily[] }，含缓存命中率
   getTokenStats: () => request('/api/tokenstats'),
+  // token 多维详细统计：{ summary, today, by_source, by_chat_type, by_status, top_targets[], hourly[], daily[](30天分来源), iterations, avg_iterations }
+  getTokenStatsDetail: () => request('/api/tokenstats/detail'),
   createClock: (task) =>
     request('/api/clocks', { method: 'POST', body: JSON.stringify(task) }),
   updateClock: (id, fields) =>
