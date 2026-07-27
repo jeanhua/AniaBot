@@ -197,3 +197,70 @@ func TestSetGetRoundTrip(t *testing.T) {
 		t.Fatal("multimodal should be true")
 	}
 }
+
+func TestPresetSaveApplyDelete(t *testing.T) {
+	s := newTestStore(t)
+	if err := s.Init(); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Set("plugin.ai_chat_bot.model", "gpt-4o"); err != nil {
+		t.Fatal(err)
+	}
+
+	// 保存预设
+	if err := s.SavePreset("日常"); err != nil {
+		t.Fatal(err)
+	}
+	list := s.PresetList()
+	if len(list) != 1 || list[0].Name != "日常" || list[0].KeyCount == 0 {
+		t.Fatalf("PresetList = %+v", list)
+	}
+	createdAt := list[0].CreatedAt
+
+	// 修改配置后应用预设，应恢复快照值
+	if err := s.Set("plugin.ai_chat_bot.model", "deepseek-v3"); err != nil {
+		t.Fatal(err)
+	}
+	n, err := s.ApplyPreset("日常")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n == 0 {
+		t.Fatal("ApplyPreset 未写入任何键")
+	}
+	if got := s.ToViper().GetString("plugin.ai_chat_bot.model"); got != "gpt-4o" {
+		t.Fatalf("应用预设后 model = %q", got)
+	}
+
+	// 预设数据不泄漏进 All()/ToViper()
+	for k := range s.All() {
+		if k == "preset" || len(k) > 7 && k[:7] == "preset." {
+			t.Fatalf("预设数据泄漏进 All(): %s", k)
+		}
+	}
+
+	// 同名覆盖保留创建时间
+	if err := s.SavePreset("日常"); err != nil {
+		t.Fatal(err)
+	}
+	list = s.PresetList()
+	if len(list) != 1 || !list[0].CreatedAt.Equal(createdAt) {
+		t.Fatalf("覆盖后 CreatedAt 未保留: %+v", list)
+	}
+
+	// 非法名称
+	if err := s.SavePreset("  "); err == nil {
+		t.Fatal("空名称应报错")
+	}
+
+	// 删除
+	if !s.DeletePreset("日常") {
+		t.Fatal("DeletePreset 应返回 true")
+	}
+	if s.DeletePreset("日常") {
+		t.Fatal("删除不存在的预设应返回 false")
+	}
+	if _, err := s.ApplyPreset("日常"); err == nil {
+		t.Fatal("应用不存在的预设应报错")
+	}
+}

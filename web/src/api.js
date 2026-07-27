@@ -58,6 +58,15 @@ export const api = {
   saveConfig: (updates) =>
     request('/api/config', { method: 'PUT', body: JSON.stringify(updates) }),
 
+  // 配置预设：保存当前配置为快照，一键切换
+  getPresets: () => request('/api/config/presets'),
+  savePreset: (name) =>
+    request('/api/config/presets', { method: 'POST', body: JSON.stringify({ name }) }),
+  applyPreset: (name) =>
+    request(`/api/config/presets/${encodeURIComponent(name)}/apply`, { method: 'POST' }),
+  deletePreset: (name) =>
+    request(`/api/config/presets/${encodeURIComponent(name)}`, { method: 'DELETE' }),
+
   getFile: (name) => request(`/api/files/${name}`),
   saveFile: (name, content) =>
     request(`/api/files/${name}`, { method: 'PUT', body: JSON.stringify({ content }) }),

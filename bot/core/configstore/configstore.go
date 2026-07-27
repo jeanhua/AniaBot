@@ -43,9 +43,10 @@ var defaultConfigYAML []byte
 
 // Store 配置中心。并发安全。
 type Store struct {
-	store  storage.PersistentStorage
-	logger *slog.Logger
-	mu     sync.RWMutex
+	store   storage.PersistentStorage
+	presets storage.PersistentStorage // 配置预设（独立命名空间，不进入 All()/ToViper()）
+	logger  *slog.Logger
+	mu      sync.RWMutex
 }
 
 // New 基于根持久化存储创建配置中心（内部 Clone 到 __config 命名空间）。
@@ -53,7 +54,7 @@ func New(root storage.PersistentStorage, logger *slog.Logger) *Store {
 	if logger == nil {
 		logger = slog.Default()
 	}
-	return &Store{store: root.Clone(Namespace), logger: logger}
+	return &Store{store: root.Clone(Namespace), presets: root.Clone(NamespacePresets), logger: logger}
 }
 
 // Init 初始化配置：已完成则直接返回；否则写入默认配置并标记待完成设置向导。
@@ -202,27 +203,7 @@ func (s *Store) Delete(key string) bool {
 func (s *Store) All() map[string]any {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	keys, err := s.store.Keys(context.Background(), "")
-	if err != nil {
-		s.logger.Warn("列出配置键失败", "error", err)
-		return map[string]any{}
-	}
-	out := make(map[string]any, len(keys))
-	for _, k := range keys {
-		if strings.HasPrefix(k, "meta.") {
-			continue
-		}
-		raw, ok := s.store.GetString(context.Background(), k)
-		if !ok {
-			continue
-		}
-		var val any
-		if err := json.Unmarshal([]byte(raw), &val); err != nil {
-			continue
-		}
-		out[k] = val
-	}
-	return out
+	return s.allLocked()
 }
 
 // envPrefix 环境变量覆盖前缀：配置键 bot.admin_panel.listen 对应

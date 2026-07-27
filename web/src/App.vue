@@ -32,7 +32,7 @@
             ? 'bg-white text-zinc-950 font-semibold'
             : 'text-zinc-500 hover:text-zinc-200 hover:bg-white/5'"
         >
-          <span v-html="item.icon" class="shrink-0 [&>svg]:w-[16px] [&>svg]:h-[16px]" />
+          <span v-html="item.icon" class="shrink-0 [&>svg]:w-4 [&>svg]:h-4" />
           {{ item.label }}
           <span v-if="$route.path === item.to" class="ml-auto w-1.5 h-1.5 bg-zinc-950" />
         </RouterLink>
@@ -48,7 +48,7 @@
         <button class="nav-foot" @click="showPwd = true">
           <span v-html="icons.key" class="[&>svg]:w-4 [&>svg]:h-4" /> 修改密码
         </button>
-        <button class="nav-foot hover:!text-red-300" @click="onLogout">
+        <button class="nav-foot hover:text-red-300!" @click="onLogout">
           <span v-html="icons.logout" class="[&>svg]:w-4 [&>svg]:h-4" /> 退出登录
         </button>
       </div>
@@ -88,8 +88,8 @@
         <input v-model="pwdForm.next" type="password" placeholder="新密码（至少 6 位）" required minlength="6" :class="inputClass" />
         <p v-if="pwdForm.msg" class="text-xs" :class="pwdForm.ok ? 'text-emerald-600' : 'text-red-600'">{{ pwdForm.msg }}</p>
         <div class="flex justify-end gap-2 pt-1">
-          <button type="button" class="px-4 py-2 text-[11px] tracking-[0.1em] uppercase text-zinc-500 hover:bg-zinc-100 rounded-md transition-colors" @click="showPwd = false">取消</button>
-          <button type="submit" class="px-4 py-2 text-[11px] tracking-[0.1em] uppercase bg-zinc-900 text-white rounded-md hover:bg-zinc-700 transition-colors">保存</button>
+          <button type="button" class="px-4 py-2 text-[11px] tracking-widest uppercase text-zinc-500 hover:bg-zinc-100 rounded-md transition-colors" @click="showPwd = false">取消</button>
+          <button type="submit" class="px-4 py-2 text-[11px] tracking-widest uppercase bg-zinc-900 text-white rounded-md hover:bg-zinc-700 transition-colors">保存</button>
         </div>
       </form>
     </div>

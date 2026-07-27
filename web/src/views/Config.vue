@@ -48,6 +48,64 @@
         </button>
       </div>
 
+      <!-- 配置预设 -->
+      <section class="bg-white rounded-xl shadow-sm border border-slate-200/60 overflow-hidden">
+        <h2 class="px-6 py-4 text-sm font-semibold text-slate-800 border-b border-slate-100 flex items-center gap-2.5">
+          <span class="w-7 h-7 rounded-lg flex items-center justify-center text-white text-xs bg-zinc-700 [&>svg]:w-4 [&>svg]:h-4" v-html="iconBookmark" />
+          配置预设
+          <span class="text-xs font-normal text-slate-400">{{ presets.length }} 个</span>
+        </h2>
+        <div class="p-6 space-y-4">
+          <p class="text-xs text-slate-500">把当前全部配置（含密钥、MCP / Prompt 覆盖）保存为一份快照，之后可一键切换。应用预设后重启生效。</p>
+
+          <div class="flex gap-2">
+            <input
+              v-model="presetName"
+              type="text"
+              placeholder="预设名称，如：DeepSeek 日常"
+              class="flex-1 border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-400 focus:border-zinc-400 transition-shadow"
+              @keyup.enter="onSavePreset()"
+            />
+            <button
+              :disabled="presetSaving || !presetName.trim()"
+              class="px-4 py-2 text-sm rounded-lg bg-zinc-900 text-white hover:bg-zinc-800 disabled:opacity-40 transition-colors shrink-0"
+              @click="onSavePreset()"
+            >
+              {{ presetSaving ? '保存中...' : '保存当前配置' }}
+            </button>
+          </div>
+
+          <p v-if="presets.length === 0" class="text-sm text-slate-400">还没有预设。调整好配置后，在上方输入名称即可保存。</p>
+          <ul v-else class="divide-y divide-slate-100 border border-slate-200/70 rounded-lg">
+            <li v-for="p in presets" :key="p.name" class="flex items-center gap-3 px-4 py-3">
+              <div class="min-w-0 flex-1">
+                <p class="text-sm font-medium text-slate-800 truncate">{{ p.name }}</p>
+                <p class="text-xs text-slate-400 mt-0.5">{{ p.key_count }} 项配置 · 更新于 {{ formatPresetTime(p.updated_at) }}</p>
+              </div>
+              <button
+                class="px-3 py-1.5 text-xs rounded-lg bg-zinc-900 text-white hover:bg-zinc-800 transition-colors shrink-0"
+                @click="onApplyPreset(p)"
+              >
+                应用
+              </button>
+              <button
+                class="px-3 py-1.5 text-xs rounded-lg border border-slate-300 text-slate-600 hover:bg-slate-50 transition-colors shrink-0"
+                title="用当前配置覆盖该预设"
+                @click="onSavePreset(p.name)"
+              >
+                更新
+              </button>
+              <button
+                class="px-3 py-1.5 text-xs rounded-lg border border-slate-300 text-slate-500 hover:text-red-600 hover:border-red-300 transition-colors shrink-0"
+                @click="onDeletePreset(p)"
+              >
+                删除
+              </button>
+            </li>
+          </ul>
+        </div>
+      </section>
+
       <!-- 表单模式 -->
       <template v-if="!rawMode">
         <section
@@ -150,6 +208,7 @@ const iconCheck = '<svg fill="none" viewBox="0 0 24 24" stroke-width="2" stroke=
 const iconSpark = '<svg fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M9.813 15.904 9 18.75l-.813-2.846a4.5 4.5 0 0 0-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 0 0 3.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 0 0 3.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 0 0-3.09 3.09ZM18.259 8.715 18 9.75l-.259-1.035a3.375 3.375 0 0 0-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 0 0 2.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 0 0 2.456 2.456L21.75 6l-1.035.259a3.375 3.375 0 0 0-2.456 2.456Z"/></svg>'
 const iconPuzzle = '<svg fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M14.25 6.087c0-.355.186-.676.401-.959.221-.29.349-.634.349-1.003 0-1.036-1.007-1.875-2.25-1.875s-2.25.84-2.25 1.875c0 .369.128.713.349 1.003.215.283.401.604.401.959v.431c0 .46-.335.84-.782.927a7.59 7.59 0 0 1-1.181.093h-.77c-.254 0-.487.09-.668.24-.297.246-.451.619-.371 1.014.073.361.026.74-.145 1.086-.199.402-.576.65-1.007.65H7.5c-.621 0-1.125.504-1.125 1.125v.77c0 .418.314.82.77 1.118.198.13.37.305.48.515.16.308.165.674.014.97-.168.333-.502.521-.864.521H4.875A1.875 1.875 0 0 1 3 14.25v-1.77c0-.358-.215-.68-.543-.822A1.87 1.87 0 0 0 1.875 9.75c0-1.243 1.007-2.25 2.25-2.25.369 0 .713.128 1.003.349.283.215.604.401.959.401h.413"/></svg>'
 const iconCube = '<svg fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="m21 7.5-9-5.25L3 7.5m18 0-9 5.25m9-5.25v9l-9 5.25M3 7.5l9 5.25M3 7.5v9l9 5.25m0-9v9"/></svg>'
+const iconBookmark = '<svg fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M17.593 3.322c1.1.128 1.907 1.077 1.907 2.185V21L12 17.25 4.5 21V5.507c0-1.108.806-2.057 1.907-2.185a48.507 48.507 0 0 1 11.186 0Z"/></svg>'
 
 const schema = ref([])
 const values = ref({})
@@ -162,6 +221,9 @@ const rawText = ref('')
 const rawError = ref('')
 const search = ref('')
 const activeGroup = ref('')
+const presets = ref([])
+const presetName = ref('')
+const presetSaving = ref(false)
 
 const groups = computed(() => {
   const map = new Map()
@@ -271,9 +333,19 @@ function resetForm() {
   for (const f of schema.value) form[f.key] = original[f.key]
 }
 
+async function reloadValues() {
+  values.value = await api.getConfig()
+  for (const f of schema.value) {
+    form[f.key] = toFormValue(f)
+    original[f.key] = form[f.key]
+  }
+  rawText.value = JSON.stringify(values.value, null, 2)
+}
+
 onMounted(async () => {
-  const [s, v] = await Promise.all([api.getSchema(), api.getConfig()])
+  const [s, v, p] = await Promise.all([api.getSchema(), api.getConfig(), api.getPresets()])
   schema.value = s
+  presets.value = p
   values.value = v
   for (const f of s) {
     form[f.key] = toFormValue(f)
@@ -296,12 +368,7 @@ async function onSave() {
     await api.saveConfig(updates)
     saved.value = true
     // 重新加载，同步掩码与原始值
-    values.value = await api.getConfig()
-    for (const f of schema.value) {
-      form[f.key] = toFormValue(f)
-      original[f.key] = form[f.key]
-    }
-    rawText.value = JSON.stringify(values.value, null, 2)
+    await reloadValues()
   } catch (e) {
     alert(e.message)
   } finally {
@@ -331,15 +398,63 @@ async function onSaveRaw() {
   try {
     await api.saveConfig(parsed)
     saved.value = true
-    values.value = await api.getConfig()
-    for (const f of schema.value) {
-      form[f.key] = toFormValue(f)
-      original[f.key] = form[f.key]
-    }
+    await reloadValues()
   } catch (e) {
     rawError.value = e.message
   } finally {
     saving.value = false
+  }
+}
+
+// ---- 配置预设 ----
+
+function formatPresetTime(iso) {
+  if (!iso) return ''
+  const d = new Date(iso)
+  return Number.isNaN(d.getTime()) ? '' : d.toLocaleString()
+}
+
+async function refreshPresets() {
+  presets.value = await api.getPresets()
+}
+
+// name 为空时保存输入框中的新预设，否则用当前配置覆盖同名预设
+async function onSavePreset(name) {
+  const target = (name || presetName.value).trim()
+  if (!target) return
+  if (name && !confirm(`用当前配置覆盖预设「${target}」？`)) return
+  if (dirty.value && !confirm('当前有未保存的修改，预设保存的是数据库中已保存的配置（不含未保存的修改）。继续？')) return
+  presetSaving.value = true
+  try {
+    await api.savePreset(target)
+    presetName.value = ''
+    await refreshPresets()
+  } catch (e) {
+    alert(e.message)
+  } finally {
+    presetSaving.value = false
+  }
+}
+
+async function onApplyPreset(p) {
+  if (dirty.value && !confirm(`当前有未保存的修改，应用预设「${p.name}」将重新加载配置，未保存的修改会丢失。继续？`)) return
+  else if (!dirty.value && !confirm(`应用预设「${p.name}」？快照中的配置项将覆盖当前配置（含密钥），重启 Bot 后生效。`)) return
+  try {
+    await api.applyPreset(p.name)
+    saved.value = true
+    await reloadValues()
+  } catch (e) {
+    alert(e.message)
+  }
+}
+
+async function onDeletePreset(p) {
+  if (!confirm(`删除预设「${p.name}」？只删除快照，不影响当前配置。`)) return
+  try {
+    await api.deletePreset(p.name)
+    await refreshPresets()
+  } catch (e) {
+    alert(e.message)
   }
 }
 </script>
