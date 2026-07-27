@@ -70,7 +70,8 @@ type Entry struct {
 	PromptTokens     int              `json:"prompt_tokens,omitempty"`
 	CompletionTokens int              `json:"completion_tokens,omitempty"`
 	TotalTokens      int              `json:"total_tokens,omitempty"`
-	Reply            string           `json:"reply,omitempty"` // 最终回复（截断）
+	CachedTokens     int              `json:"cached_tokens,omitempty"` // 命中上游 prompt 缓存的 token 数（提供方支持时才有）
+	Reply            string           `json:"reply,omitempty"`         // 最终回复（截断）
 	Error            string           `json:"error,omitempty"`
 }
 

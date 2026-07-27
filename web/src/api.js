@@ -87,6 +87,8 @@ export const api = {
     return request(`/api/querylogs${s ? '?' + s : ''}`)
   },
   getClocks: () => request('/api/clocks'),
+  // token 消耗监控指标：{ summary, today, daily[] }，含缓存命中率
+  getTokenStats: () => request('/api/tokenstats'),
   createClock: (task) =>
     request('/api/clocks', { method: 'POST', body: JSON.stringify(task) }),
   updateClock: (id, fields) =>

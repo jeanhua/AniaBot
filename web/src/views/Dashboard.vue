@@ -197,6 +197,71 @@
       </section>
     </div>
 
+    <!-- TOKEN USAGE -->
+    <div class="grid grid-cols-1 xl:grid-cols-12 gap-4">
+      <!-- TOTALS -->
+      <section class="tcard xl:col-span-4 p-6 flex flex-col">
+        <div class="flex items-center justify-between">
+          <span class="tlabel">Token Usage</span>
+          <span class="tpill">
+            <span class="tdot" :class="tokenSummary.cache_hit_rate > 0 ? 'bg-emerald-500' : 'bg-zinc-300'" />
+            Cache Hit {{ cacheHitText }}
+          </span>
+        </div>
+
+        <div class="flex-1 py-5">
+          <div class="text-4xl font-semibold tracking-tight text-zinc-900">{{ fmtTokens(tokenSummary.total_tokens) }}</div>
+          <div class="tlabel mt-2">Total tokens · {{ tokenSummary.requests ?? 0 }} runs</div>
+        </div>
+
+        <dl class="text-xs">
+          <div class="tokenrow">
+            <dt class="tlabel">Today</dt>
+            <dd class="tokenval">{{ fmtTokens(tokenToday.total_tokens) }} <span class="text-zinc-400 font-normal">/ {{ tokenToday.requests ?? 0 }} runs</span></dd>
+          </div>
+          <div class="tokenrow">
+            <dt class="tlabel">Prompt / Completion</dt>
+            <dd class="tokenval">{{ fmtTokens(tokenSummary.prompt_tokens) }} / {{ fmtTokens(tokenSummary.completion_tokens) }}</dd>
+          </div>
+          <div class="tokenrow">
+            <dt class="tlabel">Cached</dt>
+            <dd class="tokenval">{{ fmtTokens(tokenSummary.cached_tokens) }} <span class="text-zinc-400 font-normal">hit {{ cacheHitText }}</span></dd>
+          </div>
+        </dl>
+      </section>
+
+      <!-- DAILY -->
+      <section class="tcard xl:col-span-8 p-6 flex flex-col">
+        <div class="flex items-center justify-between">
+          <span class="tlabel">Daily Tokens</span>
+          <span class="tpill"><span class="tdot bg-zinc-800" />14 Days</span>
+        </div>
+
+        <div class="flex-1 flex items-end gap-1.5 pt-5 pb-1 h-36">
+          <div v-for="d in tokenDaily" :key="d.date" class="flex-1 flex flex-col justify-end h-full" :title="dayTip(d)">
+            <div class="w-full bg-zinc-300 rounded-t-sm" :style="{ height: barH(d.completion_tokens) }" />
+            <div class="w-full bg-zinc-700" :style="{ height: barH((d.prompt_tokens || 0) - (d.cached_tokens || 0)) }" />
+            <div class="w-full bg-zinc-400" :style="{ height: barH(d.cached_tokens) }" />
+          </div>
+        </div>
+        <div class="flex items-center justify-between mt-2 text-[10px] tracking-[0.12em] uppercase text-zinc-400">
+          <span>{{ tokenDaily[0]?.date?.slice(5) || '—' }}</span>
+          <span class="flex items-center gap-3">
+            <span class="flex items-center gap-1"><i class="w-2 h-2 bg-zinc-700 inline-block rounded-[1px]" />Prompt</span>
+            <span class="flex items-center gap-1"><i class="w-2 h-2 bg-zinc-300 inline-block rounded-[1px]" />Completion</span>
+            <span class="flex items-center gap-1"><i class="w-2 h-2 bg-zinc-400 inline-block rounded-[1px]" />Cached</span>
+          </span>
+          <span>{{ tokenDaily[tokenDaily.length - 1]?.date?.slice(5) || '—' }}</span>
+        </div>
+        <div class="dotline my-3" />
+        <div class="text-[10px] tracking-[0.14em] uppercase text-zinc-500 truncate">
+          Source: query &amp; cron logs (retained)
+          <span class="mx-2 text-zinc-300">//</span>
+          Cache metrics depend on upstream API
+        </div>
+      </section>
+    </div>
+
     <!-- 插件列表 -->
     <section class="tcard overflow-hidden">
       <div class="px-6 py-4 flex items-center justify-between border-b border-zinc-100">
@@ -400,6 +465,7 @@ const status = ref({})
 const host = ref({})
 const plugins = ref([])
 const clocks = ref([])
+const tokenStats = ref({ summary: {}, today: {}, daily: [] })
 const toggling = ref(new Set())
 const expanded = ref(new Set())
 const now = ref(new Date())
@@ -454,6 +520,36 @@ const adapterText = computed(() => ({
 }[status.value.adapter_status] || status.value.adapter_status || '—'))
 
 const armedCount = computed(() => clocks.value.filter(t => t.enabled).length)
+
+// ---- token 消耗监控 ----
+
+const tokenSummary = computed(() => tokenStats.value.summary || {})
+const tokenToday = computed(() => tokenStats.value.today || {})
+const tokenDaily = computed(() => tokenStats.value.daily || [])
+
+const cacheHitText = computed(() => {
+  const r = tokenSummary.value.cache_hit_rate
+  return r != null ? (r * 100).toFixed(1) + '%' : '—'
+})
+
+const tokenDayMax = computed(() => Math.max(0, ...tokenDaily.value.map(d => d.total_tokens || 0)))
+
+// 柱状图分段高度（相对 14 天最大值的百分比）
+function barH(v) {
+  if (!tokenDayMax.value || !v || v <= 0) return '0%'
+  return ((v / tokenDayMax.value) * 100).toFixed(1) + '%'
+}
+
+function fmtTokens(n) {
+  if (n == null || !isFinite(n) || n <= 0) return '0'
+  if (n >= 1e6) return (n / 1e6).toFixed(2) + 'M'
+  if (n >= 1e3) return (n / 1e3).toFixed(1) + 'k'
+  return String(n)
+}
+
+function dayTip(d) {
+  return `${d.date} · ${d.total_tokens} tok (prompt ${d.prompt_tokens} / completion ${d.completion_tokens} / cached ${d.cached_tokens}) · ${d.requests} runs`
+}
 
 // ---- 主机监控 ----
 
@@ -535,6 +631,10 @@ async function loadHost() {
 
 async function loadClocks() {
   try { clocks.value = await api.getClocks() } catch { /* 忽略 */ }
+}
+
+async function loadTokenStats() {
+  try { tokenStats.value = await api.getTokenStats() } catch { /* 忽略轮询错误 */ }
 }
 
 function toggleExpand(id) {
@@ -663,6 +763,7 @@ function poll() {
   loadStatus()
   loadHost()
   loadClocks()
+  loadTokenStats()
 }
 
 function onVisible() {
@@ -695,6 +796,22 @@ onUnmounted(() => {
 }
 .hostrow:last-child {
   border-bottom: 0;
+}
+.tokenrow {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.5rem 0;
+  border-bottom: 1px dotted rgb(212 212 216);
+}
+.tokenrow:last-child {
+  border-bottom: 0;
+}
+.tokenval {
+  color: rgb(39 39 42);
+  font-weight: 500;
+  white-space: nowrap;
 }
 .hostval {
   color: rgb(39 39 42);

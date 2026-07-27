@@ -61,6 +61,10 @@ type TokenUsage struct {
 	PromptTokens     int
 	CompletionTokens int
 	TotalTokens      int
+	// CachedTokens 命中上游 prompt 缓存的 token 数（DeepSeek prompt_cache_hit_tokens /
+	// OpenAI prompt_tokens_details.cached_tokens），是多轮工具调用的累加值。
+	// 提供方不返回缓存字段时为 0
+	CachedTokens int
 	// LastPromptTokens 本次请求最后一次 LLM 调用的 prompt token 数，
 	// 即当前上下文的真实大小。PromptTokens 是多轮工具调用的累加值，
 	// 会远超单次上下文，仅适合计费统计，不能用于压缩判断
@@ -103,6 +107,7 @@ func (o *ToolOrchestrator) ExecuteWithTools(
 		totalUsage.PromptTokens += usage.PromptTokens
 		totalUsage.CompletionTokens += usage.CompletionTokens
 		totalUsage.TotalTokens += usage.TotalTokens
+		totalUsage.CachedTokens += usage.CachedTokens
 		totalUsage.LastPromptTokens = usage.PromptTokens
 		totalUsage.Iterations++
 
@@ -142,6 +147,7 @@ func (o *ToolOrchestrator) ExecuteWithTools(
 			totalUsage.PromptTokens += finalUsage.PromptTokens
 			totalUsage.CompletionTokens += finalUsage.CompletionTokens
 			totalUsage.TotalTokens += finalUsage.TotalTokens
+			totalUsage.CachedTokens += finalUsage.CachedTokens
 			totalUsage.LastPromptTokens = finalUsage.PromptTokens
 			totalUsage.Iterations++
 			finalContent := finalResp.Content

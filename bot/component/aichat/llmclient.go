@@ -253,6 +253,25 @@ func (c *LLMClient) parseResponse(completion *openai.ChatCompletion) (GenerateRe
 	if completion.Usage.TotalTokens > 0 {
 		usage.TotalTokens = int(completion.Usage.TotalTokens)
 	}
+	usage.CachedTokens = extractCachedTokens(&completion.Usage)
 
 	return resp, usage
+}
+
+// extractCachedTokens 提取命中 prompt 缓存的 token 数。优先取 OpenAI 标准字段
+// prompt_tokens_details.cached_tokens；DeepSeek 等提供方返回的是扩展字段
+// prompt_cache_hit_tokens，SDK 未建模，需从原始 JSON 兜底解析。均无时返回 0。
+func extractCachedTokens(usage *openai.CompletionUsage) int {
+	if usage.PromptTokensDetails.CachedTokens > 0 {
+		return int(usage.PromptTokensDetails.CachedTokens)
+	}
+	if raw := usage.RawJSON(); raw != "" {
+		var rawMap map[string]any
+		if err := json.Unmarshal([]byte(raw), &rawMap); err == nil {
+			if hit, ok := rawMap["prompt_cache_hit_tokens"].(float64); ok && hit > 0 {
+				return int(hit)
+			}
+		}
+	}
+	return 0
 }

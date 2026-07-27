@@ -531,6 +531,7 @@ func (m *clockManager) runTask(task *ClockTask) {
 				e.PromptTokens = usage.PromptTokens
 				e.CompletionTokens = usage.CompletionTokens
 				e.TotalTokens = usage.TotalTokens
+				e.CachedTokens = usage.CachedTokens
 				e.FinishedAt = time.Now()
 			})
 			finished = true
@@ -548,6 +549,7 @@ func (m *clockManager) runTask(task *ClockTask) {
 			e.PromptTokens = usage.PromptTokens
 			e.CompletionTokens = usage.CompletionTokens
 			e.TotalTokens = usage.TotalTokens
+			e.CachedTokens = usage.CachedTokens
 			e.FinishedAt = time.Now()
 		})
 		finished = true

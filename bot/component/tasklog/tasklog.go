@@ -45,6 +45,7 @@ type Entry struct {
 	PromptTokens     int       `json:"prompt_tokens,omitempty"`
 	CompletionTokens int       `json:"completion_tokens,omitempty"`
 	TotalTokens      int       `json:"total_tokens,omitempty"`
+	CachedTokens     int       `json:"cached_tokens,omitempty"` // 命中上游 prompt 缓存的 token 数（提供方支持时才有）
 	FinishedAt       time.Time `json:"finished_at,omitempty"`
 }
 

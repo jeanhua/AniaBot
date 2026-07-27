@@ -117,6 +117,7 @@ func (p *AIChatPlugin) finishQuery(r *queryRecorder, chat *aichat.ChatBot, usage
 		e.PromptTokens = usage.PromptTokens
 		e.CompletionTokens = usage.CompletionTokens
 		e.TotalTokens = usage.TotalTokens
+		e.CachedTokens = usage.CachedTokens
 		e.ToolCalls = toolCalls
 		e.ToolCallsTotal = r.toolCallsTotal
 		e.Reply = querylog.Truncate(reply, querylog.MaxReplyRunes)
