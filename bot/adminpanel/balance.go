@@ -1,10 +1,12 @@
 // balance.go —— API 余额查询。
 //
-// 面板概览页展示 AI API 余额。余额接口各厂商差异巨大，因此请求方式由用户在
-// 面板配置中自定义一段 JS（bot.balance.js），后端用 goja 执行：脚本内通过
-// 全局 cfg（AI 对话插件的 base_url/api_key/model）与同步 fetch() 发起请求，
-// 最后一条表达式的值作为余额显示。结果按 bot.balance.cache_sec 缓存，
-// 避免面板轮询频繁打余额接口。配置即时读取（configstore 直查 DB），修改无需重启。
+// 面板概览页展示 AI API 余额。余额接口各厂商差异较大，但绝大多数都是
+// 「带鉴权头请求一个地址，从 JSON 响应里取一个字段」，因此请求方式由面板
+// 配置项以声明式描述（bot.balance.*）：地址/请求头/请求体支持
+// ${base_url} ${api_key} ${model} 占位符（取自 AI 对话插件的 API 配置），
+// 显示模板中的 {gjson 路径} 会被替换为响应 JSON 中对应字段的值。
+// 结果按 bot.balance.cache_sec 缓存，避免面板轮询频繁打余额接口。
+// 配置即时读取（configstore 直查 DB），修改无需重启。
 package adminpanel
 
 import (
@@ -12,39 +14,30 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
 
-	"github.com/dop251/goja"
+	"github.com/tidwall/gjson"
 )
 
-// DefaultBalanceJS 默认的余额查询脚本（适配 DeepSeek 风格 /user/balance 接口，
-// 也是配置项 bot.balance.js 的默认值；core 包注册配置字段时引用）。
-const DefaultBalanceJS = `// 可用全局变量：
-//   cfg.base_url / cfg.api_key / cfg.model —— AI 对话插件的 API 配置
-//   fetch(url, { method, headers, body }) —— 同步 HTTP 请求，返回 { status, body, json() }
-//   console.log(...) —— 输出到 Bot 日志
-// 最后一条表达式的值会作为余额显示（数字 / 字符串 / 对象均可）
-const resp = fetch(cfg.base_url.replace(/\/+$/, '') + '/user/balance', {
-  headers: { Authorization: 'Bearer ' + cfg.api_key },
-})
-if (resp.status !== 200) throw new Error('HTTP ' + resp.status + ': ' + resp.body.slice(0, 200))
-const data = resp.json()
-const list = (data.data && data.data.balances) || []
-const b = list.length ? list[0] : {}
-const cur = b.currency === 'CNY' ? '¥' : (b.currency || '')
-cur + ' ' + (b.total_balance != null ? b.total_balance : '?')
-`
+// 余额查询的默认配置（适配 DeepSeek 风格 /user/balance 接口，
+// 也是 bot.balance.url / headers / format 配置项的默认值；core 包注册配置字段时引用）。
+const (
+	DefaultBalanceURL     = "${base_url}/user/balance"
+	DefaultBalanceHeaders = `{"Authorization":"Bearer ${api_key}"}`
+	DefaultBalanceFormat  = `¥ {data.balances.0.total_balance}`
+)
 
-// balanceExecTimeout JS 脚本整体执行超时（含脚本内所有 HTTP 请求）
-const balanceExecTimeout = 30 * time.Second
-
-// balanceHTTPTimeout 脚本内单次 fetch 的 HTTP 超时
+// balanceHTTPTimeout 单次余额请求的 HTTP 超时
 const balanceHTTPTimeout = 15 * time.Second
 
-// balanceMaxBody 单次 fetch 响应体大小上限
+// balanceMaxBody 余额接口响应体大小上限
 const balanceMaxBody = 4 << 20 // 4 MiB
+
+// balanceFormatFieldRe 匹配显示模板中的 {gjson 路径} 占位符
+var balanceFormatFieldRe = regexp.MustCompile(`\{([^{}]+)\}`)
 
 // BalanceResult 余额查询结果（GET /api/balance 的响应体）。
 type BalanceResult struct {
@@ -78,7 +71,7 @@ func (s *Server) handleBalance(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, s.queryBalance(force))
 }
 
-// queryBalance 读配置并执行余额查询脚本，带缓存；脚本/请求错误不返回 HTTP 错误，
+// queryBalance 读配置并执行余额查询，带缓存；请求错误不返回 HTTP 错误，
 // 而是放进结果体的 error 字段由前端展示。
 func (s *Server) queryBalance(force bool) BalanceResult {
 	enabled, _ := s.opt.Config.Get("bot.balance.enable")
@@ -96,12 +89,7 @@ func (s *Server) queryBalance(force bool) BalanceResult {
 	}
 
 	res := BalanceResult{Enabled: true, UpdatedAt: time.Now().Format(time.RFC3339), TTL: int(ttl.Seconds())}
-	script, _ := s.opt.Config.Get("bot.balance.js")
-	code, _ := script.(string)
-	if strings.TrimSpace(code) == "" {
-		code = DefaultBalanceJS
-	}
-	value, err := s.runBalanceScript(code)
+	value, err := s.runBalanceQuery()
 	if err != nil {
 		s.opt.Logger.Warn("API 余额查询失败", "error", err)
 		res.Error = err.Error()
@@ -117,131 +105,103 @@ func (s *Server) queryBalance(force bool) BalanceResult {
 	return res
 }
 
-// runBalanceScript 用 goja 执行用户脚本，注入 cfg / fetch / console，返回最后一条
-// 表达式的显示文本。超时通过 vm.Interrupt 强制中断。
-func (s *Server) runBalanceScript(code string) (string, error) {
-	vm := goja.New()
-	timer := time.AfterFunc(balanceExecTimeout, func() { vm.Interrupt("余额查询脚本执行超时") })
-	defer timer.Stop()
+// runBalanceQuery 按 bot.balance.* 声明式配置发起 HTTP 请求并渲染余额显示文本。
+func (s *Server) runBalanceQuery() (string, error) {
+	// 占位符取自 AI 对话插件的 API 配置
+	ph := strings.NewReplacer(
+		"${base_url}", strings.TrimRight(configString(s.opt.Config, "plugin.ai_chat_bot.base_url"), "/"),
+		"${api_key}", configString(s.opt.Config, "plugin.ai_chat_bot.api_key"),
+		"${model}", configString(s.opt.Config, "plugin.ai_chat_bot.model"),
+	)
 
-	cfg := map[string]string{
-		"base_url": configString(s.opt.Config, "plugin.ai_chat_bot.base_url"),
-		"api_key":  configString(s.opt.Config, "plugin.ai_chat_bot.api_key"),
-		"model":    configString(s.opt.Config, "plugin.ai_chat_bot.model"),
+	url := ph.Replace(s.balanceConfigString("bot.balance.url", DefaultBalanceURL))
+	if url == "" {
+		return "", fmt.Errorf("请求地址为空（检查 bot.balance.url 与 plugin.ai_chat_bot.base_url）")
 	}
-	if err := vm.Set("cfg", cfg); err != nil {
-		return "", err
-	}
-	if err := vm.Set("fetch", s.makeBalanceFetch(vm)); err != nil {
-		return "", err
-	}
-	console := vm.NewObject()
-	_ = console.Set("log", func(args ...any) {
-		s.opt.Logger.Info("余额查询脚本", "console", fmt.Sprint(args...))
-	})
-	if err := vm.Set("console", console); err != nil {
-		return "", err
+	method := strings.ToUpper(s.balanceConfigString("bot.balance.method", http.MethodGet))
+
+	var body io.Reader
+	if b := ph.Replace(configString(s.opt.Config, "bot.balance.body")); strings.TrimSpace(b) != "" {
+		body = strings.NewReader(b)
 	}
 
-	v, err := vm.RunString(code)
+	req, err := http.NewRequest(method, url, body)
 	if err != nil {
-		return "", fmt.Errorf("脚本执行失败: %w", err)
+		return "", fmt.Errorf("构造请求失败: %w", err)
 	}
-	return balanceDisplay(v.Export())
-}
-
-// balanceDisplay 把脚本返回值转成显示文本：数字去尾零、对象 JSON 化。
-func balanceDisplay(v any) (string, error) {
-	switch t := v.(type) {
-	case nil:
-		return "", fmt.Errorf("脚本没有返回值（最后一条表达式的值作为余额显示）")
-	case string:
-		if strings.TrimSpace(t) == "" {
-			return "", fmt.Errorf("脚本返回了空字符串")
-		}
-		return t, nil
-	case float64:
-		return strings.TrimRight(strings.TrimRight(fmt.Sprintf("%.4f", t), "0"), "."), nil
-	case int64:
-		return fmt.Sprintf("%d", t), nil
-	case bool:
-		return fmt.Sprintf("%v", t), nil
-	default:
-		data, err := json.Marshal(t)
-		if err != nil {
-			return "", fmt.Errorf("脚本返回值无法显示: %w", err)
-		}
-		return string(data), nil
-	}
-}
-
-// makeBalanceFetch 构造注入脚本的同步 fetch(url, options)：
-// options 支持 method（默认 GET）、headers（对象）、body（字符串）；
-// 返回 { status, headers, body, json() }。
-func (s *Server) makeBalanceFetch(vm *goja.Runtime) func(goja.FunctionCall) goja.Value {
-	client := &http.Client{Timeout: balanceHTTPTimeout}
-	return func(call goja.FunctionCall) goja.Value {
-		url := call.Argument(0).String()
-		if url == "" || url == "undefined" {
-			panic(vm.NewTypeError("fetch: 缺少 url 参数"))
-		}
-		method := http.MethodGet
-		headers := map[string]string{}
-		var body io.Reader
-		defined := func(v goja.Value) bool { return v != nil && !goja.IsUndefined(v) && !goja.IsNull(v) }
-		if opt := call.Argument(1); defined(opt) {
-			obj := opt.ToObject(vm)
-			if m := obj.Get("method"); defined(m) {
-				method = strings.ToUpper(m.String())
-			}
-			if h := obj.Get("headers"); defined(h) {
-				if exported := h.Export(); exported != nil {
-					if m, ok := exported.(map[string]any); ok {
-						for k, v := range m {
-							headers[k] = fmt.Sprint(v)
-						}
-					}
-				}
-			}
-			if b := obj.Get("body"); defined(b) {
-				body = strings.NewReader(b.String())
-			}
-		}
-
-		req, err := http.NewRequest(method, url, body)
-		if err != nil {
-			panic(vm.NewGoError(fmt.Errorf("fetch: 构造请求失败: %w", err)))
+	if raw := s.balanceConfigString("bot.balance.headers", DefaultBalanceHeaders); strings.TrimSpace(raw) != "" {
+		var headers map[string]any
+		if err := json.Unmarshal([]byte(raw), &headers); err != nil {
+			return "", fmt.Errorf("请求头不是合法 JSON 对象: %w", err)
 		}
 		for k, v := range headers {
-			req.Header.Set(k, v)
+			req.Header.Set(k, ph.Replace(fmt.Sprint(v)))
 		}
-		if body != nil && req.Header.Get("Content-Type") == "" {
-			req.Header.Set("Content-Type", "application/json")
-		}
-		resp, err := client.Do(req)
-		if err != nil {
-			panic(vm.NewGoError(fmt.Errorf("fetch: 请求失败: %w", err)))
-		}
-		defer resp.Body.Close()
-		data, err := io.ReadAll(io.LimitReader(resp.Body, balanceMaxBody))
-		if err != nil {
-			panic(vm.NewGoError(fmt.Errorf("fetch: 读取响应失败: %w", err)))
-		}
-		bodyStr := string(data)
-
-		out := vm.NewObject()
-		_ = out.Set("status", resp.StatusCode)
-		_ = out.Set("body", bodyStr)
-		_ = out.Set("headers", resp.Header)
-		_ = out.Set("json", func() (any, error) {
-			var v any
-			if err := json.Unmarshal([]byte(bodyStr), &v); err != nil {
-				return nil, fmt.Errorf("fetch: 响应不是合法 JSON: %w", err)
-			}
-			return v, nil
-		})
-		return out
 	}
+	if body != nil && req.Header.Get("Content-Type") == "" {
+		req.Header.Set("Content-Type", "application/json")
+	}
+
+	client := &http.Client{Timeout: balanceHTTPTimeout}
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("请求失败: %w", err)
+	}
+	defer resp.Body.Close()
+	data, err := io.ReadAll(io.LimitReader(resp.Body, balanceMaxBody))
+	if err != nil {
+		return "", fmt.Errorf("读取响应失败: %w", err)
+	}
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return "", fmt.Errorf("HTTP %d: %s", resp.StatusCode, truncate(string(data), 200))
+	}
+	if !gjson.ValidBytes(data) {
+		return "", fmt.Errorf("响应不是合法 JSON: %s", truncate(string(data), 200))
+	}
+
+	format := s.balanceConfigString("bot.balance.format", DefaultBalanceFormat)
+	return renderBalanceFormat(format, data)
+}
+
+// renderBalanceFormat 渲染余额显示模板：{gjson 路径} 替换为响应 JSON 中对应字段的值
+// （数字保留原始字面量，字符串不带引号）。任一路径不存在即报错，便于排查配置。
+func renderBalanceFormat(format string, body []byte) (string, error) {
+	var missing []string
+	out := balanceFormatFieldRe.ReplaceAllStringFunc(format, func(m string) string {
+		path := strings.TrimSpace(m[1 : len(m)-1])
+		r := gjson.GetBytes(body, path)
+		if !r.Exists() {
+			missing = append(missing, path)
+			return ""
+		}
+		if r.Type == gjson.Number && r.Raw != "" {
+			return r.Raw // 数字保留原始字面量（42.50 不变成 42.5）
+		}
+		return r.String()
+	})
+	if len(missing) > 0 {
+		return "", fmt.Errorf("响应 JSON 中不存在路径: %s", strings.Join(missing, ", "))
+	}
+	if strings.TrimSpace(out) == "" {
+		return "", fmt.Errorf("余额显示为空（检查 bot.balance.format）")
+	}
+	return out, nil
+}
+
+// balanceConfigString 读余额相关字符串配置，空值时回退到默认值。
+func (s *Server) balanceConfigString(key, def string) string {
+	if v := configString(s.opt.Config, key); strings.TrimSpace(v) != "" {
+		return v
+	}
+	return def
+}
+
+// truncate 截断字符串到 n 个字节，用于错误信息中附带响应片段。
+func truncate(s string, n int) string {
+	if len(s) > n {
+		return s[:n] + "..."
+	}
+	return s
 }
 
 // configString 从配置中心读字符串配置（缺失返回空串）。

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -119,7 +120,7 @@ func fakeBalanceAPI(t *testing.T) *httptest.Server {
 	}))
 }
 
-func TestRunBalanceScript(t *testing.T) {
+func TestRunBalanceQuery(t *testing.T) {
 	api := fakeBalanceAPI(t)
 	defer api.Close()
 
@@ -127,58 +128,109 @@ func TestRunBalanceScript(t *testing.T) {
 	_ = s.opt.Config.Set("plugin.ai_chat_bot.base_url", api.URL)
 	_ = s.opt.Config.Set("plugin.ai_chat_bot.api_key", "test-key")
 
-	got, err := s.runBalanceScript(DefaultBalanceJS)
+	got, err := s.runBalanceQuery()
 	if err != nil {
-		t.Fatalf("默认脚本执行失败: %v", err)
+		t.Fatalf("默认配置查询失败: %v", err)
 	}
 	if got != "¥ 42.50" {
 		t.Fatalf("余额显示不符: got %q", got)
 	}
 }
 
-func TestRunBalanceScriptError(t *testing.T) {
+func TestRunBalanceQueryCustom(t *testing.T) {
+	// POST + 自定义请求头 + 自定义模板
+	api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+		if r.Header.Get("X-Key") != "test-key" {
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		body, _ := io.ReadAll(r.Body)
+		if !strings.Contains(string(body), "gpt-test") {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		fmt.Fprint(w, `{"quota":7.5,"unit":"USD"}`)
+	}))
+	defer api.Close()
+
+	s := newBalanceTestServer(t)
+	_ = s.opt.Config.Set("plugin.ai_chat_bot.base_url", api.URL)
+	_ = s.opt.Config.Set("plugin.ai_chat_bot.api_key", "test-key")
+	_ = s.opt.Config.Set("plugin.ai_chat_bot.model", "gpt-test")
+	_ = s.opt.Config.Set("bot.balance.method", "POST")
+	_ = s.opt.Config.Set("bot.balance.headers", `{"X-Key":"${api_key}"}`)
+	_ = s.opt.Config.Set("bot.balance.body", `{"model":"${model}"}`)
+	_ = s.opt.Config.Set("bot.balance.format", `${quota} {unit}`)
+
+	got, err := s.runBalanceQuery()
+	if err != nil {
+		t.Fatalf("自定义配置查询失败: %v", err)
+	}
+	if got != "$7.5 USD" {
+		t.Fatalf("余额显示不符: got %q", got)
+	}
+}
+
+func TestRunBalanceQueryError(t *testing.T) {
 	s := newBalanceTestServer(t)
 
-	// 无返回值
-	if _, err := s.runBalanceScript(`const a = 1`); err == nil {
-		t.Fatal("无返回值应当报错")
-	}
-	// 脚本抛异常
-	if _, err := s.runBalanceScript(`throw new Error("boom")`); err == nil {
-		t.Fatal("脚本抛异常应当报错")
-	}
-	// HTTP 错误被脚本捕获并抛出
+	// 鉴权失败（非 2xx）
 	api := fakeBalanceAPI(t)
 	defer api.Close()
 	_ = s.opt.Config.Set("plugin.ai_chat_bot.base_url", api.URL)
 	_ = s.opt.Config.Set("plugin.ai_chat_bot.api_key", "wrong-key")
-	if _, err := s.runBalanceScript(DefaultBalanceJS); err == nil {
+	if _, err := s.runBalanceQuery(); err == nil {
 		t.Fatal("鉴权失败应当报错")
+	}
+
+	// 显示模板路径不存在
+	_ = s.opt.Config.Set("plugin.ai_chat_bot.api_key", "test-key")
+	_ = s.opt.Config.Set("bot.balance.format", "{data.nope}")
+	if _, err := s.runBalanceQuery(); err == nil {
+		t.Fatal("路径不存在应当报错")
+	}
+
+	// 响应不是合法 JSON
+	bad := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		fmt.Fprint(w, "not json")
+	}))
+	defer bad.Close()
+	s2 := newBalanceTestServer(t)
+	_ = s2.opt.Config.Set("plugin.ai_chat_bot.base_url", bad.URL)
+	_ = s2.opt.Config.Set("bot.balance.url", "${base_url}")
+	_ = s2.opt.Config.Set("bot.balance.headers", "")
+	if _, err := s2.runBalanceQuery(); err == nil {
+		t.Fatal("非法 JSON 应当报错")
 	}
 }
 
-func TestBalanceDisplay(t *testing.T) {
+func TestRenderBalanceFormat(t *testing.T) {
+	body := []byte(`{"a":{"b":42.50},"s":"hello","n":100}`)
 	cases := []struct {
-		in   any
-		want string
+		format string
+		want   string
 	}{
-		{float64(42.5), "42.5"},
-		{float64(100), "100"},
-		{int64(7), "7"},
-		{"¥ 9.9", "¥ 9.9"},
-		{map[string]any{"a": 1}, `{"a":1}`},
+		{"¥ {a.b}", "¥ 42.50"},   // 数字保留原始字面量
+		{"{s}", "hello"},         // 字符串不带引号
+		{"{n} 元", "100 元"},       // 整数
+		{"{s} {n}", "hello 100"}, // 多占位符
+		{"固定文本", "固定文本"},         // 无占位符原样输出
 	}
 	for _, c := range cases {
-		got, err := balanceDisplay(c.in)
+		got, err := renderBalanceFormat(c.format, body)
 		if err != nil {
-			t.Fatalf("balanceDisplay(%v) 报错: %v", c.in, err)
+			t.Fatalf("renderBalanceFormat(%q) 报错: %v", c.format, err)
 		}
 		if got != c.want {
-			t.Fatalf("balanceDisplay(%v) = %q, want %q", c.in, got, c.want)
+			t.Fatalf("renderBalanceFormat(%q) = %q, want %q", c.format, got, c.want)
 		}
 	}
-	if _, err := balanceDisplay(nil); err == nil {
-		t.Fatal("nil 应当报错")
+	if _, err := renderBalanceFormat("{a.nope}", body); err == nil {
+		t.Fatal("路径不存在应当报错")
 	}
 }
 

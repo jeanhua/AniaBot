@@ -36,7 +36,11 @@ var frameworkConfigFields = []pluginconfig.Field{
 	{Key: "bot.update.branch", Label: "跟踪分支", Type: "string", Group: "自动更新", Default: "main"},
 
 	// API 余额查询（面板概览页展示，修改后即时生效，无需重启）
-	{Key: "bot.balance.enable", Label: "启用余额查询", Type: "bool", Group: "API 余额查询", Help: "在面板概览页显示 AI API 余额；通过下方自定义 JS 代码请求余额接口", Default: false},
+	{Key: "bot.balance.enable", Label: "启用余额查询", Type: "bool", Group: "API 余额查询", Help: "在面板概览页显示 AI API 余额；默认适配 DeepSeek 风格接口，其他厂商可按下方配置调整", Default: false},
 	{Key: "bot.balance.cache_sec", Label: "缓存时间(秒)", Type: "int", Group: "API 余额查询", Help: "余额查询结果的缓存时长，避免频繁请求余额接口", Default: 300},
-	{Key: "bot.balance.js", Label: "查询脚本(JS)", Type: "text", Group: "API 余额查询", Help: "自定义 JS 代码，由后端执行。可用全局变量：cfg.base_url / cfg.api_key / cfg.model（AI 对话插件的 API 配置）、fetch(url, {method, headers, body})（同步 HTTP 请求，返回 {status, body, json()}）、console.log。最后一条表达式的值作为余额显示", Default: adminpanel.DefaultBalanceJS},
+	{Key: "bot.balance.url", Label: "请求地址", Type: "string", Group: "API 余额查询", Help: "支持 ${base_url} ${api_key} ${model} 占位符（取自 AI 对话插件的 API 配置）", Default: adminpanel.DefaultBalanceURL},
+	{Key: "bot.balance.method", Label: "请求方法", Type: "select", Options: []string{"GET", "POST"}, Group: "API 余额查询", Default: "GET"},
+	{Key: "bot.balance.headers", Label: "请求头(JSON)", Type: "text", Group: "API 余额查询", Help: "JSON 对象，值中支持 ${base_url} ${api_key} ${model} 占位符", Default: adminpanel.DefaultBalanceHeaders},
+	{Key: "bot.balance.body", Label: "请求体", Type: "text", Group: "API 余额查询", Help: "可选，POST 请求时填写；支持 ${base_url} ${api_key} ${model} 占位符；留空则不发送请求体"},
+	{Key: "bot.balance.format", Label: "显示模板", Type: "string", Group: "API 余额查询", Help: "余额显示文本，{路径} 会被替换为响应 JSON 中对应 gjson 路径的值，如 ¥ {data.balances.0.total_balance}", Default: adminpanel.DefaultBalanceFormat},
 }
