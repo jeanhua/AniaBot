@@ -21,6 +21,13 @@
 
 - 面板概览页的定时任务管理（新建/编辑/删除/启停）合并到「任务日志」页，侧边栏该项更名为「定时任务」
 - 移除 `MAX_ITERATIONS` 环境变量，工具调用轮数统一由 `plugin.ai_chat_bot.max_iterations` 配置项控制
+- 面板 NapCat 适配器 HTTP 配置项标注更明确：「HTTP 监听端口」更名「本地监听端口」、「HTTP 目标地址」更名「NapCat HTTP 地址」，帮助文本注明与 NapCat 侧「HTTP 客户端」（上报）和「HTTP 服务器」（调用）配置的对应关系
+
+### 修复
+
+- HTTP 适配器接收 NapCat 事件上报时校验 token：配置 `bot.adapter.token` 后，未携带正确 `Authorization: Bearer <token>` 头（或 `access_token` 查询参数）的上报请求将被拒绝（401），防止伪造事件注入
+- HTTP 适配器本地服务器启动失败（如端口被占用）时明确输出错误日志，不再静默失效
+- HTTP 适配器上报接口仅接受 POST 请求，其他方法返回 405
 
 ## [v3.2.0] - 2026-07-27
 

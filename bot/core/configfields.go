@@ -13,13 +13,13 @@ var frameworkConfigFields = []pluginconfig.Field{
 	{Key: "bot.admin_panel.listen", Label: "监听地址", Type: "string", Group: "Web 面板", Help: "如 127.0.0.1:7700；改为 0.0.0.0:7700 可局域网访问（面板有密码保护）", Default: "127.0.0.1:7700"},
 
 	// 适配器
-	{Key: "bot.adapter.mode", Label: "连接模式", Type: "select", Options: []string{"ws", "http"}, Group: "NapCat 适配器", Help: "ws（WebSocket，推荐）或 http（Webhook 上报），重启后生效", Default: "ws"},
+	{Key: "bot.adapter.mode", Label: "连接模式", Type: "select", Options: []string{"ws", "http"}, Group: "NapCat 适配器", Help: "ws（WebSocket，推荐）或 http（需同时配置下方「本地监听端口」和「NapCat HTTP 地址」），重启后生效", Default: "ws"},
 	{Key: "bot.adapter.token", Label: "Token", Type: "password", Group: "NapCat 适配器", Sensitive: true, Help: "NapCat 侧设置了 token 时填写"},
 	{Key: "bot.adapter.ws.address", Label: "WS 地址", Type: "string", Group: "NapCat 适配器", Help: "NapCat WebSocket Server 地址", Default: "ws://localhost:4455"},
 	{Key: "bot.adapter.ws.worker_count", Label: "处理线程数", Type: "int", Group: "NapCat 适配器", Help: "0 为自动调整", Default: 0},
 	{Key: "bot.adapter.ws.worker_queue_size", Label: "消息队列大小", Type: "int", Group: "NapCat 适配器", Help: "超出限制的消息将被丢弃", Default: 1024},
-	{Key: "bot.adapter.http.listen_port", Label: "HTTP 监听端口", Type: "int", Group: "NapCat 适配器", Help: "HTTP 模式下 NapCat 上报事件的本地端口", Default: 6679},
-	{Key: "bot.adapter.http.target_url", Label: "HTTP 目标地址", Type: "string", Group: "NapCat 适配器", Help: "HTTP 模式下 NapCat 开放的调用地址", Default: "http://localhost:6680"},
+	{Key: "bot.adapter.http.listen_port", Label: "本地监听端口", Type: "int", Group: "NapCat 适配器", Help: "HTTP 模式下 Bot 接收 NapCat 事件上报的本地端口；NapCat 侧需添加「HTTP 客户端」，上报地址填 http://<Bot 主机 IP>:<此端口>", Default: 6679},
+	{Key: "bot.adapter.http.target_url", Label: "NapCat HTTP 地址", Type: "string", Group: "NapCat 适配器", Help: "HTTP 模式下 NapCat 的「HTTP 服务器」地址，Bot 通过它调用 NapCat 接口（发消息等）", Default: "http://localhost:6680"},
 
 	// 缓存存储
 	{Key: "bot.store.cache.driver", Label: "缓存驱动", Type: "select", Options: []string{"memory", "redis"}, Group: "缓存存储", Help: "memory（进程内内存，重启清空）或 redis（需 Redis 服务，支持多实例共享）", Default: "memory"},

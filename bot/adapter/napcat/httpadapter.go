@@ -71,11 +71,24 @@ func (n *napcatHttpAdapter) Serve(v *viper.Viper) {
 	port := v.GetInt("bot.adapter.http.listen_port")
 	log.Println("已启用napcat http adapter")
 	log.Printf("本地HTTP服务器已启动 http://localhost:%d...\n", port)
-	http.ListenAndServe(fmt.Sprintf(":%d", port), nil)
-	log.Println("HTTP服务器已停止，正在退出")
+	if err := http.ListenAndServe(fmt.Sprintf(":%d", port), nil); err != nil {
+		// 不 Fatal：保持面板可访问，用户可在面板修正端口后重启
+		log.Printf("HTTP服务器异常退出，将无法接收NapCat事件: %v", err)
+	}
 }
 
 func (n *napcatHttpAdapter) handler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	// HTTP 模式下 Bot 是被动接收方，必须校验上报来源：
+	// NapCat 的 HTTP 客户端配置 token 后会在上报请求携带 Authorization: Bearer <token>
+	if n.token != nil && !n.checkInToken(r) {
+		log.Printf("拒绝未授权的HTTP上报: %s", r.RemoteAddr)
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
 		log.Printf("无法读取HTTP请求内容: %v", err)
@@ -88,6 +101,14 @@ func (n *napcatHttpAdapter) handler(w http.ResponseWriter, r *http.Request) {
 		}
 	}()
 	n.onMsg(body)
+}
+
+// checkInToken 校验 NapCat 上报请求的 token，兼容 Authorization: Bearer 头与 access_token 查询参数两种形式
+func (n *napcatHttpAdapter) checkInToken(r *http.Request) bool {
+	if auth := r.Header.Get("Authorization"); auth != "" {
+		return strings.EqualFold(auth, "Bearer "+*n.token)
+	}
+	return r.URL.Query().Get("access_token") == *n.token
 }
 
 func (n *napcatHttpAdapter) onMsg(data []byte) {
