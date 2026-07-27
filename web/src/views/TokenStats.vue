@@ -81,7 +81,7 @@
         </div>
       </div>
 
-      <div class="flex items-end gap-[3px] pt-5 pb-1 h-40">
+      <div class="flex items-end gap-0.75 pt-5 pb-1 h-40">
         <div v-for="d in daily" :key="d.date" class="flex-1 flex flex-col justify-end h-full min-w-0" :title="dayTip(d)">
           <div class="w-full bg-zinc-700" :style="{ height: barH(d.query?.total_tokens) }" />
           <div class="w-full bg-zinc-300 rounded-t-sm" :style="{ height: barH(d.task?.total_tokens) }" />

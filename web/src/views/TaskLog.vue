@@ -154,14 +154,14 @@
         </label>
         <div class="flex items-end gap-2">
           <button
-            class="px-4 py-1.5 text-[11px] tracking-[0.1em] uppercase bg-zinc-900 text-white rounded-md hover:bg-zinc-700 transition-colors"
+            class="px-4 py-1.5 text-[11px] tracking-widest uppercase bg-zinc-900 text-white rounded-md hover:bg-zinc-700 transition-colors"
             @click="applyFilters"
           >
             查询
           </button>
           <button
             v-if="hasFilter"
-            class="px-3 py-1.5 text-[11px] tracking-[0.1em] uppercase text-zinc-500 hover:bg-zinc-100 rounded-md transition-colors"
+            class="px-3 py-1.5 text-[11px] tracking-widest uppercase text-zinc-500 hover:bg-zinc-100 rounded-md transition-colors"
             @click="resetFilters"
           >
             重置
