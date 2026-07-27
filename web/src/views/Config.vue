@@ -115,7 +115,7 @@
           class="bg-white rounded-xl shadow-sm border border-slate-200/60 scroll-mt-24 overflow-hidden"
         >
           <h2 class="px-6 py-4 text-sm font-semibold text-slate-800 border-b border-slate-100 flex items-center gap-2.5">
-            <span class="w-7 h-7 rounded-lg flex items-center justify-center text-white text-xs [&>svg]:w-4 [&>svg]:h-4" :class="groupColor(group.name)" v-html="groupIcon(group.name)" />
+            <span class="w-7 h-7 rounded-lg flex items-center justify-center text-white text-xs [&>svg]:w-4 [&>svg]:h-4" :class="groupColor(group)" v-html="groupIcon(group)" />
             {{ group.name }}
             <span class="text-xs font-normal text-slate-400">{{ group.fields.length }} 项</span>
           </h2>
@@ -235,12 +235,13 @@ const groups = computed(() => {
 })
 
 // 分组归类：框架基础 / AI 对话 / 插件
-const FRAMEWORK = new Set(['Bot 基础', 'Web 面板', 'NapCat 适配器', '缓存存储'])
+// 按配置键前缀判断：bot.* 为框架基础，plugin.* 为插件；AI 对话插件单独归类
 const CAT_ORDER = ['框架基础', 'AI 对话', '插件']
 
-function categoryOf(groupName) {
-  if (FRAMEWORK.has(groupName)) return '框架基础'
-  if (groupName.startsWith('AI 对话')) return 'AI 对话'
+function categoryOf(group) {
+  const key = group.fields[0]?.key || ''
+  if (key.startsWith('bot.')) return '框架基础'
+  if (group.name.startsWith('AI 对话')) return 'AI 对话'
   return '插件'
 }
 
@@ -259,13 +260,13 @@ const filteredGroups = computed(() => {
         ),
       }))
       .filter((g) => g.fields.length > 0)
-  return [...list].sort((a, b) => CAT_ORDER.indexOf(categoryOf(a.name)) - CAT_ORDER.indexOf(categoryOf(b.name)))
+  return [...list].sort((a, b) => CAT_ORDER.indexOf(categoryOf(a)) - CAT_ORDER.indexOf(categoryOf(b)))
 })
 
 const categorized = computed(() => {
   const map = new Map(CAT_ORDER.map((n) => [n, []]))
   for (const g of filteredGroups.value) {
-    map.get(categoryOf(g.name)).push(g)
+    map.get(categoryOf(g)).push(g)
   }
   return CAT_ORDER.map((name) => ({ name, groups: map.get(name) })).filter((c) => c.groups.length > 0)
 })
@@ -283,8 +284,8 @@ function jumpTo(name) {
   document.getElementById(sectionId(name))?.scrollIntoView({ behavior: 'smooth', block: 'start' })
 }
 
-function groupColor(name) {
-  const cat = categoryOf(name)
+function groupColor(group) {
+  const cat = categoryOf(group)
   return {
     '框架基础': 'bg-zinc-500',
     'AI 对话': 'bg-zinc-900',
@@ -292,8 +293,8 @@ function groupColor(name) {
   }[cat]
 }
 
-function groupIcon(name) {
-  const cat = categoryOf(name)
+function groupIcon(group) {
+  const cat = categoryOf(group)
   return { '框架基础': iconCube, 'AI 对话': iconSpark, '插件': iconPuzzle }[cat]
 }
 
