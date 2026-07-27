@@ -87,6 +87,13 @@ func (p *AIChatPlugin) registerScopedTools(sessionExecutor *llmtool.SessionToolE
 	}
 }
 
+func (p *AIChatPlugin) mainMaxIterations() int {
+	if p.cfg.MaxIterations <= 0 {
+		return 20
+	}
+	return p.cfg.MaxIterations
+}
+
 func (p *AIChatPlugin) getChat(b bot.Bot, id message.QID, isGroup bool, prompt string) *aichat.ChatBot {
 	key := sessionKey(id, isGroup)
 	chat, ok := p.chats.Load(key)
@@ -123,6 +130,7 @@ func (p *AIChatPlugin) getChat(b bot.Bot, id message.QID, isGroup bool, prompt s
 			p.Logger.Error("创建 ChatBot 失败", "error", err.Error())
 			return nil
 		}
+		c.SetMaxIterations(p.mainMaxIterations())
 		// 注入 SkillManager，让 system prompt 包含 available_skills
 		if p.skillManager != nil {
 			c.SetSkillManager(p.skillManager)

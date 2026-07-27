@@ -114,6 +114,7 @@ HTTP 模式下 NapCat 向 `localhost` 上报会失败，请将 NapCat 的 HTTP C
 | 配置键 | 默认值 | 说明 |
 | --- | --- | --- |
 | `plugin.ai_chat_bot.max_context_tokens` | `128000` | 上下文 token 预算，超过 80% 自动压缩历史 |
+| `plugin.ai_chat_bot.max_iterations` | `20` | 主对话单次回复的最大工具调用轮数，超出后强制结束 |
 | `plugin.ai_chat_bot.temperature` | `1.2` | 采样温度 |
 | `plugin.ai_chat_bot.top_p` | `0.9` | 核采样 |
 | `plugin.ai_chat_bot.top_k` | `100` | Top-K 采样 |
@@ -259,9 +260,3 @@ HTTP 模式下 NapCat 向 `localhost` 上报会失败，请将 NapCat 的 HTTP C
 ```
 
 MCP 工具采用两阶段懒加载：AI 先通过发现工具查看有哪些 MCP 能力，按需加载到当前会话，避免工具描述撑爆上下文。
-
-## 其他环境变量
-
-| 变量 | 说明 |
-| --- | --- |
-| `MAX_ITERATIONS` | AI Agent 单轮对话的最大工具迭代次数，默认 20 |

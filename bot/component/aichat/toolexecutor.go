@@ -3,8 +3,6 @@ package aichat
 import (
 	"context"
 	"fmt"
-	"os"
-	"strconv"
 	"time"
 
 	"github.com/jeanhua/AniaBot/bot/component/llmtool"
@@ -33,17 +31,12 @@ type ToolCallInfo struct {
 }
 
 func NewToolOrchestrator(executor ToolExecutor, msgBuilder *MessageBuilder) *ToolOrchestrator {
-	maxIterationsStr := os.Getenv("MAX_ITERATIONS")
-	maxIterations := 20
-	if maxIterationsStr != "" {
-		if it, err := strconv.Atoi(maxIterationsStr); err == nil {
-			maxIterations = it
-		}
-	}
+	// 默认上限仅作兜底：主对话/定时任务由插件配置 plugin.ai_chat_bot.max_iterations
+	// 在 ChatBot 创建后通过 SetMaxIterations 覆盖
 	return &ToolOrchestrator{
 		executor:      executor,
 		msgBuilder:    msgBuilder,
-		maxIterations: maxIterations,
+		maxIterations: 20,
 	}
 }
 

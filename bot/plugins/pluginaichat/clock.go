@@ -609,6 +609,7 @@ func (m *clockManager) executeTask(ctx context.Context, task *ClockTask, rec *ta
 	if err != nil {
 		return "", aichat.TokenUsage{}, fmt.Errorf("创建对话失败: %w", err)
 	}
+	chat.SetMaxIterations(p.mainMaxIterations())
 	if p.skillManager != nil {
 		chat.SetSkillManager(p.skillManager)
 	}
