@@ -40,7 +40,7 @@ func newMemoryTools(mgr *memoryManager, scope string, sessionDesc string) []llmt
 // ---- memory_save ----
 
 type memorySaveParams struct {
-	Content string   `json:"content" desc:"要记住的内容，一条完整自洽的事实，如「群主小明（QQ 12345）讨厌被半夜@」"`
+	Content string   `json:"content" desc:"要记住的内容，一条完整自洽的事实，如「群主小明（QQ 12345）讨厌被半夜@」；最长 2000 字符，超出会被截断"`
 	UserID  string   `json:"user_id,omitempty" desc:"该记忆关联的群成员QQ号（其消息以 [nickname:昵称 id:QQ号] 开头，取其中的id）；属于整个群/会话的记忆不填"`
 	Tags    []string `json:"tags,omitempty" desc:"分类标签，便于检索，如 [\"偏好\",\"称呼\"]"`
 }

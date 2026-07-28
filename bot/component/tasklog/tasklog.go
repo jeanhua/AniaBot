@@ -246,20 +246,9 @@ func (l *Logger) Recent(limit int) []Entry {
 
 // RecentForTask 返回指定任务的最近 limit 条日志（新在前）。limit<=0 时返回全部。
 func (l *Logger) RecentForTask(taskID string, limit int) []Entry {
-	all := l.load(context.Background())
-	if limit <= 0 {
-		limit = len(all)
-	}
-	out := make([]Entry, 0, limit)
-	for _, e := range all {
-		if e.TaskID == taskID {
-			out = append(out, e)
-			if len(out) >= limit {
-				break
-			}
-		}
-	}
-	return out
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.loadMatchLocked(func(e Entry) bool { return e.TaskID == taskID }, limit)
 }
 
 // Filter 执行日志的查询条件，零值字段不参与过滤。
@@ -306,38 +295,35 @@ func (l *Logger) Query(f Filter) []Entry {
 	if limit <= 0 {
 		limit = defaultMax
 	}
-	entries := l.load(context.Background())
-	out := make([]Entry, 0, limit)
-	for _, e := range entries {
-		if !f.match(e) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.loadMatchLocked(f.match, limit)
+}
+
+// loadMatchLocked 逆序（新在前）逐条加载日志，仅保留满足 match 的记录，
+// 凑够 limit 条即停止，避免面板查询时把全部记录逐键读出。limit<=0 表示不限条数。
+func (l *Logger) loadMatchLocked(match func(Entry) bool, limit int) []Entry {
+	seqs := l.listLocked() // 升序，新在后
+	ctx := context.Background()
+	capacity := limit
+	if capacity <= 0 || capacity > len(seqs) {
+		capacity = len(seqs)
+	}
+	out := make([]Entry, 0, capacity)
+	for i := len(seqs) - 1; i >= 0; i-- {
+		var e Entry
+		if !l.store.Get(ctx, entryKey(seqs[i]), &e) {
+			continue
+		}
+		if match != nil && !match(e) {
 			continue
 		}
 		out = append(out, e)
-		if len(out) >= limit {
+		if limit > 0 && len(out) >= limit {
 			break
 		}
 	}
 	return out
-}
-
-// load 返回全部日志（新在前）。
-func (l *Logger) load(ctx context.Context) []Entry {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	return l.loadLocked()
-}
-
-func (l *Logger) loadLocked() []Entry {
-	seqs := l.listLocked() // 升序，新在后
-	ctx := context.Background()
-	entries := make([]Entry, 0, len(seqs))
-	for i := len(seqs) - 1; i >= 0; i-- {
-		var e Entry
-		if l.store.Get(ctx, entryKey(seqs[i]), &e) {
-			entries = append(entries, e)
-		}
-	}
-	return entries
 }
 
 // listLocked 返回全部日志记录的序号，按升序排列（旧在前）。

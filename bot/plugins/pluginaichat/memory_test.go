@@ -198,3 +198,29 @@ func TestFormatMemoryLine(t *testing.T) {
 		}
 	}
 }
+
+func TestMemoryContentTruncation(t *testing.T) {
+	m := newTestMemoryManager(0)
+
+	long := strings.Repeat("长", MaxContentRunes+100)
+	e, err := m.add("g:123", "", long, nil)
+	if err != nil {
+		t.Fatalf("add 失败: %v", err)
+	}
+	// 截断为 MaxContentRunes 个符文 + 省略标记
+	if got := len([]rune(e.Content)); got != MaxContentRunes+1 {
+		t.Fatalf("add 未截断超长内容，符文数 = %d", got)
+	}
+	entries := m.list("g:123")
+	if len(entries) != 1 || entries[0].Content != e.Content {
+		t.Fatalf("落盘内容未截断: %+v", entries)
+	}
+
+	// update 同样截断
+	if err := m.update("g:123", e.ID, "", long, nil); err != nil {
+		t.Fatalf("update 失败: %v", err)
+	}
+	if got := len([]rune(m.list("g:123")[0].Content)); got != MaxContentRunes+1 {
+		t.Fatalf("update 未截断超长内容，符文数 = %d", got)
+	}
+}

@@ -40,10 +40,13 @@ var (
 
 	mysqlDialect = sqlDialect{
 		name: "mysql",
-		// 使用 REPLACE INTO 而非 INSERT ... ON DUPLICATE KEY UPDATE val = VALUES(val)，
-		// 后者的 VALUES(col) 自 MySQL 8.0.20 起被弃用；REPLACE 在 5.7+/MariaDB 均稳定可用。
-		upsertSQL: `REPLACE INTO ania_kv (namespace, key_name, val, updated_at) ` +
-			`VALUES (?, ?, ?, CURRENT_TIMESTAMP)`,
+		// 用 INSERT ... ON DUPLICATE KEY UPDATE 而非 REPLACE INTO：REPLACE 的语义是
+		// delete+insert（两次行变更、二级索引双倍维护），写放大更大；原地 UPDATE 更轻。
+		// VALUES(col) 自 MySQL 8.0.20 起标记弃用（仅告警），但在 5.7/8.x 与 MariaDB
+		// 中均稳定可用，而 8.0.20+ 推荐的行别名语法 MariaDB 不支持，故取最大兼容写法。
+		upsertSQL: `INSERT INTO ania_kv (namespace, key_name, val, updated_at) ` +
+			`VALUES (?, ?, ?, CURRENT_TIMESTAMP) ` +
+			`ON DUPLICATE KEY UPDATE val = VALUES(val), updated_at = CURRENT_TIMESTAMP`,
 		ddl: []string{
 			// namespace/key_name 显式声明 utf8mb4_bin（字节序、大小写敏感），
 			// 与 SQLite TEXT 的 BINARY 语义对齐；否则 MySQL 默认 CI 排序会破坏命名空间隔离
@@ -66,8 +69,8 @@ var (
 type aniaSqlPersistentStorage struct {
 	namespace string // 命名空间前缀，语义同缓存的 prefix
 	db        *sql.DB
-	dialect  sqlDialect
-	logger   *slog.Logger
+	dialect   sqlDialect
+	logger    *slog.Logger
 }
 
 // newSqlPersistentStorage 在打开的 *sql.DB 上建表并返回一个持久化存储实例。

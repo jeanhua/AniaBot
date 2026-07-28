@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"unicode/utf8"
 )
 
 type CompressorFunc func(ctx context.Context, client *LLMClient, oldMsgs []Message) ([]Message, error)
@@ -38,8 +39,8 @@ func (w *messageWindow) load(ctx context.Context) {
 	}
 	// 回放的历史中的图片 URL（多为 QQ 临时签名链接）重启后大概率失效，
 	// 若原样发给 LLM 会因拉取失败导致整轮对话报错。这里把图片片段降级为
-	// 文本标记：仅作用于内存中回放后的副本，落盘的原始 URL 不变（无损），
-	// 当前会话本轮新加载的图片在 persist 之前仍是 ImageURL 片段，不受影响。
+	// 文本标记。新落盘的数据在 persist 时已剔除图片（见 degradeImagesForPersist），
+	// 此处理主要兼容旧版落盘数据中仍保留的图片片段。
 	w.messages = degradeImagesToText(msgs)
 }
 
@@ -81,16 +82,49 @@ func isRemoteImageURL(s string) bool {
 }
 
 // persist 将当前历史落盘；store 未注入时为空操作。
+// 落盘副本中的图片片段一律降级为文本标记（degradeImagesForPersist）：
+// 远程 http(s) 链接重启后失效无保留价值；data URI（base64 内联图片）体积
+// 可达 MB 级，若随历史整体反复全量重写会撑大单 key 并造成严重写放大
+// （MySQL MEDIUMTEXT 超限还会导致落盘静默失败、历史丢失）。
+// 仅影响落盘数据，内存中当前会话的消息仍保留图片供本轮对话使用。
 // 使用独立的后台 context，避免请求被 /stop 取消时丢失刚写入的历史。
 func (w *messageWindow) persist() {
 	if w.store == nil {
 		return
 	}
 	ctx := context.Background()
-	if err := w.store.Save(ctx, w.messages); err != nil {
+	if err := w.store.Save(ctx, degradeImagesForPersist(w.messages)); err != nil {
 		// 落盘失败仅记录，不影响内存中的对话
 		_ = err
 	}
+}
+
+// degradeImagesForPersist 将待落盘消息中的所有图片片段（http(s) 与 data URI）
+// 替换为文本标记，返回新切片，不修改原消息。
+func degradeImagesForPersist(msgs []Message) []Message {
+	out := make([]Message, len(msgs))
+	for i := range msgs {
+		msg := msgs[i]
+		if len(msg.Parts) == 0 {
+			out[i] = msg
+			continue
+		}
+		changed := false
+		newParts := make([]ContentPart, 0, len(msg.Parts))
+		for _, p := range msg.Parts {
+			if p.Type == ContentPartImageURL {
+				newParts = append(newParts, TextPart("[图片]"))
+				changed = true
+				continue
+			}
+			newParts = append(newParts, p)
+		}
+		if changed {
+			msg.Parts = newParts
+		}
+		out[i] = msg
+	}
+	return out
 }
 
 func (w *messageWindow) append(msgs ...Message) {
@@ -122,10 +156,37 @@ func (w *messageWindow) RecordUsage(usage TokenUsage) {
 }
 
 func (w *messageWindow) needsCompression() bool {
-	if w.maxContextTokens <= 0 || w.lastPromptTokens <= 0 {
+	if w.maxContextTokens <= 0 {
 		return false
 	}
-	return w.lastPromptTokens > int(float64(w.maxContextTokens)*0.8)
+	threshold := int(float64(w.maxContextTokens) * 0.8)
+	if w.lastPromptTokens > 0 {
+		return w.lastPromptTokens > threshold
+	}
+	// 上游未上报 usage 时用字符数粗估兜底：缺少真实 token 统计不代表上下文很小，
+	// 若不兜底历史会无限增长，撑大落盘 key 并拖慢每轮的全量读写。
+	return w.estimateTokens() > threshold
+}
+
+// estimateTokens 用字符数粗估当前历史的 token 量，仅用于 usage 缺失时的兜底判断。
+// 约 2 个字符折 1 token（中英文混合的保守估计）；图片片段按固定值估算，
+// 不统计 data URI 的 base64 长度（与真实多模态 token 计量无关）。
+func (w *messageWindow) estimateTokens() int {
+	total := 0
+	for _, m := range w.messages {
+		for _, p := range m.Parts {
+			if p.Type == ContentPartImageURL {
+				total += 1000 // 多模态图片的约值
+				continue
+			}
+			total += utf8.RuneCountInString(p.Text)
+		}
+		total += utf8.RuneCountInString(m.ReasoningContent)
+		for _, tc := range m.ToolCalls {
+			total += utf8.RuneCountInString(tc.Name) + utf8.RuneCountInString(tc.Arguments)
+		}
+	}
+	return total / 2
 }
 
 func (w *messageWindow) MaybeCompress(ctx context.Context) error {

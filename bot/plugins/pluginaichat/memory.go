@@ -12,6 +12,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/jeanhua/AniaBot/bot/component/tasklog"
 	"github.com/jeanhua/AniaBot/common/storage"
 )
 
@@ -31,6 +32,10 @@ type memoryEntry struct {
 
 // ErrMemoryFull 单会话记忆条数达到上限时返回，提示 AI 先清理或合并旧记忆。
 var ErrMemoryFull = errors.New("记忆条数已达上限")
+
+// MaxContentRunes 单条记忆内容的符文数上限，超出部分截断。
+// 每个 scope 的记忆是一个 key 存整个 JSON 数组，单条长度不设限会把 key 撑大。
+const MaxContentRunes = 2000
 
 // memoryManager 长期记忆管理器：按会话 scope 存取记忆条目。
 //
@@ -75,9 +80,9 @@ func (m *memoryManager) listLocked(scope string) []memoryEntry {
 
 // add 追加一条记忆，返回写入后的条目（含生成的 ID）。
 // 内容与已有记忆重复（规范化后相同）时不重复写入，返回已有条目；
-// 达到 maxEntries 上限时返回 ErrMemoryFull。
+// 达到 maxEntries 上限时返回 ErrMemoryFull；超长内容按 MaxContentRunes 截断。
 func (m *memoryManager) add(scope, userID, content string, tags []string) (memoryEntry, error) {
-	content = strings.TrimSpace(content)
+	content = tasklog.Truncate(strings.TrimSpace(content), MaxContentRunes)
 	if content == "" {
 		return memoryEntry{}, errors.New("记忆内容不能为空")
 	}
@@ -146,9 +151,9 @@ func (m *memoryManager) scopes() []string {
 }
 
 // update 按 ID 更新指定 scope 中一条记忆的内容、关联 QQ 与标签；
-// ID 不存在时返回错误。创建时间保留不变。
+// ID 不存在时返回错误。创建时间保留不变；超长内容按 MaxContentRunes 截断。
 func (m *memoryManager) update(scope, id, userID, content string, tags []string) error {
-	content = strings.TrimSpace(content)
+	content = tasklog.Truncate(strings.TrimSpace(content), MaxContentRunes)
 	if content == "" {
 		return errors.New("记忆内容不能为空")
 	}
