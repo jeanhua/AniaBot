@@ -307,7 +307,6 @@ func (s *Server) handleSetupComplete(w http.ResponseWriter, _ *http.Request) {
 
 func (s *Server) handleChangePassword(w http.ResponseWriter, r *http.Request) {
 	var req struct {
-		OldPassword string `json:"old_password"`
 		NewPassword string `json:"new_password"`
 	}
 	if err := readJSON(r, &req); err != nil {
@@ -316,11 +315,6 @@ func (s *Server) handleChangePassword(w http.ResponseWriter, r *http.Request) {
 	}
 	if len(req.NewPassword) < 6 {
 		writeError(w, http.StatusBadRequest, "新密码长度至少 6 位")
-		return
-	}
-	if !s.auth.CheckPassword(req.OldPassword) {
-		// 注意不能用 401：前端会把 401 当作会话过期处理
-		writeError(w, http.StatusBadRequest, "原密码错误")
 		return
 	}
 	if !s.auth.SetPassword(req.NewPassword) {

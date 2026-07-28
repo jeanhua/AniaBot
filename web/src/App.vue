@@ -84,7 +84,6 @@
     <div v-if="showPwd" class="fixed inset-0 bg-zinc-950/50 backdrop-blur-sm flex items-center justify-center z-50" @click.self="showPwd = false">
       <form class="tcard p-6 w-96 space-y-4" @submit.prevent="onChangePwd">
         <h2 class="text-[11px] tracking-[0.22em] uppercase text-zinc-500 font-medium">修改密码</h2>
-        <input v-model="pwdForm.old" type="password" placeholder="原密码" required :class="inputClass" />
         <input v-model="pwdForm.next" type="password" placeholder="新密码（至少 6 位）" required minlength="6" :class="inputClass" />
         <p v-if="pwdForm.msg" class="text-xs" :class="pwdForm.ok ? 'text-emerald-600' : 'text-red-600'">{{ pwdForm.msg }}</p>
         <div class="flex justify-end gap-2 pt-1">
@@ -140,7 +139,7 @@ const navItems = [
 const inputClass = 'w-full border border-zinc-300 rounded-md px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-zinc-400 focus:border-zinc-400 transition-shadow bg-white'
 
 const showPwd = ref(false)
-const pwdForm = reactive({ old: '', next: '', msg: '', ok: false })
+const pwdForm = reactive({ next: '', msg: '', ok: false })
 const restarting = ref(false)
 
 onMounted(() => api.checkLogin())
@@ -168,10 +167,10 @@ async function onRestart() {
 async function onChangePwd() {
   pwdForm.msg = ''
   try {
-    await api.changePassword(pwdForm.old, pwdForm.next)
+    await api.changePassword(pwdForm.next)
     // 修改密码后服务端会销毁所有会话，退回登录页重新登录
     showPwd.value = false
-    pwdForm.old = pwdForm.next = ''
+    pwdForm.next = ''
     auth.notice = '密码已更新，请使用新密码重新登录'
     auth.loggedIn = false
   } catch (e) {

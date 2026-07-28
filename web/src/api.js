@@ -50,8 +50,8 @@ export const api = {
     await request('/api/logout', { method: 'POST' })
     auth.loggedIn = false
   },
-  changePassword: (old_password, new_password) =>
-    request('/api/password', { method: 'PUT', body: JSON.stringify({ old_password, new_password }) }),
+  changePassword: (new_password) =>
+    request('/api/password', { method: 'PUT', body: JSON.stringify({ new_password }) }),
 
   getSchema: () => request('/api/config/schema'),
   getConfig: () => request('/api/config'),
