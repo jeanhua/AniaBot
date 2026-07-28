@@ -134,6 +134,7 @@ func NewServer(opt Options) *Server {
 	s := &Server{opt: opt, mux: http.NewServeMux(), started: time.Now()}
 	s.auth = newAuthManager(opt.Persistent, opt.Logger)
 	s.routes()
+	startCPUSampler() // 后台持续采样 CPU，为负载图提供服务端缓存的历史曲线
 	return s
 }
 

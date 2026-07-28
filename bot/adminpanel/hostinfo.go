@@ -1,6 +1,7 @@
 package adminpanel
 
 import (
+	"math"
 	"os"
 	"runtime"
 	"strings"
@@ -24,6 +25,9 @@ type HostSnapshot struct {
 	UptimeSec  uint64  `json:"uptime_sec"` // 主机开机时长
 	GoVersion  string  `json:"go_version"`
 	GoMemAlloc uint64  `json:"go_mem_alloc"` // Bot 进程堆占用
+	// CPUHistory 服务端缓存的 CPU 占用率历史（新在后），供面板负载图直接使用，
+	// 前端打开页面即可拿到完整曲线，不必从单个数据点开始重新积累
+	CPUHistory []float64 `json:"cpu_history"`
 }
 
 // ---- 平台相关采集（hostinfo_windows.go / hostinfo_linux.go / hostinfo_other.go） ----
@@ -46,6 +50,65 @@ var cpuSampler struct {
 	sync.Mutex
 	primed    bool
 	idle, tot uint64
+}
+
+const (
+	cpuSampleInterval = 5 * time.Second // 后台 CPU 采样间隔（与面板轮询节奏一致）
+	cpuHistoryCap     = 120             // 历史缓存容量（约最近 10 分钟）
+)
+
+// cpuHistory 服务端缓存的 CPU 占用率历史环形缓冲
+var cpuHistory struct {
+	sync.RWMutex
+	started bool
+	points  []float64
+}
+
+// startCPUSampler 启动后台 CPU 采样协程（幂等）。
+// 采样协程是 sampleCPUPercent 的唯一调用方：占用率靠两次采样的差值计算，
+// 若请求处理也直接采样会打乱差值窗口，因此 collectHost 只读取最近一次采样值。
+func startCPUSampler() {
+	cpuHistory.Lock()
+	if cpuHistory.started {
+		cpuHistory.Unlock()
+		return
+	}
+	cpuHistory.started = true
+	cpuHistory.Unlock()
+	go func() {
+		for {
+			if p := sampleCPUPercent(); p >= 0 {
+				// 保留两位小数，减小快照 JSON 体积
+				p = math.Round(p*100) / 100
+				cpuHistory.Lock()
+				cpuHistory.points = append(cpuHistory.points, p)
+				if len(cpuHistory.points) > cpuHistoryCap {
+					cpuHistory.points = cpuHistory.points[len(cpuHistory.points)-cpuHistoryCap:]
+				}
+				cpuHistory.Unlock()
+			}
+			time.Sleep(cpuSampleInterval)
+		}
+	}()
+}
+
+// latestCPUPercent 返回最近一次后台采样的 CPU 占用率；尚无采样时返回 -1。
+func latestCPUPercent() float64 {
+	cpuHistory.RLock()
+	defer cpuHistory.RUnlock()
+	if len(cpuHistory.points) == 0 {
+		return -1
+	}
+	return cpuHistory.points[len(cpuHistory.points)-1]
+}
+
+// cpuHistoryPoints 返回服务端缓存的 CPU 历史快照（新在后）。
+func cpuHistoryPoints() []float64 {
+	cpuHistory.RLock()
+	defer cpuHistory.RUnlock()
+	out := make([]float64, len(cpuHistory.points))
+	copy(out, cpuHistory.points)
+	return out
 }
 
 // sampleCPUPercent 返回距上次采样间的 CPU 占用率（0-100），不可用时返回 -1。
@@ -83,7 +146,8 @@ func sampleCPUPercent() float64 {
 	return p
 }
 
-// collectHost 采集一份主机快照。静态字段缓存，动态字段每次实时读取。
+// collectHost 采集一份主机快照。静态字段缓存，动态字段每次实时读取；
+// CPU 占用率与历史曲线来自后台采样协程的缓存（未启动采样或暂无采样时 cpu_percent 为 -1）。
 func collectHost() HostSnapshot {
 	hostStatic.Do(func() {
 		hostStatic.osVersion = hostOSVersion()
@@ -102,11 +166,12 @@ func collectHost() HostSnapshot {
 		Arch:       runtime.GOARCH,
 		CPUModel:   hostStatic.cpuModel,
 		CPUCores:   runtime.NumCPU(),
-		CPUPercent: sampleCPUPercent(),
+		CPUPercent: latestCPUPercent(),
 		MemTotal:   total,
 		UptimeSec:  hostUptime(),
 		GoVersion:  runtime.Version(),
 		GoMemAlloc: ms.Alloc,
+		CPUHistory: cpuHistoryPoints(),
 	}
 	if total > 0 && avail <= total {
 		s.MemUsed = total - avail

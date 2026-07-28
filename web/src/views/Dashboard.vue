@@ -509,7 +509,11 @@ async function loadHost() {
   try {
     const h = await api.getHost()
     host.value = h
-    if (h.cpu_percent != null && h.cpu_percent >= 0) {
+    if (Array.isArray(h.cpu_history) && h.cpu_history.length) {
+      // 服务端缓存的完整历史（新在后），打开页面即有完整曲线，取最近 48 个点绘图
+      cpuHistory.value = h.cpu_history.slice(-48)
+    } else if (h.cpu_percent != null && h.cpu_percent >= 0) {
+      // 兼容无历史缓存的旧后端：本地逐点积累
       const hist = [...cpuHistory.value, h.cpu_percent]
       cpuHistory.value = hist.length > 48 ? hist.slice(hist.length - 48) : hist
     }
