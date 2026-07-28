@@ -231,13 +231,28 @@ func readJSON(r *http.Request, v any) error {
 	return json.NewDecoder(r.Body).Decode(v)
 }
 
-// requireAuth 校验会话 Cookie。
+// requireAuth 校验会话 Cookie；会话被滑动续期时同步刷新 Cookie 过期时间。
 func (s *Server) requireAuth(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		cookie, err := r.Cookie(sessionCookieName)
-		if err != nil || !s.auth.ValidSession(cookie.Value) {
+		if err != nil {
 			writeError(w, http.StatusUnauthorized, "未登录或会话已过期")
 			return
+		}
+		valid, renewed := s.auth.ValidSession(cookie.Value)
+		if !valid {
+			writeError(w, http.StatusUnauthorized, "未登录或会话已过期")
+			return
+		}
+		if renewed {
+			http.SetCookie(w, &http.Cookie{
+				Name:     sessionCookieName,
+				Value:    cookie.Value,
+				Path:     "/",
+				HttpOnly: true,
+				SameSite: http.SameSiteLaxMode,
+				Expires:  time.Now().Add(sessionTTL),
+			})
 		}
 		next.ServeHTTP(w, r)
 	})

@@ -19,6 +19,10 @@ const (
 	sessionCookieName = "ania_session"
 	sessionTTL        = 24 * time.Hour
 
+	// sessionRenewThreshold 剩余有效期不足该阈值时自动续期（滑动过期），
+	// 活跃用户不会被踢下线，闲置满 sessionTTL 才过期。
+	sessionRenewThreshold = 12 * time.Hour
+
 	passwordHashKey  = "password_hash"
 	sessionKeyPrefix = "session:"
 	adminNamespace   = "__admin"
@@ -143,27 +147,50 @@ func (a *authManager) NewSession() string {
 }
 
 // ValidSession 校验 token 是否有效（内存优先，未命中回查持久化存储）。
-func (a *authManager) ValidSession(token string) bool {
+// 校验通过且剩余有效期不足 sessionRenewThreshold 时自动续期至 sessionTTL，
+// 并返回 renewed=true，调用方应同步刷新客户端 Cookie。
+func (a *authManager) ValidSession(token string) (valid, renewed bool) {
+	now := time.Now()
 	a.mu.Lock()
 	exp, ok := a.sessions[token]
 	a.mu.Unlock()
 	if ok {
-		return time.Now().Before(exp)
+		if !now.Before(exp) {
+			return false, false
+		}
+		if exp.Sub(now) < sessionRenewThreshold {
+			a.renewSession(token)
+			return true, true
+		}
+		return true, false
 	}
 	// 内存未命中（如 Bot 重启后）：回查持久化存储
 	raw, found := a.store.GetString(context.Background(), sessionKeyPrefix+token)
 	if !found {
-		return false
+		return false, false
 	}
 	expTime, err := time.Parse(time.RFC3339Nano, raw)
-	if err != nil || time.Now().After(expTime) {
+	if err != nil || now.After(expTime) {
 		a.store.Del(context.Background(), sessionKeyPrefix+token)
-		return false
+		return false, false
+	}
+	if expTime.Sub(now) < sessionRenewThreshold {
+		a.renewSession(token)
+		return true, true
 	}
 	a.mu.Lock()
 	a.sessions[token] = expTime
 	a.mu.Unlock()
-	return true
+	return true, false
+}
+
+// renewSession 将内存与持久化存储中的会话过期时间顺延至 now+sessionTTL。
+func (a *authManager) renewSession(token string) {
+	exp := time.Now().Add(sessionTTL)
+	a.mu.Lock()
+	a.sessions[token] = exp
+	a.mu.Unlock()
+	a.store.SetString(context.Background(), sessionKeyPrefix+token, exp.Format(time.RFC3339Nano))
 }
 
 // DropSession 销毁会话。
