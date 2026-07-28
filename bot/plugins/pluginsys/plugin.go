@@ -30,7 +30,7 @@ func NewPluginSys() *PluginSys {
 		Meta: plugin.Meta{
 			Name:      "系统插件",
 			HelpWords: "AniaBot系统插件",
-			Order:     plugin.LevelLog,
+			Order:     plugin.LevelLog - 100,
 			ShowFor:   plugininfo.ShowForGroup | plugininfo.ShowForFriend,
 			Author:    "jeanhua",
 			Version:   "1.0.0",

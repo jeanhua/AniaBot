@@ -29,6 +29,7 @@ func NewPlugin() *AntiWithdrawalPlugin {
 	p.Version = "1.0.0"
 	p.AdminOnly = false
 	p.ShowFor = plugininfo.ShowForGroup
+	p.Order = plugin.LevelNormal
 	return p
 }
 

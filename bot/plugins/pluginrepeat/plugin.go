@@ -35,6 +35,7 @@ func NewPlugin() *RepeatPlugin {
 	p.ShowFor = plugininfo.ShowForGroup
 	p.Author = "jeanhua"
 	p.Version = "1.0.0"
+	p.Order = plugin.LevelNormal
 	return p
 }
 

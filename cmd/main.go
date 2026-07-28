@@ -35,11 +35,13 @@ func main() {
 	// 插件注册
 	bot.AddPlugin(pluginsys.NewPluginSys())
 	bot.AddPlugin(pluginlog.NewPlugin())
+	bot.AddPlugin(plugininterceptor.NewPlugin())
+
 	bot.AddPlugin(pluginrepeat.NewPlugin())
 	bot.AddPlugin(pluginantiwithdrawal.NewPlugin())
-	bot.AddPlugin(plugininterceptor.NewPlugin())
-	bot.AddPlugin(pluginaichat.NewAIChatPlugin())
 	bot.AddPlugin(pluginnews.NewNewsPlugin())
+
+	bot.AddPlugin(pluginaichat.NewAIChatPlugin())
 
 	bot.Run()
 }
