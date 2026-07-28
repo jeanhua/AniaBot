@@ -307,7 +307,7 @@
             <th class="px-6 py-3 font-medium">说明</th>
             <th class="px-6 py-3 font-medium">作者</th>
             <th class="px-6 py-3 font-medium">版本</th>
-            <th class="px-6 py-3 font-medium">仅管理员</th>
+            <th class="px-6 py-3 font-medium">可见性</th>
           </tr>
         </thead>
         <tbody>
