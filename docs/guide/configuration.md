@@ -107,7 +107,7 @@ HTTP 模式下 NapCat 向 `localhost` 上报会失败，请将 NapCat 的 HTTP C
 | `plugin.ai_chat_bot.api_key` | 空（必填） | API 密钥 |
 | `plugin.ai_chat_bot.model` | `deepseek-chat` | 主模型名称 |
 | `plugin.ai_chat_bot.multimodal` | `false` | 主模型是否支持图片输入 |
-| `plugin.ai_chat_bot.rate_limit` | `2` | 每秒最多调用次数 |
+| `plugin.ai_chat_bot.rate_limit` | `2` | 同时处理的 AI 请求并发上限，超出后直接拒绝 |
 
 ### 模型参数
 
