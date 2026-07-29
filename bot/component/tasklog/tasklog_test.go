@@ -141,6 +141,38 @@ func TestMigrateLegacyEntries(t *testing.T) {
 	}
 }
 
+func TestQueryBeforeCursor(t *testing.T) {
+	l := New(newFakeStore(), 10, nil)
+	for _, title := range []string{"a", "b", "c", "d", "e"} {
+		l.Record(Entry{TaskID: "t", Status: StatusSuccess, TaskTitle: title})
+	}
+	all := l.Query(Filter{Limit: 10})
+	if len(all) != 5 {
+		t.Fatalf("want 5 entries, got %d", len(all))
+	}
+	// 以中间记录为游标，应只返回比它更旧的两条
+	cursor := all[2].ID
+	page := l.Query(Filter{Before: cursor, Limit: 10})
+	if len(page) != 2 || page[0].ID != all[3].ID || page[1].ID != all[4].ID {
+		t.Fatalf("cursor page wrong: %+v", page)
+	}
+	// 非法游标不生效，从最新开始
+	bad := l.Query(Filter{Before: "!!", Limit: 1})
+	if len(bad) != 1 || bad[0].ID != all[0].ID {
+		t.Fatalf("invalid cursor should be ignored: %+v", bad)
+	}
+	// 游标与过滤条件叠加
+	l2 := New(newFakeStore(), 10, nil)
+	l2.Record(Entry{TaskID: "a", Status: StatusSuccess})
+	l2.Record(Entry{TaskID: "b", Status: StatusSuccess})
+	e3 := l2.Record(Entry{TaskID: "a", Status: StatusTimeout})
+	l2.Record(Entry{TaskID: "a", Status: StatusSuccess})
+	got := l2.Query(Filter{TaskID: "a", Before: e3.ID, Limit: 10})
+	if len(got) != 1 || got[0].TaskID != "a" {
+		t.Fatalf("cursor + filter wrong: %+v", got)
+	}
+}
+
 func TestRecentForTask(t *testing.T) {
 	l := New(newFakeStore(), 10, nil)
 	l.Record(Entry{TaskID: "a", Status: StatusSuccess})

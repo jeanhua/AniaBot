@@ -61,8 +61,9 @@ type ClockTaskSource interface {
 
 // MsgLogSource 可选接口：插件实现后，面板「消息日志」页可展示其记录的
 // 群消息 / 好友消息 / 通知事件（当前由日志打印插件实现，内存环形缓冲）。
+// beforeID>0 时仅返回 ID 小于它的更旧日志（滚动分页游标）。
 type MsgLogSource interface {
-	MsgLogRecent(limit int) []msglog.Entry
+	MsgLogPage(limit int, beforeID uint64) []msglog.Entry
 }
 
 // SkillSource 可选接口：插件实现后，面板可对其 AI skill 做列表 / 上传 / 删除
@@ -99,18 +100,18 @@ type QueryLogSource interface {
 
 // Options 面板依赖。
 type Options struct {
-	Listen        string                                   // 监听地址，如 127.0.0.1:7700
-	Config        *configstore.Store                       // 配置中心
-	Persistent    storage.PersistentStorage                // 根持久化存储（__admin 命名空间存密码哈希）
-	Bot           BotInfo                                  // 运行信息来源
-	Adapter       func() string                            // 适配器连接状态描述
-	AdapterDetail func() string                            // 适配器状态详情（最近错误/重试次数，可为 nil）
-	TaskLogs      func(f tasklog.Filter) []tasklog.Entry   // AI 定时任务执行日志（可为 nil）
-	Clocks        ClockTaskSource                          // AI 定时任务列表与启停（可为 nil）
-	MsgLogs       func(limit int) []msglog.Entry           // 消息日志（群/好友/通知，可为 nil）
-	Skills        SkillSource                              // AI skill 管理（可为 nil）
-	Memories      MemorySource                             // AI 长期记忆管理（可为 nil）
-	QueryLogs     func(f querylog.Filter) []querylog.Entry // AI Query 日志（可为 nil）
+	Listen        string                                          // 监听地址，如 127.0.0.1:7700
+	Config        *configstore.Store                              // 配置中心
+	Persistent    storage.PersistentStorage                       // 根持久化存储（__admin 命名空间存密码哈希）
+	Bot           BotInfo                                         // 运行信息来源
+	Adapter       func() string                                   // 适配器连接状态描述
+	AdapterDetail func() string                                   // 适配器状态详情（最近错误/重试次数，可为 nil）
+	TaskLogs      func(f tasklog.Filter) []tasklog.Entry          // AI 定时任务执行日志（可为 nil）
+	Clocks        ClockTaskSource                                 // AI 定时任务列表与启停（可为 nil）
+	MsgLogs       func(limit int, beforeID uint64) []msglog.Entry // 消息日志（群/好友/通知，可为 nil）
+	Skills        SkillSource                                     // AI skill 管理（可为 nil）
+	Memories      MemorySource                                    // AI 长期记忆管理（可为 nil）
+	QueryLogs     func(f querylog.Filter) []querylog.Entry        // AI Query 日志（可为 nil）
 	Logger        *slog.Logger
 }
 
@@ -489,13 +490,15 @@ func (s *Server) handleFriends(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusOK, friends)
 }
 
-// handleTaskLogs 按条件查询定时任务执行日志（新在前）。
+// handleTaskLogs 按条件分页查询定时任务执行日志（新在前）。
 // 支持查询参数：target_type（group/friend）、target_id（群号/QQ）、task_id（任务 ID）、
 // status（running/success/timeout/error）、start / end（RFC3339 或 datetime-local 格式）、
-// keyword（匹配任务标题）、limit（条数上限，默认 200，最大 500）。
+// keyword（匹配任务标题）、limit（每页条数，默认 50，最大 200）、
+// before（分页游标：仅返回比该日志 ID 更旧的记录）。
+// 响应：{"items": [...], "has_more": bool}。
 func (s *Server) handleTaskLogs(w http.ResponseWriter, r *http.Request) {
 	if s.opt.TaskLogs == nil {
-		writeJSON(w, http.StatusOK, []any{})
+		writePagedLogs(w, nil, false)
 		return
 	}
 	q := r.URL.Query()
@@ -532,32 +535,60 @@ func (s *Server) handleTaskLogs(w http.ResponseWriter, r *http.Request) {
 		}
 		f.End = t
 	}
-	if v := q.Get("limit"); v != "" {
-		if n, err := strconv.Atoi(v); err == nil && n > 0 {
-			if n > 500 {
-				n = 500
-			}
-			f.Limit = n
+	if v := q.Get("before"); v != "" {
+		if _, err := strconv.ParseUint(v, 36, 64); err != nil {
+			writeError(w, http.StatusBadRequest, "before 游标格式错误（应为日志 ID）")
+			return
 		}
+		f.Before = v
 	}
-	writeJSON(w, http.StatusOK, s.opt.TaskLogs(f))
+	limit := parsePageLimit(q.Get("limit"))
+	// 多取一条判断是否还有下一页
+	f.Limit = limit + 1
+	items := s.opt.TaskLogs(f)
+	hasMore := len(items) > limit
+	if hasMore {
+		items = items[:limit]
+	}
+	writePagedLogs(w, items, hasMore)
 }
 
-// handleMsgLogs 返回最近的消息日志（群/好友/通知，新在前）。
+// handleMsgLogs 分页返回消息日志（群/好友/通知，新在前）。
+// 支持查询参数：limit（每页条数，默认 50，最大 200）、
+// before（分页游标：仅返回 ID 小于它的更旧日志）。
+// 响应：{"items": [...], "has_more": bool}。
 func (s *Server) handleMsgLogs(w http.ResponseWriter, r *http.Request) {
 	if s.opt.MsgLogs == nil {
-		writeJSON(w, http.StatusOK, []any{})
+		writePagedLogs(w, nil, false)
 		return
 	}
-	writeJSON(w, http.StatusOK, s.opt.MsgLogs(300))
+	q := r.URL.Query()
+	limit := parsePageLimit(q.Get("limit"))
+	var before uint64
+	if v := q.Get("before"); v != "" {
+		n, err := strconv.ParseUint(v, 10, 64)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, "before 游标格式错误（应为数字日志 ID）")
+			return
+		}
+		before = n
+	}
+	items := s.opt.MsgLogs(limit+1, before)
+	hasMore := len(items) > limit
+	if hasMore {
+		items = items[:limit]
+	}
+	writePagedLogs(w, items, hasMore)
 }
 
-// handleQueryLogs 按条件查询 AI Query 日志（新在前）。
+// handleQueryLogs 按条件分页查询 AI Query 日志（新在前）。
 // 支持查询参数：chat_type（group/friend）、target_id（群号/QQ）、sender（触发人 QQ）、
-// start / end（RFC3339 或 datetime-local 格式）、keyword（匹配用户输入）、limit（条数上限，默认 200，最大 500）。
+// start / end（RFC3339 或 datetime-local 格式）、keyword（匹配用户输入）、
+// limit（每页条数，默认 50，最大 200）、before（分页游标：仅返回比该日志 ID 更旧的记录）。
+// 响应：{"items": [...], "has_more": bool}。
 func (s *Server) handleQueryLogs(w http.ResponseWriter, r *http.Request) {
 	if s.opt.QueryLogs == nil {
-		writeJSON(w, http.StatusOK, []any{})
+		writePagedLogs(w, nil, false)
 		return
 	}
 	q := r.URL.Query()
@@ -587,15 +618,51 @@ func (s *Server) handleQueryLogs(w http.ResponseWriter, r *http.Request) {
 		}
 		f.End = t
 	}
-	if v := q.Get("limit"); v != "" {
-		if n, err := strconv.Atoi(v); err == nil && n > 0 {
-			if n > 500 {
-				n = 500
-			}
-			f.Limit = n
+	if v := q.Get("before"); v != "" {
+		if _, err := strconv.ParseUint(v, 36, 64); err != nil {
+			writeError(w, http.StatusBadRequest, "before 游标格式错误（应为日志 ID）")
+			return
 		}
+		f.Before = v
 	}
-	writeJSON(w, http.StatusOK, s.opt.QueryLogs(f))
+	limit := parsePageLimit(q.Get("limit"))
+	f.Limit = limit + 1
+	items := s.opt.QueryLogs(f)
+	hasMore := len(items) > limit
+	if hasMore {
+		items = items[:limit]
+	}
+	writePagedLogs(w, items, hasMore)
+}
+
+// parsePageLimit 解析分页大小：默认 50，最大 200；非法值取默认。
+func parsePageLimit(v string) int {
+	const (
+		def = 50
+		max = 200
+	)
+	if v == "" {
+		return def
+	}
+	n, err := strconv.Atoi(v)
+	if err != nil || n <= 0 {
+		return def
+	}
+	if n > max {
+		return max
+	}
+	return n
+}
+
+// writePagedLogs 输出分页日志响应；items 为 nil 时序列化为空数组而非 null。
+func writePagedLogs(w http.ResponseWriter, items any, hasMore bool) {
+	if items == nil {
+		items = []any{}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"items":    items,
+		"has_more": hasMore,
+	})
 }
 
 // parseQueryTime 解析面板传来的时间：RFC3339，或 datetime-local 控件的

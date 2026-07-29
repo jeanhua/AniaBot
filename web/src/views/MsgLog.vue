@@ -24,9 +24,11 @@
       </div>
     </div>
 
-    <!-- 日志列表（旧在上、新在下，自动滚到底部） -->
+    <!-- 日志列表（旧在上、新在下，自动滚到底部；滚动到顶部加载更早的记录） -->
     <section class="bg-white rounded-xl shadow-sm border border-slate-200/60 overflow-hidden">
-      <ul ref="listEl" class="h-[60vh] overflow-y-auto px-5 py-3 space-y-3">
+      <ul ref="listEl" class="h-[60vh] overflow-y-auto px-5 py-3 space-y-3" @scroll="onScroll">
+        <li v-if="loadingMore" class="py-2 text-xs text-slate-400 text-center list-none">加载更早的消息…</li>
+        <li v-else-if="!hasMore && logs.length" class="py-2 text-xs text-slate-300 text-center list-none">没有更早的消息了</li>
         <li v-if="filtered.length === 0" class="py-12 text-sm text-slate-400 text-center list-none">
           暂无消息记录（日志保存在内存中，重启后清空，最多保留最近 500 条）
         </li>
@@ -76,11 +78,15 @@ const typeTabs = [
   { value: 'notice', label: '通知' },
 ]
 
-const logs = ref([])
+const PAGE = 50 // 每页条数
+
+const logs = ref([]) // 新在前
 const filter = ref('all')
 const autoRefresh = ref(true)
 const listEl = ref(null)
 const hasNew = ref(false)
+const hasMore = ref(false) // 是否还有更早的日志可加载
+const loadingMore = ref(false)
 let timer = null
 
 // 接口返回新在前，展示时翻转为旧在上、新在下
@@ -124,10 +130,20 @@ function scrollToBottom(smooth = false) {
   hasNew.value = false
 }
 
+// 刷新：拉取最新一页，仅把新出现的条目合并到头部，已加载的更早分页保留
 async function load() {
   const stick = nearBottom()
   const prevLatest = logs.value[0]?.id
-  try { logs.value = await api.getMsgLogs() } catch { return }
+  let page
+  try { page = await api.getMsgLogs({ limit: PAGE }) } catch { return }
+  const items = page.items || []
+  if (!logs.value.length) {
+    logs.value = items
+    hasMore.value = page.has_more
+  } else {
+    const fresh = items.filter((l) => l.id > prevLatest)
+    if (fresh.length) logs.value = [...fresh, ...logs.value]
+  }
   const gotNew = logs.value[0]?.id !== prevLatest
   if (!gotNew) return
   if (stick) {
@@ -136,6 +152,32 @@ async function load() {
   } else {
     hasNew.value = true
   }
+}
+
+// 滚动到顶部附近时加载更早的一页，并保持视口位置不跳变
+async function loadOlder() {
+  if (loadingMore.value || !hasMore.value || !logs.value.length) return
+  loadingMore.value = true
+  const oldest = logs.value[logs.value.length - 1].id
+  const el = listEl.value
+  const prevHeight = el?.scrollHeight ?? 0
+  try {
+    const page = await api.getMsgLogs({ limit: PAGE, before: oldest })
+    const items = (page.items || []).filter((l) => l.id < oldest)
+    hasMore.value = page.has_more && items.length > 0
+    if (items.length) {
+      logs.value = [...logs.value, ...items]
+      await nextTick()
+      if (el) el.scrollTop = el.scrollHeight - prevHeight + el.scrollTop
+    }
+  } catch { /* 忽略，下次滚动重试 */ } finally {
+    loadingMore.value = false
+  }
+}
+
+function onScroll() {
+  const el = listEl.value
+  if (el && el.scrollTop < 80) loadOlder()
 }
 
 // 实时刷新：标签页隐藏时暂停，恢复可见时立即刷新

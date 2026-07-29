@@ -45,12 +45,13 @@ func (p *LogPlugin) Start(ctx context.Context, cfg *viper.Viper) error {
 	return nil
 }
 
-// MsgLogRecent 供 Web 控制面板读取最近的消息日志（实现 adminpanel.MsgLogSource）。
-func (p *LogPlugin) MsgLogRecent(limit int) []msglog.Entry {
+// MsgLogPage 供 Web 控制面板分页读取消息日志（实现 adminpanel.MsgLogSource）：
+// 新在前，beforeID>0 时仅返回 ID 小于它的更旧日志。
+func (p *LogPlugin) MsgLogPage(limit int, beforeID uint64) []msglog.Entry {
 	if p.recorder == nil {
 		return nil
 	}
-	return p.recorder.Recent(limit)
+	return p.recorder.Page(limit, beforeID)
 }
 
 // add 记录一条消息日志；recorder 未初始化（Start 之前）时忽略。

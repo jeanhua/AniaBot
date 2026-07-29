@@ -219,3 +219,25 @@ func TestQueryFilter(t *testing.T) {
 		t.Errorf("Query 结果应按时间倒序: %+v", got)
 	}
 }
+
+func TestQueryBeforeCursor(t *testing.T) {
+	l := New(newFakeStore(), 10, nil)
+	for _, q := range []string{"a", "b", "c", "d", "e"} {
+		l.Record(Entry{ChatType: "group", TargetID: "1", Query: q})
+	}
+	all := l.Query(Filter{Limit: 10})
+	if len(all) != 5 {
+		t.Fatalf("want 5 entries, got %d", len(all))
+	}
+	// 以中间记录为游标，应只返回比它更旧的两条
+	cursor := all[2].ID
+	page := l.Query(Filter{Before: cursor, Limit: 10})
+	if len(page) != 2 || page[0].ID != all[3].ID || page[1].ID != all[4].ID {
+		t.Fatalf("cursor page wrong: %+v", page)
+	}
+	// 非法游标不生效，从最新开始
+	bad := l.Query(Filter{Before: "!!", Limit: 1})
+	if len(bad) != 1 || bad[0].ID != all[0].ID {
+		t.Fatalf("invalid cursor should be ignored: %+v", bad)
+	}
+}

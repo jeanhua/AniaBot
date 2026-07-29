@@ -56,6 +56,49 @@ func TestMaxEntries(t *testing.T) {
 	}
 }
 
+func TestPage(t *testing.T) {
+	r := msglog.New(newStore(), 10)
+	for _, text := range []string{"a", "b", "c", "d", "e"} {
+		r.Add(msglog.Entry{Type: msglog.TypeGroup, Text: text})
+	}
+
+	// 第一页：最新两条
+	p1 := r.Page(2, 0)
+	if len(p1) != 2 || p1[0].Text != "e" || p1[1].Text != "d" {
+		t.Fatalf("page1 wrong: %+v", p1)
+	}
+	// 第二页：以 p1 最旧一条为游标
+	p2 := r.Page(2, p1[1].ID)
+	if len(p2) != 2 || p2[0].Text != "c" || p2[1].Text != "b" {
+		t.Fatalf("page2 wrong: %+v", p2)
+	}
+	// 第三页：只剩一条
+	p3 := r.Page(2, p2[1].ID)
+	if len(p3) != 1 || p3[0].Text != "a" {
+		t.Fatalf("page3 wrong: %+v", p3)
+	}
+	// 游标超过最新 ID 时从最新开始
+	p4 := r.Page(2, 999)
+	if len(p4) != 2 || p4[0].Text != "e" {
+		t.Fatalf("page with future cursor wrong: %+v", p4)
+	}
+}
+
+func TestPageWithEviction(t *testing.T) {
+	r := msglog.New(newStore(), 3)
+	for _, text := range []string{"a", "b", "c", "d", "e"} {
+		r.Add(msglog.Entry{Type: msglog.TypeGroup, Text: text})
+	}
+	// 容量 3，只剩 e/d/c；游标指向已淘汰的 b（ID=2）时换算偏移越界，应为空
+	if page := r.Page(2, 2); len(page) != 0 {
+		t.Fatalf("evicted cursor should yield empty page, got %+v", page)
+	}
+	// 游标指向现存最旧的 c（ID=3）时，更旧的已被淘汰，应为空
+	if page := r.Page(2, 3); len(page) != 0 {
+		t.Fatalf("oldest cursor should yield empty page, got %+v", page)
+	}
+}
+
 // TestRestartWithSameStore 模拟 redis 驱动下的重启：同一存储新建 Recorder，
 // 日志与 ID 计数器都应续接。
 func TestRestartWithSameStore(t *testing.T) {

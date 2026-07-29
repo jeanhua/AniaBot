@@ -111,9 +111,37 @@ func (r *Recorder) Recent(limit int) []Entry {
 	if !ok {
 		return nil
 	}
+	return decodeEntries(items)
+}
+
+// Page 返回一页日志（新在前），供面板滚动分页使用：beforeID>0 时仅返回
+// ID 小于它的更旧日志，否则从最新开始。limit<=0 时取容量上限。
+//
+// 列表按新在前排列且 ID 连续自增，索引 i 处的条目 ID 为 seq-i，
+// 因此可直接把游标换算为列表偏移，无需全量扫描。
+func (r *Recorder) Page(limit int, beforeID uint64) []Entry {
+	r.mu.Lock()
+	seq := r.seq
+	r.mu.Unlock()
+
+	if limit <= 0 || limit > int(r.max) {
+		limit = int(r.max)
+	}
+	var start int64
+	if beforeID > 0 && beforeID <= seq {
+		start = int64(seq - beforeID + 1)
+	}
+	items, ok := r.store.LRange(context.Background(), entriesKey, start, start+int64(limit)-1)
+	if !ok {
+		return nil
+	}
+	return decodeEntries(items)
+}
+
+// decodeEntries 把存储层按 any 解码的列表元素（map）经 JSON 往返还原为 Entry。
+func decodeEntries(items []any) []Entry {
 	out := make([]Entry, 0, len(items))
 	for _, item := range items {
-		// 存储层按 any 解码（map），经 JSON 往返还原为 Entry
 		data, err := json.Marshal(item)
 		if err != nil {
 			continue

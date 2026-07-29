@@ -10,6 +10,10 @@
 
 ## [Unreleased]
 
+### 变更
+
+- 面板消息日志 / Query 日志 / 定时任务执行日志改为服务端分页 + 前端滚动加载：`GET /api/msglogs` `/api/querylogs` `/api/tasklogs` 新增 `limit`（默认 50、最大 200）与 `before` 游标参数，响应结构由裸数组改为 `{"items": [...], "has_more": bool}`（调用方需同步适配）；消息日志利用「列表新在前 + ID 连续自增」把游标直接换算为列表偏移定位，任务/Query 日志按序号跳过游标之后记录，均不再全量读取；前端三个页面刷新只拉最新一页合并头部（已有条目原地更新状态），消息日志滚动到顶部、Query/任务日志滚动到底部时自动加载更早分页
+
 ### 修复
 
 - 修复面板消息日志中群表情回应通知的操作者 QQ 恒为 0 的问题：`GroupMsgEmojiLikeNotice` 按错误的 `operator_id` 字段解析，而 NapCat 实际上报的是 `user_id`；现更正为 `UserId`（同时修正 `likes` 的表情 ID 字段为 `emoji_id` 字符串）

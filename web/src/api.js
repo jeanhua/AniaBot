@@ -24,6 +24,16 @@ async function request(path, options = {}) {
   return data
 }
 
+// 把参数对象拼成查询串，空值跳过
+function qs(params = {}) {
+  const q = new URLSearchParams()
+  for (const [k, v] of Object.entries(params)) {
+    if (v !== undefined && v !== null && v !== '') q.set(k, v)
+  }
+  const s = q.toString()
+  return s ? '?' + s : ''
+}
+
 export const api = {
   async checkLogin() {
     try {
@@ -76,25 +86,12 @@ export const api = {
   getPlugins: () => request('/api/plugins'),
   getGroups: () => request('/api/groups'),
   getFriends: () => request('/api/friends'),
-  getMsgLogs: () => request('/api/msglogs'),
-  // 定时任务执行日志条件查询：{ target_type, target_id, task_id, status, start, end, keyword, limit }（均可选）
-  getTaskLogs: (params = {}) => {
-    const qs = new URLSearchParams()
-    for (const [k, v] of Object.entries(params)) {
-      if (v !== undefined && v !== null && v !== '') qs.set(k, v)
-    }
-    const s = qs.toString()
-    return request(`/api/tasklogs${s ? '?' + s : ''}`)
-  },
-  // Query 日志条件查询：{ chat_type, target_id, sender, start, end, keyword, limit }（均可选）
-  getQueryLogs: (params = {}) => {
-    const qs = new URLSearchParams()
-    for (const [k, v] of Object.entries(params)) {
-      if (v !== undefined && v !== null && v !== '') qs.set(k, v)
-    }
-    const s = qs.toString()
-    return request(`/api/querylogs${s ? '?' + s : ''}`)
-  },
+  // 消息日志分页查询：{ limit, before }（均可选），返回 { items, has_more }
+  getMsgLogs: (params = {}) => request(`/api/msglogs${qs(params)}`),
+  // 定时任务执行日志分页查询：{ target_type, target_id, task_id, status, start, end, keyword, limit, before }（均可选）
+  getTaskLogs: (params = {}) => request(`/api/tasklogs${qs(params)}`),
+  // Query 日志分页查询：{ chat_type, target_id, sender, start, end, keyword, limit, before }（均可选）
+  getQueryLogs: (params = {}) => request(`/api/querylogs${qs(params)}`),
   getClocks: () => request('/api/clocks'),
   // token 消耗监控指标：{ summary, today, daily[] }，含缓存命中率
   getTokenStats: () => request('/api/tokenstats'),

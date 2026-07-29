@@ -248,7 +248,7 @@ func (l *Logger) Recent(limit int) []Entry {
 func (l *Logger) RecentForTask(taskID string, limit int) []Entry {
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	return l.loadMatchLocked(func(e Entry) bool { return e.TaskID == taskID }, limit)
+	return l.loadMatchLocked(func(e Entry) bool { return e.TaskID == taskID }, limit, 0)
 }
 
 // Filter 执行日志的查询条件，零值字段不参与过滤。
@@ -260,6 +260,7 @@ type Filter struct {
 	Start      time.Time // 触发起始时间（含），零值不限
 	End        time.Time // 触发截止时间（含），零值不限
 	Keyword    string    // 任务标题包含的关键词（不区分大小写）
+	Before     string    // 分页游标：仅返回比该日志 ID 更旧的记录（空为从最新开始）
 	Limit      int       // 返回条数上限，<=0 时取默认值
 }
 
@@ -290,6 +291,7 @@ func (f Filter) match(e Entry) bool {
 }
 
 // Query 按条件过滤日志（新在前），最多返回 f.Limit 条（<=0 时取默认值）。
+// f.Before 非空时作为分页游标，仅返回比它更旧的记录。
 func (l *Logger) Query(f Filter) []Entry {
 	limit := f.Limit
 	if limit <= 0 {
@@ -297,12 +299,25 @@ func (l *Logger) Query(f Filter) []Entry {
 	}
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	return l.loadMatchLocked(f.match, limit)
+	return l.loadMatchLocked(f.match, limit, parseBeforeSeq(f.Before))
+}
+
+// parseBeforeSeq 把分页游标（日志 ID，序号的 base36）解析为序号；非法时为 0（不生效）。
+func parseBeforeSeq(before string) uint64 {
+	if before == "" {
+		return 0
+	}
+	n, err := strconv.ParseUint(before, 36, 64)
+	if err != nil {
+		return 0
+	}
+	return n
 }
 
 // loadMatchLocked 逆序（新在前）逐条加载日志，仅保留满足 match 的记录，
 // 凑够 limit 条即停止，避免面板查询时把全部记录逐键读出。limit<=0 表示不限条数。
-func (l *Logger) loadMatchLocked(match func(Entry) bool, limit int) []Entry {
+// beforeSeq>0 时跳过序号 >= beforeSeq 的记录（游标分页）。
+func (l *Logger) loadMatchLocked(match func(Entry) bool, limit int, beforeSeq uint64) []Entry {
 	seqs := l.listLocked() // 升序，新在后
 	ctx := context.Background()
 	capacity := limit
@@ -311,6 +326,9 @@ func (l *Logger) loadMatchLocked(match func(Entry) bool, limit int) []Entry {
 	}
 	out := make([]Entry, 0, capacity)
 	for i := len(seqs) - 1; i >= 0; i-- {
+		if beforeSeq > 0 && seqs[i] >= beforeSeq {
+			continue
+		}
 		var e Entry
 		if !l.store.Get(ctx, entryKey(seqs[i]), &e) {
 			continue

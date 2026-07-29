@@ -65,7 +65,7 @@
       </div>
     </section>
 
-    <!-- 日志列表（新在上） -->
+    <!-- 日志列表（新在上，滚动到底部自动加载更早的记录） -->
     <section class="space-y-3">
       <div v-if="logs.length === 0" class="bg-white rounded-xl shadow-sm border border-slate-200/60 py-12 text-sm text-slate-400 text-center">
         暂无符合条件的 Query 记录（@ 机器人或私聊触发 AI 回复后在此展示）
@@ -101,6 +101,11 @@
         </button>
       </div>
     </section>
+
+    <!-- 滚动分页哨兵：进入视口即加载下一页 -->
+    <div ref="sentinel" class="h-px" />
+    <div v-if="loadingMore" class="py-3 text-xs text-slate-400 text-center">加载更早的记录…</div>
+    <div v-else-if="!hasMore && logs.length" class="py-3 text-xs text-slate-300 text-center">没有更早的记录了</div>
 
     <!-- 详情弹窗：点遮罩 / 右上角关闭 / Esc 均可关闭 -->
     <div
@@ -207,23 +212,38 @@ const emptyFilters = () => ({ chat_type: '', sender: '', target_id: '', start: '
 const filters = reactive(emptyFilters())
 const applied = reactive(emptyFilters())
 
-const logs = ref([])
+const PAGE = 50 // 每页条数
+
+const logs = ref([]) // 新在前
 const autoRefresh = ref(true)
 // detail 为当前弹窗展示的日志（null 表示弹窗关闭）
 const detail = ref(null)
+const hasMore = ref(false) // 是否还有更早的日志可加载
+const loadingMore = ref(false)
+const loadedOlder = ref(false) // 是否已加载过更早分页（是则刷新不再重置 hasMore）
+const sentinel = ref(null)
 let timer = null
+let observer = null
 
 const hasFilter = computed(() => Object.values(applied).some((v) => v !== ''))
 
 function applyFilters() {
   Object.assign(applied, filters)
+  resetList()
   load()
 }
 
 function resetFilters() {
   Object.assign(filters, emptyFilters())
   Object.assign(applied, filters)
+  resetList()
   load()
+}
+
+function resetList() {
+  logs.value = []
+  hasMore.value = false
+  loadedOlder.value = false
 }
 
 // Esc 关闭详情弹窗
@@ -260,8 +280,51 @@ function statusClass(s) {
   }[s] || 'bg-slate-100 text-slate-600'
 }
 
+// 刷新：拉取最新一页，新条目插入头部、已有条目原地更新（执行中 → 完成），
+// 已加载的更早分页保留
 async function load() {
-  try { logs.value = await api.getQueryLogs(applied) } catch { return }
+  let page
+  try { page = await api.getQueryLogs({ ...applied, limit: PAGE }) } catch { return }
+  mergeHead(page.items || [])
+  if (!loadedOlder.value) hasMore.value = page.has_more
+}
+
+// 把最新一页合并进列表头部（items 新在前）
+function mergeHead(items) {
+  if (!logs.value.length) {
+    logs.value = items
+    return
+  }
+  const index = new Map(logs.value.map((l, i) => [l.id, i]))
+  const fresh = []
+  const merged = [...logs.value]
+  for (const it of items) {
+    if (index.has(it.id)) merged[index.get(it.id)] = it
+    else fresh.push(it)
+  }
+  logs.value = fresh.length ? [...fresh, ...merged] : merged
+  // 详情弹窗内容随状态更新同步刷新
+  if (detail.value) {
+    const cur = logs.value.find((l) => l.id === detail.value.id)
+    if (cur) detail.value = cur
+  }
+}
+
+// 加载更早的一页（滚动分页）
+async function loadMore() {
+  if (loadingMore.value || !hasMore.value || !logs.value.length) return
+  loadingMore.value = true
+  const before = logs.value[logs.value.length - 1].id
+  try {
+    const page = await api.getQueryLogs({ ...applied, limit: PAGE, before })
+    const known = new Set(logs.value.map((l) => l.id))
+    const items = (page.items || []).filter((it) => !known.has(it.id))
+    loadedOlder.value = true
+    hasMore.value = page.has_more && items.length > 0
+    logs.value = [...logs.value, ...items]
+  } catch { /* 忽略，下次滚动重试 */ } finally {
+    loadingMore.value = false
+  }
 }
 
 // 实时刷新：标签页隐藏时暂停，恢复可见时立即刷新
@@ -272,12 +335,18 @@ function onVisible() {
 onMounted(() => {
   load()
   timer = setInterval(() => { if (!document.hidden && autoRefresh.value) load() }, 4000)
+  observer = new IntersectionObserver(
+    (entries) => { if (entries.some((e) => e.isIntersecting)) loadMore() },
+    { rootMargin: '300px' },
+  )
+  if (sentinel.value) observer.observe(sentinel.value)
   document.addEventListener('visibilitychange', onVisible)
   document.addEventListener('keydown', onKeydown)
 })
 
 onUnmounted(() => {
   clearInterval(timer)
+  observer?.disconnect()
   document.removeEventListener('visibilitychange', onVisible)
   document.removeEventListener('keydown', onKeydown)
 })

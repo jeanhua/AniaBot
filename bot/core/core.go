@@ -329,7 +329,7 @@ func (ania *AniaBot) startAdminPanel() {
 	// 查找提供定时任务执行日志的插件（如 AI 对话插件的 clock 功能）
 	var taskLogFn func(f tasklog.Filter) []tasklog.Entry
 	var clockSrc adminpanel.ClockTaskSource
-	var msgLogFn func(limit int) []msglog.Entry
+	var msgLogFn func(limit int, beforeID uint64) []msglog.Entry
 	var skillSrc adminpanel.SkillSource
 	var memorySrc adminpanel.MemorySource
 	var queryLogFn func(f querylog.Filter) []querylog.Entry
@@ -341,7 +341,7 @@ func (ania *AniaBot) startAdminPanel() {
 			clockSrc = src
 		}
 		if src, ok := p.(adminpanel.MsgLogSource); ok {
-			msgLogFn = src.MsgLogRecent
+			msgLogFn = src.MsgLogPage
 		}
 		if src, ok := p.(adminpanel.SkillSource); ok {
 			skillSrc = src
