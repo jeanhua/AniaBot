@@ -215,8 +215,8 @@ func (p *LogPlugin) OnHonor(ctx context.Context, bot bot.Bot, n message.HonorNot
 }
 
 func (p *LogPlugin) OnGroupMsgEmojiLike(ctx context.Context, bot bot.Bot, n message.GroupMsgEmojiLikeNotice) error {
-	p.notice(n.GroupId, n.OperatorId, "表情回应",
-		fmt.Sprintf("%d 对消息（%d）添加了 %d 个表情回应", n.OperatorId.Uint64(), n.MessageId.Uint64(), len(n.Likes)))
+	p.notice(n.GroupId, n.UserId, "表情回应",
+		fmt.Sprintf("%d 对消息（%d）添加了 %d 个表情回应", n.UserId.Uint64(), n.MessageId.Uint64(), len(n.Likes)))
 	return nil
 }
 

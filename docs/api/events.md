@@ -211,12 +211,12 @@ type HonorNotice struct {
 ```go
 type GroupMsgEmojiLikeNotice struct {
     BasicNotice
-    GroupId    QID
-    OperatorId QID
-    MessageId  QID
-    Likes      []struct {
-        Code  int // 表情 ID
-        Count int // 数量
+    GroupId   QID
+    UserId    QID // 贴/取消贴表情的操作者
+    MessageId QID
+    Likes     []struct {
+        EmojiId string // 表情 ID
+        Count   int    // 数量
     }
 }
 ```

@@ -108,12 +108,12 @@ type HonorNotice struct {
 // GroupMsgEmojiLikeNotice 群表情回应
 type GroupMsgEmojiLikeNotice struct {
 	BasicNotice
-	GroupId    QID `json:"group_id"`
-	OperatorId QID `json:"operator_id"`
-	MessageId  QID `json:"message_id"`
-	Likes      []struct {
-		Code  int `json:"code"`
-		Count int `json:"count"`
+	GroupId   QID `json:"group_id"`
+	UserId    QID `json:"user_id"` // 贴/取消贴表情的操作者
+	MessageId QID `json:"message_id"`
+	Likes     []struct {
+		EmojiId string `json:"emoji_id"`
+		Count   int    `json:"count"`
 	} `json:"likes,omitempty"`
 }
 
