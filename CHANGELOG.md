@@ -10,6 +10,10 @@
 
 ## [Unreleased]
 
+### 修复
+
+- 修复 LLM 请求 prompt 前缀缓存命中率极低的问题：工具定义列表（`ToolExecuter.toolsWithSession`）与注入 system prompt 的 skill 注册表（`SkillManager.BuildAvailableSkillsPrompt`）此前直接遍历 Go map 序列化，输出顺序每次请求随机变化，导致上游 context cache（如 DeepSeek）从前缀第 0 个 token 起即不匹配、命中率接近 0；现两处均按名称排序输出，保证请求前缀完全确定，同一会话内历史部分可稳定命中缓存
+
 ## [v3.4.0] - 2026-07-29
 
 ### 新增

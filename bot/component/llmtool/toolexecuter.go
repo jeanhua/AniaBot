@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"reflect"
+	"sort"
 )
 
 type ToolExecuter struct {
@@ -35,13 +36,27 @@ func (e *ToolExecuter) Tools() []ToolDef {
 	return e.toolsWithSession(nil)
 }
 
+// toolsWithSession 合并共享工具与会话工具的定义列表。
+// 输出按工具名排序：Go map 遍历顺序随机，若直接序列化会导致每次请求的
+// tools 字段排列不同，把上游 prompt 前缀缓存（如 DeepSeek context caching）
+// 全部打失，必须保证完全确定的输出顺序。
 func (e *ToolExecuter) toolsWithSession(sessionTools map[string]Tool) []ToolDef {
-	tools := make([]ToolDef, 0, len(e.tools)+len(sessionTools))
-	for _, tool := range e.tools {
-		tools = append(tools, structToOpenAITool(tool))
+	names := make([]string, 0, len(e.tools)+len(sessionTools))
+	for name := range e.tools {
+		names = append(names, name)
 	}
-	for _, tool := range sessionTools {
-		tools = append(tools, structToOpenAITool(tool))
+	for name := range sessionTools {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+
+	tools := make([]ToolDef, 0, len(names))
+	for _, name := range names {
+		if tool, ok := e.tools[name]; ok {
+			tools = append(tools, structToOpenAITool(tool))
+		} else if tool, ok := sessionTools[name]; ok {
+			tools = append(tools, structToOpenAITool(tool))
+		}
 	}
 	return tools
 }

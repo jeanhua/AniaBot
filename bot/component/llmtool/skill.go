@@ -6,6 +6,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 
@@ -170,7 +171,15 @@ func (m *SkillManager) BuildAvailableSkillsPrompt() string {
 	sb.WriteString("    BEFORE invoking any tool, you MUST match the intent against these skills first.\n")
 	sb.WriteString("  </instruction>\n\n")
 
-	for _, s := range m.skills {
+	// 按 skill 名排序输出：map 遍历顺序随机，若直接拼接会导致每次请求的
+	// system prompt 内容不同，打失上游 prompt 前缀缓存（见 toolsWithSession）
+	names := make([]string, 0, len(m.skills))
+	for name := range m.skills {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	for _, name := range names {
+		s := m.skills[name]
 		sb.WriteString("  <skill>\n")
 		sb.WriteString(fmt.Sprintf("    <name>%s</name>\n", s.Meta.Name))
 		sb.WriteString(fmt.Sprintf("    <description>%s</description>\n", s.Meta.Description))
