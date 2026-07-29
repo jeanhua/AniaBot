@@ -21,4 +21,6 @@ type CallBackFuncs struct {
 	// 推入待加载图片队列（下一轮上下文提供），否则交由备用识别模型描述。
 	// 回调返回给 LLM 的提示文本；nil 表示当前会话不支持读取本地图片。
 	LoadLocalImage func(path string) (string, error)
+	// DescribeImage 使用备用视觉模型（OCR）描述图片内容；nil 表示未配置备用模型。
+	DescribeImage func(ctx context.Context, imageURL string) (string, error)
 }
