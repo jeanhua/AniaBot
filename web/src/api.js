@@ -97,8 +97,8 @@ export const api = {
   getTokenStats: () => request('/api/tokenstats'),
   // AI API 余额：{ enabled, value, error, updated_at, cached, ttl }；refresh=true 强制刷新服务端缓存
   getBalance: (refresh = false) => request('/api/balance' + (refresh ? '?refresh=1' : '')),
-  // token 多维详细统计：{ range, summary, today, by_source, by_chat_type, by_status, top_targets[], hourly[], daily[](窗口内分来源), iterations, avg_iterations }
-  // params.range 时间维度：today / yesterday / 7d / 30d / month / all（默认 all）
+  // token 多维详细统计：{ range, summary, today, by_source, by_chat_type, by_status, top_targets[], hourly[](24h分来源), daily[](窗口内分来源), iterations, avg_iterations }
+  // params.range 时间维度：today / yesterday / 7d / 30d / month / all（默认 all）/ custom（需配合 start、end=YYYY-MM-DD，跨度 1~62 天）
   getTokenStatsDetail: (params = {}) => request(`/api/tokenstats/detail${qs(params)}`),
   createClock: (task) =>
     request('/api/clocks', { method: 'POST', body: JSON.stringify(task) }),

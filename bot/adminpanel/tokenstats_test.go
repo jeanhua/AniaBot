@@ -132,6 +132,31 @@ func TestTokenStatsDetailRange(t *testing.T) {
 		t.Fatalf("yesterday daily len = %d", len(d))
 	}
 
+	// 自定义：昨天~今天 → 2 天，含今日与昨日记录
+	start := yesterdayNoon.Format("2006-01-02")
+	end := now.Format("2006-01-02")
+	got = get(t, "/api/tokenstats/detail?range=custom&start="+start+"&end="+end)
+	if s := got["summary"].(map[string]any); s["requests"].(float64) != 2 || s["total_tokens"].(float64) != 1800 {
+		t.Fatalf("custom summary = %v", s)
+	}
+	if d := got["daily"].([]any); len(d) != 2 {
+		t.Fatalf("custom daily len = %d", len(d))
+	}
+
+	// 自定义缺参数 / 跨度超限：400
+	for _, url := range []string{
+		"/api/tokenstats/detail?range=custom",
+		"/api/tokenstats/detail?range=custom&start=" + start,
+		"/api/tokenstats/detail?range=custom&start=2020-01-01&end=2020-06-01",
+		"/api/tokenstats/detail?range=custom&start=" + end + "&end=" + start,
+	} {
+		rec := httptest.NewRecorder()
+		newServer().handleTokenStatsDetail(rec, httptest.NewRequest("GET", url, nil))
+		if rec.Code != 400 {
+			t.Fatalf("%s: status = %d", url, rec.Code)
+		}
+	}
+
 	// 非法 range：400
 	rec := httptest.NewRecorder()
 	newServer().handleTokenStatsDetail(rec, httptest.NewRequest("GET", "/api/tokenstats/detail?range=bogus", nil))

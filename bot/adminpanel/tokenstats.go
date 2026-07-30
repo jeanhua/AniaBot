@@ -109,10 +109,14 @@ type tokenRange struct {
 	days  int
 }
 
+// tokenCustomMaxDays 自定义日期范围的最大跨度（天）
+const tokenCustomMaxDays = 62
+
 // resolveTokenRange 把 range 查询参数解析为统计窗口，非法值返回 false。
 // 支持：today（今日）、yesterday（昨日）、7d（近 7 天）、30d（近 30 天）、
 // month（本月）、all / 空（全部留存，daily 序列仍取最近 30 天）。均按本地时区。
-func resolveTokenRange(key string, now time.Time) (tokenRange, bool) {
+// custom（自定义）需配合 start / end（2006-01-02，含端点两天，跨度 1~62 天）。
+func resolveTokenRange(key, startStr, endStr string, now time.Time) (tokenRange, bool) {
 	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
 	switch key {
 	case "", "all":
@@ -129,6 +133,18 @@ func resolveTokenRange(key string, now time.Time) (tokenRange, bool) {
 	case "month":
 		first := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, now.Location())
 		return tokenRange{key: key, start: first, days: now.Day()}, true
+	case "custom":
+		sd, err1 := time.ParseInLocation("2006-01-02", startStr, now.Location())
+		ed, err2 := time.ParseInLocation("2006-01-02", endStr, now.Location())
+		if err1 != nil || err2 != nil {
+			return tokenRange{}, false
+		}
+		days := int(ed.Sub(sd)/(24*time.Hour)) + 1
+		if days < 1 || days > tokenCustomMaxDays {
+			return tokenRange{}, false
+		}
+		// end 取结束日后一天的 0 点前一纳秒（含结束日全天）
+		return tokenRange{key: key, start: sd, end: ed.AddDate(0, 0, 1).Add(-time.Nanosecond), days: days}, true
 	default:
 		return tokenRange{}, false
 	}
@@ -183,12 +199,14 @@ func summarize(a *tokenStatAcc) tokenStatSummary {
 // 会话类型（群聊 / 私聊）、执行状态、消耗目标排行（Top 10）、24 小时分布与
 // 分来源的每日序列。数据源与 handleTokenStats 相同（留存日志，非全量历史）。
 // 支持查询参数 range 限定统计窗口：today / yesterday / 7d / 30d / month / all
-// （默认 all，即全部留存记录）；daily 序列覆盖窗口内天数（all 时仍为最近 30 天）。
+// （默认 all，即全部留存记录）/ custom（自定义，需配合 start / end=2006-01-02，
+// 跨度 1~62 天）；daily 序列覆盖窗口内天数（all 时仍为最近 30 天）。
 func (s *Server) handleTokenStatsDetail(w http.ResponseWriter, r *http.Request) {
 	now := time.Now()
-	rng, ok := resolveTokenRange(r.URL.Query().Get("range"), now)
+	q := r.URL.Query()
+	rng, ok := resolveTokenRange(q.Get("range"), q.Get("start"), q.Get("end"), now)
 	if !ok {
-		writeError(w, http.StatusBadRequest, "range 仅支持 today / yesterday / 7d / 30d / month / all")
+		writeError(w, http.StatusBadRequest, "range 仅支持 today / yesterday / 7d / 30d / month / all / custom（custom 需配合 start / end=2006-01-02，跨度 1~62 天）")
 		return
 	}
 	todayStr := now.Format("2006-01-02")
@@ -207,7 +225,8 @@ func (s *Server) handleTokenStatsDetail(w http.ResponseWriter, r *http.Request) 
 	}
 
 	var summary, today, byQuery, byTask, byGroup, byFriend tokenStatAcc
-	hourly := make([]tokenStatAcc, 24)
+	// hourly 与 daily 同构（按来源拆分，Date 字段不用），供单天窗口时前端直接渲染当日小时序列
+	hourly := make([]tokenDayDetail, 24)
 	statusCount := map[string]int{}
 	targets := make(map[string]*tokenTargetStat)
 	var iterations int
@@ -238,7 +257,13 @@ func (s *Server) handleTokenStatsDetail(w http.ResponseWriter, r *http.Request) 
 		case "friend":
 			byFriend.add(prompt, completion, total, cached)
 		}
-		hourly[lt.Hour()].add(prompt, completion, total, cached)
+		hh := &hourly[lt.Hour()]
+		hh.Total.add(prompt, completion, total, cached)
+		if source == "task" {
+			hh.Task.add(prompt, completion, total, cached)
+		} else {
+			hh.Query.add(prompt, completion, total, cached)
+		}
 		if status != "" && status != "running" {
 			// running 中的执行尚未产生最终用量，不计入状态分布
 			statusCount[status]++
@@ -275,7 +300,9 @@ func (s *Server) handleTokenStatsDetail(w http.ResponseWriter, r *http.Request) 
 	byGroup.finish()
 	byFriend.finish()
 	for i := range hourly {
-		hourly[i].finish()
+		hourly[i].Query.finish()
+		hourly[i].Task.finish()
+		hourly[i].Total.finish()
 	}
 	for i := range daily {
 		daily[i].Query.finish()
