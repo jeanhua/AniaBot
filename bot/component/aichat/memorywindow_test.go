@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/jeanhua/AniaBot/bot/component/llmtool"
+	"github.com/jeanhua/AniaBot/common/model/message"
 )
 
 // fakeHistoryStore 用于测试的内存历史存储，模拟持久化的读写语义。
@@ -58,8 +59,9 @@ func TestMessageWindowPersistAndLoad(t *testing.T) {
 	if len(store.saved) != 2 {
 		t.Fatalf("持久化消息数 = %d, want 2", len(store.saved))
 	}
-	// 落盘副本中的图片片段应降级为文本标记（避免大 key 与写放大）
-	if store.saved[1].Parts[1].Type != ContentPartText || store.saved[1].Parts[1].Text != "[图片]" {
+	// 落盘副本中的图片片段应降级为带哈希的文本标记（避免大 key 与写放大）
+	wantMark := "[图片 " + message.ImageHash("https://example.com/a.png") + "]"
+	if store.saved[1].Parts[1].Type != ContentPartText || store.saved[1].Parts[1].Text != wantMark {
 		t.Fatalf("落盘历史中的图片应降级为文本标记: %+v", store.saved[1].Parts)
 	}
 	// 内存中的当前会话消息仍保留图片供本轮对话使用
@@ -85,8 +87,8 @@ func TestMessageWindowPersistAndLoad(t *testing.T) {
 	if got.ReasoningContent != "推理过程" {
 		t.Fatalf("推理内容未还原: %q", got.ReasoningContent)
 	}
-	// 回放后图片片段应为落盘时的文本标记
-	if len(got.Parts) != 2 || got.Parts[1].Type != ContentPartText || got.Parts[1].Text != "[图片]" {
+	// 回放后图片片段应为落盘时的带哈希文本标记
+	if len(got.Parts) != 2 || got.Parts[1].Type != ContentPartText || got.Parts[1].Text != wantMark {
 		t.Fatalf("回放后图片应为文本标记: %+v", got.Parts)
 	}
 }
@@ -185,8 +187,9 @@ func TestDegradeImagesKeepsDataURI(t *testing.T) {
 	if got[0].Parts[1].Type != ContentPartImageURL || got[0].Parts[1].ImageURL != "data:image/png;base64,iVBORw0KGgo=" {
 		t.Fatalf("data URI 应保留原样: %+v", got[0].Parts[1])
 	}
-	// http URL 降级为文本标记
-	if got[1].Parts[1].Type != ContentPartText || got[1].Parts[1].Text != "[图片，链接已失效]" {
+	// http URL 降级为带哈希的文本标记
+	wantMark := "[图片 " + message.ImageHash("https://qpic.cn/expire-soon.png") + "，链接已失效]"
+	if got[1].Parts[1].Type != ContentPartText || got[1].Parts[1].Text != wantMark {
 		t.Fatalf("http URL 应降级为文本标记: %+v", got[1].Parts[1])
 	}
 }
@@ -205,7 +208,8 @@ func TestPersistDegradesDataURI(t *testing.T) {
 		},
 	})
 
-	if store.saved[0].Parts[1].Type != ContentPartText || store.saved[0].Parts[1].Text != "[图片]" {
+	wantMark := "[图片 " + message.ImageHash("data:image/png;base64,iVBORw0KGgo=") + "]"
+	if store.saved[0].Parts[1].Type != ContentPartText || store.saved[0].Parts[1].Text != wantMark {
 		t.Fatalf("落盘副本的 data URI 应降级为文本标记: %+v", store.saved[0].Parts[1])
 	}
 	if w.history()[0].Parts[1].Type != ContentPartImageURL {

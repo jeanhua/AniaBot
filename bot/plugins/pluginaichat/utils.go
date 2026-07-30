@@ -27,7 +27,7 @@ func (p *AIChatPlugin) extraMsg(bot bot.Bot, msg message.Message) string {
 	if msg.Sender.UserId == message.FromUint64(0) {
 		opts = append(opts, message.WithNoSenderPrefix())
 	}
-	return msg.FriendlyText(false, opts...)
+	return msg.FriendlyText(true, opts...)
 }
 
 func collectImageURLs(bot bot.Bot, msgs ...message.Message) []string {
@@ -86,7 +86,12 @@ func (p *AIChatPlugin) configureImageCallbacks(ctx context.Context, bot bot.Bot,
 
 		if p.cfg.Multimodal {
 			loadedImages = append(loadedImages, imageURLs...)
-			return fmt.Sprintf("已加载 %d 张图片，图片将在下一轮上下文中提供，请直接查看图片后回答", len(imageURLs)), nil
+			// 列出每张图片的哈希标识，与消息文本中的 [图片 <hash>] 标记对应
+			labels := make([]string, 0, len(imageURLs))
+			for _, imageURL := range imageURLs {
+				labels = append(labels, "[图片 "+message.ImageHash(imageURL)+"]")
+			}
+			return fmt.Sprintf("已加载 %d 张图片（%s），图片将在下一轮上下文中提供，请直接查看图片后回答", len(imageURLs), strings.Join(labels, "、")), nil
 		}
 
 		if p.ocrModel == nil {
@@ -95,14 +100,15 @@ func (p *AIChatPlugin) configureImageCallbacks(ctx context.Context, bot bot.Bot,
 
 		var result strings.Builder
 		result.WriteString("主模型不支持多模态，以下是备用图片识别模型返回的图片描述：")
-		for i, imageURL := range imageURLs {
+		for _, imageURL := range imageURLs {
+			hash := message.ImageHash(imageURL)
 			description, err := p.ocrModel.GetSingleImageDesc(ctx, "描述图片内容", imageURL, p.buildOCRChatOptions())
 			if err != nil {
-				p.Logger.Error("备用图片识别请求失败", "index", i+1, "error", err.Error())
-				result.WriteString(fmt.Sprintf("\n<图片 %d>识别失败：%s</图片 %d>", i+1, err.Error(), i+1))
+				p.Logger.Error("备用图片识别请求失败", "hash", hash, "error", err.Error())
+				result.WriteString(fmt.Sprintf("\n<图片 %s>识别失败：%s</图片 %s>", hash, err.Error(), hash))
 				continue
 			}
-			result.WriteString(fmt.Sprintf("\n<图片 %d>\n%s\n</图片 %d>", i+1, description, i+1))
+			result.WriteString(fmt.Sprintf("\n<图片 %s>\n%s\n</图片 %s>", hash, description, hash))
 		}
 		return result.String(), nil
 	}
@@ -128,12 +134,13 @@ func (p *AIChatPlugin) loadLocalImageInto(ctx context.Context, path string, load
 		return fmt.Sprintf("读取本地图片失败: %v", err)
 	}
 	dataURI := "data:" + imageMIME(path) + ";base64," + base64.StdEncoding.EncodeToString(data)
+	hash := message.ImageHash(dataURI)
 
 	if p.cfg.Multimodal {
 		// data URI 推入待加载队列，下一轮由 TakeLoadedImages 取出并入上下文；
 		// data URI 不依赖外部链接，历史持久化后重启也不会失效
 		*loadedImages = append(*loadedImages, dataURI)
-		return fmt.Sprintf("已加载本地图片 %s，将在下一轮上下文中提供，请直接查看图片后回答", path)
+		return fmt.Sprintf("已加载本地图片 %s（[图片 %s]），将在下一轮上下文中提供，请直接查看图片后回答", path, hash)
 	}
 
 	if p.ocrModel == nil {
@@ -144,7 +151,7 @@ func (p *AIChatPlugin) loadLocalImageInto(ctx context.Context, path string, load
 		p.Logger.Error("备用图片识别请求失败", "path", path, "error", err.Error())
 		return fmt.Sprintf("本地图片识别失败: %v", err)
 	}
-	return "主模型不支持多模态，以下是备用图片识别模型返回的图片描述：\n" + description
+	return fmt.Sprintf("主模型不支持多模态，以下是备用图片识别模型返回的图片描述：\n<图片 %s>\n%s\n</图片 %s>", hash, description, hash)
 }
 
 // imageMIME 根据文件扩展名推断图片 MIME 类型，无法识别时回退到 image/png。

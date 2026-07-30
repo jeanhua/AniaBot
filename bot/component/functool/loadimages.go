@@ -17,7 +17,7 @@ func NewLoadImagesTool() *LoadImagesTool {
 	return &LoadImagesTool{
 		BaseTool: llmtool.MakeBaseTool(
 			"load_images",
-			"按需加载用户当前消息及其引用消息中的图片。仅当理解或回答用户问题确实需要查看图片内容时调用；不要在每次出现图片时自动调用。",
+			"按需加载用户当前消息及其引用消息中的图片。仅当理解或回答用户问题确实需要查看图片内容时调用；不要在每次出现图片时自动调用。每张图片以 [图片 <hash>] 形式的哈希标识区分，加载结果中的标识与消息里的标记一一对应。",
 			LoadImagesParams{},
 		),
 	}

@@ -3,6 +3,7 @@ package aichat
 import (
 	"github.com/jeanhua/AniaBot/bot/component/llmtool"
 	"github.com/jeanhua/AniaBot/bot/utils"
+	"github.com/jeanhua/AniaBot/common/model/message"
 )
 
 type MessageBuilder struct {
@@ -48,10 +49,13 @@ func (b *MessageBuilder) BuildChatMessages(userInput string, history []Message) 
 	return messages
 }
 
+// BuildImageContextMessage 构造加载图片的上下文消息。每张图片前附带 [图片 <hash>]
+// 文本标签，与消息文本中的图片标记一致，便于 AI 区分和引用具体图片。
 func (b *MessageBuilder) BuildImageContextMessage(imageURLs []string) Message {
-	parts := make([]ContentPart, 0, len(imageURLs)+1)
+	parts := make([]ContentPart, 0, 2*len(imageURLs)+1)
 	parts = append(parts, TextPart("以下是用户要求加载的图片，请结合图片内容继续回答。"))
 	for _, imageURL := range imageURLs {
+		parts = append(parts, TextPart("[图片 "+message.ImageHash(imageURL)+"]"))
 		parts = append(parts, ImageURLPart(imageURL))
 	}
 	return Message{Role: RoleUser, Parts: parts}

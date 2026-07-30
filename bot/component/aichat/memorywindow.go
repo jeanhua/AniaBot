@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"strings"
 	"unicode/utf8"
+
+	"github.com/jeanhua/AniaBot/common/model/message"
 )
 
 type CompressorFunc func(ctx context.Context, client *LLMClient, oldMsgs []Message) ([]Message, error)
@@ -58,7 +60,8 @@ func degradeImagesToText(msgs []Message) []Message {
 		newParts := make([]ContentPart, 0, len(msg.Parts))
 		for _, p := range msg.Parts {
 			if p.Type == ContentPartImageURL && isRemoteImageURL(p.ImageURL) {
-				newParts = append(newParts, TextPart("[图片，链接已失效]"))
+				// 保留图片哈希标记，AI 仍可将历史提及与具体图片对应
+				newParts = append(newParts, TextPart("[图片 "+message.ImageHash(p.ImageURL)+"，链接已失效]"))
 				changed = true
 				continue
 			}
@@ -113,7 +116,8 @@ func degradeImagesForPersist(msgs []Message) []Message {
 		newParts := make([]ContentPart, 0, len(msg.Parts))
 		for _, p := range msg.Parts {
 			if p.Type == ContentPartImageURL {
-				newParts = append(newParts, TextPart("[图片]"))
+				// 降级为带哈希的文本标记，与消息文本中的图片标识一致
+				newParts = append(newParts, TextPart("[图片 "+message.ImageHash(p.ImageURL)+"]"))
 				changed = true
 				continue
 			}

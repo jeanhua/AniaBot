@@ -74,12 +74,14 @@ func (raw Message) FriendlyText(showUrl bool, opts ...MsgOptFunc) string {
 			var msg ImageMessage
 			if ok := ParseImage(s, &msg); ok {
 				if msgFuncs.getImageOCRFunc != nil {
-					result.WriteString("\n<图片消息>\n")
+					result.WriteString(fmt.Sprintf("\n<图片消息 %s>\n", msg.Hash()))
 					result.WriteString(msgFuncs.getImageOCRFunc(msg.Url))
-					result.WriteString("\n</图片消息>\n")
+					result.WriteString(fmt.Sprintf("\n</图片消息 %s>\n", msg.Hash()))
 				} else {
 					if showUrl {
-						result.WriteString(fmt.Sprintf("[图片:%s]", msg.Url))
+						// 输出短哈希而非原始 URL：URL 是冗长的临时签名链接，
+						// 哈希足以让 AI 区分图片（与 load_images 加载结果的标识一致）
+						result.WriteString(fmt.Sprintf("[图片 %s]", msg.Hash()))
 					} else {
 						result.WriteString("[图片]")
 					}
