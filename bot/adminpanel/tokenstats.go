@@ -97,8 +97,42 @@ func (s *Server) handleTokenStats(w http.ResponseWriter, _ *http.Request) {
 	})
 }
 
-// tokenDetailDailyDays 详细统计 daily 序列覆盖的天数（含今天）
+// tokenDetailDailyDays 详细统计 daily 序列覆盖的默认天数（range=all 时，含今天）
 const tokenDetailDailyDays = 30
+
+// tokenRange 时间维度筛选窗口：start/end 界定统计范围（含端点，零值不限），
+// days 为 daily 序列覆盖的天数（含窗口最后一天）。
+type tokenRange struct {
+	key   string
+	start time.Time
+	end   time.Time
+	days  int
+}
+
+// resolveTokenRange 把 range 查询参数解析为统计窗口，非法值返回 false。
+// 支持：today（今日）、yesterday（昨日）、7d（近 7 天）、30d（近 30 天）、
+// month（本月）、all / 空（全部留存，daily 序列仍取最近 30 天）。均按本地时区。
+func resolveTokenRange(key string, now time.Time) (tokenRange, bool) {
+	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
+	switch key {
+	case "", "all":
+		return tokenRange{key: "all", days: tokenDetailDailyDays}, true
+	case "today":
+		return tokenRange{key: key, start: today, days: 1}, true
+	case "yesterday":
+		// end 取今日 0 点前一纳秒（Filter 的 End 为含端点语义）
+		return tokenRange{key: key, start: today.AddDate(0, 0, -1), end: today.Add(-time.Nanosecond), days: 1}, true
+	case "7d":
+		return tokenRange{key: key, start: today.AddDate(0, 0, -6), days: 7}, true
+	case "30d":
+		return tokenRange{key: key, start: today.AddDate(0, 0, -29), days: 30}, true
+	case "month":
+		first := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, now.Location())
+		return tokenRange{key: key, start: first, days: now.Day()}, true
+	default:
+		return tokenRange{}, false
+	}
+}
 
 // tokenTopTargets 详细统计中按目标（群/好友）排行的条目数上限
 const tokenTopTargets = 10
@@ -147,16 +181,27 @@ func summarize(a *tokenStatAcc) tokenStatSummary {
 
 // handleTokenStatsDetail 返回更细粒度的 token 统计维度：按来源（对话 / 定时任务）、
 // 会话类型（群聊 / 私聊）、执行状态、消耗目标排行（Top 10）、24 小时分布与
-// 最近 30 天分来源的每日序列。数据源与 handleTokenStats 相同（留存日志，非全量历史）。
-func (s *Server) handleTokenStatsDetail(w http.ResponseWriter, _ *http.Request) {
+// 分来源的每日序列。数据源与 handleTokenStats 相同（留存日志，非全量历史）。
+// 支持查询参数 range 限定统计窗口：today / yesterday / 7d / 30d / month / all
+// （默认 all，即全部留存记录）；daily 序列覆盖窗口内天数（all 时仍为最近 30 天）。
+func (s *Server) handleTokenStatsDetail(w http.ResponseWriter, r *http.Request) {
 	now := time.Now()
+	rng, ok := resolveTokenRange(r.URL.Query().Get("range"), now)
+	if !ok {
+		writeError(w, http.StatusBadRequest, "range 仅支持 today / yesterday / 7d / 30d / month / all")
+		return
+	}
 	todayStr := now.Format("2006-01-02")
 
-	// 预建最近 N 天的桶（分来源，含无数据的日期）
-	daily := make([]tokenDayDetail, 0, tokenDetailDailyDays)
-	buckets := make(map[string]*tokenDayDetail, tokenDetailDailyDays)
-	for i := tokenDetailDailyDays - 1; i >= 0; i-- {
-		ds := now.AddDate(0, 0, -i).Format("2006-01-02")
+	// 预建窗口内每天的桶（分来源，含无数据的日期）；窗口无 end 时以今天收尾
+	endDay := now
+	if !rng.end.IsZero() {
+		endDay = rng.end
+	}
+	daily := make([]tokenDayDetail, 0, rng.days)
+	buckets := make(map[string]*tokenDayDetail, rng.days)
+	for i := rng.days - 1; i >= 0; i-- {
+		ds := endDay.AddDate(0, 0, -i).Format("2006-01-02")
 		daily = append(daily, tokenDayDetail{Date: ds})
 		buckets[ds] = &daily[len(daily)-1]
 	}
@@ -211,13 +256,13 @@ func (s *Server) handleTokenStatsDetail(w http.ResponseWriter, _ *http.Request) 
 	}
 
 	if s.opt.QueryLogs != nil {
-		for _, e := range s.opt.QueryLogs(querylog.Filter{Limit: 500}) {
+		for _, e := range s.opt.QueryLogs(querylog.Filter{Start: rng.start, End: rng.end, Limit: 500}) {
 			addEntry(e.Time, "query", e.ChatType, e.TargetID, string(e.Status),
 				e.Iterations, e.PromptTokens, e.CompletionTokens, e.TotalTokens, e.CachedTokens)
 		}
 	}
 	if s.opt.TaskLogs != nil {
-		for _, e := range s.opt.TaskLogs(tasklog.Filter{Limit: 500}) {
+		for _, e := range s.opt.TaskLogs(tasklog.Filter{Start: rng.start, End: rng.end, Limit: 500}) {
 			addEntry(e.TriggerTime, "task", e.TargetType, e.TargetID, string(e.Status),
 				e.Iterations, e.PromptTokens, e.CompletionTokens, e.TotalTokens, e.CachedTokens)
 		}
@@ -260,6 +305,7 @@ func (s *Server) handleTokenStatsDetail(w http.ResponseWriter, _ *http.Request) 
 	}
 
 	writeJSON(w, http.StatusOK, map[string]any{
+		"range":          rng.key,
 		"summary":        summarize(&summary),
 		"today":          summarize(&today),
 		"by_source":      map[string]tokenStatSummary{"query": summarize(&byQuery), "task": summarize(&byTask)},

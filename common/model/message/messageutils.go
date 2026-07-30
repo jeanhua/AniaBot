@@ -131,7 +131,7 @@ func (raw Message) FriendlyText(showUrl bool, opts ...MsgOptFunc) string {
 							nickname = dtMsg.Sender.Nickname
 						}
 						_ = nickname
-						result.WriteString("\n<reply>\n")
+						result.WriteString("<reply>\n")
 						result.WriteString(dtMsg.FriendlyText(showUrl,
 							WithGetImageOCRFunc(msgFuncs.getImageOCRFunc),
 							WithGetForwardMsgFunc(msgFuncs.getForwardMsgFunc)))

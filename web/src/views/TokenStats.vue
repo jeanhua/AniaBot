@@ -1,5 +1,17 @@
 <template>
   <div class="space-y-4">
+    <!-- 时间维度筛选 -->
+    <div class="flex items-center gap-1.5 flex-wrap">
+      <button
+        v-for="r in RANGE_OPTIONS" :key="r.key"
+        class="px-3 py-1.5 text-[10px] tracking-[0.15em] uppercase rounded-sm border transition-colors"
+        :class="range === r.key
+          ? 'bg-zinc-900 text-zinc-50 border-zinc-900 font-medium'
+          : 'border-zinc-300 text-zinc-500 hover:text-zinc-900 hover:border-zinc-500'"
+        @click="range = r.key"
+      >{{ r.label }}</button>
+    </div>
+
     <!-- 顶部统计卡 -->
     <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
       <!-- TOTAL -->
@@ -10,7 +22,7 @@
         </div>
         <div class="flex-1 py-4">
           <div class="text-4xl font-semibold tracking-tight text-zinc-900">{{ fmtTokens(summary.total_tokens) }}</div>
-          <div class="tlabel mt-2">历史留存累计</div>
+          <div class="tlabel mt-2">{{ rangeMeta.subtitle }}</div>
         </div>
         <div class="border-t border-dotted border-zinc-300 pt-2.5 flex justify-between text-[10px] tracking-[0.12em] uppercase text-zinc-500">
           <span>Prompt {{ fmtTokens(summary.prompt_tokens) }}</span>
@@ -89,7 +101,7 @@
       </div>
       <div class="flex items-center justify-between mt-2 text-[10px] tracking-[0.12em] uppercase text-zinc-400">
         <span>{{ daily[0]?.date?.slice(5) || '—' }}</span>
-        <span>30 Days</span>
+        <span>{{ daily.length }} Days</span>
         <span>{{ daily[daily.length - 1]?.date?.slice(5) || '—' }}</span>
       </div>
       <div class="dotline my-3" />
@@ -229,11 +241,28 @@
 </template>
 
 <script setup>
-import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { api } from '../api.js'
 
+// 时间维度筛选选项（与后端 resolveTokenRange 对应）
+const RANGE_OPTIONS = [
+  { key: 'all', label: '全部' },
+  { key: 'today', label: '今日' },
+  { key: 'yesterday', label: '昨日' },
+  { key: '7d', label: '近 7 天' },
+  { key: '30d', label: '近 30 天' },
+  { key: 'month', label: '本月' },
+]
+
 const detail = ref({})
+const range = ref('all')
 let timer = null
+
+// 当前范围的展示文案：累计卡的副标题
+const rangeMeta = computed(() => {
+  const opt = RANGE_OPTIONS.find(r => r.key === range.value) || RANGE_OPTIONS[0]
+  return { subtitle: opt.key === 'all' ? '历史留存累计' : `${opt.label} · 消耗` }
+})
 
 const summary = computed(() => detail.value.summary || {})
 const today = computed(() => detail.value.today || {})
@@ -325,12 +354,14 @@ function dayTip(d) {
 }
 
 async function load() {
-  try { detail.value = await api.getTokenStatsDetail() } catch { /* 忽略轮询错误 */ }
+  try { detail.value = await api.getTokenStatsDetail({ range: range.value }) } catch { /* 忽略轮询错误 */ }
 }
 
 function onVisible() {
   if (!document.hidden) load()
 }
+
+watch(range, load)
 
 onMounted(() => {
   load()

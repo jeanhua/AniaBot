@@ -60,3 +60,82 @@ func TestTokenStatsDetail(t *testing.T) {
 		t.Fatalf("top[0] = %v", first)
 	}
 }
+
+// range 窗口应同时作用于日志查询条件（Start/End）与 daily 序列长度。
+func TestTokenStatsDetailRange(t *testing.T) {
+	now := time.Now()
+	yesterdayNoon := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location()).Add(-12 * time.Hour)
+	newServer := func() *Server {
+		return &Server{opt: Options{
+			QueryLogs: func(f querylog.Filter) []querylog.Entry {
+				entries := []querylog.Entry{
+					{Time: now, ChatType: "group", TargetID: "100", Status: querylog.StatusSuccess, TotalTokens: 1200},
+					{Time: yesterdayNoon, ChatType: "friend", TargetID: "200", Status: querylog.StatusError, TotalTokens: 600},
+					{Time: now.AddDate(0, 0, -10), ChatType: "group", TargetID: "300", Status: querylog.StatusSuccess, TotalTokens: 100},
+				}
+				var out []querylog.Entry
+				for _, e := range entries {
+					if !f.Start.IsZero() && e.Time.Before(f.Start) {
+						continue
+					}
+					if !f.End.IsZero() && e.Time.After(f.End) {
+						continue
+					}
+					out = append(out, e)
+				}
+				return out
+			},
+		}}
+	}
+
+	get := func(t *testing.T, url string) map[string]any {
+		t.Helper()
+		rec := httptest.NewRecorder()
+		newServer().handleTokenStatsDetail(rec, httptest.NewRequest("GET", url, nil))
+		if rec.Code != 200 {
+			t.Fatalf("%s: status = %d, body = %s", url, rec.Code, rec.Body.String())
+		}
+		var got map[string]any
+		if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+			t.Fatalf("%s: invalid JSON: %v", url, err)
+		}
+		return got
+	}
+
+	// 今日：仅包含今天的记录，daily 只有 1 天
+	got := get(t, "/api/tokenstats/detail?range=today")
+	if got["range"] != "today" {
+		t.Fatalf("range = %v", got["range"])
+	}
+	if s := got["summary"].(map[string]any); s["requests"].(float64) != 1 || s["total_tokens"].(float64) != 1200 {
+		t.Fatalf("today summary = %v", s)
+	}
+	if d := got["daily"].([]any); len(d) != 1 {
+		t.Fatalf("today daily len = %d", len(d))
+	}
+
+	// 近 7 天：10 天前的记录被排除，daily 为 7 天
+	got = get(t, "/api/tokenstats/detail?range=7d")
+	if s := got["summary"].(map[string]any); s["requests"].(float64) != 2 || s["total_tokens"].(float64) != 1800 {
+		t.Fatalf("7d summary = %v", s)
+	}
+	if d := got["daily"].([]any); len(d) != 7 {
+		t.Fatalf("7d daily len = %d", len(d))
+	}
+
+	// 昨日：仅昨日记录（今日与 10 天前均被排除），daily 为 1 天
+	got = get(t, "/api/tokenstats/detail?range=yesterday")
+	if s := got["summary"].(map[string]any); s["requests"].(float64) != 1 || s["total_tokens"].(float64) != 600 {
+		t.Fatalf("yesterday summary = %v", s)
+	}
+	if d := got["daily"].([]any); len(d) != 1 {
+		t.Fatalf("yesterday daily len = %d", len(d))
+	}
+
+	// 非法 range：400
+	rec := httptest.NewRecorder()
+	newServer().handleTokenStatsDetail(rec, httptest.NewRequest("GET", "/api/tokenstats/detail?range=bogus", nil))
+	if rec.Code != 400 {
+		t.Fatalf("bogus range: status = %d", rec.Code)
+	}
+}
