@@ -7,8 +7,8 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/jeanhua/AniaBot/common/storage"
 	_ "github.com/go-sql-driver/mysql" // 纯 Go MySQL 驱动
+	"github.com/jeanhua/AniaBot/common/storage"
 )
 
 // MysqlPoolConfig MySQL 连接池配置。

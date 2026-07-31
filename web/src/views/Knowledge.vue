@@ -41,7 +41,7 @@
             </button>
           </div>
         </div>
-        <ul class="divide-y divide-slate-100 max-h-[32rem] overflow-y-auto">
+        <ul class="divide-y divide-slate-100 max-h-128 overflow-y-auto">
           <li v-if="filteredScopes.length === 0" class="py-10 text-xs text-slate-400 text-center list-none px-4">
             暂无文档。可在面板手动新增，或点击右上角导入 URL
           </li>
@@ -49,7 +49,7 @@
             v-for="s in filteredScopes"
             :key="s.scope"
             class="px-4 py-3 cursor-pointer transition-colors"
-            :class="current?.scope === s.scope ? 'bg-zinc-900/[0.04]' : 'hover:bg-slate-50/70'"
+            :class="current?.scope === s.scope ? 'bg-zinc-900/4' : 'hover:bg-slate-50/70'"
             @click="selectScope(s)"
           >
             <div class="flex items-center justify-between gap-2">
@@ -83,7 +83,7 @@
                 <span class="text-sm font-semibold text-slate-800 truncate">{{ d.title || '(无标题)' }}</span>
                 <span v-if="d.source" class="text-[11px] font-mono text-slate-400 truncate max-w-[16rem]">{{ d.source }}</span>
               </div>
-              <p class="text-sm text-slate-600 leading-relaxed whitespace-pre-wrap break-words mt-1.5">{{ preview(d.content) }}</p>
+              <p class="text-sm text-slate-600 leading-relaxed whitespace-pre-wrap wrap-break-word mt-1.5">{{ preview(d.content) }}</p>
               <div class="flex items-center gap-1.5 mt-2 flex-wrap">
                 <span class="text-[11px] font-mono text-slate-400">{{ d.id }}</span>
                 <span v-for="t in d.tags" :key="t" class="text-[11px] px-2 py-0.5 rounded-full bg-zinc-100 text-zinc-600">{{ t }}</span>
@@ -111,7 +111,7 @@
 
     <!-- 新增/编辑弹窗 -->
     <div v-if="showForm" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-50" @click.self="showForm = false">
-      <form class="bg-white rounded-2xl shadow-2xl p-6 w-[34rem] space-y-4" @submit.prevent="onSubmit">
+      <form class="bg-white rounded-2xl shadow-2xl p-6 w-136 space-y-4" @submit.prevent="onSubmit">
         <h2 class="text-base font-semibold text-slate-800">{{ form.id ? '编辑文档' : '新增文档' }}</h2>
         <div v-if="!form.id">
           <label class="block text-xs text-slate-500 mb-1.5">作用域（下拉可选用已有作用域，或手输 global / g:群号 / f:QQ号）</label>
@@ -146,7 +146,7 @@
 
     <!-- 导入 URL 弹窗 -->
     <div v-if="showImport" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-50" @click.self="showImport = false">
-      <form class="bg-white rounded-2xl shadow-2xl p-6 w-[34rem] space-y-4" @submit.prevent="onImport">
+      <form class="bg-white rounded-2xl shadow-2xl p-6 w-136 space-y-4" @submit.prevent="onImport">
         <h2 class="text-base font-semibold text-slate-800">从 URL 导入</h2>
         <div>
           <label class="block text-xs text-slate-500 mb-1.5">作用域（下拉可选用已有作用域，或手输 global / g:群号 / f:QQ号）</label>

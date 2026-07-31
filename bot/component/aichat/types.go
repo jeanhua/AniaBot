@@ -30,10 +30,10 @@ type ContentPart struct {
 
 // Message 对话消息
 type Message struct {
-	Role       MessageRole       `json:"role"`
-	Parts      []ContentPart     `json:"parts,omitempty"`
-	ToolCallID string            `json:"tool_call_id,omitempty"` // tool 结果消息使用
-	ToolCalls  []llmtool.ToolCall `json:"tool_calls,omitempty"`  // assistant 消息使用
+	Role       MessageRole        `json:"role"`
+	Parts      []ContentPart      `json:"parts,omitempty"`
+	ToolCallID string             `json:"tool_call_id,omitempty"` // tool 结果消息使用
+	ToolCalls  []llmtool.ToolCall `json:"tool_calls,omitempty"`   // assistant 消息使用
 	// ReasoningContent 保存 API 返回的推理过程内容（如 DeepSeek 的 reasoning_content），
 	// 在多轮对话（特别是 tool calling）中需要原样传回，否则 API 会报错。
 	ReasoningContent string `json:"reasoning_content,omitempty"`
