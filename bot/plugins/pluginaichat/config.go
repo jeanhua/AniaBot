@@ -61,6 +61,21 @@ type memoryConfig struct {
 	MaxEntries int  `cfg:"max_entries" label:"单会话记忆上限" group:"AI 对话 · 定时与记忆" default:"200"`
 }
 
+type kbEmbeddingConfig struct {
+	Enable  bool   `cfg:"enable" label:"启用向量检索" group:"AI 对话 · 知识库" default:"false" help:"入库时计算语义向量，检索时与关键词混合打分；需要 embedding 服务支持，provider 不支持时自动退回纯关键词"`
+	BaseURL string `cfg:"base_url" label:"Embedding Base URL" group:"AI 对话 · 知识库" help:"留空使用主模型的 Base URL；如主模型无 embedding 接口（如 DeepSeek），可填 https://api.jina.ai/v1 或其它 OpenAI 兼容服务"`
+	APIKey  string `cfg:"api_key" label:"Embedding API Key" type:"password" sensitive:"true" group:"AI 对话 · 知识库" help:"留空使用主模型的 API Key（用 Jina 时可填 Jina AI Token）"`
+	Model   string `cfg:"model" label:"Embedding 模型" group:"AI 对话 · 知识库" default:"jina-embeddings-v3" help:"如 jina-embeddings-v3、text-embedding-3-small、BAAI/bge-large-zh-v1.5"`
+}
+
+type kbConfig struct {
+	Enable     bool `cfg:"enable" label:"启用知识库" group:"AI 对话 · 知识库" default:"true"`
+	MaxDocs    int  `cfg:"max_docs" label:"单作用域文档上限" group:"AI 对话 · 知识库" default:"500"`
+	AutoInject bool `cfg:"auto_inject" label:"自动注入上下文" group:"AI 对话 · 知识库" default:"true" help:"每次对话前自动关键词检索相关文档并注入上下文（不走向量，避免每条消息产生 embedding 成本）"`
+
+	Embedding kbEmbeddingConfig `cfg:"embedding"`
+}
+
 type subagentConfig struct {
 	Enable        bool `cfg:"enable" label:"启用子代理" group:"AI 对话 · 子代理" help:"允许主 AI 把复杂子任务委派给一次性子代理执行，子代理拥有全部工具能力且上下文独立" default:"true"`
 	TimeoutSec    int  `cfg:"timeout_sec" label:"默认超时(秒)" group:"AI 对话 · 子代理" default:"300"`
@@ -101,6 +116,7 @@ type aiChatConfig struct {
 
 	Clock    clockConfig    `cfg:"plugin.ai_chat_bot.clock"`
 	Memory   memoryConfig   `cfg:"plugin.ai_chat_bot.memory"`
+	Kb       kbConfig       `cfg:"plugin.ai_chat_bot.kb"`
 	Subagent subagentConfig `cfg:"plugin.ai_chat_bot.subagent"`
 	QueryLog queryLogConfig `cfg:"plugin.ai_chat_bot.query_log"`
 }

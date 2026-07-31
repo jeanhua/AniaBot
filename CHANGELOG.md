@@ -10,6 +10,10 @@
 
 ## [Unreleased]
 
+### 新增
+
+- 新增知识库功能：文档按作用域（全局 `global` / 群聊 `g:群号` / 私聊 `f:QQ号`）管理，持久化到 `kb:` 命名空间；长文档入库时自动切片（约 600 字符/块、块间重叠），检索命中块而非整篇；AI 对话通过 `kb_search` / `kb_add` 工具按需检索或记录资料，并支持每次对话前自动关键词检索注入相关片段（`plugin.ai_chat_bot.kb.auto_inject`，默认开启，走纯关键词不产生额外 API 成本）；检索默认基于中文二元组切分 + 局部 IDF 加权打分，零外部依赖；可选开启向量检索（`plugin.ai_chat_bot.kb.embedding.enable`）用 OpenAI 兼容 `/embeddings` 混合打分，provider 不支持时自动退回纯关键词；面板新增「知识库」管理页（增删改查 + Jina Reader URL 导入），改动即时生效无需重启
+
 ## [v3.5.0] - 2026-07-30
 
 ### 新增

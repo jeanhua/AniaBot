@@ -1,0 +1,328 @@
+package pluginaichat
+
+import (
+	"errors"
+	"io"
+	"log/slog"
+	"strings"
+	"testing"
+)
+
+func newTestKnowledgeManager(maxDocs int) *knowledgeManager {
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	return newKnowledgeManager(newPFake(), logger, maxDocs, nil)
+}
+
+func TestKbAddAndList(t *testing.T) {
+	km := newTestKnowledgeManager(0)
+
+	d, err := km.add("global", "Docker 部署指南", "第一步：安装 docker。", []string{"部署"}, "url:https://example.com")
+	if err != nil {
+		t.Fatalf("add 失败: %v", err)
+	}
+	if d.ID == "" {
+		t.Fatal("add 未生成 ID")
+	}
+	if d.Scope != "global" {
+		t.Fatalf("scope 不符: %s", d.Scope)
+	}
+
+	docs := km.list("global")
+	if len(docs) != 1 {
+		t.Fatalf("期望 1 篇文档，实际 %d 篇", len(docs))
+	}
+	got := docs[0]
+	if got.Title != "Docker 部署指南" || got.Source != "url:https://example.com" || len(got.Tags) != 1 {
+		t.Fatalf("文档内容不符: %+v", got)
+	}
+
+	// 全局库与会话库相互隔离
+	if got := km.list("g:123"); len(got) != 0 {
+		t.Fatalf("scope 隔离失效，g:123 看到 %d 篇文档", len(got))
+	}
+}
+
+func TestKbAddDedup(t *testing.T) {
+	km := newTestKnowledgeManager(0)
+
+	first, err := km.add("global", "标题", "正文内容", nil, "")
+	if err != nil {
+		t.Fatalf("首次 add 失败: %v", err)
+	}
+	// 空白差异应被规范化去重
+	second, err := km.add("global", " 标题 \n", "  正文内容 \n", nil, "url:https://x")
+	if err != nil {
+		t.Fatalf("重复 add 失败: %v", err)
+	}
+	if first.ID != second.ID {
+		t.Fatalf("重复内容应返回已有文档，ID 不同: %s vs %s", first.ID, second.ID)
+	}
+	if got := km.list("global"); len(got) != 1 {
+		t.Fatalf("去重失效，实际 %d 篇", len(got))
+	}
+}
+
+func TestKbAddEmpty(t *testing.T) {
+	km := newTestKnowledgeManager(0)
+	if _, err := km.add("global", "标题", "   ", nil, ""); err == nil {
+		t.Fatal("空内容应报错")
+	}
+}
+
+func TestKbMaxDocs(t *testing.T) {
+	km := newTestKnowledgeManager(2)
+
+	if _, err := km.add("global", "", "第一篇", nil, ""); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := km.add("global", "", "第二篇", nil, ""); err != nil {
+		t.Fatal(err)
+	}
+	_, err := km.add("global", "", "第三篇", nil, "")
+	if !errors.Is(err, ErrKBFull) {
+		t.Fatalf("达到上限应返回 ErrKBFull，实际: %v", err)
+	}
+
+	// 删除一篇后可继续写入
+	docs := km.list("global")
+	if !km.remove("global", docs[0].ID) {
+		t.Fatal("remove 失败")
+	}
+	if _, err := km.add("global", "", "第三篇", nil, ""); err != nil {
+		t.Fatalf("删除后 add 仍失败: %v", err)
+	}
+}
+
+func TestKbRemove(t *testing.T) {
+	km := newTestKnowledgeManager(0)
+
+	d, _ := km.add("g:123", "", "待删除", nil, "")
+	if !km.remove("g:123", d.ID) {
+		t.Fatal("remove 已存在 ID 应返回 true")
+	}
+	if got := km.list("g:123"); len(got) != 0 {
+		t.Fatalf("删除后仍有 %d 篇", len(got))
+	}
+	if km.remove("g:123", d.ID) {
+		t.Fatal("remove 不存在 ID 应返回 false")
+	}
+	// 不影响其它 scope（含全局库）
+	other, _ := km.add("global", "", "全局文档", nil, "")
+	if km.remove("g:123", other.ID) {
+		t.Fatal("不应跨 scope 删除")
+	}
+}
+
+func TestKbUpdate(t *testing.T) {
+	km := newTestKnowledgeManager(0)
+
+	d, _ := km.add("g:123", "旧标题", "旧内容", []string{"旧标签"}, "url:https://old")
+	created := d.CreatedAt
+
+	if err := km.update("g:123", d.ID, "新标题", "新内容", []string{"新标签"}, "url:https://new"); err != nil {
+		t.Fatalf("update 失败: %v", err)
+	}
+	docs := km.list("g:123")
+	if len(docs) != 1 {
+		t.Fatalf("update 后条数不符: %d", len(docs))
+	}
+	got := docs[0]
+	if got.Title != "新标题" || got.Content != "新内容" || got.Source != "url:https://new" || len(got.Tags) != 1 {
+		t.Fatalf("update 后内容不符: %+v", got)
+	}
+	if !got.CreatedAt.Equal(created) {
+		t.Fatalf("update 不应改变创建时间: %v -> %v", created, got.CreatedAt)
+	}
+
+	// ID 不存在 / 空内容
+	if err := km.update("g:123", "deadbeef", "", "x", nil, ""); err == nil {
+		t.Fatal("更新不存在的 ID 应报错")
+	}
+	if err := km.update("g:123", d.ID, "", "   ", nil, ""); err == nil {
+		t.Fatal("空内容应报错")
+	}
+	// 不影响其它 scope
+	if err := km.update("global", d.ID, "", "跨 scope", nil, ""); err == nil {
+		t.Fatal("不应跨 scope 更新")
+	}
+}
+
+func TestKbScopes(t *testing.T) {
+	km := newTestKnowledgeManager(0)
+
+	if got := km.scopes(); len(got) != 0 {
+		t.Fatalf("空管理器应无 scope，实际 %v", got)
+	}
+	if _, err := km.add("g:123", "", "群文档", nil, ""); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := km.add("global", "", "全局文档", nil, ""); err != nil {
+		t.Fatal(err)
+	}
+	got := km.scopes()
+	// 字典序排序：'g:1' 中 ':'(0x3A) 小于 'global' 中的 'l'，故 g:123 在前
+	if len(got) != 2 || got[0] != "g:123" || got[1] != "global" {
+		t.Fatalf("scopes 不符（应排序）: %v", got)
+	}
+}
+
+func TestKbContentTruncation(t *testing.T) {
+	km := newTestKnowledgeManager(0)
+
+	long := strings.Repeat("长", KbMaxContentRunes+100)
+	d, err := km.add("global", "", long, nil, "")
+	if err != nil {
+		t.Fatalf("add 失败: %v", err)
+	}
+	if got := len([]rune(d.Content)); got != KbMaxContentRunes+1 {
+		t.Fatalf("add 未截断超长内容，符文数 = %d", got)
+	}
+
+	if err := km.update("global", d.ID, "", long, nil, ""); err != nil {
+		t.Fatalf("update 失败: %v", err)
+	}
+	if got := len([]rune(km.list("global")[0].Content)); got != KbMaxContentRunes+1 {
+		t.Fatalf("update 未截断超长内容，符文数 = %d", got)
+	}
+}
+
+func TestKbChunkText(t *testing.T) {
+	if got := chunkText(""); got != nil {
+		t.Fatalf("空内容应返回 nil，实际 %v", got)
+	}
+	// 短内容原样返回
+	if got := chunkText("短的正文"); len(got) != 1 || got[0] != "短的正文" {
+		t.Fatalf("短内容应原样返回: %v", got)
+	}
+	// 长内容切成多块
+	long := strings.Repeat("这是一个很长的段落内容。", kbChunkSize/10+10)
+	chunks := chunkText(long)
+	if len(chunks) < 2 {
+		t.Fatalf("长内容应切成多块，实际 %d 块", len(chunks))
+	}
+	// 各块不超限，且所有块拼回后覆盖原文
+	for i, c := range chunks {
+		if len([]rune(c)) > kbChunkSize {
+			t.Fatalf("块 %d 超长: %d", i, len([]rune(c)))
+		}
+	}
+	if !strings.Contains(strings.Join(chunks, ""), "这是一个很长的段落内容。") {
+		t.Fatal("切片丢失了原文内容")
+	}
+}
+
+func TestKbQueryTerms(t *testing.T) {
+	terms := queryTerms("docker 部署")
+	joined := strings.Join(terms, ",")
+	for _, want := range []string{"docker", "部署", "部", "署"} {
+		if !strings.Contains(joined, want) {
+			t.Fatalf("queryTerms 缺少 %q: %v", want, terms)
+		}
+	}
+	// 去重
+	seen := map[string]int{}
+	for _, tm := range terms {
+		seen[tm]++
+	}
+	for tm, n := range seen {
+		if n > 1 {
+			t.Fatalf("term %q 重复 %d 次: %v", tm, n, terms)
+		}
+	}
+}
+
+func TestKbSearchRelevant(t *testing.T) {
+	km := newTestKnowledgeManager(0)
+	docker, err := km.add("global", "Docker 部署指南", "第一步：安装 docker 引擎。第二步：docker compose up -d 部署服务。", []string{"部署", "docker"}, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := km.add("global", "天气查询", "今日北京天气晴朗，气温 25 度。", nil, ""); err != nil {
+		t.Fatal(err)
+	}
+
+	results := km.search("global", "docker 部署", 5)
+	if len(results) == 0 {
+		t.Fatal("应检索到相关文档")
+	}
+	if results[0].DocID != docker.ID {
+		t.Fatalf("最相关文档应为 Docker 指南，实际 %+v", results[0])
+	}
+	if results[0].Chunk == "" {
+		t.Fatal("应返回命中的内容块")
+	}
+
+	// 无关 query 返回空
+	if got := km.search("global", "美食推荐", 5); len(got) != 0 {
+		t.Fatalf("无关 query 应无命中，实际 %+v", got)
+	}
+}
+
+func TestKbSearchScopeAndGlobal(t *testing.T) {
+	km := newTestKnowledgeManager(0)
+	local, err := km.add("g:123", "本地资料", "本群私有资料库：活动安排。", nil, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := km.add("global", "全局资料", "全站公开资料：机器人使用说明。", nil, ""); err != nil {
+		t.Fatal(err)
+	}
+
+	// 会话 scope 检索命中会话库
+	results := km.search("g:123", "本地 私有 活动安排", 5)
+	if len(results) == 0 {
+		t.Fatal("会话库应命中")
+	}
+	if results[0].DocID != local.ID {
+		t.Fatalf("会话库命中应优先，实际 %+v", results[0])
+	}
+
+	// 全局文档也应被会话 scope 检索到
+	if got := km.search("g:123", "全站 公开 使用说明", 5); len(got) != 1 {
+		t.Fatalf("全局文档应可被检索，实际 %+v", got)
+	}
+}
+
+func TestKbSearchEmpty(t *testing.T) {
+	km := newTestKnowledgeManager(0)
+	if got := km.search("global", "随便什么", 5); got != nil {
+		t.Fatalf("空库应返回 nil，实际 %v", got)
+	}
+	km.add("global", "", "只有一条内容", nil, "")
+	if got := km.searchKeyword("global", "   ", 5); got != nil {
+		t.Fatalf("空 query 应返回 nil，实际 %v", got)
+	}
+}
+
+func TestKbAutoInject(t *testing.T) {
+	km := newTestKnowledgeManager(0)
+
+	// 无相关文档时不注入
+	if got := km.autoInject("global", "帮我查下今天的天气", 30); got != "" {
+		t.Fatalf("无相关文档应返回空串，实际 %q", got)
+	}
+
+	km.add("global", "部署教程", "如何部署 AniaBot：make linux 编译，配置环境变量启动。", nil, "")
+	injected := km.autoInject("global", "AniaBot 怎么部署？", 30)
+	if injected == "" {
+		t.Fatal("命中相关文档时应注入上下文")
+	}
+	if !strings.Contains(injected, "部署教程") {
+		t.Fatalf("注入内容应含文档标题: %q", injected)
+	}
+}
+
+func TestKbCosineSimilarity(t *testing.T) {
+	if got := cosineSimilarity([]float32{1, 0, 0}, []float32{1, 0, 0}); got < 0.99 {
+		t.Fatalf("相同向量余弦应≈1，实际 %v", got)
+	}
+	if got := cosineSimilarity([]float32{1, 0}, []float32{0, 1}); got > 1e-9 {
+		t.Fatalf("正交向量余弦应≈0，实际 %v", got)
+	}
+	if got := cosineSimilarity([]float32{1, 0}, []float32{1, 0, 0}); got != 0 {
+		t.Fatalf("维度不一致应返回 0，实际 %v", got)
+	}
+	if got := cosineSimilarity(nil, []float32{1}); got != 0 {
+		t.Fatalf("空向量应返回 0，实际 %v", got)
+	}
+}

@@ -55,6 +55,9 @@ func (p *AIChatPlugin) buildScenePrompt(b bot.Bot, id message.QID, isGroup bool)
 	if p.memoryManager != nil {
 		sb.WriteString("\n\n【长期记忆】你拥有跨会话的长期记忆能力：对话中得知的用户称呼/偏好/重要信息、群里的约定或值得记住的事件，应主动调用 memory_save 保存；当对话涉及过去的事情或你不确定的背景时，先调用 memory_search 回忆；记忆有误或用户要求忘记时用 memory_forget 删除。记忆仅在当前会话内可见。")
 	}
+	if p.knowledgeManager != nil {
+		sb.WriteString("\n\n【知识库】你拥有知识库检索能力：遇到需要查资料、或用户询问知识库中应有文档的问题时，先调用 kb_search 检索；若用户明确提供了值得长期保存的完整资料/教程，可调用 kb_add 记入当前会话的知识库。知识库含当前会话库与全局库，回答引用知识库内容时可说明出处。")
+	}
 	return sb.String()
 }
 
@@ -82,6 +85,18 @@ func (p *AIChatPlugin) registerScopedTools(sessionExecutor *llmtool.SessionToolE
 			sessionDesc = "群聊（群号 " + id.String() + "）"
 		}
 		for _, tool := range newMemoryTools(p.memoryManager, scope, sessionDesc) {
+			sessionExecutor.RegisterSession(tool)
+		}
+	}
+	// 注册知识库工具，scope 绑定当前会话；知识库检索同时覆盖该会话库与全局库
+	if p.knowledgeManager != nil {
+		scope := "f:" + id.String()
+		sessionDesc := "私聊（对方QQ " + id.String() + "）"
+		if isGroup {
+			scope = "g:" + id.String()
+			sessionDesc = "群聊（群号 " + id.String() + "）"
+		}
+		for _, tool := range newKnowledgeTools(p.knowledgeManager, scope, sessionDesc) {
 			sessionExecutor.RegisterSession(tool)
 		}
 	}

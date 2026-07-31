@@ -98,6 +98,23 @@ type QueryLogSource interface {
 	QueryLogRecent(f querylog.Filter) []querylog.Entry
 }
 
+// KnowledgeBaseSource 可选接口：插件实现后，面板「知识库」页可对其知识库文档
+// 做列表 / 新增 / 编辑 / 删除 / URL 导入（当前由 AI 对话插件实现）。改动即时生效，无需重启。
+type KnowledgeBaseSource interface {
+	// KnowledgeScopes 返回已有知识库的作用域列表及各自文档条数
+	KnowledgeScopes() []plugininfo.KnowledgeScopeInfo
+	// KnowledgeList 返回指定 scope 的全部文档（新在前）
+	KnowledgeList(scope string) ([]plugininfo.KnowledgeDocInfo, error)
+	// KnowledgeCreate 新增一条文档，返回生成的 ID
+	KnowledgeCreate(up plugininfo.KnowledgeDocUpsert) (string, error)
+	// KnowledgeUpdate 按 ID 更新一条文档
+	KnowledgeUpdate(up plugininfo.KnowledgeDocUpsert) error
+	// KnowledgeDelete 按 ID 删除一条文档
+	KnowledgeDelete(scope, id string) error
+	// KnowledgeImportURL 抓取网页正文导入知识库，返回生成的 ID
+	KnowledgeImportURL(scope, url string) (string, error)
+}
+
 // Options 面板依赖。
 type Options struct {
 	Listen        string                                          // 监听地址，如 127.0.0.1:7700
@@ -111,6 +128,7 @@ type Options struct {
 	MsgLogs       func(limit int, beforeID uint64) []msglog.Entry // 消息日志（群/好友/通知，可为 nil）
 	Skills        SkillSource                                     // AI skill 管理（可为 nil）
 	Memories      MemorySource                                    // AI 长期记忆管理（可为 nil）
+	Knowledge     KnowledgeBaseSource                             // AI 知识库管理（可为 nil）
 	QueryLogs     func(f querylog.Filter) []querylog.Entry        // AI Query 日志（可为 nil）
 	Logger        *slog.Logger
 }
@@ -190,6 +208,12 @@ func (s *Server) routes() {
 	s.mux.Handle("POST /api/memory", s.requireAuth(http.HandlerFunc(s.handleMemoryCreate)))
 	s.mux.Handle("PUT /api/memory", s.requireAuth(http.HandlerFunc(s.handleMemoryUpdate)))
 	s.mux.Handle("DELETE /api/memory", s.requireAuth(http.HandlerFunc(s.handleMemoryDelete)))
+	s.mux.Handle("GET /api/knowledge/scopes", s.requireAuth(http.HandlerFunc(s.handleKnowledgeScopes)))
+	s.mux.Handle("GET /api/knowledge/list", s.requireAuth(http.HandlerFunc(s.handleKnowledgeList)))
+	s.mux.Handle("POST /api/knowledge", s.requireAuth(http.HandlerFunc(s.handleKnowledgeCreate)))
+	s.mux.Handle("PUT /api/knowledge", s.requireAuth(http.HandlerFunc(s.handleKnowledgeUpdate)))
+	s.mux.Handle("DELETE /api/knowledge", s.requireAuth(http.HandlerFunc(s.handleKnowledgeDelete)))
+	s.mux.Handle("POST /api/knowledge/import-url", s.requireAuth(http.HandlerFunc(s.handleKnowledgeImportURL)))
 	s.mux.Handle("POST /api/restart", s.requireAuth(http.HandlerFunc(s.handleRestart)))
 	s.mux.Handle("GET /api/update/info", s.requireAuth(http.HandlerFunc(s.handleUpdateInfo)))
 	s.mux.Handle("POST /api/update/start", s.requireAuth(http.HandlerFunc(s.handleUpdateStart)))
@@ -898,6 +922,108 @@ func (s *Server) handleMemoryDelete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
+}
+
+// ---- knowledge handlers（AI 知识库管理） ----
+
+// handleKnowledgeScopes 返回已有知识库的作用域列表及文档条数（功能未启用时返回空数组）。
+func (s *Server) handleKnowledgeScopes(w http.ResponseWriter, _ *http.Request) {
+	if s.opt.Knowledge == nil {
+		writeJSON(w, http.StatusOK, []any{})
+		return
+	}
+	scopes := s.opt.Knowledge.KnowledgeScopes()
+	if scopes == nil {
+		scopes = []plugininfo.KnowledgeScopeInfo{}
+	}
+	writeJSON(w, http.StatusOK, scopes)
+}
+
+// handleKnowledgeList 返回指定 scope（query 参数 scope）的全部文档。
+func (s *Server) handleKnowledgeList(w http.ResponseWriter, r *http.Request) {
+	if s.opt.Knowledge == nil {
+		writeError(w, http.StatusNotFound, "知识库功能未启用")
+		return
+	}
+	docs, err := s.opt.Knowledge.KnowledgeList(r.URL.Query().Get("scope"))
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if docs == nil {
+		docs = []plugininfo.KnowledgeDocInfo{}
+	}
+	writeJSON(w, http.StatusOK, docs)
+}
+
+// handleKnowledgeCreate 新增一条知识库文档。
+func (s *Server) handleKnowledgeCreate(w http.ResponseWriter, r *http.Request) {
+	if s.opt.Knowledge == nil {
+		writeError(w, http.StatusNotFound, "知识库功能未启用")
+		return
+	}
+	var req plugininfo.KnowledgeDocUpsert
+	if err := readJSON(r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, "请求格式错误")
+		return
+	}
+	id, err := s.opt.Knowledge.KnowledgeCreate(req)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "id": id})
+}
+
+// handleKnowledgeUpdate 按 ID 更新一条知识库文档。
+func (s *Server) handleKnowledgeUpdate(w http.ResponseWriter, r *http.Request) {
+	if s.opt.Knowledge == nil {
+		writeError(w, http.StatusNotFound, "知识库功能未启用")
+		return
+	}
+	var req plugininfo.KnowledgeDocUpsert
+	if err := readJSON(r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, "请求格式错误")
+		return
+	}
+	if err := s.opt.Knowledge.KnowledgeUpdate(req); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
+}
+
+// handleKnowledgeDelete 按 ID 删除一条知识库文档（query 参数 scope 与 id）。
+func (s *Server) handleKnowledgeDelete(w http.ResponseWriter, r *http.Request) {
+	if s.opt.Knowledge == nil {
+		writeError(w, http.StatusNotFound, "知识库功能未启用")
+		return
+	}
+	q := r.URL.Query()
+	if err := s.opt.Knowledge.KnowledgeDelete(q.Get("scope"), q.Get("id")); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
+}
+
+// handleKnowledgeImportURL 抓取网页正文导入知识库。
+func (s *Server) handleKnowledgeImportURL(w http.ResponseWriter, r *http.Request) {
+	if s.opt.Knowledge == nil {
+		writeError(w, http.StatusNotFound, "知识库功能未启用")
+		return
+	}
+	var req plugininfo.KnowledgeImportURLRequest
+	if err := readJSON(r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, "请求格式错误")
+		return
+	}
+	id, err := s.opt.Knowledge.KnowledgeImportURL(req.Scope, req.URL)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "id": id})
 }
 
 // handleRestart 自重启 Bot：先响应请求，再延迟以相同命令行参数重启进程。

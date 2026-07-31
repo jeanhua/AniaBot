@@ -66,6 +66,9 @@ type AIChatPlugin struct {
 	// memoryManager 长期记忆管理器；为 nil 表示功能未启用
 	memoryManager *memoryManager
 
+	// knowledgeManager 知识库管理器；为 nil 表示功能未启用
+	knowledgeManager *knowledgeManager
+
 	// queryLogger Query 日志记录器（面板「Query 日志」页数据源）；为 nil 表示功能未启用
 	queryLogger *querylog.Logger
 }
@@ -290,6 +293,19 @@ func (p *AIChatPlugin) processChatBatch(ctx context.Context, b bot.Bot, id messa
 
 	chatOpts := p.buildChatOptions()
 	recorder := p.beginQuery(chat, id, isGroup, batch, extraText)
+
+	// 知识库自动注入：对用户消息做轻量关键词检索，命中相关文档时把片段拼到
+	// 用户消息前作为参考上下文。注入在 beginQuery 之后，query 日志保留原始用户消息。
+	if p.knowledgeManager != nil && p.cfg.Kb.AutoInject {
+		kbScope := "f:" + id.String()
+		if isGroup {
+			kbScope = "g:" + id.String()
+		}
+		if injected := p.knowledgeManager.autoInject(kbScope, extraText, 30); injected != "" {
+			extraText = injected + "\n\n" + extraText
+		}
+	}
+
 	resp, usage, err := chat.Chat(ctx, extraText, msgFuncs, chatOpts)
 	p.finishQuery(recorder, chat, usage, resp, err)
 	if err != nil {
@@ -517,6 +533,38 @@ func (p *AIChatPlugin) Start(ctx context.Context, cfg *viper.Viper) error {
 		p.Logger.Info("已启用AI长期记忆功能", "max_entries", maxEntries)
 	} else {
 		p.Logger.Info("AI长期记忆功能未启用（plugin.ai_chat_bot.memory.enable=false）")
+	}
+
+	// 知识库：文档主动管理 + AI 检索（kb_search）与自动注入。作用域含全局库
+	// 与按会话库，持久化到 PersistentStorage（kb: 命名空间）。
+	if p.cfg.Kb.Enable {
+		maxDocs := p.cfg.Kb.MaxDocs
+		if maxDocs <= 0 {
+			maxDocs = 500
+		}
+		var emb *embedder
+		if p.cfg.Kb.Embedding.Enable {
+			embBaseURL := p.cfg.Kb.Embedding.BaseURL
+			embAPIKey := p.cfg.Kb.Embedding.APIKey
+			embModel := p.cfg.Kb.Embedding.Model
+			if embBaseURL == "" {
+				embBaseURL = p.cfg.BaseURL
+			}
+			if embAPIKey == "" {
+				embAPIKey = p.cfg.APIKey
+			}
+			if embModel == "" {
+				embModel = "jina-embeddings-v3"
+			}
+			emb = newEmbedder(embBaseURL, embAPIKey, embModel, p.Logger.WithGroup("kb-embedding"))
+			if emb == nil {
+				p.Logger.Warn("向量检索未启用：Embedding 配置不完整（base_url/api_key/model 缺项）")
+			}
+		}
+		p.knowledgeManager = newKnowledgeManager(p.PersistentStorage, p.Logger.WithGroup("knowledge"), maxDocs, emb)
+		p.Logger.Info("已启用知识库功能", "max_docs", maxDocs, "vector", emb != nil, "auto_inject", p.cfg.Kb.AutoInject)
+	} else {
+		p.Logger.Info("知识库功能未启用（plugin.ai_chat_bot.kb.enable=false）")
 	}
 
 	// AI 子代理：主 AI 可通过 subagent_run 工具把复杂子任务委派给一次性子代理

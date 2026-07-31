@@ -139,6 +139,17 @@ export const api = {
   deleteMemory: (scope, id) =>
     request(`/api/memory?scope=${encodeURIComponent(scope)}&id=${encodeURIComponent(id)}`, { method: 'DELETE' }),
 
+  getKnowledgeScopes: () => request('/api/knowledge/scopes'),
+  getKnowledgeDocs: (scope) => request(`/api/knowledge/list?scope=${encodeURIComponent(scope)}`),
+  createKnowledge: (entry) =>
+    request('/api/knowledge', { method: 'POST', body: JSON.stringify(entry) }),
+  updateKnowledge: (entry) =>
+    request('/api/knowledge', { method: 'PUT', body: JSON.stringify(entry) }),
+  deleteKnowledge: (scope, id) =>
+    request(`/api/knowledge?scope=${encodeURIComponent(scope)}&id=${encodeURIComponent(id)}`, { method: 'DELETE' }),
+  importKnowledgeURL: (scope, url) =>
+    request('/api/knowledge/import-url', { method: 'POST', body: JSON.stringify({ scope, url }) }),
+
   restart: () => request('/api/restart', { method: 'POST' }),
 
   getUpdateInfo: () => request('/api/update/info'),
