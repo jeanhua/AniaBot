@@ -35,7 +35,7 @@
             </button>
           </div>
         </div>
-        <ul class="divide-y divide-slate-100 max-h-[32rem] overflow-y-auto">
+        <ul class="divide-y divide-slate-100 max-h-128 overflow-y-auto">
           <li v-if="filteredScopes.length === 0" class="py-10 text-xs text-slate-400 text-center list-none px-4">
             暂无团队。可让 AI 在对话中调用 team_create 创建，也可点击右上角手动新增
           </li>
@@ -43,7 +43,7 @@
             v-for="s in filteredScopes"
             :key="s.scope"
             class="px-4 py-3 cursor-pointer transition-colors"
-            :class="current?.scope === s.scope ? 'bg-zinc-900/[0.04]' : 'hover:bg-slate-50/70'"
+            :class="current?.scope === s.scope ? 'bg-zinc-900/4' : 'hover:bg-slate-50/70'"
             @click="selectScope(s)"
           >
             <div class="flex items-center justify-between gap-2">
@@ -81,8 +81,8 @@
               <p v-if="t.desc" class="text-xs text-slate-500 mt-1.5">{{ t.desc }}</p>
               <ul class="mt-2.5 space-y-1.5">
                 <li v-for="m in t.members" :key="m.name" class="flex items-start gap-2">
-                  <span class="text-[11px] px-2 py-0.5 rounded-md bg-zinc-900/[0.05] border border-zinc-200/60 font-mono text-zinc-700 shrink-0 mt-px">{{ m.name }}</span>
-                  <span class="text-xs text-slate-500 leading-relaxed break-words">{{ m.role || '（无角色描述）' }}</span>
+                  <span class="text-[11px] px-2 py-0.5 rounded-md bg-zinc-900/5 border border-zinc-200/60 font-mono text-zinc-700 shrink-0 mt-px">{{ m.name }}</span>
+                  <span class="text-xs text-slate-500 leading-relaxed wrap-break-word">{{ m.role || '（无角色描述）' }}</span>
                 </li>
               </ul>
             </div>
@@ -107,7 +107,7 @@
 
     <!-- 新增/编辑弹窗 -->
     <div v-if="showForm" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-50" @click.self="showForm = false">
-      <form class="bg-white rounded-2xl shadow-2xl p-6 w-[32rem] space-y-4" @submit.prevent="onSubmit">
+      <form class="bg-white rounded-2xl shadow-2xl p-6 w-lg space-y-4" @submit.prevent="onSubmit">
         <h2 class="text-base font-semibold text-slate-800">{{ form.name ? '编辑团队' : '新增团队' }}</h2>
         <div class="grid grid-cols-2 gap-3">
           <div>
