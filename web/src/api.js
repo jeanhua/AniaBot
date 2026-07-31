@@ -143,6 +143,7 @@ export const api = {
 
   getTeamScopes: () => request('/api/team/scopes'),
   getTeams: (scope) => request(`/api/team/list?scope=${encodeURIComponent(scope)}`),
+  getTeamRoles: () => request('/api/team/roles'),
   createTeam: (team) =>
     request('/api/team', { method: 'POST', body: JSON.stringify(team) }),
   updateTeam: (team) =>

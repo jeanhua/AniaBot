@@ -115,8 +115,11 @@
             <input v-model="form.name" placeholder="如：开发小组" required :disabled="!!form.originName" :class="[inputClass, form.originName && 'bg-slate-50 text-slate-400']" />
           </div>
           <div v-if="!form.originName">
-            <label class="block text-xs text-slate-500 mb-1.5">会话 scope（g:群号 / f:QQ号）</label>
-            <input v-model="form.scope" placeholder="如 g:123456" required :class="inputClass" />
+            <label class="block text-xs text-slate-500 mb-1.5">会话 scope</label>
+            <input v-model="form.scope" list="team-scope-options" placeholder="如 global 或 g:123456" required :class="inputClass" />
+            <datalist id="team-scope-options">
+              <option v-for="s in scopeOptions" :key="s" :value="s" />
+            </datalist>
           </div>
         </div>
         <div>
@@ -124,19 +127,27 @@
           <input v-model="form.desc" placeholder="用途、适合的任务类型等" :class="inputClass" />
         </div>
         <div>
-          <label class="block text-xs text-slate-500 mb-1.5">成员（1 至 10 个，name 必填，role 为该成员的角色描述，可空）</label>
+          <label class="block text-xs text-slate-500 mb-1.5">成员（1 至 10 个：可选预置角色自动填充名字，或用 name + 角色描述自定义；角色描述为空且名字命中预置角色时，该成员按预置角色执行）</label>
           <div class="space-y-2">
-            <div v-for="(m, i) in form.members" :key="i" class="flex items-center gap-2">
-              <input v-model="m.name" placeholder="成员名" required :class="[inputClass, 'w-40 shrink-0']" />
-              <input v-model="m.role" placeholder="角色描述，如：负责代码审查" :class="inputClass" />
-              <button
-                type="button"
-                class="text-xs text-red-400 hover:text-red-600 px-2 py-1.5 rounded-lg hover:bg-red-50 font-medium shrink-0 transition-colors"
-                :disabled="form.members.length <= 1"
-                @click="form.members.splice(i, 1)"
-              >
-                移除
-              </button>
+            <div v-for="(m, i) in form.members" :key="i" class="border border-slate-200 rounded-lg p-2.5 space-y-2">
+              <div class="flex items-center gap-2">
+                <select :value="presetOf(m)" class="w-44 shrink-0 border border-slate-300 rounded-lg px-2 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-zinc-400" @change="onPresetChange(m, $event)">
+                  <option value="">自定义</option>
+                  <option v-for="r in roles" :key="r.name" :value="r.name" :title="r.summary">
+                    {{ r.name }} · {{ r.summary }}
+                  </option>
+                </select>
+                <input v-model="m.name" placeholder="成员名（选预置角色后自动填充）" required :class="inputClass" />
+                <button
+                  type="button"
+                  class="text-xs text-red-400 hover:text-red-600 px-2 py-1.5 rounded-lg hover:bg-red-50 font-medium shrink-0 transition-colors"
+                  :disabled="form.members.length <= 1"
+                  @click="form.members.splice(i, 1)"
+                >
+                  移除
+                </button>
+              </div>
+              <input v-model="m.role" placeholder="角色描述，如：负责代码审查（可空；填了则优先于预置角色生效）" :class="inputClass" />
             </div>
           </div>
           <button
@@ -166,6 +177,7 @@ const inputClass = 'w-full border border-slate-300 rounded-lg px-3 py-2 text-sm 
 
 const kindTabs = [
   { value: 'all', label: '全部' },
+  { value: 'global', label: '全局' },
   { value: 'group', label: '群聊' },
   { value: 'friend', label: '私聊' },
 ]
@@ -175,20 +187,46 @@ const teams = ref([])
 const current = ref(null)
 const kindFilter = ref('all')
 const names = ref({})
+const roles = ref([])
 const msg = ref('')
 const msgOk = ref(false)
 
 const showForm = ref(false)
 const form = reactive({ scope: '', name: '', originName: '', desc: '', members: [], msg: '' })
 
-const scopePattern = /^[gf]:\d+$/
+const scopePattern = /^(global|[gf]:\d+)$/
 
 const filteredScopes = computed(() =>
   kindFilter.value === 'all' ? scopes.value : scopes.value.filter((s) => s.kind === kindFilter.value),
 )
 
+// 新建团队的作用域建议：全局 + 左侧已有的作用域（去重），手输新作用域仍被允许
+const scopeOptions = computed(() => {
+  const list = ['global']
+  for (const s of scopes.value) {
+    if (s.scope !== 'global' && !list.includes(s.scope)) list.push(s.scope)
+  }
+  return list
+})
+
+// 成员行预置角色下拉的当前值：成员名命中预置角色时显示该角色，否则显示「自定义」
+function presetOf(m) {
+  const r = roles.value.find((r) => r.name === m.name)
+  return r ? r.name : ''
+}
+
+// 选中预置角色：自动填充成员名并清空角色描述（空角色描述时 team_run 按预置角色执行）
+function onPresetChange(m, event) {
+  const name = event.target.value
+  if (name) {
+    m.name = name
+    m.role = ''
+  }
+}
+
 function displayName(s) {
   if (names.value[s.scope]) return names.value[s.scope]
+  if (s.scope === 'global') return '全局团队'
   return s.kind === 'group' ? `群 ${s.target}` : `QQ ${s.target}`
 }
 
@@ -273,7 +311,7 @@ async function onSubmit() {
   form.msg = ''
   const scope = form.scope.trim()
   if (!scopePattern.test(scope)) {
-    form.msg = '会话 scope 格式应为 g:群号 或 f:QQ号'
+    form.msg = '会话 scope 应为 global、g:群号 或 f:QQ号'
     return
   }
   const team = {
@@ -322,8 +360,12 @@ async function onDelete(t) {
   }
 }
 
-onMounted(() => {
+onMounted(async () => {
   load()
   loadNames()
+  // 预置角色列表（加载失败时成员行只有自定义选项，不影响其余功能）
+  try {
+    roles.value = (await api.getTeamRoles()) || []
+  } catch { /* 功能未启用时忽略 */ }
 })
 </script>

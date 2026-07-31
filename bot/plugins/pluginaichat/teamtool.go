@@ -31,7 +31,7 @@ func newTeamTools(p *AIChatPlugin, b bot.Bot, id message.QID, isGroup bool) []ll
 		"拥有与你一致的工具能力，以其实际可用的工具列表为准），全部完成后汇总各成员结果返回，由你综合出最终回复。" +
 		"适用场景：需要多视角/多维度处理的任务（如同时调研与评审、交叉验证）。" +
 		"成员指定三种方式：① role 填内联自定义角色描述（优先级最高）；② name 填预置角色（" + roles + "）；" +
-		"③ name 填当前会话已保存团队（team_list 查看）中的成员名。未识别的 name 会按普通子代理执行。" +
+		"③ name 填当前会话已保存团队（team_list 查看）或全局团队（Web 面板管理的跨会话团队）中的成员名。未识别的 name 会按普通子代理执行。" +
 		"当前会话为" + sessionDesc + "，任务文本会原样发给每个成员。" +
 		fmt.Sprintf("单成员默认超时 %d 秒，最多并行 %d 个成员；成员无法再组建团队或委派子代理。",
 			int(p.teamTimeout().Seconds()), p.teamMaxMembers())
@@ -41,7 +41,7 @@ func newTeamTools(p *AIChatPlugin, b bot.Bot, id message.QID, isGroup bool) []ll
 			teamToolBase: base,
 		},
 		&teamCreateTool{
-			BaseTool:     llmtool.MakeBaseTool("team_create", "在当前会话保存一个自定义团队（成员可带角色描述），保存后即可通过 team_run 的 name 引用团队成员。团队按群聊/私聊隔离，仅当前会话可见，跨重启保留", teamCreateParams{}),
+			BaseTool:     llmtool.MakeBaseTool("team_create", "在当前会话保存一个自定义团队（成员可带角色描述），保存后即可通过 team_run 的 name 引用团队成员。团队按群聊/私聊隔离，仅当前会话可见，跨重启保留；跨会话共享的全局团队请通过 Web 面板管理", teamCreateParams{}),
 			teamToolBase: base,
 		},
 		&teamListTool{

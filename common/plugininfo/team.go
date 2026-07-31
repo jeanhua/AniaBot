@@ -31,3 +31,9 @@ type TeamUpsert struct {
 	Desc    string           `json:"desc,omitempty"`
 	Members []TeamMemberInfo `json:"members"`
 }
+
+// TeamRoleInfo 是一个预置团队成员角色，供面板选择器展示。
+type TeamRoleInfo struct {
+	Name    string `json:"name"`
+	Summary string `json:"summary"`
+}

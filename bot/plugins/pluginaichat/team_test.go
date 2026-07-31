@@ -225,6 +225,10 @@ func TestResolveTeamMemberSpec(t *testing.T) {
 	if _, err := m.create("g:1", "评审小组", "", []teamMember{{Name: "老张", Role: "负责挑刺"}}); err != nil {
 		t.Fatal(err)
 	}
+	// 全局团队：所有会话的解析链都可回退命中
+	if _, err := m.create(teamScopeGlobal, "通用小组", "", []teamMember{{Name: "全球员", Role: "跨会话角色"}}); err != nil {
+		t.Fatal(err)
+	}
 	p := &AIChatPlugin{teamManager: m}
 
 	// ① 内联 role 优先级最高
@@ -245,13 +249,19 @@ func TestResolveTeamMemberSpec(t *testing.T) {
 		t.Fatalf("预置角色不应降级, got %q", spec.degraded)
 	}
 
-	// ③ 已存团队成员命中
+	// ③ 已存团队成员命中（当前 scope）
 	spec = p.resolveTeamMemberSpec(m, "g:1", "老张", "")
 	if spec.prompt == "" || !strings.Contains(spec.prompt, "负责挑刺") {
 		t.Fatalf("已存团队成员应使用其角色, got %q", spec.prompt)
 	}
 
-	// ④ 未知名降级
+	// ④ 全局团队成员命中（其它会话也可引用）
+	spec = p.resolveTeamMemberSpec(m, "f:9", "全球员", "")
+	if spec.prompt == "" || !strings.Contains(spec.prompt, "跨会话角色") {
+		t.Fatalf("全局团队成员应可被任意会话引用, got %q", spec.prompt)
+	}
+
+	// ⑤ 未知名降级
 	spec = p.resolveTeamMemberSpec(m, "g:1", "调研达人", "")
 	if spec.prompt != "" || !strings.Contains(spec.degraded, "调研达人") {
 		t.Fatalf("未知名应降级, got %+v", spec)
@@ -435,11 +445,36 @@ func TestTeamPanelSource(t *testing.T) {
 		t.Fatalf("更新后数据异常: %+v", infos[0])
 	}
 
+	// 全局团队：任意 scope 合法，scopes 汇总带 global 种类
+	if err := p.TeamCreate(plugininfo.TeamUpsert{
+		Scope:   "global",
+		Name:    "通用小组",
+		Members: []plugininfo.TeamMemberInfo{{Name: "全球员", Role: "跨会话角色"}},
+	}); err != nil {
+		t.Fatalf("global scope 创建失败: %v", err)
+	}
+
 	// scopes 汇总
 	_ = p.TeamCreate(plugininfo.TeamUpsert{Scope: "f:2", Name: "私聊团队", Members: []plugininfo.TeamMemberInfo{{Name: "a"}}})
 	scopes := p.TeamScopes()
-	if len(scopes) != 2 || scopes[0].Scope != "f:2" || scopes[0].Count != 1 || scopes[0].Kind != "friend" {
-		t.Fatalf("TeamScopes 异常: %+v", scopes)
+	if len(scopes) != 3 {
+		t.Fatalf("TeamScopes 数量异常: %+v", scopes)
+	}
+	byScope := map[string]plugininfo.TeamScopeInfo{}
+	for _, s := range scopes {
+		byScope[s.Scope] = s
+	}
+	if s := byScope["global"]; s.Kind != "global" || s.Count != 1 {
+		t.Fatalf("global scope 信息异常: %+v", s)
+	}
+	if s := byScope["f:2"]; s.Kind != "friend" || s.Count != 1 {
+		t.Fatalf("f:2 scope 信息异常: %+v", s)
+	}
+
+	// 预置角色列表（供面板选择器）
+	roles := p.TeamRoles()
+	if len(roles) != len(builtinTeamRoles) || roles[0].Name != builtinTeamRoles[0].Name || roles[0].Summary == "" {
+		t.Fatalf("TeamRoles 异常: %+v", roles)
 	}
 
 	// 删除 → 不存在报错

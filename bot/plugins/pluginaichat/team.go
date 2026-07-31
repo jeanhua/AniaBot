@@ -18,6 +18,10 @@ import (
 	"github.com/jeanhua/AniaBot/common/storage"
 )
 
+// teamScopeGlobal 全局团队作用域。与知识库的全局库一致：所有会话都可引用
+// 全局团队中的成员（经 team_run 的解析链回退），但仅 Web 面板可管理。
+const teamScopeGlobal = "global"
+
 const (
 	// teamMaxPerScope 单个会话 scope 可保存的团队数上限
 	teamMaxPerScope = 20
@@ -311,7 +315,8 @@ type teamMemberResult struct {
 //  1. role 非空 → 内联角色（最高优先级），label 取 name；
 //  2. name 命中预置角色（lookupTeamRole）→ 使用预置提示词；
 //  3. name 命中当前 scope 已保存团队中的成员 → 使用该成员 Role（非空时）；
-//  4. 以上皆未命中 → prompt 置空（执行时兜底为 defaultSubagentPrompt），
+//  4. name 命中全局团队（teamScopeGlobal，所有会话共享，面板管理）中的成员 → 使用其 Role；
+//  5. 以上皆未命中 → prompt 置空（执行时兜底为 defaultSubagentPrompt），
 //     degraded 记为"未识别的角色「name」，已按普通子代理执行"。
 //
 // 角色描述统一截断到 teamRoleMaxRunes，防止超长描述撑大 system prompt。
@@ -332,12 +337,14 @@ func (p *AIChatPlugin) resolveTeamMemberSpec(mgr *teamManager, scope, name, role
 	}
 
 	if mgr != nil {
-		// 命中当前 scope 已保存团队中的成员（按团队成员名引用）：使用该成员的角色描述
-		for _, def := range mgr.list(scope) {
-			for _, mem := range def.Members {
-				if strings.TrimSpace(mem.Name) == name && strings.TrimSpace(mem.Role) != "" {
-					spec.prompt = "你是一名" + name + "。" + strings.TrimSpace(mem.Role) + "\n\n" + teamRoleCommonNote
-					return spec
+		// 命中当前 scope 或全局团队中的成员（按团队成员名引用）：使用该成员的角色描述
+		for _, s := range []string{scope, teamScopeGlobal} {
+			for _, def := range mgr.list(s) {
+				for _, mem := range def.Members {
+					if strings.TrimSpace(mem.Name) == name && strings.TrimSpace(mem.Role) != "" {
+						spec.prompt = "你是一名" + name + "。" + strings.TrimSpace(mem.Role) + "\n\n" + teamRoleCommonNote
+						return spec
+					}
 				}
 			}
 		}

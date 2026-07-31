@@ -96,6 +96,8 @@ type MemorySource interface {
 // TeamSource 可选接口：插件实现后，面板「Agent 团队」页可对其自定义团队
 // 做列表 / 新增 / 编辑 / 删除（当前由 AI 对话插件实现）。改动即时生效，无需重启。
 type TeamSource interface {
+	// TeamRoles 返回预置团队成员角色列表（供面板选择器展示）
+	TeamRoles() []plugininfo.TeamRoleInfo
 	// TeamScopes 返回已有团队的会话 scope 列表及各自数量
 	TeamScopes() []plugininfo.TeamScopeInfo
 	// TeamList 返回指定 scope 的全部团队
@@ -228,6 +230,7 @@ func (s *Server) routes() {
 	s.mux.Handle("PUT /api/memory", s.requireAuth(http.HandlerFunc(s.handleMemoryUpdate)))
 	s.mux.Handle("DELETE /api/memory", s.requireAuth(http.HandlerFunc(s.handleMemoryDelete)))
 
+	s.mux.Handle("GET /api/team/roles", s.requireAuth(http.HandlerFunc(s.handleTeamRoles)))
 	s.mux.Handle("GET /api/team/scopes", s.requireAuth(http.HandlerFunc(s.handleTeamScopes)))
 	s.mux.Handle("GET /api/team/list", s.requireAuth(http.HandlerFunc(s.handleTeamList)))
 	s.mux.Handle("POST /api/team", s.requireAuth(http.HandlerFunc(s.handleTeamCreate)))
@@ -978,6 +981,19 @@ func (s *Server) handleMemoryDelete(w http.ResponseWriter, r *http.Request) {
 }
 
 // ---- team handlers（Agent 团队管理） ----
+
+// handleTeamRoles 返回预置团队成员角色列表（功能未启用时返回空数组）。
+func (s *Server) handleTeamRoles(w http.ResponseWriter, _ *http.Request) {
+	if s.opt.Teams == nil {
+		writeJSON(w, http.StatusOK, []any{})
+		return
+	}
+	roles := s.opt.Teams.TeamRoles()
+	if roles == nil {
+		roles = []plugininfo.TeamRoleInfo{}
+	}
+	writeJSON(w, http.StatusOK, roles)
+}
 
 // handleTeamScopes 返回已有团队的会话 scope 列表及数量（功能未启用时返回空数组）。
 func (s *Server) handleTeamScopes(w http.ResponseWriter, _ *http.Request) {
