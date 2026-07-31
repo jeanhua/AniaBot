@@ -22,8 +22,13 @@ func (ania *AniaBot) Go(name string, f func()) {
 				ania.logger.Error("goroutine panic", "name", name, "err", err)
 				for _, plugin := range ania.plugins {
 					ctx, cancel := context.WithTimeout(ania.ctx, PanicTimeout)
-					defer cancel()
-					plugin.OnPanic(ctx, ania, name, err)
+					// 立即释放：外层 recover 已消费本次 panic，插件 OnPanic 再 panic
+					// 会传播出该 goroutine 直接终止整个进程，必须逐个恢复
+					func() {
+						defer cancel()
+						defer func() { _ = recover() }()
+						plugin.OnPanic(ctx, ania, name, err)
+					}()
 				}
 			}
 		}()

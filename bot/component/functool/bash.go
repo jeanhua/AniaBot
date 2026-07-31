@@ -117,7 +117,7 @@ func (t *BashTool) checkCommand(cmd string) error {
 	return nil
 }
 
-func (t *BashTool) Execute(_ context.Context, params any, _ llmtool.CallBackFuncs) (string, error) {
+func (t *BashTool) Execute(ctx context.Context, params any, _ llmtool.CallBackFuncs) (string, error) {
 	p, ok := params.(*BashParams)
 	if !ok {
 		return "", fmt.Errorf("bash: 参数类型错误")
@@ -132,7 +132,9 @@ func (t *BashTool) Execute(_ context.Context, params any, _ llmtool.CallBackFunc
 		return "", err
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), bashTimeout)
+	// 基于调用方 ctx 派生超时：/stop 取消请求时命令随之终止，
+	// 不会因忽略 ctx 而让长命令继续占满会话锁与并发槽
+	ctx, cancel := context.WithTimeout(ctx, bashTimeout)
 	defer cancel()
 
 	cmd := exec.CommandContext(ctx, t.shell, t.shellArg, p.Command)
@@ -156,8 +158,9 @@ func (t *BashTool) Execute(_ context.Context, params any, _ llmtool.CallBackFunc
 		result += "stderr: " + stderr.String()
 	}
 
-	if len(result) > bashMaxOutput {
-		result = result[:bashMaxOutput] + "\n...(输出已截断)"
+	if r := []rune(result); len(r) > bashMaxOutput {
+		// 按 rune 截断，避免切在多字节字符中间产生非法 UTF-8
+		result = string(r[:bashMaxOutput]) + "\n...(输出已截断)"
 	}
 
 	if ctx.Err() == context.DeadlineExceeded {

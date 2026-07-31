@@ -159,18 +159,36 @@ func (c *MCPClient) CallTool(ctx context.Context, toolName string, arguments jso
 	}
 
 	if result.IsError {
+		// 服务器在错误时通常也在 Content 中回传具体错误文本（多数实现 error 时
+		// 同样返回 TextContent），保留它让模型能根据错误详情纠正参数
+		if msg := extractMCPText(result.Content); msg != "" {
+			return "", fmt.Errorf("工具执行错误: %s", truncateMCPResult(msg))
+		}
 		return "", fmt.Errorf("工具执行错误")
 	}
 
-	// 提取文本内容
+	return truncateMCPResult(extractMCPText(result.Content)), nil
+}
+
+// extractMCPText 拼接 MCP 工具返回的全部 TextContent。
+func extractMCPText(contents []mcp.Content) string {
 	var textBuilder strings.Builder
-	for _, content := range result.Content {
+	for _, content := range contents {
 		if textContent, ok := content.(*mcp.TextContent); ok {
 			textBuilder.WriteString(textContent.Text)
 		}
 	}
+	return textBuilder.String()
+}
 
-	return textBuilder.String(), nil
+// truncateMCPResult 按 rune 截断 MCP 工具结果：超大结果直接进入下一轮
+// LLM 上下文并永久留在窗口历史中，会撑爆上下文并拖垮后续压缩。
+func truncateMCPResult(s string) string {
+	const maxRunes = 8000
+	if r := []rune(s); len(r) > maxRunes {
+		return string(r[:maxRunes]) + "\n...(MCP 工具结果已截断)"
+	}
+	return s
 }
 
 // Close 关闭MCP客户端

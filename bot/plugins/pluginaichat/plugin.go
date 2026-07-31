@@ -42,7 +42,10 @@ type AIChatPlugin struct {
 	// pendingMsgs AI 响应期间到达的消息排队队列，按会话（群/好友）隔离
 	pendingMsgs sync.Map
 
+	// noMentionCount 未 @ 消息计数；noMentionMu 保护其读改写（sync.Map 的
+	// Load+Store 组合非原子，并发消息会丢计数）
 	noMentionCount sync.Map
+	noMentionMu    sync.Mutex
 
 	// 按群聊/好友独立的 prompt 覆盖配置
 	promptOverrides struct {
@@ -105,6 +108,8 @@ func (p *AIChatPlugin) OnGroupMsg(ctx context.Context, bot bot.Bot, cmd command.
 	}
 
 	if !cmd.Mention {
+		// 计数读改写整体加锁，避免并发消息丢计数
+		p.noMentionMu.Lock()
 		cnt := 0
 		if v, ok := p.noMentionCount.Load(msg.GroupId); ok {
 			if iv, ok2 := v.(int); ok2 {
@@ -113,7 +118,10 @@ func (p *AIChatPlugin) OnGroupMsg(ctx context.Context, bot bot.Bot, cmd command.
 		}
 		cnt++
 		p.noMentionCount.Store(msg.GroupId, cnt)
-		if cnt > 30 {
+		needCheck := cnt > 30
+		p.noMentionMu.Unlock()
+
+		if needCheck {
 			if c, ok := p.chats.Load(sessionKey(msg.GroupId, true)); ok && c != nil {
 				chat := c.(*aichat.ChatBot)
 				// 与 mention 路径的 chat.Chat 共用 per-group 锁，避免自动清理与进行中的对话
@@ -126,9 +134,15 @@ func (p *AIChatPlugin) OnGroupMsg(ctx context.Context, bot bot.Bot, cmd command.
 					if cleared := chat.ClearDynamicTools(); cleared > 0 {
 						p.Logger.Info("清理动态加载的 MCP 工具", "count", cleared)
 					}
+				} else {
+					// AI 长响应中拿不到锁：保留计数，响应结束后继续累计直到成功清理，
+					// 否则长响应期间积累的 30+ 条消息永远不会触发历史清理
+					return true, nil
 				}
 			}
+			p.noMentionMu.Lock()
 			p.noMentionCount.Store(msg.GroupId, 0)
+			p.noMentionMu.Unlock()
 		}
 		return true, nil
 	}

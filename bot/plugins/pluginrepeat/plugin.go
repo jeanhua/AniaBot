@@ -86,6 +86,12 @@ func (p *RepeatPlugin) OnGroupMsg(ctx context.Context, bot bot.Bot, cmd command.
 	rc := val.(*repeatCount)
 	needRepeat := false
 
+	if msg.RawMessage == "" {
+		// 纯图片/表情等消息 RawMessage 为空串，无法区分内容，
+		// 若参与比较会把所有此类消息判为"相同"而误触发复读，直接忽略
+		return true, nil
+	}
+
 	rc.lock.Lock()
 	if rc.msg == msg.RawMessage {
 		rc.count++

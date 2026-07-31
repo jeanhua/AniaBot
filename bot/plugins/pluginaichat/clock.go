@@ -100,7 +100,10 @@ func newClockManager(p *AIChatPlugin, defaultTimeout time.Duration, maxLog int) 
 		defaultTimeout: defaultTimeout,
 		tasks:          map[string]*ClockTask{},
 		entries:        map[string]cron.EntryID{},
-		cron:           cron.New(),
+		// SkipIfStillRunning：上一次执行未结束时跳过一次触发，
+		// 防止短周期任务（如 @every 30s）执行超时后并发叠加
+		// （重复推送消息、重复消耗 API 额度）
+		cron: cron.New(cron.WithChain(cron.SkipIfStillRunning(cron.DefaultLogger))),
 	}
 	m.loadAll()
 	return m

@@ -62,15 +62,15 @@ func (p *AIChatPlugin) handleClockCommand(ctx context.Context, b bot.Bot, cmd co
 	case "add":
 		p.replyClock(b, msg, p.cmdAdd(rest, targetType, targetID, msg.Sender.UserId))
 	case "del", "delete", "rm":
-		p.replyClock(b, msg, p.cmdDelete(rest))
+		p.replyClock(b, msg, p.cmdDelete(rest, targetType, targetID, isAdmin))
 	case "on", "enable":
-		p.replyClock(b, msg, p.cmdToggle(rest, true))
+		p.replyClock(b, msg, p.cmdToggle(rest, true, targetType, targetID, isAdmin))
 	case "off", "disable":
-		p.replyClock(b, msg, p.cmdToggle(rest, false))
+		p.replyClock(b, msg, p.cmdToggle(rest, false, targetType, targetID, isAdmin))
 	case "info":
-		p.replyClock(b, msg, p.cmdInfo(rest))
+		p.replyClock(b, msg, p.cmdInfo(rest, targetType, targetID, isAdmin))
 	case "timeout":
-		p.replyClock(b, msg, p.cmdTimeout(rest))
+		p.replyClock(b, msg, p.cmdTimeout(rest, targetType, targetID, isAdmin))
 	case "run":
 		if !isAdmin {
 			p.replyClock(b, msg, "仅管理员可手动触发任务")
@@ -159,10 +159,30 @@ func (p *AIChatPlugin) cmdAdd(args []string, targetType string, targetID string,
 	return fmt.Sprintf("已添加定时任务（ID: %s，模式: %s）%s\ncron: %s\n标题: %s", id, mode, next, cronExpr, title)
 }
 
-func (p *AIChatPlugin) cmdDelete(args []string) string {
+// checkTaskOwned 校验任务归属：任务属于当前会话（target 与本次命令的会话一致）
+// 或操作者为管理员时返回 true；任务不存在返回 false。
+// 任务 ID 为自增序号可枚举，若不校验归属，任意成员可删除/查看其他会话的任务。
+func (p *AIChatPlugin) checkTaskOwned(t *ClockTask, targetType, targetID string, isAdmin bool) bool {
+	if t == nil {
+		return false
+	}
+	if isAdmin {
+		return true
+	}
+	return t.TargetType == targetType && t.TargetID == targetID
+}
+
+func (p *AIChatPlugin) cmdDelete(args []string, targetType, targetID string, isAdmin bool) string {
 	id := pickID(args)
 	if id == "" {
 		return "用法：/clock del <id>"
+	}
+	t, ok := p.clockManager.Get(id)
+	if !ok {
+		return "定时任务不存在: " + id
+	}
+	if !p.checkTaskOwned(t, targetType, targetID, isAdmin) {
+		return "无权操作该定时任务（只能操作当前会话的任务）"
 	}
 	if p.clockManager.Delete(id) {
 		return "已删除定时任务 " + id
@@ -170,7 +190,7 @@ func (p *AIChatPlugin) cmdDelete(args []string) string {
 	return "定时任务不存在: " + id
 }
 
-func (p *AIChatPlugin) cmdToggle(args []string, enable bool) string {
+func (p *AIChatPlugin) cmdToggle(args []string, enable bool, targetType, targetID string, isAdmin bool) string {
 	id := pickID(args)
 	if id == "" {
 		verb := "on"
@@ -178,6 +198,13 @@ func (p *AIChatPlugin) cmdToggle(args []string, enable bool) string {
 			verb = "off"
 		}
 		return "用法：/clock " + verb + " <id>"
+	}
+	t, ok := p.clockManager.Get(id)
+	if !ok {
+		return "定时任务不存在: " + id
+	}
+	if !p.checkTaskOwned(t, targetType, targetID, isAdmin) {
+		return "无权操作该定时任务（只能操作当前会话的任务）"
 	}
 	f := ClockUpdateFields{Enabled: &enable}
 	if _, err := p.clockManager.Update(id, f); err != nil {
@@ -189,7 +216,7 @@ func (p *AIChatPlugin) cmdToggle(args []string, enable bool) string {
 	return "已停用 定时任务 " + id
 }
 
-func (p *AIChatPlugin) cmdInfo(args []string) string {
+func (p *AIChatPlugin) cmdInfo(args []string, targetType, targetID string, isAdmin bool) string {
 	id := pickID(args)
 	if id == "" {
 		return "用法：/clock info <id>"
@@ -197,6 +224,9 @@ func (p *AIChatPlugin) cmdInfo(args []string) string {
 	t, ok := p.clockManager.Get(id)
 	if !ok {
 		return "定时任务不存在: " + id
+	}
+	if !p.checkTaskOwned(t, targetType, targetID, isAdmin) {
+		return "无权查看该定时任务（只能查看当前会话的任务）"
 	}
 	var sb strings.Builder
 	sb.WriteString(formatTaskDetail(t))
@@ -223,7 +253,7 @@ func (p *AIChatPlugin) cmdRun(args []string) string {
 }
 
 // cmdTimeout 设置任务超时：/clock timeout <id> <秒数>（秒数为0表示恢复默认）。
-func (p *AIChatPlugin) cmdTimeout(args []string) string {
+func (p *AIChatPlugin) cmdTimeout(args []string, targetType, targetID string, isAdmin bool) string {
 	if len(args) < 2 {
 		return "用法：/clock timeout <id> <秒数>"
 	}
@@ -231,6 +261,13 @@ func (p *AIChatPlugin) cmdTimeout(args []string) string {
 	sec, err := strconv.Atoi(strings.TrimSpace(args[1]))
 	if err != nil || sec < 0 {
 		return "秒数必须是非负整数"
+	}
+	t, ok := p.clockManager.Get(id)
+	if !ok {
+		return "定时任务不存在: " + id
+	}
+	if !p.checkTaskOwned(t, targetType, targetID, isAdmin) {
+		return "无权操作该定时任务（只能操作当前会话的任务）"
 	}
 	f := ClockUpdateFields{TimeoutSec: &sec}
 	if _, err := p.clockManager.Update(id, f); err != nil {

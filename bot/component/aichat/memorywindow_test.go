@@ -3,6 +3,7 @@ package aichat
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -218,6 +219,36 @@ func TestPersistDegradesDataURI(t *testing.T) {
 	// 落盘降级不应修改原消息切片
 	if w.history()[0].Parts[1].ImageURL != "data:image/png;base64,iVBORw0KGgo=" {
 		t.Fatalf("原消息被落盘降级修改: %+v", w.history()[0].Parts[1])
+	}
+}
+
+func TestMaybeCompressFailureDegradesToTruncation(t *testing.T) {
+	// 压缩失败（网络抖动/限流）时不得阻断对话：降级丢弃最旧一半历史并返回 nil，
+	// 保证本轮用户消息能正常处理与落盘
+	store := &fakeHistoryStore{}
+	failCompressor := func(ctx context.Context, client *LLMClient, oldMsgs []Message) ([]Message, error) {
+		return nil, fmt.Errorf("compress failed")
+	}
+	w := newMessageWindow(1000, &LLMClient{}, failCompressor, store)
+	for i := 0; i < 8; i++ {
+		w.append(TextMessage(RoleUser, fmt.Sprintf("消息%d", i)))
+	}
+	w.RecordUsage(TokenUsage{LastPromptTokens: 900}) // 超阈值触发压缩
+
+	if err := w.MaybeCompress(context.Background()); err != nil {
+		t.Fatalf("压缩失败应降级截断而不是返回错误: %v", err)
+	}
+	// 截断到最近一半（4 条），且保留最新消息
+	if len(w.history()) != 4 {
+		t.Fatalf("降级截断后历史长度 = %d, want 4", len(w.history()))
+	}
+	last := w.history()[len(w.history())-1]
+	if last.Parts[0].Text != "消息7" {
+		t.Fatalf("应保留最新消息，got %q", last.Parts[0].Text)
+	}
+	// 截断后应同步落盘
+	if len(store.saved) != 4 {
+		t.Fatalf("降级截断后落盘长度 = %d, want 4", len(store.saved))
 	}
 }
 

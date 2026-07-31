@@ -3,10 +3,15 @@ package pluginaichat
 import (
 	"context"
 	"log/slog"
+	"time"
 
 	"github.com/openai/openai-go/v3"
 	"github.com/openai/openai-go/v3/option"
 )
+
+// embeddingTimeout embedding 请求超时：服务无响应时调用方（kb_add/kb_search）
+// 不能永久挂起，超时后退回纯关键词检索。
+const embeddingTimeout = 30 * time.Second
 
 // embedder 封装 OpenAI 兼容的 embeddings 客户端（复用 openai-go/v3 的
 // EmbeddingService，与 LLMClient 同一套 SDK）。
@@ -33,10 +38,14 @@ func newEmbedder(baseURL, apiKey, model string, logger *slog.Logger) *embedder {
 }
 
 // EmbedMany 批量计算文本向量，与输入顺序一一对应；出错返回 nil。
+// 内部强制请求超时：调用方即使传入 context.Background()（如 kb_add 入库路径），
+// embedding 服务无响应时也会超时退回关键词检索，而不是永久挂起。
 func (e *embedder) EmbedMany(ctx context.Context, texts []string) [][]float32 {
 	if e == nil || len(texts) == 0 {
 		return nil
 	}
+	ctx, cancel := context.WithTimeout(ctx, embeddingTimeout)
+	defer cancel()
 	resp, err := e.client.Embeddings.New(ctx, openai.EmbeddingNewParams{
 		Model: openai.EmbeddingModel(e.model),
 		Input: openai.EmbeddingNewParamsInputUnion{OfArrayOfStrings: texts},
@@ -44,6 +53,14 @@ func (e *embedder) EmbedMany(ctx context.Context, texts []string) [][]float32 {
 	if err != nil {
 		if e.logger != nil {
 			e.logger.Warn("embedding 调用失败，退回关键词检索", "error", err)
+		}
+		return nil
+	}
+	// 校验返回数量与顺序：兼容 provider 若缺失/乱序返回，向量会错配到错误文本块，
+	// 不如整体退回关键词检索
+	if len(resp.Data) != len(texts) {
+		if e.logger != nil {
+			e.logger.Warn("embedding 返回数量与输入不一致，退回关键词检索", "input", len(texts), "got", len(resp.Data))
 		}
 		return nil
 	}

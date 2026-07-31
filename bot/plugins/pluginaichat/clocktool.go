@@ -26,6 +26,30 @@ func (b clockToolBase) resolveTarget(givenType string, givenID string) (string, 
 	return b.defType, b.defID
 }
 
+// resolveOwnedTarget 解析并校验触发对象：显式指定时必须与当前会话一致，
+// 否则拒绝——AI 工具只能操作当前会话的定时任务，防止跨会话越权
+// （任务 ID 为自增序号可枚举，按 ID 直接操作会命中其他会话的任务）。
+func (b clockToolBase) resolveOwnedTarget(givenType string, givenID string) (string, string, error) {
+	if givenID == "" {
+		return b.defType, b.defID, nil
+	}
+	if givenType != b.defType || givenID != b.defID {
+		return "", "", fmt.Errorf("只能操作当前会话的定时任务（当前会话为 %s/%s）", b.defType, b.defID)
+	}
+	return b.defType, b.defID, nil
+}
+
+// checkTaskOwned 校验任务归属：任务必须属于当前会话（AI 工具无管理员豁免）。
+func (b clockToolBase) checkTaskOwned(t *ClockTask) error {
+	if t == nil {
+		return fmt.Errorf("定时任务不存在")
+	}
+	if t.TargetType != b.defType || t.TargetID != b.defID {
+		return fmt.Errorf("无权操作该定时任务（只能操作当前会话的任务）")
+	}
+	return nil
+}
+
 // newClockTools 创建一组定时任务管理工具，注册到当前会话的执行器中。
 // defType/defID 为当前会话的触发对象，作为工具参数缺省时的默认值。
 func newClockTools(mgr *clockManager, defType string, defID string) []llmtool.Tool {
@@ -80,7 +104,11 @@ type clockCreateTool struct {
 
 func (t *clockCreateTool) Execute(_ context.Context, params any, _ llmtool.CallBackFuncs) (string, error) {
 	p := params.(*clockCreateParams)
-	targetType, targetID := t.resolveTarget(p.TargetType, p.TargetID)
+	// 只允许创建发到当前会话的任务，防止跨会话安排定时消息
+	targetType, targetID, err := t.resolveOwnedTarget(p.TargetType, p.TargetID)
+	if err != nil {
+		return "", err
+	}
 	var creator message.QID
 	if s := strings.TrimSpace(p.CreatedBy); s != "" {
 		n, err := strconv.ParseUint(s, 10, 64)
@@ -130,9 +158,12 @@ type clockListTool struct {
 
 func (t *clockListTool) Execute(_ context.Context, params any, _ llmtool.CallBackFuncs) (string, error) {
 	p := params.(*clockListParams)
-	// 始终限定在当前会话（或显式指定的同会话对象），不提供跨会话列举能力——
+	// 始终限定在当前会话，不提供跨会话列举能力——
 	// 跨会话的全部任务列举仅管理员可通过 /clock list all 命令使用
-	targetType, targetID := t.resolveTarget(p.TargetType, p.TargetID)
+	targetType, targetID, err := t.resolveOwnedTarget(p.TargetType, p.TargetID)
+	if err != nil {
+		return "", err
+	}
 	tasks := t.mgr.ListByTarget(targetType, targetID)
 	if len(tasks) == 0 {
 		return "没有符合条件的定时任务", nil
@@ -171,6 +202,27 @@ func (t *clockUpdateTool) Execute(_ context.Context, params any, _ llmtool.CallB
 	if strings.TrimSpace(p.ID) == "" {
 		return "", fmt.Errorf("id 不能为空")
 	}
+	// 归属校验：只能更新当前会话的任务，且更新后的触发对象仍必须是当前会话
+	task, ok := t.mgr.Get(p.ID)
+	if !ok {
+		return "", fmt.Errorf("定时任务不存在: %s", p.ID)
+	}
+	if err := t.checkTaskOwned(task); err != nil {
+		return "", err
+	}
+	if p.TargetType != nil || p.TargetID != nil {
+		tt := t.defType
+		if p.TargetType != nil {
+			tt = *p.TargetType
+		}
+		tid := t.defID
+		if p.TargetID != nil {
+			tid = *p.TargetID
+		}
+		if _, _, err := t.resolveOwnedTarget(tt, tid); err != nil {
+			return "", err
+		}
+	}
 	f := ClockUpdateFields{
 		Cron:       p.Cron,
 		Title:      p.Title,
@@ -205,6 +257,14 @@ func (t *clockDeleteTool) Execute(_ context.Context, params any, _ llmtool.CallB
 	if strings.TrimSpace(p.ID) == "" {
 		return "", fmt.Errorf("id 不能为空")
 	}
+	// 归属校验：只能删除当前会话的任务
+	task, ok := t.mgr.Get(p.ID)
+	if !ok {
+		return "", fmt.Errorf("定时任务不存在: %s", p.ID)
+	}
+	if err := t.checkTaskOwned(task); err != nil {
+		return "", err
+	}
 	if t.mgr.Delete(p.ID) {
 		return "已删除定时任务 " + p.ID, nil
 	}
@@ -231,9 +291,18 @@ func (t *clockLogTool) Execute(_ context.Context, params any, _ llmtool.CallBack
 	}
 	var logs []tasklog.Entry
 	if strings.TrimSpace(p.TaskID) != "" {
+		// 指定任务：校验归属后查该任务日志
+		task, ok := t.mgr.Get(p.TaskID)
+		if !ok {
+			return "", fmt.Errorf("定时任务不存在: %s", p.TaskID)
+		}
+		if err := t.checkTaskOwned(task); err != nil {
+			return "", err
+		}
 		logs = t.mgr.log.RecentForTask(p.TaskID, limit)
 	} else {
-		logs = t.mgr.log.Recent(limit)
+		// 未指定任务：只返回当前会话任务的日志，不暴露其他会话的执行记录
+		logs = t.mgr.log.RecentForTarget(t.defType, t.defID, limit)
 	}
 	if len(logs) == 0 {
 		return "暂无执行记录", nil

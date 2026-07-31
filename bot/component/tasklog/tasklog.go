@@ -251,6 +251,16 @@ func (l *Logger) RecentForTask(taskID string, limit int) []Entry {
 	return l.loadMatchLocked(func(e Entry) bool { return e.TaskID == taskID }, limit, 0)
 }
 
+// RecentForTarget 返回指定触发对象的最近 limit 条日志（新在前）。limit<=0 时返回全部。
+// 供会话视角查询使用：AI 工具与 /clock 命令按当前会话过滤，不暴露其他会话的任务日志。
+func (l *Logger) RecentForTarget(targetType, targetID string, limit int) []Entry {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.loadMatchLocked(func(e Entry) bool {
+		return e.TargetType == targetType && e.TargetID == targetID
+	}, limit, 0)
+}
+
 // Filter 执行日志的查询条件，零值字段不参与过滤。
 type Filter struct {
 	TargetType string    // group / friend

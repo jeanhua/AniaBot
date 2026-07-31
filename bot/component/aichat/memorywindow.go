@@ -200,7 +200,11 @@ func (w *messageWindow) MaybeCompress(ctx context.Context) error {
 
 	compressed, err := w.compressor(ctx, w.llmClient, w.messages)
 	if err != nil {
-		return fmt.Errorf("上下文压缩失败: %w", err)
+		// 压缩失败（网络抖动/限流恰好在上下文最满时最易发生）不能阻断对话：
+		// 直接丢弃最旧一半历史降级，保证本轮用户消息能正常处理与落盘。
+		// 截断后 lastPromptTokens 置 0，若仍超阈值下一轮会再走压缩/截断，逐步收敛。
+		w.truncateOldestHalf()
+		return nil
 	}
 
 	w.messages = compressed
@@ -208,6 +212,17 @@ func (w *messageWindow) MaybeCompress(ctx context.Context) error {
 	// 压缩后历史发生改变，需落盘覆盖旧记录
 	w.persist()
 	return nil
+}
+
+// truncateOldestHalf 压缩失败时的降级策略：丢弃最旧一半历史（至少保留 1 条）。
+func (w *messageWindow) truncateOldestHalf() {
+	keep := len(w.messages) / 2
+	if keep < 1 {
+		keep = 1
+	}
+	w.messages = w.messages[len(w.messages)-keep:]
+	w.lastPromptTokens = 0
+	w.persist()
 }
 
 // ExtractMessageText 提取消息中的纯文本内容
@@ -249,12 +264,17 @@ func FormatMessagesForSummary(msgs []Message) string {
 	return buf.String()
 }
 
-// NewContextCompressor 创建上下文压缩函数
+// NewContextCompressor 创建上下文压缩函数。
+// 压缩结果以 user 角色消息保存（"之前的对话摘要"），而不是 system 角色：
+// 请求构建时会在最前注入一份完整 system prompt（含 skills 注册表、场景提示），
+// 若摘要也作为 system 消息进入历史，同一份 basePrompt 会在请求里出现两次，
+// 既浪费 token 又稀释指令；且压缩后再次压缩时 basePrompt 会被反复带进摘要。
+// 压缩器也不再拼接 basePrompt，摘要只含对话本身。
 func NewContextCompressor(basePrompt string) CompressorFunc {
 	return func(ctx context.Context, client *LLMClient, oldMsgs []Message) ([]Message, error) {
 		text := FormatMessagesForSummary(oldMsgs)
 		if text == "" {
-			return []Message{TextMessage(RoleSystem, basePrompt)}, nil
+			return []Message{TextMessage(RoleUser, "[对话摘要]（无内容）")}, nil
 		}
 
 		compressPrompt := "你是一个对话摘要助手。请对以下历史对话进行简洁的摘要，保留关键信息、用户意图、讨论结论和重要上下文。工具调用细节和中间推理过程可以省略。"
@@ -269,7 +289,6 @@ func NewContextCompressor(basePrompt string) CompressorFunc {
 
 		summary = removeThinkContent(summary)
 
-		combinedPrompt := basePrompt + "\n\n[对话摘要]\n" + summary
-		return []Message{TextMessage(RoleSystem, combinedPrompt)}, nil
+		return []Message{TextMessage(RoleUser, "以下是之前的对话摘要：\n"+summary)}, nil
 	}
 }

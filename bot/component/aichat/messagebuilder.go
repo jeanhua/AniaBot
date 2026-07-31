@@ -44,7 +44,14 @@ func (b *MessageBuilder) withTimePrefix(input string) string {
 func (b *MessageBuilder) BuildChatMessages(userInput string, history []Message) []Message {
 	messages := make([]Message, 0, 1+len(history)+1)
 	messages = append(messages, TextMessage(RoleSystem, b.buildSystemPrompt()))
-	messages = append(messages, history...)
+	for _, m := range history {
+		// 历史中不应出现 system 角色消息：压缩器输出已改为 user 角色的摘要消息，
+		// 此处仅防御旧版落盘数据回放等历史遗留，避免 system prompt 出现两份。
+		if m.Role == RoleSystem {
+			continue
+		}
+		messages = append(messages, m)
+	}
 	messages = append(messages, TextMessage(RoleUser, b.withTimePrefix(userInput)))
 	return messages
 }

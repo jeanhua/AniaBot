@@ -145,7 +145,8 @@ func (m *SkillManager) Get(name string) (*Skill, bool) {
 	return s, ok
 }
 
-// List 返回所有 skill 的元数据列表
+// List 返回所有 skill 的元数据列表（按名称排序：map 遍历顺序随机，
+// 列表会作为 skill_read 的工具结果文本回填给 LLM，必须保证输出确定）
 func (m *SkillManager) List() []*SkillMeta {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
@@ -154,6 +155,7 @@ func (m *SkillManager) List() []*SkillMeta {
 		meta := s.Meta // 复制，避免外部修改
 		result = append(result, &meta)
 	}
+	sort.Slice(result, func(i, j int) bool { return result[i].Name < result[j].Name })
 	return result
 }
 
@@ -377,6 +379,8 @@ func (t *SkillReadTool) Execute(ctx context.Context, params any, callbacks CallB
 			for name := range skill.References {
 				available = append(available, name)
 			}
+			// 排序保证输出确定（列表会作为工具结果回填给 LLM）
+			sort.Strings(available)
 			if len(available) == 0 {
 				return "", fmt.Errorf("skill '%s' 没有附属文件", p.SkillName)
 			}
@@ -395,19 +399,38 @@ func (t *SkillReadTool) Execute(ctx context.Context, params any, callbacks CallB
 		if len(skill.References) > 0 {
 			sb.WriteString("## [reference文档]\n\n")
 			sb.WriteString("通过 skill_read 的 file_name 参数按需读取：\n")
+			// 按名排序：map 遍历顺序随机，清单作为工具结果回填必须确定
+			refNames := make([]string, 0, len(skill.References))
 			for name := range skill.References {
+				refNames = append(refNames, name)
+			}
+			sort.Strings(refNames)
+			for _, name := range refNames {
 				sb.WriteString(fmt.Sprintf("- %s\n", name))
 			}
 		}
 		if len(skill.ExtraFiles) > 0 {
 			sb.WriteString("\n## [附带文件]\n\n")
 			sb.WriteString("无需读取，可通过 bash 工具执行（.sh 脚本用 `sh 脚本路径` 运行）：\n")
-			for name, path := range skill.ExtraFiles {
-				sb.WriteString(fmt.Sprintf("- %s → %s\n", name, path))
+			extraNames := make([]string, 0, len(skill.ExtraFiles))
+			for name := range skill.ExtraFiles {
+				extraNames = append(extraNames, name)
+			}
+			sort.Strings(extraNames)
+			for _, name := range extraNames {
+				sb.WriteString(fmt.Sprintf("- %s → %s\n", name, skill.ExtraFiles[name]))
 			}
 		}
 		result = sb.String()
 	}
 
+	// 防御性截断：异常巨大的 SKILL.md/附属内容不能直接撑爆 LLM 上下文
+	if r := []rune(result); len(r) > maxSkillReadRunes {
+		return string(r[:maxSkillReadRunes]) + "\n...(skill 内容过长已截断，可通过 file_name 参数按需读取附属文件)", nil
+	}
 	return result, nil
 }
+
+// maxSkillReadRunes skill_read 单次返回的 rune 上限（宽松于工具结果截断：
+// skill 是核心指令，正常内容远小于该值）。
+const maxSkillReadRunes = 16000

@@ -70,7 +70,14 @@ func (n *napcatHttpAdapter) Serve(v *viper.Viper) {
 	}
 	port := v.GetInt("bot.adapter.http.listen_port")
 	log.Println("已启用napcat http adapter")
-	log.Printf("本地HTTP服务器已启动 http://localhost:%d...\n", port)
+	if n.token == nil || *n.token == "" {
+		// fail-closed：HTTP 模式下 Bot 是被动接收上报的一方，未配置有效 token
+		// 时无法甄别事件来源，若放行则任何能访问该端口的主机都能伪造事件
+		// （冒充管理员等），因此拒绝全部上报并在日志中提示配置方式
+		log.Printf("警告: 未配置 bot.adapter.token，HTTP 上报接口将拒绝所有事件（请在面板配置 token 并同步到 NapCat 的 HTTP 客户端后重启）")
+	} else {
+		log.Printf("本地HTTP服务器已启动 http://localhost:%d...（上报需携带 token）\n", port)
+	}
 	if err := http.ListenAndServe(fmt.Sprintf(":%d", port), nil); err != nil {
 		// 不 Fatal：保持面板可访问，用户可在面板修正端口后重启
 		log.Printf("HTTP服务器异常退出，将无法接收NapCat事件: %v", err)
@@ -84,7 +91,8 @@ func (n *napcatHttpAdapter) handler(w http.ResponseWriter, r *http.Request) {
 	}
 	// HTTP 模式下 Bot 是被动接收方，必须校验上报来源：
 	// NapCat 的 HTTP 客户端配置 token 后会在上报请求携带 Authorization: Bearer <token>
-	if n.token != nil && !n.checkInToken(r) {
+	// 未配置有效 token 时按未授权处理（fail-closed），防止伪造事件注入
+	if n.token == nil || *n.token == "" || !n.checkInToken(r) {
 		log.Printf("拒绝未授权的HTTP上报: %s", r.RemoteAddr)
 		http.Error(w, "Unauthorized", http.StatusUnauthorized)
 		return
@@ -103,10 +111,11 @@ func (n *napcatHttpAdapter) handler(w http.ResponseWriter, r *http.Request) {
 	n.onMsg(body)
 }
 
-// checkInToken 校验 NapCat 上报请求的 token，兼容 Authorization: Bearer 头与 access_token 查询参数两种形式
+// checkInToken 校验 NapCat 上报请求的 token，兼容 Authorization: Bearer 头与 access_token 查询参数两种形式。
+// token 是共享密钥，必须精确匹配（大小写不敏感比较会扩大可猜测面）。
 func (n *napcatHttpAdapter) checkInToken(r *http.Request) bool {
 	if auth := r.Header.Get("Authorization"); auth != "" {
-		return strings.EqualFold(auth, "Bearer "+*n.token)
+		return auth == "Bearer "+*n.token
 	}
 	return r.URL.Query().Get("access_token") == *n.token
 }
@@ -196,7 +205,11 @@ func (n *napcatHttpAdapter) SendPokeMsg(userId message.QID, groupId *message.QID
 	if groupId != nil {
 		data["group_id"] = *groupId
 	}
-	return n.postAndCheck(n.baseUrl+"/send_poke", data, nil)
+	var resp message.Response[json.RawMessage]
+	if !n.postAndCheck(n.baseUrl+"/send_poke", data, &resp) {
+		return false
+	}
+	return checkResponseStatus(&resp)
 }
 
 func (n *napcatHttpAdapter) SendGroupForwardMsg(groupId message.QID, chain msgchain.GroupForwardChain) (msgId message.QID, success bool) {

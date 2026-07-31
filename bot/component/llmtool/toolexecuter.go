@@ -110,6 +110,8 @@ func (e *ToolExecuter) getToolNames() []string {
 	for name := range e.tools {
 		names = append(names, name)
 	}
+	// 排序保证输出确定：该列表会作为"工具未找到"错误文本回填给 LLM
+	sort.Strings(names)
 	return names
 }
 

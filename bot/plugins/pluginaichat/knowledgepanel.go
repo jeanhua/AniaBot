@@ -4,12 +4,17 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/go-resty/resty/v2"
 	"github.com/jeanhua/AniaBot/common/plugininfo"
 )
+
+// kbImportTimeout URL 导入抓取超时（Jina Reader）。
+const kbImportTimeout = 60 * time.Second
 
 // 知识库面板管理接口（实现 adminpanel.KnowledgeBaseSource）。
 // 改动直接落盘，AI 工具每次调用实时读写存储，因此无需重启即生效。
@@ -145,7 +150,8 @@ func (p *AIChatPlugin) KnowledgeImportURL(scope, targetURL string) (string, erro
 		return "", fmt.Errorf("URL 必须以 http:// 或 https:// 开头")
 	}
 
-	client := resty.New()
+	// 带请求超时：Jina 挂起时不能让面板 API 永久悬挂
+	client := resty.New().SetTimeout(kbImportTimeout)
 	resp, err := client.R().
 		SetContext(context.Background()).
 		SetHeader("Authorization", "Bearer "+p.cfg.Search.Token).
@@ -155,6 +161,10 @@ func (p *AIChatPlugin) KnowledgeImportURL(scope, targetURL string) (string, erro
 		Get("https://r.jina.ai/" + targetURL)
 	if err != nil {
 		return "", fmt.Errorf("抓取网页失败: %w", err)
+	}
+	if resp.StatusCode() != http.StatusOK {
+		// 402（无配额）/404/5xx 返回的是错误页而非正文，不能入库
+		return "", fmt.Errorf("抓取网页失败: Jina 返回 HTTP %d（请检查 URL 是否有效及搜索 token 配额）", resp.StatusCode())
 	}
 	text := resp.String()
 	if strings.TrimSpace(text) == "" {

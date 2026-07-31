@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jeanhua/AniaBot/bot/component/llmtool"
 	"github.com/jeanhua/AniaBot/common/storage"
 )
 
@@ -267,5 +268,89 @@ func TestResolveTarget(t *testing.T) {
 	// 类型对但 id 缺失 → 回退
 	if tt, id := b.resolveTarget(clockTargetFriend, ""); tt != clockTargetGroup || id != "123" {
 		t.Fatalf("half resolve wrong: %s %s", tt, id)
+	}
+}
+
+// TestClockToolsScopeIsolation 验证 AI 定时任务工具的会话作用域隔离：
+// 任务 ID 为自增序号可枚举，若无归属校验，任意会话的 AI 可删除/查看其他会话的任务。
+func TestClockToolsScopeIsolation(t *testing.T) {
+	p := &AIChatPlugin{}
+	p.Logger = slog.Default()
+	p.PersistentStorage = newPFake()
+	m := newClockManager(p, 30*time.Second, 100)
+
+	// 群 A（123）创建任务
+	ta, err := m.Add(&ClockTask{Cron: "@every 1h", Title: "A群任务", Content: "内容", TargetType: clockTargetGroup, TargetID: "123", Enabled: true})
+	if err != nil {
+		t.Fatalf("Add failed: %v", err)
+	}
+	// 群 B（456）创建任务
+	tb, err := m.Add(&ClockTask{Cron: "@every 1h", Title: "B群任务", Content: "内容", TargetType: clockTargetGroup, TargetID: "456", Enabled: true})
+	if err != nil {
+		t.Fatalf("Add failed: %v", err)
+	}
+
+	// 群 A 的工具视角
+	toolsA := newClockTools(m, clockTargetGroup, "123")
+	var delA, updA, logA, listA, createA llmtool.Tool
+	for _, tool := range toolsA {
+		switch tool.Name() {
+		case "clock_delete":
+			delA = tool
+		case "clock_update":
+			updA = tool
+		case "clock_log":
+			logA = tool
+		case "clock_list":
+			listA = tool
+		case "clock_create":
+			createA = tool
+		}
+	}
+
+	// 删除他群任务被拒绝
+	if _, err := delA.Execute(context.Background(), &clockDeleteParams{ID: tb}, llmtool.CallBackFuncs{}); err == nil || !strings.Contains(err.Error(), "无权操作") {
+		t.Fatalf("跨会话删除应被拒绝, err=%v", err)
+	}
+	// 删除本群任务成功
+	if _, err := delA.Execute(context.Background(), &clockDeleteParams{ID: ta}, llmtool.CallBackFuncs{}); err != nil {
+		t.Fatalf("本会话删除应成功: %v", err)
+	}
+
+	// 更新他群任务被拒绝
+	enabled := false
+	if _, err := updA.Execute(context.Background(), &clockUpdateParams{ID: tb, Enabled: &enabled}, llmtool.CallBackFuncs{}); err == nil || !strings.Contains(err.Error(), "无权操作") {
+		t.Fatalf("跨会话更新应被拒绝, err=%v", err)
+	}
+	// 查看他群任务日志被拒绝
+	if _, err := logA.Execute(context.Background(), &clockLogParams{TaskID: tb}, llmtool.CallBackFuncs{}); err == nil || !strings.Contains(err.Error(), "无权操作") {
+		t.Fatalf("跨会话日志应被拒绝, err=%v", err)
+	}
+	// 未指定任务的日志只包含本会话内容（B 群任务已删除，A 群任务已删，无日志为预期，不报错即可）
+	if _, err := logA.Execute(context.Background(), &clockLogParams{}, llmtool.CallBackFuncs{}); err != nil {
+		t.Fatalf("本会话日志查询不应报错: %v", err)
+	}
+
+	// 列表限定本会话：B 群任务不可见
+	out, err := listA.Execute(context.Background(), &clockListParams{}, llmtool.CallBackFuncs{})
+	if err != nil {
+		t.Fatalf("list failed: %v", err)
+	}
+	if strings.Contains(out, "B群任务") {
+		t.Fatalf("列表泄露其他会话任务: %s", out)
+	}
+
+	// 创建指定其他会话被拒绝
+	if _, err := createA.Execute(context.Background(), &clockCreateParams{
+		Cron: "@every 1h", Title: "x", Content: "y",
+		TargetType: clockTargetGroup, TargetID: "456",
+	}, llmtool.CallBackFuncs{}); err == nil || !strings.Contains(err.Error(), "只能操作当前会话") {
+		t.Fatalf("跨会话创建应被拒绝, err=%v", err)
+	}
+	// 创建默认当前会话成功
+	if _, err := createA.Execute(context.Background(), &clockCreateParams{
+		Cron: "@every 1h", Title: "x", Content: "y",
+	}, llmtool.CallBackFuncs{}); err != nil {
+		t.Fatalf("本会话创建应成功: %v", err)
 	}
 }

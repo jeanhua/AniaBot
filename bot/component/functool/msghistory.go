@@ -23,11 +23,18 @@ func NewMsgHistoryTool() *MsgHistoryTool {
 	}
 }
 
+// maxMsgHistoryCount 单次历史消息条数上限：模型可传任意 count，
+// 不设上限会把海量消息拼进工具结果，直接撑大下一轮 LLM 上下文。
+const maxMsgHistoryCount = 30
+
 func (t *MsgHistoryTool) Execute(ctx context.Context, params any, callbacks llmtool.CallBackFuncs) (string, error) {
 	p := params.(*MsgHistoryParams)
 	count := p.Count
 	if count <= 0 {
 		count = 10
+	}
+	if count > maxMsgHistoryCount {
+		count = maxMsgHistoryCount
 	}
 	p.MessageSeq = max(p.MessageSeq, 0)
 	log.Printf("执行get_msg_history, count=%d, seq=%d", count, p.MessageSeq)

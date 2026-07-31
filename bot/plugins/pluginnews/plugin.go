@@ -2,6 +2,7 @@ package pluginnews
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/jeanhua/AniaBot/common/aniaerror"
 	"github.com/jeanhua/AniaBot/common/bot"
@@ -61,9 +62,12 @@ func (p *NewsPlugin) StartCron(ctx context.Context, bot bot.Bot, c plugin.CronMa
 	if !p.cfg.Enable {
 		return nil
 	}
-	c.AddFunc(p.cronExpress, func() {
+	if _, err := c.AddFunc(p.cronExpress, func() {
 		p.sendNews(bot)
-	})
+	}); err != nil {
+		// cron 表达式非法时任务会静默不注册，必须显式报错避免"看似启动成功但从不播报"
+		return fmt.Errorf("注册每日新闻定时任务失败（cron 表达式非法）: %w", err)
+	}
 	return nil
 }
 

@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"net/http"
+	"time"
 
 	"github.com/go-resty/resty/v2"
 	"github.com/jeanhua/AniaBot/bot/component/llmtool"
@@ -66,7 +68,7 @@ func (t *WebSearchTool) search(ctx context.Context, params *WebSearchParams) (st
 		modifier.SetQuery("page", fmt.Sprintf("%d", *params.Page))
 	}
 
-	client := resty.New()
+	client := newJinaClient()
 	resp, err := client.R().
 		SetContext(ctx).
 		SetHeader("Authorization", "Bearer "+t.searchToken).
@@ -75,6 +77,11 @@ func (t *WebSearchTool) search(ctx context.Context, params *WebSearchParams) (st
 
 	if err != nil {
 		return "", err
+	}
+	if resp.StatusCode() != http.StatusOK {
+		// 401（token 失效）/429/5xx 的错误页是 HTML 而非搜索结果，
+		// 直接返回会给模型一堆无用文本并诱导重试
+		return "", fmt.Errorf("jina 搜索请求失败: HTTP %d", resp.StatusCode())
 	}
 	text := resp.String()
 	rText := []rune(text)
@@ -86,7 +93,7 @@ func (t *WebSearchTool) search(ctx context.Context, params *WebSearchParams) (st
 
 func (t *WebExploreTool) explore(ctx context.Context, params *WebExploreParams) (string, error) {
 	link := "https://r.jina.ai/" + params.Url
-	client := resty.New()
+	client := newJinaClient()
 	resp, err := client.R().
 		SetContext(ctx).
 		SetHeader("Authorization", "Bearer "+t.searchToken).
@@ -100,10 +107,21 @@ func (t *WebExploreTool) explore(ctx context.Context, params *WebExploreParams) 
 	if err != nil {
 		return "", err
 	}
+	if resp.StatusCode() != http.StatusOK {
+		return "", fmt.Errorf("jina 网页抓取失败: HTTP %d", resp.StatusCode())
+	}
 	text := resp.String()
 	rText := []rune(text)
 	if len(rText) > 8000 {
 		return string(rText[:8000]) + "...", nil
 	}
 	return text, nil
+}
+
+// newJinaClient 创建带请求超时的 Jina 客户端。
+// 若无超时，jina 服务挂起时整个会话会阻塞到消息预算耗尽（/stop 也无法中断工具调用）。
+const jinaTimeout = 30 * time.Second
+
+func newJinaClient() *resty.Client {
+	return resty.New().SetTimeout(jinaTimeout)
 }

@@ -82,6 +82,11 @@ func (c *LLMClient) applyOptions(params *openai.ChatCompletionNewParams, opts Ch
 	if opts.TopP != nil {
 		params.TopP = openai.Float(*opts.TopP)
 	}
+	if opts.TopK != nil {
+		// top_k 非 OpenAI 标准参数，openai-go SDK 未内置字段，
+		// 经 ExtraFields 原样下发（DeepSeek 等兼容 API 支持）
+		params.SetExtraFields(map[string]any{"top_k": *opts.TopK})
+	}
 	if opts.ReasoningEffort != nil {
 		switch *opts.ReasoningEffort {
 		case "low":

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"reflect"
+	"sort"
 	"strings"
 )
 
@@ -209,6 +210,9 @@ func extractRequiredFromProperties(properties any) []string {
 			}
 		}
 	}
+	// map 遍历顺序随机，必须排序后才能进入请求体 tools 字段，
+	// 否则每次请求的 required 数组排列不同，打失上游 prompt 前缀缓存
+	sort.Strings(required)
 	return required
 }
 

@@ -16,6 +16,23 @@
 - 新增知识库功能：文档按作用域（全局 `global` / 群聊 `g:群号` / 私聊 `f:QQ号`）管理，持久化到 `kb:` 命名空间；长文档入库时自动切片（约 600 字符/块、块间重叠），检索命中块而非整篇；AI 对话通过 `kb_search` / `kb_add` 工具按需检索或记录资料，并支持每次对话前自动关键词检索注入相关片段（`plugin.ai_chat_bot.kb.auto_inject`，默认开启，走纯关键词不产生额外 API 成本）；检索默认基于中文二元组切分 + 局部 IDF 加权打分，零外部依赖；可选开启向量检索（`plugin.ai_chat_bot.kb.embedding.enable`）用 OpenAI 兼容 `/embeddings` 混合打分，provider 不支持时自动退回纯关键词；面板新增「知识库」管理页（增删改查 + Jina Reader URL 导入），改动即时生效无需重启
 - 面板新增「控制台日志」页：实时查看 Bot 运行时的控制台输出——捕获 slog 结构化日志（核心/插件/面板）与标准库 `log` 输出（适配器/工具类），终端风格按级别着色展示（debug/info/warn/error/log），支持级别筛选、自动刷新、滚动加载更早记录与清空显示；日志保存在内存环形缓冲（最多保留最近 2000 条），重启后清空；新增 `GET /api/consolelogs` 分页接口（`limit` / `before` 游标，`{"items": [...], "has_more": bool}`），捕获层放在核心 logger，原控制台输出行为不变
 
+### 修复
+
+- 修复 MCP 工具定义 `required` 数组顺序随机打失前缀缓存的问题：MCP inputSchema 缺少顶层 `required` 键时，`extractRequiredFromProperties` 遍历 map 生成 required 切片，每次请求顺序不同，直接破坏上游 prompt 前缀缓存（与 v3.5.0 修复同类）；现按名称排序后输出，并给 `getToolNames`、`SkillManager.List`、`skill_read` 附属文件清单等工具结果文本的 map 遍历统一补排序，彻底消除非确定性输出
+- 修复 HTTP 适配器默认零认证的问题：未配置 `bot.adapter.token`（或配置为空串）时拒绝全部上报并提示配置方式（fail-closed），防止伪造事件注入冒充管理员；token 比较由大小写不敏感改为精确匹配；`SendPokeMsg` 补充 OneBot status 校验，不再对 `status=failed` 报假成功
+- 修复 AI 定时任务越权：`/clock` 命令的 `del` / `on` / `off` / `info` / `timeout` 与 AI 工具的 `clock_update` / `clock_delete` / `clock_log` 此前按任务 ID 直接操作、无归属校验（ID 为自增序号可枚举），任意群成员或任意会话的 AI 可删除/查看其他会话的任务；现统一校验任务归属（只能操作当前会话的任务，管理员豁免），`clock_create` / `clock_list` 的显式跨会话目标同样拒绝，`clock_log` 未指定任务时只返回本会话日志；`tasklog` 新增按触发对象过滤的 `RecentForTarget`
+- 修复上下文压缩失败导致整轮对话失败、用户消息丢失的问题：`MaybeCompress` 压缩请求失败（网络抖动/限流）时不再返回错误，改为丢弃最旧一半历史降级截断，本轮用户消息正常处理与落盘；同时压缩器输出的摘要消息由 system 角色改为 user 角色、不再拼接 basePrompt，消除压缩后请求中 system prompt 出现两份的问题（basePrompt 此前被重复注入且会被反复带进二次摘要）
+- 修复 bash 工具忽略调用方 ctx 的问题：`/stop` 或请求超时后命令继续跑满 2 分钟、占满会话锁与并发槽；现基于调用方 ctx 派生超时，取消请求立即终止命令；输出截断改为按 rune 计算，避免切坏多字节 UTF-8
+- 修复 Jina 搜索/浏览与面板 URL 导入不检查 HTTP 状态码且无请求超时的问题：401/402/429/5xx 的错误页文本此前会被当搜索结果返回给模型、当知识文档入库；现均校验状态码并设置请求超时（搜索 30s、导入 60s）
+- 修复 MCP 工具错误详情被丢弃与结果无截断的问题：`IsError` 时保留服务器在 Content 中回传的具体错误文本供模型纠正参数；MCP 工具结果按 8000 字符截断、`skill_read` 按 16000 字符截断、`get_msg_history` count 上限 30，防止超大结果直接撑爆下一轮 LLM 上下文并拖垮后续压缩
+- 修复 `top_k` 配置项完全无效的问题：此前 `ChatOptions.TopK` 从未下发到 LLM 请求，现经 openai-go 的 `SetExtraFields` 原样下发（`top_k` 为非标准参数，DeepSeek 等兼容 API 支持）
+- 修复 embedding 调用无超时与不校验返回数量的问题：`kb_add` / `kb_search` 在 embedding 服务无响应时永久挂起，现内部强制 30s 超时；返回向量数量与输入不一致时整体退回关键词检索，避免向量错配到错误文本块
+- 修复定时任务无防重入的问题：cron 实例改用 `SkipIfStillRunning` 链，上一次执行未结束时跳过一次触发，防止短周期任务（如 `@every 30s`）执行超时后并发叠加重复推送、重复消耗 API 额度
+- 修复 goroutine panic 恢复回调无二次恢复的问题：插件 `OnPanic` 实现再 panic 会传播出 goroutine 直接终止整个进程，现逐个插件包一层 recover，并立即释放 per-plugin 的 context 定时器
+- 修复复读机对纯图片/表情消息误判的问题：`RawMessage` 为空串时所有此类消息被判定为"相同"，连续 3 条不同图片消息即触发复读；现空消息不参与复读比较
+- 修复每日新闻插件 cron 表达式非法时静默不注册的问题：`StartCron` 现在检查 `AddFunc` 错误并返回，避免"看似启动成功但从不播报"
+- 修复未 @ 消息计数非原子与清理被跳过仍清零的问题：并发消息可能丢计数；AI 长响应中拿不到会话锁时保留计数继续累计，响应结束后才触发历史自动清理
+
 ## [v3.5.0] - 2026-07-30
 
 ### 新增
