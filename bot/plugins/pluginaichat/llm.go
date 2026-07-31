@@ -122,6 +122,13 @@ func (p *AIChatPlugin) getChat(b bot.Bot, id message.QID, isGroup bool, prompt s
 				sessionExecutor.RegisterSession(tool)
 			}
 		}
+		// 注册 Agent 团队工具（仅主会话；团队成员的一次性会话经 registerScopedTools
+		// 不注册团队工具，防止递归组建团队）
+		if p.teamManager != nil {
+			for _, tool := range newTeamTools(p, b, id, isGroup) {
+				sessionExecutor.RegisterSession(tool)
+			}
+		}
 		// 在 system prompt 末尾注入当前对话场景（群聊/私聊、群信息、消息 id 前缀含义）
 		prompt += p.buildScenePrompt(b, id, isGroup)
 		// 每个会话独立的历史持久化存储；g:/f: 前缀避免群聊与好友 id 相同导致历史串扰

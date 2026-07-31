@@ -92,6 +92,8 @@ export const api = {
   getTaskLogs: (params = {}) => request(`/api/tasklogs${qs(params)}`),
   // Query 日志分页查询：{ chat_type, target_id, sender, start, end, keyword, limit, before }（均可选）
   getQueryLogs: (params = {}) => request(`/api/querylogs${qs(params)}`),
+  // 控制台日志分页查询：{ limit, before }（均可选），返回 { items, has_more }
+  getConsoleLogs: (params = {}) => request(`/api/consolelogs${qs(params)}`),
   getClocks: () => request('/api/clocks'),
   // token 消耗监控指标：{ summary, today, daily[] }，含缓存命中率
   getTokenStats: () => request('/api/tokenstats'),

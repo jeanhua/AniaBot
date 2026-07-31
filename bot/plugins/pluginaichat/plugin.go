@@ -69,6 +69,9 @@ type AIChatPlugin struct {
 	// knowledgeManager 知识库管理器；为 nil 表示功能未启用
 	knowledgeManager *knowledgeManager
 
+	// teamManager Agent 团队管理器；为 nil 表示功能未启用
+	teamManager *teamManager
+
 	// queryLogger Query 日志记录器（面板「Query 日志」页数据源）；为 nil 表示功能未启用
 	queryLogger *querylog.Logger
 }
@@ -576,6 +579,20 @@ func (p *AIChatPlugin) Start(ctx context.Context, cfg *viper.Viper) error {
 			"max_result_len", p.subagentMaxResultLen())
 	} else {
 		p.Logger.Info("子代理功能未启用（plugin.ai_chat_bot.subagent.enable=false）")
+	}
+
+	// Agent 团队：主 AI 通过 team_run 组建多代理团队并行执行子任务。
+	// 团队成员为带角色提示词的一次性子代理，复用子代理执行引擎；
+	// 团队定义持久化到 PersistentStorage（team: 命名空间，按会话 scope 隔离）
+	if p.cfg.Team.Enable {
+		p.teamManager = newTeamManager(p.PersistentStorage, p.Logger.WithGroup("team"))
+		p.Logger.Info("已启用Agent团队功能",
+			"timeout_sec", p.teamTimeout().Seconds(),
+			"max_iterations", p.teamMaxIterations(),
+			"max_result_len", p.teamMaxResultLen(),
+			"max_members", p.teamMaxMembers())
+	} else {
+		p.Logger.Info("Agent团队功能未启用（plugin.ai_chat_bot.team.enable=false）")
 	}
 
 	// Query 日志：记录每次 AI 回复的完整执行过程（面板「Query 日志」页数据源）

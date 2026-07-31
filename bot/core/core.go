@@ -13,6 +13,7 @@ import (
 
 	"github.com/go-resty/resty/v2"
 	"github.com/jeanhua/AniaBot/bot/adminpanel"
+	"github.com/jeanhua/AniaBot/bot/component/consollog"
 	"github.com/jeanhua/AniaBot/bot/component/msglog"
 	"github.com/jeanhua/AniaBot/bot/component/querylog"
 	"github.com/jeanhua/AniaBot/bot/component/tasklog"
@@ -395,14 +396,15 @@ func (ania *AniaBot) startAdminPanel() {
 			}
 			return ""
 		},
-		TaskLogs:  taskLogFn,
-		Clocks:    clockSrc,
-		MsgLogs:   msgLogFn,
-		Skills:    skillSrc,
-		Memories:  memorySrc,
-		Knowledge: kbSrc,
-		QueryLogs: queryLogFn,
-		Logger:    Logger().WithGroup("AdminPanel"),
+		TaskLogs:    taskLogFn,
+		Clocks:      clockSrc,
+		MsgLogs:     msgLogFn,
+		Skills:      skillSrc,
+		Memories:    memorySrc,
+		Knowledge:   kbSrc,
+		QueryLogs:   queryLogFn,
+		ConsoleLogs: consollog.Page,
+		Logger:      Logger().WithGroup("AdminPanel"),
 	})
 	go srv.Run()
 }

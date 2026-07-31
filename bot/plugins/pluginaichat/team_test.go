@@ -1,0 +1,424 @@
+package pluginaichat
+
+import (
+	"context"
+	"fmt"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/jeanhua/AniaBot/bot/component/llmtool"
+	"github.com/jeanhua/AniaBot/common/model/message"
+)
+
+// ---- 配置兜底 ----
+
+func TestTeamConfigDefaults(t *testing.T) {
+	p := &AIChatPlugin{}
+	if got := p.teamTimeout(); got != 300*time.Second {
+		t.Fatalf("默认超时 = %v, want 300s", got)
+	}
+	if got := p.teamMaxIterations(); got != 10 {
+		t.Fatalf("默认最大轮数 = %d, want 10", got)
+	}
+	if got := p.teamMaxResultLen(); got != 4000 {
+		t.Fatalf("默认结果上限 = %d, want 4000", got)
+	}
+	if got := p.teamMaxMembers(); got != 5 {
+		t.Fatalf("默认并行成员数 = %d, want 5", got)
+	}
+
+	p.cfg.Team.TimeoutSec = 60
+	p.cfg.Team.MaxIterations = 5
+	p.cfg.Team.MaxResultLen = 100
+	p.cfg.Team.MaxMembers = 3
+	if got := p.teamTimeout(); got != 60*time.Second {
+		t.Fatalf("超时 = %v, want 60s", got)
+	}
+	if got := p.teamMaxIterations(); got != 5 {
+		t.Fatalf("最大轮数 = %d, want 5", got)
+	}
+	if got := p.teamMaxResultLen(); got != 100 {
+		t.Fatalf("结果上限 = %d, want 100", got)
+	}
+	if got := p.teamMaxMembers(); got != 3 {
+		t.Fatalf("并行成员数 = %d, want 3", got)
+	}
+}
+
+// TestTeamTimeoutConfigClamp 超大配置被限幅到 subagentMaxTimeoutSec，且成员数上限封顶。
+func TestTeamTimeoutConfigClamp(t *testing.T) {
+	p := &AIChatPlugin{}
+	p.cfg.Team.TimeoutSec = 10000000000 // 直接乘会 int64 溢出为负值
+	if got := p.teamTimeout(); got != subagentMaxTimeoutSec*time.Second {
+		t.Fatalf("超大配置超时应被限幅到 %v, got %v", subagentMaxTimeoutSec*time.Second, got)
+	}
+	p.cfg.Team.MaxMembers = 1000
+	if got := p.teamMaxMembers(); got != teamMaxMembersCap {
+		t.Fatalf("超大成员数应被限幅到 %d, got %d", teamMaxMembersCap, got)
+	}
+}
+
+// ---- validateTeamName ----
+
+func TestValidateTeamName(t *testing.T) {
+	valid := []string{"开发团队", "team-a", "Team_1", "α小组", "A"}
+	for _, name := range valid {
+		if err := validateTeamName(name); err != nil {
+			t.Fatalf("合法团队名 %q 应通过, got err %v", name, err)
+		}
+	}
+	invalid := []string{"", "  ", "a:b", "a b", strings.Repeat("长", 21)}
+	for _, name := range invalid {
+		if err := validateTeamName(name); err == nil {
+			t.Fatalf("非法团队名 %q 应报错", name)
+		}
+	}
+}
+
+// ---- teamManager ----
+
+func newTestTeamManager(t *testing.T) *teamManager {
+	t.Helper()
+	return newTeamManager(newPFake(), testLogger())
+}
+
+func TestTeamManagerCreateGetList(t *testing.T) {
+	m := newTestTeamManager(t)
+
+	// 创建 → 读取
+	def, err := m.create("g:123", "开发团队", "前后端开发", []teamMember{
+		{Name: "程序员", Role: "写后端"},
+		{Name: "审查员", Role: "审代码"},
+	})
+	if err != nil {
+		t.Fatalf("create err = %v", err)
+	}
+	if def.Name != "开发团队" || len(def.Members) != 2 {
+		t.Fatalf("创建结果异常: %+v", def)
+	}
+	got, ok := m.get("g:123", "开发团队")
+	if !ok || got.Desc != "前后端开发" {
+		t.Fatalf("get 异常: ok=%v def=%+v", ok, got)
+	}
+
+	// 列表按名排序
+	if _, err := m.create("g:123", "Alpha", "", []teamMember{{Name: "x"}}); err != nil {
+		t.Fatal(err)
+	}
+	defs := m.list("g:123")
+	if len(defs) != 2 || defs[0].Name != "Alpha" || defs[1].Name != "开发团队" {
+		t.Fatalf("列表应按名排序, got %+v", defs)
+	}
+
+	// scope 隔离：f:123 看不到 g:123 的团队
+	if _, ok := m.get("f:123", "开发团队"); ok {
+		t.Fatal("跨 scope 不应读到团队")
+	}
+	if defs := m.list("f:123"); len(defs) != 0 {
+		t.Fatalf("跨 scope 列表应为空, got %d", len(defs))
+	}
+}
+
+func TestTeamManagerDuplicateCreate(t *testing.T) {
+	m := newTestTeamManager(t)
+	if _, err := m.create("g:1", "团队", "", []teamMember{{Name: "a"}}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := m.create("g:1", "团队", "", []teamMember{{Name: "b"}}); err == nil {
+		t.Fatal("重复创建应报错")
+	}
+}
+
+func TestTeamManagerUpdate(t *testing.T) {
+	m := newTestTeamManager(t)
+	if _, err := m.create("g:1", "团队", "旧说明", []teamMember{{Name: "a", Role: "旧角色"}}); err != nil {
+		t.Fatal(err)
+	}
+	if err := m.update("g:1", "团队", "新说明", []teamMember{{Name: "b", Role: "新角色"}}); err != nil {
+		t.Fatalf("update err = %v", err)
+	}
+	def, ok := m.get("g:1", "团队")
+	if !ok || def.Desc != "新说明" || len(def.Members) != 1 || def.Members[0].Name != "b" {
+		t.Fatalf("update 后数据异常: %+v", def)
+	}
+	if err := m.update("g:1", "不存在", "", []teamMember{{Name: "a"}}); err == nil {
+		t.Fatal("更新不存在的团队应报错")
+	}
+}
+
+func TestTeamManagerDelete(t *testing.T) {
+	m := newTestTeamManager(t)
+	if _, err := m.create("g:1", "团队", "", []teamMember{{Name: "a"}}); err != nil {
+		t.Fatal(err)
+	}
+	if !m.delete("g:1", "团队") {
+		t.Fatal("删除已存在的团队应返回 true")
+	}
+	if m.delete("g:1", "团队") {
+		t.Fatal("删除不存在的团队应返回 false")
+	}
+	if _, ok := m.get("g:1", "团队"); ok {
+		t.Fatal("删除后不应再读到团队")
+	}
+}
+
+func TestTeamManagerCaps(t *testing.T) {
+	m := newTestTeamManager(t)
+
+	// 单 scope 团队数上限（名字用序号区分，避免与 20 字符上限冲突）
+	for i := 0; i < teamMaxPerScope; i++ {
+		if _, err := m.create("g:1", fmt.Sprintf("团队%d", i), "", []teamMember{{Name: "a"}}); err != nil {
+			t.Fatalf("创建第 %d 个团队失败: %v", i+1, err)
+		}
+	}
+	if _, err := m.create("g:1", "超额团队", "", []teamMember{{Name: "a"}}); err == nil {
+		t.Fatal("超过团队数上限应报错")
+	}
+
+	// 成员数上限
+	members := make([]teamMember, teamMaxStoredMembers+1)
+	for i := range members {
+		members[i] = teamMember{Name: "m"}
+	}
+	if _, err := m.create("g:2", "人太多", "", members); err == nil {
+		t.Fatal("超过成员数上限应报错")
+	}
+
+	// 空成员 / 成员重名
+	if _, err := m.create("g:2", "空团队", "", nil); err == nil {
+		t.Fatal("空成员应报错")
+	}
+	if _, err := m.create("g:2", "重名团队", "", []teamMember{{Name: "a"}, {Name: " a "}}); err == nil {
+		t.Fatal("成员重名应报错")
+	}
+}
+
+// ---- 预置角色 ----
+
+func TestLookupTeamRole(t *testing.T) {
+	tests := []struct {
+		name string
+		want bool
+	}{
+		{"研究员", true},
+		{" 研究员 ", true},
+		{"研究员x", false},
+		{"", false},
+	}
+	for _, tt := range tests {
+		_, ok := lookupTeamRole(tt.name)
+		if ok != tt.want {
+			t.Fatalf("lookupTeamRole(%q) = %v, want %v", tt.name, ok, tt.want)
+		}
+	}
+	if names := builtinTeamRoleNames(); !strings.Contains(names, "规划师") || !strings.Contains(names, "编辑") {
+		t.Fatalf("角色名列表应包含全部预置角色, got %q", names)
+	}
+}
+
+// ---- resolveTeamMemberSpec ----
+
+func TestResolveTeamMemberSpec(t *testing.T) {
+	m := newTestTeamManager(t)
+	if _, err := m.create("g:1", "评审小组", "", []teamMember{{Name: "老张", Role: "负责挑刺"}}); err != nil {
+		t.Fatal(err)
+	}
+	p := &AIChatPlugin{teamManager: m}
+
+	// ① 内联 role 优先级最高
+	spec := p.resolveTeamMemberSpec(m, "g:1", "研究员", "重点核查数据来源")
+	if spec.prompt == "" || !strings.Contains(spec.prompt, "重点核查数据来源") {
+		t.Fatalf("内联角色应作为提示词, got %q", spec.prompt)
+	}
+	if spec.degraded != "" {
+		t.Fatalf("内联角色不应降级, got %q", spec.degraded)
+	}
+
+	// ② 预置角色命中
+	spec = p.resolveTeamMemberSpec(m, "g:1", "研究员", "")
+	if spec.prompt == "" || !strings.Contains(spec.prompt, "研究员") {
+		t.Fatalf("预置角色应使用其提示词, got %q", spec.prompt)
+	}
+	if spec.degraded != "" {
+		t.Fatalf("预置角色不应降级, got %q", spec.degraded)
+	}
+
+	// ③ 已存团队成员命中
+	spec = p.resolveTeamMemberSpec(m, "g:1", "老张", "")
+	if spec.prompt == "" || !strings.Contains(spec.prompt, "负责挑刺") {
+		t.Fatalf("已存团队成员应使用其角色, got %q", spec.prompt)
+	}
+
+	// ④ 未知名降级
+	spec = p.resolveTeamMemberSpec(m, "g:1", "调研达人", "")
+	if spec.prompt != "" || !strings.Contains(spec.degraded, "调研达人") {
+		t.Fatalf("未知名应降级, got %+v", spec)
+	}
+}
+
+// TestResolveTeamMemberSpecRoleTruncate 超长内联角色被截断，防止撑大 system prompt
+// （提示词 = 角色名包装 + 截断后的角色描述 + 通用注意段）。
+func TestResolveTeamMemberSpecRoleTruncate(t *testing.T) {
+	p := &AIChatPlugin{}
+	long := strings.Repeat("长", teamRoleMaxRunes*2)
+	spec := p.resolveTeamMemberSpec(nil, "g:1", "研究员", long)
+	if len([]rune(spec.prompt)) > teamRoleMaxRunes+len([]rune(teamRoleCommonNote))+50 {
+		t.Fatalf("角色描述应被截断, 提示词长度 %d", len([]rune(spec.prompt)))
+	}
+	if strings.Contains(spec.prompt, strings.Repeat("长", teamRoleMaxRunes+100)) {
+		t.Fatal("超长角色描述未截断")
+	}
+}
+
+// ---- buildTeamReport ----
+
+func TestBuildTeamReport(t *testing.T) {
+	base := func(label, result string) teamMemberResult {
+		return teamMemberResult{label: label, result: result}
+	}
+	err := func(label string, e error) teamMemberResult {
+		return teamMemberResult{label: label, err: e}
+	}
+
+	t.Run("全成功", func(t *testing.T) {
+		report := buildTeamReport([]teamMemberResult{
+			base("研究员", "【子代理执行完成】耗时 1.0s · LLM 轮数 2 · token 100\n结论A"),
+			base("编辑", "【子代理执行完成】耗时 2.0s · LLM 轮数 3 · token 200\n结论B"),
+		}, 3*time.Second)
+		for _, want := range []string{"成员 2 人（成功 2 · 失败 0）", "===== 成员 1/2：研究员 =====", "===== 成员 2/2：编辑 =====", "结论A", "结论B"} {
+			if !strings.Contains(report, want) {
+				t.Fatalf("报告应包含 %q, got:\n%s", want, report)
+			}
+		}
+	})
+
+	t.Run("混合成功失败与降级", func(t *testing.T) {
+		report := buildTeamReport([]teamMemberResult{
+			{label: "调研达人", result: "【子代理执行完成】耗时 1.0s · LLM 轮数 1 · token 10\n结果", degraded: "未识别的角色「调研达人」，已按普通子代理执行"},
+			err("程序员", context.DeadlineExceeded),
+			base("编辑", ""),
+		}, 5*time.Second)
+		// 空结果算成功（err 为 nil），故成功 2 失败 1
+		for _, want := range []string{"成员 3 人（成功 2 · 失败 1）", "（未识别的角色「调研达人」", "执行失败", "（成员没有返回内容）"} {
+			if !strings.Contains(report, want) {
+				t.Fatalf("报告应包含 %q, got:\n%s", want, report)
+			}
+		}
+	})
+
+	t.Run("输入顺序保持", func(t *testing.T) {
+		report := buildTeamReport([]teamMemberResult{
+			base("成员C", "结果C"),
+			base("成员A", "结果A"),
+			base("成员B", "结果B"),
+		}, time.Second)
+		idxC, idxA, idxB := strings.Index(report, "成员C"), strings.Index(report, "成员A"), strings.Index(report, "成员B")
+		if !(idxC < idxA && idxA < idxB) {
+			t.Fatalf("报告应按输入顺序输出, got:\n%s", report)
+		}
+	})
+}
+
+// ---- team_run 参数校验 ----
+
+func newTeamToolPlugin(t *testing.T) *AIChatPlugin {
+	t.Helper()
+	p := &AIChatPlugin{}
+	p.teamManager = newTeamManager(newPFake(), testLogger())
+	return p
+}
+
+func TestTeamRunToolValidation(t *testing.T) {
+	p := newTeamToolPlugin(t)
+	tool := newTeamTools(p, nil, message.FromUint64(123), true)[0]
+
+	if _, err := tool.Execute(context.Background(), &teamRunParams{Task: "   ", Members: []teamMemberParam{{Name: "研究员"}}}, llmtool.CallBackFuncs{}); err == nil {
+		t.Fatal("空 task 应报错")
+	}
+	if _, err := tool.Execute(context.Background(), &teamRunParams{Task: "任务", Members: nil}, llmtool.CallBackFuncs{}); err == nil {
+		t.Fatal("空 members 应报错")
+	}
+	tooMany := make([]teamMemberParam, p.teamMaxMembers()+1)
+	for i := range tooMany {
+		tooMany[i] = teamMemberParam{Name: "研究员"}
+	}
+	if _, err := tool.Execute(context.Background(), &teamRunParams{Task: "任务", Members: tooMany}, llmtool.CallBackFuncs{}); err == nil {
+		t.Fatal("超上限成员数应报错")
+	}
+	if _, err := tool.Execute(context.Background(), &teamRunParams{Task: "任务", Members: []teamMemberParam{{Name: "  "}}}, llmtool.CallBackFuncs{}); err == nil {
+		t.Fatal("成员 name 为空应报错")
+	}
+	if _, err := tool.Execute(context.Background(), &teamRunParams{Task: "任务", Members: []teamMemberParam{{Name: "研究员"}, {Name: " 研究员 "}}}, llmtool.CallBackFuncs{}); err == nil {
+		t.Fatal("成员名重复应报错")
+	}
+}
+
+// ---- newTeamTools ----
+
+func TestNewTeamTools(t *testing.T) {
+	p := newTeamToolPlugin(t)
+
+	groupTools := newTeamTools(p, nil, message.FromUint64(12345), true)
+	if len(groupTools) != 4 {
+		t.Fatalf("应有 4 个团队工具（run/create/list/delete）, got %d", len(groupTools))
+	}
+	if groupTools[0].Name() != "team_run" {
+		t.Fatalf("工具名 = %q, want team_run", groupTools[0].Name())
+	}
+	desc := groupTools[0].Description()
+	for _, want := range []string{"群聊（群号 12345）", "规划师", "研究员", "编辑", "300 秒", "5 个成员"} {
+		if !strings.Contains(desc, want) {
+			t.Fatalf("team_run 描述应包含 %q, got %q", want, desc)
+		}
+	}
+
+	friendTools := newTeamTools(p, nil, message.FromUint64(67890), false)
+	if !strings.Contains(friendTools[0].Description(), "私聊（对方QQ 67890）") {
+		t.Fatalf("私聊会话描述应包含对方QQ, got %q", friendTools[0].Description())
+	}
+}
+
+// ---- team_create / team_list / team_delete 端到端 ----
+
+func TestTeamManageTools(t *testing.T) {
+	p := newTeamToolPlugin(t)
+	tools := newTeamTools(p, nil, message.FromUint64(1), true)
+	var create, list, del llmtool.Tool
+	for _, tool := range tools {
+		switch tool.Name() {
+		case "team_create":
+			create = tool
+		case "team_list":
+			list = tool
+		case "team_delete":
+			del = tool
+		}
+	}
+	if create == nil || list == nil || del == nil {
+		t.Fatal("四个工具不齐")
+	}
+
+	res, err := create.Execute(context.Background(), &teamCreateParams{
+		Name:    "开发团队",
+		Desc:    "前后端开发",
+		Members: []teamMemberParam{{Name: "程序员", Role: "写代码"}, {Name: "审查员", Role: "审代码"}},
+	}, llmtool.CallBackFuncs{})
+	if err != nil || !strings.Contains(res, "已创建") {
+		t.Fatalf("create 结果异常: %q err %v", res, err)
+	}
+
+	res, err = list.Execute(context.Background(), &teamListParams{}, llmtool.CallBackFuncs{})
+	if err != nil || !strings.Contains(res, "开发团队") || !strings.Contains(res, "程序员 / 审查员") {
+		t.Fatalf("list 结果异常: %q err %v", res, err)
+	}
+
+	res, err = del.Execute(context.Background(), &teamDeleteParams{Name: "开发团队"}, llmtool.CallBackFuncs{})
+	if err != nil || !strings.Contains(res, "已删除") {
+		t.Fatalf("delete 结果异常: %q err %v", res, err)
+	}
+	res, err = list.Execute(context.Background(), &teamListParams{}, llmtool.CallBackFuncs{})
+	if err != nil || !strings.Contains(res, "还没有保存的团队") {
+		t.Fatalf("删除后 list 应为空: %q err %v", res, err)
+	}
+}

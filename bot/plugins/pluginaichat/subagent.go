@@ -99,7 +99,29 @@ func resolveSubagentTimeout(defaultTimeout time.Duration, timeoutSec int, parent
 //
 // ctx 为主会话的请求上下文：/stop 取消主请求时子代理一并取消；timeoutSec<=0 用默认超时。
 func (p *AIChatPlugin) runSubagent(ctx context.Context, b bot.Bot, id message.QID, isGroup bool, task string, timeoutSec int, parentCbs llmtool.CallBackFuncs) (string, error) {
-	timeout, err := resolveSubagentTimeout(p.subagentTimeout(), timeoutSec, ctx)
+	return p.runSubagentWithOptions(ctx, b, id, isGroup, task, subagentRunOptions{timeoutSec: timeoutSec}, parentCbs)
+}
+
+// subagentRunOptions 子代理（含团队成员）单次执行的定制项；零值取对应默认值。
+type subagentRunOptions struct {
+	prompt        string        // 系统提示词，空用 defaultSubagentPrompt（团队成员传角色提示词）
+	timeout       time.Duration // 默认超时，<=0 用 p.subagentTimeout()
+	timeoutSec    int           // 本次调用覆盖的秒数（先限幅再乘 time.Second），<=0 忽略
+	maxIterations int           // 工具循环轮数上限，<=0 用 p.subagentMaxIterations()
+	maxResultLen  int           // 结果截断字符数，<=0 用 p.subagentMaxResultLen()
+}
+
+// runSubagentWithOptions 泛化的子代理执行：主体即原 runSubagent，差异仅在于
+// 提示词与默认参数取自 options（Agent 团队成员的并行执行复用它，传入角色提示词
+// 与团队配置的默认值）。超时预算解析完全在内部完成（按父 ctx deadline 压缩并
+// 预留 subagentParentReserve 收尾时间），调用方不应预建带超时的 context，
+// 否则会被二次压缩损失预算。
+func (p *AIChatPlugin) runSubagentWithOptions(ctx context.Context, b bot.Bot, id message.QID, isGroup bool, task string, o subagentRunOptions, parentCbs llmtool.CallBackFuncs) (string, error) {
+	defaultTimeout := o.timeout
+	if defaultTimeout <= 0 {
+		defaultTimeout = p.subagentTimeout()
+	}
+	timeout, err := resolveSubagentTimeout(defaultTimeout, o.timeoutSec, ctx)
 	if err != nil {
 		return "", err
 	}
@@ -110,7 +132,11 @@ func (p *AIChatPlugin) runSubagent(ctx context.Context, b bot.Bot, id message.QI
 	sessionExecutor := p.toolExecutor.NewSessionExecutor()
 	p.registerScopedTools(sessionExecutor, id, isGroup)
 
-	prompt := defaultSubagentPrompt + p.buildScenePrompt(b, id, isGroup)
+	prompt := o.prompt
+	if prompt == "" {
+		prompt = defaultSubagentPrompt
+	}
+	prompt += p.buildScenePrompt(b, id, isGroup)
 	chat, err := aichat.NewChatBot(
 		p.cfg.BaseURL, p.cfg.APIKey, p.cfg.Model,
 		prompt, p.cfg.MaxContextTokens, sessionExecutor, nil,
@@ -121,7 +147,11 @@ func (p *AIChatPlugin) runSubagent(ctx context.Context, b bot.Bot, id message.QI
 	if p.skillManager != nil {
 		chat.SetSkillManager(p.skillManager)
 	}
-	chat.SetMaxIterations(p.subagentMaxIterations())
+	maxIterations := o.maxIterations
+	if maxIterations <= 0 {
+		maxIterations = p.subagentMaxIterations()
+	}
+	chat.SetMaxIterations(maxIterations)
 
 	logger := p.Logger.WithGroup("subagent")
 	cbs := p.makeSubagentCallbacks(runCtx, parentCbs, logger)
@@ -144,7 +174,11 @@ func (p *AIChatPlugin) runSubagent(ctx context.Context, b bot.Bot, id message.QI
 		}
 	}
 
-	result, truncated := truncateSubagentResult(resp, p.subagentMaxResultLen())
+	maxResultLen := o.maxResultLen
+	if maxResultLen <= 0 {
+		maxResultLen = p.subagentMaxResultLen()
+	}
+	result, truncated := truncateSubagentResult(resp, maxResultLen)
 	logger.Info("子代理执行完成", "id", id, "is_group", isGroup,
 		"duration", duration, "iterations", usage.Iterations, "tokens", usage.TotalTokens, "truncated", truncated)
 

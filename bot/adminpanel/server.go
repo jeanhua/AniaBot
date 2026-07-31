@@ -22,6 +22,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/jeanhua/AniaBot/bot/component/consollog"
 	"github.com/jeanhua/AniaBot/bot/component/msglog"
 	"github.com/jeanhua/AniaBot/bot/component/querylog"
 	"github.com/jeanhua/AniaBot/bot/component/tasklog"
@@ -117,19 +118,20 @@ type KnowledgeBaseSource interface {
 
 // Options 面板依赖。
 type Options struct {
-	Listen        string                                          // 监听地址，如 127.0.0.1:7700
-	Config        *configstore.Store                              // 配置中心
-	Persistent    storage.PersistentStorage                       // 根持久化存储（__admin 命名空间存密码哈希）
-	Bot           BotInfo                                         // 运行信息来源
-	Adapter       func() string                                   // 适配器连接状态描述
-	AdapterDetail func() string                                   // 适配器状态详情（最近错误/重试次数，可为 nil）
-	TaskLogs      func(f tasklog.Filter) []tasklog.Entry          // AI 定时任务执行日志（可为 nil）
-	Clocks        ClockTaskSource                                 // AI 定时任务列表与启停（可为 nil）
-	MsgLogs       func(limit int, beforeID uint64) []msglog.Entry // 消息日志（群/好友/通知，可为 nil）
-	Skills        SkillSource                                     // AI skill 管理（可为 nil）
-	Memories      MemorySource                                    // AI 长期记忆管理（可为 nil）
-	Knowledge     KnowledgeBaseSource                             // AI 知识库管理（可为 nil）
-	QueryLogs     func(f querylog.Filter) []querylog.Entry        // AI Query 日志（可为 nil）
+	Listen        string                                             // 监听地址，如 127.0.0.1:7700
+	Config        *configstore.Store                                 // 配置中心
+	Persistent    storage.PersistentStorage                          // 根持久化存储（__admin 命名空间存密码哈希）
+	Bot           BotInfo                                            // 运行信息来源
+	Adapter       func() string                                      // 适配器连接状态描述
+	AdapterDetail func() string                                      // 适配器状态详情（最近错误/重试次数，可为 nil）
+	TaskLogs      func(f tasklog.Filter) []tasklog.Entry             // AI 定时任务执行日志（可为 nil）
+	Clocks        ClockTaskSource                                    // AI 定时任务列表与启停（可为 nil）
+	MsgLogs       func(limit int, beforeID uint64) []msglog.Entry    // 消息日志（群/好友/通知，可为 nil）
+	Skills        SkillSource                                        // AI skill 管理（可为 nil）
+	Memories      MemorySource                                       // AI 长期记忆管理（可为 nil）
+	Knowledge     KnowledgeBaseSource                                // AI 知识库管理（可为 nil）
+	QueryLogs     func(f querylog.Filter) []querylog.Entry           // AI Query 日志（可为 nil）
+	ConsoleLogs   func(limit int, beforeID uint64) []consollog.Entry // 控制台日志（slog + log 输出，可为 nil）
 	Logger        *slog.Logger
 }
 
@@ -193,6 +195,7 @@ func (s *Server) routes() {
 	s.mux.Handle("GET /api/tasklogs", s.requireAuth(http.HandlerFunc(s.handleTaskLogs)))
 	s.mux.Handle("GET /api/msglogs", s.requireAuth(http.HandlerFunc(s.handleMsgLogs)))
 	s.mux.Handle("GET /api/querylogs", s.requireAuth(http.HandlerFunc(s.handleQueryLogs)))
+	s.mux.Handle("GET /api/consolelogs", s.requireAuth(http.HandlerFunc(s.handleConsoleLogs)))
 	s.mux.Handle("GET /api/tokenstats", s.requireAuth(http.HandlerFunc(s.handleTokenStats)))
 	s.mux.Handle("GET /api/balance", s.requireAuth(http.HandlerFunc(s.handleBalance)))
 	s.mux.Handle("GET /api/tokenstats/detail", s.requireAuth(http.HandlerFunc(s.handleTokenStatsDetail)))
@@ -652,6 +655,34 @@ func (s *Server) handleQueryLogs(w http.ResponseWriter, r *http.Request) {
 	limit := parsePageLimit(q.Get("limit"))
 	f.Limit = limit + 1
 	items := s.opt.QueryLogs(f)
+	hasMore := len(items) > limit
+	if hasMore {
+		items = items[:limit]
+	}
+	writePagedLogs(w, items, hasMore)
+}
+
+// handleConsoleLogs 分页返回控制台日志（slog 结构化日志与标准库 log 输出，
+// 新在前）。支持查询参数：limit（每页条数，默认 50，最大 200）、
+// before（分页游标：仅返回 ID 小于它的更旧日志）。
+// 响应：{"items": [...], "has_more": bool}。
+func (s *Server) handleConsoleLogs(w http.ResponseWriter, r *http.Request) {
+	if s.opt.ConsoleLogs == nil {
+		writePagedLogs(w, nil, false)
+		return
+	}
+	q := r.URL.Query()
+	limit := parsePageLimit(q.Get("limit"))
+	var before uint64
+	if v := q.Get("before"); v != "" {
+		n, err := strconv.ParseUint(v, 10, 64)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, "before 游标格式错误（应为数字日志 ID）")
+			return
+		}
+		before = n
+	}
+	items := s.opt.ConsoleLogs(limit+1, before)
 	hasMore := len(items) > limit
 	if hasMore {
 		items = items[:limit]

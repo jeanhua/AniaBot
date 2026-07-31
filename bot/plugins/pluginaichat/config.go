@@ -83,6 +83,14 @@ type subagentConfig struct {
 	MaxResultLen  int  `cfg:"max_result_len" label:"结果最大字符数" group:"AI 对话 · 子代理" help:"子代理返回结果超出该长度时截断，防止污染主对话上下文" default:"4000"`
 }
 
+type teamConfig struct {
+	Enable        bool `cfg:"enable" label:"启用 Agent 团队" group:"AI 对话 · Agent 团队" help:"允许主 AI 组建多代理团队，把子任务派发给多个成员代理并行执行" default:"false"`
+	TimeoutSec    int  `cfg:"timeout_sec" label:"成员默认超时(秒)" group:"AI 对话 · Agent 团队" default:"300"`
+	MaxIterations int  `cfg:"max_iterations" label:"成员最大工具迭代轮数" group:"AI 对话 · Agent 团队" default:"10"`
+	MaxResultLen  int  `cfg:"max_result_len" label:"单成员结果最大字符数" group:"AI 对话 · Agent 团队" help:"每个成员返回的结果超出该长度时截断，防止汇总报告污染主对话上下文" default:"4000"`
+	MaxMembers    int  `cfg:"max_members" label:"单次最多并行成员数" group:"AI 对话 · Agent 团队" default:"5"`
+}
+
 type queryLogConfig struct {
 	Enable     bool `cfg:"enable" label:"启用 Query 日志" group:"AI 对话 · 查询日志" help:"在面板记录每次 AI 回复的完整执行过程（耗时、token、工具调用详情）" default:"true"`
 	MaxEntries int  `cfg:"max_entries" label:"日志保留条数" group:"AI 对话 · 查询日志" default:"200"`
@@ -118,6 +126,7 @@ type aiChatConfig struct {
 	Memory   memoryConfig   `cfg:"plugin.ai_chat_bot.memory"`
 	Kb       kbConfig       `cfg:"plugin.ai_chat_bot.kb"`
 	Subagent subagentConfig `cfg:"plugin.ai_chat_bot.subagent"`
+	Team     teamConfig     `cfg:"plugin.ai_chat_bot.team"`
 	QueryLog queryLogConfig `cfg:"plugin.ai_chat_bot.query_log"`
 }
 
