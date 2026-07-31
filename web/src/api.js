@@ -141,6 +141,15 @@ export const api = {
   deleteMemory: (scope, id) =>
     request(`/api/memory?scope=${encodeURIComponent(scope)}&id=${encodeURIComponent(id)}`, { method: 'DELETE' }),
 
+  getTeamScopes: () => request('/api/team/scopes'),
+  getTeams: (scope) => request(`/api/team/list?scope=${encodeURIComponent(scope)}`),
+  createTeam: (team) =>
+    request('/api/team', { method: 'POST', body: JSON.stringify(team) }),
+  updateTeam: (team) =>
+    request('/api/team', { method: 'PUT', body: JSON.stringify(team) }),
+  deleteTeam: (scope, name) =>
+    request(`/api/team?scope=${encodeURIComponent(scope)}&name=${encodeURIComponent(name)}`, { method: 'DELETE' }),
+
   getKnowledgeScopes: () => request('/api/knowledge/scopes'),
   getKnowledgeDocs: (scope) => request(`/api/knowledge/list?scope=${encodeURIComponent(scope)}`),
   createKnowledge: (entry) =>

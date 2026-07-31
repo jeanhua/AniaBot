@@ -111,6 +111,33 @@ func (m *teamManager) get(scope, name string) (teamDefinition, bool) {
 	return m.getLocked(scope + ":" + strings.TrimSpace(name))
 }
 
+// scopes 列出当前已有团队的全部会话 scope（g:群号 / f:QQ号），排序后返回。
+// 供 Web 面板的 Agent 团队管理页使用。
+func (m *teamManager) scopes() []string {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	keys, err := m.store.Keys(context.Background(), "")
+	if err != nil {
+		m.logger.Error("列出团队 scope 失败", "error", err)
+		return nil
+	}
+	seen := make(map[string]bool, len(keys))
+	scopes := make([]string, 0, len(keys))
+	for _, k := range keys {
+		// key = scope + ":" + 团队名（团队名不含冒号），取最后一个冒号前为 scope
+		if idx := strings.LastIndex(k, ":"); idx > 0 {
+			scope := k[:idx]
+			if !seen[scope] {
+				seen[scope] = true
+				scopes = append(scopes, scope)
+			}
+		}
+	}
+	slices.Sort(scopes)
+	return scopes
+}
+
 // create 创建团队；同名团队已存在时返回错误。
 // 校验顺序：团队名 → 成员非空 → 成员名去重 → 成员名/角色截断 → 数量上限 → 落盘。
 func (m *teamManager) create(scope, name, desc string, members []teamMember) (teamDefinition, error) {

@@ -13,6 +13,7 @@ const routes = [
   { path: '/skills', name: 'skills', component: () => import('./views/Skills.vue'), meta: { title: '技能管理' } },
   { path: '/memory', name: 'memory', component: () => import('./views/Memory.vue'), meta: { title: '记忆管理' } },
   { path: '/knowledge', name: 'knowledge', component: () => import('./views/Knowledge.vue'), meta: { title: '知识库' } },
+  { path: '/team', name: 'team', component: () => import('./views/Team.vue'), meta: { title: 'Agent 团队' } },
   { path: '/config', name: 'config', component: () => import('./views/Config.vue'), meta: { title: '配置管理' } },
   { path: '/files', name: 'files', component: () => import('./views/Files.vue'), meta: { title: '扩展配置' } },
   { path: '/contacts', name: 'contacts', component: () => import('./views/Contacts.vue'), meta: { title: '通讯录' } },

@@ -93,6 +93,21 @@ type MemorySource interface {
 	MemoryDelete(scope, id string) error
 }
 
+// TeamSource 可选接口：插件实现后，面板「Agent 团队」页可对其自定义团队
+// 做列表 / 新增 / 编辑 / 删除（当前由 AI 对话插件实现）。改动即时生效，无需重启。
+type TeamSource interface {
+	// TeamScopes 返回已有团队的会话 scope 列表及各自数量
+	TeamScopes() []plugininfo.TeamScopeInfo
+	// TeamList 返回指定 scope 的全部团队
+	TeamList(scope string) ([]plugininfo.TeamInfo, error)
+	// TeamCreate 新增一个团队
+	TeamCreate(up plugininfo.TeamUpsert) error
+	// TeamUpdate 替换一个团队的说明与成员
+	TeamUpdate(up plugininfo.TeamUpsert) error
+	// TeamDelete 删除一个团队
+	TeamDelete(scope, name string) error
+}
+
 // QueryLogSource 可选接口：插件实现后，面板「Query 日志」页可展示每次 AI 回复
 // 的完整执行记录（耗时、token 用量、工具调用详情）（当前由 AI 对话插件实现）。
 type QueryLogSource interface {
@@ -130,6 +145,7 @@ type Options struct {
 	Skills        SkillSource                                        // AI skill 管理（可为 nil）
 	Memories      MemorySource                                       // AI 长期记忆管理（可为 nil）
 	Knowledge     KnowledgeBaseSource                                // AI 知识库管理（可为 nil）
+	Teams         TeamSource                                         // Agent 团队管理（可为 nil）
 	QueryLogs     func(f querylog.Filter) []querylog.Entry           // AI Query 日志（可为 nil）
 	ConsoleLogs   func(limit int, beforeID uint64) []consollog.Entry // 控制台日志（slog + log 输出，可为 nil）
 	Logger        *slog.Logger
@@ -211,6 +227,12 @@ func (s *Server) routes() {
 	s.mux.Handle("POST /api/memory", s.requireAuth(http.HandlerFunc(s.handleMemoryCreate)))
 	s.mux.Handle("PUT /api/memory", s.requireAuth(http.HandlerFunc(s.handleMemoryUpdate)))
 	s.mux.Handle("DELETE /api/memory", s.requireAuth(http.HandlerFunc(s.handleMemoryDelete)))
+
+	s.mux.Handle("GET /api/team/scopes", s.requireAuth(http.HandlerFunc(s.handleTeamScopes)))
+	s.mux.Handle("GET /api/team/list", s.requireAuth(http.HandlerFunc(s.handleTeamList)))
+	s.mux.Handle("POST /api/team", s.requireAuth(http.HandlerFunc(s.handleTeamCreate)))
+	s.mux.Handle("PUT /api/team", s.requireAuth(http.HandlerFunc(s.handleTeamUpdate)))
+	s.mux.Handle("DELETE /api/team", s.requireAuth(http.HandlerFunc(s.handleTeamDelete)))
 	s.mux.Handle("GET /api/knowledge/scopes", s.requireAuth(http.HandlerFunc(s.handleKnowledgeScopes)))
 	s.mux.Handle("GET /api/knowledge/list", s.requireAuth(http.HandlerFunc(s.handleKnowledgeList)))
 	s.mux.Handle("POST /api/knowledge", s.requireAuth(http.HandlerFunc(s.handleKnowledgeCreate)))
@@ -949,6 +971,88 @@ func (s *Server) handleMemoryDelete(w http.ResponseWriter, r *http.Request) {
 	}
 	q := r.URL.Query()
 	if err := s.opt.Memories.MemoryDelete(q.Get("scope"), q.Get("id")); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
+}
+
+// ---- team handlers（Agent 团队管理） ----
+
+// handleTeamScopes 返回已有团队的会话 scope 列表及数量（功能未启用时返回空数组）。
+func (s *Server) handleTeamScopes(w http.ResponseWriter, _ *http.Request) {
+	if s.opt.Teams == nil {
+		writeJSON(w, http.StatusOK, []any{})
+		return
+	}
+	scopes := s.opt.Teams.TeamScopes()
+	if scopes == nil {
+		scopes = []plugininfo.TeamScopeInfo{}
+	}
+	writeJSON(w, http.StatusOK, scopes)
+}
+
+// handleTeamList 返回指定 scope（query 参数 scope）的全部团队。
+func (s *Server) handleTeamList(w http.ResponseWriter, r *http.Request) {
+	if s.opt.Teams == nil {
+		writeError(w, http.StatusNotFound, "Agent 团队功能未启用")
+		return
+	}
+	teams, err := s.opt.Teams.TeamList(r.URL.Query().Get("scope"))
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if teams == nil {
+		teams = []plugininfo.TeamInfo{}
+	}
+	writeJSON(w, http.StatusOK, teams)
+}
+
+// handleTeamCreate 新增一个团队。
+func (s *Server) handleTeamCreate(w http.ResponseWriter, r *http.Request) {
+	if s.opt.Teams == nil {
+		writeError(w, http.StatusNotFound, "Agent 团队功能未启用")
+		return
+	}
+	var req plugininfo.TeamUpsert
+	if err := readJSON(r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, "请求格式错误")
+		return
+	}
+	if err := s.opt.Teams.TeamCreate(req); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
+}
+
+// handleTeamUpdate 替换一个团队的说明与成员。
+func (s *Server) handleTeamUpdate(w http.ResponseWriter, r *http.Request) {
+	if s.opt.Teams == nil {
+		writeError(w, http.StatusNotFound, "Agent 团队功能未启用")
+		return
+	}
+	var req plugininfo.TeamUpsert
+	if err := readJSON(r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, "请求格式错误")
+		return
+	}
+	if err := s.opt.Teams.TeamUpdate(req); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
+}
+
+// handleTeamDelete 删除一个团队（query 参数 scope 与 name）。
+func (s *Server) handleTeamDelete(w http.ResponseWriter, r *http.Request) {
+	if s.opt.Teams == nil {
+		writeError(w, http.StatusNotFound, "Agent 团队功能未启用")
+		return
+	}
+	q := r.URL.Query()
+	if err := s.opt.Teams.TeamDelete(q.Get("scope"), q.Get("name")); err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}

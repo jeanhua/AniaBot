@@ -9,6 +9,7 @@ import (
 
 	"github.com/jeanhua/AniaBot/bot/component/llmtool"
 	"github.com/jeanhua/AniaBot/common/model/message"
+	"github.com/jeanhua/AniaBot/common/plugininfo"
 )
 
 // ---- 配置兜底 ----
@@ -376,6 +377,77 @@ func TestNewTeamTools(t *testing.T) {
 	friendTools := newTeamTools(p, nil, message.FromUint64(67890), false)
 	if !strings.Contains(friendTools[0].Description(), "私聊（对方QQ 67890）") {
 		t.Fatalf("私聊会话描述应包含对方QQ, got %q", friendTools[0].Description())
+	}
+}
+
+// ---- Web 面板数据源（teampanel.go） ----
+
+func TestTeamPanelSource(t *testing.T) {
+	p := &AIChatPlugin{teamManager: newTestTeamManager(t)}
+	p.Logger = testLogger()
+
+	// 未启用时返回统一错误
+	p.teamManager = nil
+	if _, err := p.TeamList("g:1"); err == nil {
+		t.Fatal("功能未启用时应报错")
+	}
+	p.teamManager = newTestTeamManager(t)
+
+	// 非法 scope 一律拒绝
+	if err := p.TeamCreate(plugininfo.TeamUpsert{Scope: "hack:1", Name: "x", Members: []plugininfo.TeamMemberInfo{{Name: "a"}}}); err == nil {
+		t.Fatal("非法 scope 应报错")
+	}
+
+	// 创建 → 列表
+	err := p.TeamCreate(plugininfo.TeamUpsert{
+		Scope: "g:1",
+		Name:  "开发团队",
+		Desc:  "前后端",
+		Members: []plugininfo.TeamMemberInfo{
+			{Name: "程序员", Role: "写代码"},
+			{Name: "审查员"},
+		},
+	})
+	if err != nil {
+		t.Fatalf("TeamCreate err = %v", err)
+	}
+	infos, err := p.TeamList("g:1")
+	if err != nil || len(infos) != 1 {
+		t.Fatalf("TeamList 异常: %v len %d", err, len(infos))
+	}
+	info := infos[0]
+	if info.Name != "开发团队" || len(info.Members) != 2 || info.Members[0].Role != "写代码" {
+		t.Fatalf("列表数据异常: %+v", info)
+	}
+
+	// 更新 → 读取
+	err = p.TeamUpdate(plugininfo.TeamUpsert{
+		Scope:   "g:1",
+		Name:    "开发团队",
+		Desc:    "仅后端",
+		Members: []plugininfo.TeamMemberInfo{{Name: "后端工程师", Role: "写后端"}},
+	})
+	if err != nil {
+		t.Fatalf("TeamUpdate err = %v", err)
+	}
+	infos, _ = p.TeamList("g:1")
+	if infos[0].Desc != "仅后端" || len(infos[0].Members) != 1 || infos[0].Members[0].Name != "后端工程师" {
+		t.Fatalf("更新后数据异常: %+v", infos[0])
+	}
+
+	// scopes 汇总
+	_ = p.TeamCreate(plugininfo.TeamUpsert{Scope: "f:2", Name: "私聊团队", Members: []plugininfo.TeamMemberInfo{{Name: "a"}}})
+	scopes := p.TeamScopes()
+	if len(scopes) != 2 || scopes[0].Scope != "f:2" || scopes[0].Count != 1 || scopes[0].Kind != "friend" {
+		t.Fatalf("TeamScopes 异常: %+v", scopes)
+	}
+
+	// 删除 → 不存在报错
+	if err := p.TeamDelete("g:1", "开发团队"); err != nil {
+		t.Fatalf("TeamDelete err = %v", err)
+	}
+	if err := p.TeamDelete("g:1", "开发团队"); err == nil {
+		t.Fatal("删除不存在的团队应报错")
 	}
 }
 

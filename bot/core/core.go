@@ -334,6 +334,7 @@ func (ania *AniaBot) startAdminPanel() {
 	var skillSrc adminpanel.SkillSource
 	var memorySrc adminpanel.MemorySource
 	var kbSrc adminpanel.KnowledgeBaseSource
+	var teamSrc adminpanel.TeamSource
 	var queryLogFn func(f querylog.Filter) []querylog.Entry
 	for _, p := range ania.plugins {
 		if src, ok := p.(adminpanel.TaskLogSource); ok {
@@ -354,10 +355,13 @@ func (ania *AniaBot) startAdminPanel() {
 		if src, ok := p.(adminpanel.KnowledgeBaseSource); ok {
 			kbSrc = src
 		}
+		if src, ok := p.(adminpanel.TeamSource); ok {
+			teamSrc = src
+		}
 		if src, ok := p.(adminpanel.QueryLogSource); ok {
 			queryLogFn = src.QueryLogRecent
 		}
-		if taskLogFn != nil && clockSrc != nil && msgLogFn != nil && skillSrc != nil && memorySrc != nil && kbSrc != nil && queryLogFn != nil {
+		if taskLogFn != nil && clockSrc != nil && msgLogFn != nil && skillSrc != nil && memorySrc != nil && kbSrc != nil && teamSrc != nil && queryLogFn != nil {
 			break
 		}
 	}
@@ -402,6 +406,7 @@ func (ania *AniaBot) startAdminPanel() {
 		Skills:      skillSrc,
 		Memories:    memorySrc,
 		Knowledge:   kbSrc,
+		Teams:       teamSrc,
 		QueryLogs:   queryLogFn,
 		ConsoleLogs: consollog.Page,
 		Logger:      Logger().WithGroup("AdminPanel"),
