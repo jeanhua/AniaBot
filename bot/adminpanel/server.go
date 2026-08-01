@@ -6,6 +6,7 @@
 //
 // 认证：首次启动生成随机初始密码打印到控制台，SHA-256+salt 哈希存于持久化
 // 存储的 __admin 命名空间；登录后签发内存会话（HttpOnly Cookie，24h 过期）。
+// 登录接口带防爆破：按来源 IP 统计失败次数，超限锁定并固定延迟响应（见 loginguard.go）。
 //
 // 注意：使用独立的 http.ServeMux，绝不注册到 http.DefaultServeMux
 // （NapCat HTTP 适配器占用了默认 mux 的 / 路由）。
@@ -14,6 +15,7 @@ package adminpanel
 import (
 	"embed"
 	"encoding/json"
+	"fmt"
 	"io"
 	"io/fs"
 	"log/slog"
@@ -334,10 +336,29 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "请求格式错误")
 		return
 	}
+	ip := clientIP(r)
+	// 防爆破：来源处于锁定期时直接拒绝
+	if locked, remain := s.auth.guard.locked(ip); locked {
+		s.opt.Logger.Warn("面板登录被拒绝（来源锁定中）", "ip", ip, "retry_after", remain.Round(time.Second))
+		w.Header().Set("Retry-After", strconv.Itoa(int(remain.Seconds())+1))
+		writeError(w, http.StatusTooManyRequests, fmt.Sprintf("失败次数过多，请约 %d 分钟后再试", int(remain.Minutes())+1))
+		return
+	}
 	if !s.auth.CheckPassword(req.Password) {
+		lockedNow, lockDur := s.auth.guard.recordFail(ip)
+		time.Sleep(loginFailDelay) // 固定延迟，拖慢在线爆破
+		if lockedNow {
+			s.opt.Logger.Warn("面板登录连续失败，来源已锁定", "ip", ip, "lock_duration", lockDur)
+			w.Header().Set("Retry-After", strconv.Itoa(int(lockDur.Seconds())))
+			writeError(w, http.StatusTooManyRequests, fmt.Sprintf("失败次数过多，已锁定 %d 分钟", int(lockDur.Minutes())))
+			return
+		}
+		s.opt.Logger.Warn("面板登录失败：密码错误", "ip", ip)
 		writeError(w, http.StatusUnauthorized, "密码错误")
 		return
 	}
+	s.auth.guard.recordSuccess(ip)
+	s.opt.Logger.Info("面板登录成功", "ip", ip)
 	token := s.auth.NewSession()
 	http.SetCookie(w, &http.Cookie{
 		Name:     sessionCookieName,

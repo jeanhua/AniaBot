@@ -13,11 +13,12 @@ async function request(path, options = {}) {
     credentials: 'same-origin',
     ...options,
   })
+  const data = await resp.json().catch(() => ({}))
   if (resp.status === 401) {
     auth.loggedIn = false
-    throw new Error('未登录或会话已过期')
+    // 优先展示服务端返回的具体错误（如登录时的「密码错误」），而非笼统的会话过期
+    throw new Error(data.error || '未登录或会话已过期')
   }
-  const data = await resp.json().catch(() => ({}))
   if (!resp.ok) {
     throw new Error(data.error || `请求失败 (${resp.status})`)
   }

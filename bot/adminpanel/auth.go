@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"crypto/sha256"
+	"crypto/subtle"
 	"encoding/hex"
 	"fmt"
 	"log/slog"
@@ -34,6 +35,7 @@ const (
 type authManager struct {
 	store  storage.PersistentStorage
 	logger *slog.Logger
+	guard  *loginGuard // 登录防爆破（失败计数 + 锁定）
 
 	mu       sync.Mutex
 	sessions map[string]time.Time // token -> 过期时间
@@ -43,6 +45,7 @@ func newAuthManager(root storage.PersistentStorage, logger *slog.Logger) *authMa
 	a := &authManager{
 		store:    root.Clone(adminNamespace),
 		logger:   logger,
+		guard:    newLoginGuard(),
 		sessions: map[string]time.Time{},
 	}
 	a.ensureInitialPassword()
@@ -97,8 +100,13 @@ func verifyPassword(stored, password string) bool {
 	if err != nil {
 		return false
 	}
+	expected, err := hex.DecodeString(parts[1])
+	if err != nil || len(expected) != sha256.Size {
+		return false
+	}
 	sum := sha256.Sum256(append(salt, []byte(password)...))
-	return hex.EncodeToString(sum[:]) == parts[1]
+	// 常数时间比较，消除计时侧信道
+	return subtle.ConstantTimeCompare(sum[:], expected) == 1
 }
 
 // SetPassword 更新密码（哈希落盘）。
