@@ -17,7 +17,7 @@
 
 ![framework](./README/framework.png)
 
-![pannel](./README/pannel.png)
+![pannel](./README/pannel0801.png)
 
 ## 快速开始
 
