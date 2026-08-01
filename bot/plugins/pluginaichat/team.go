@@ -299,6 +299,7 @@ func (p *AIChatPlugin) teamMaxMembers() int {
 type teamMemberSpec struct {
 	label    string // 报告中的显示名（角色名/团队成员名/内联角色名）
 	prompt   string // 成员系统提示词（空 = 降级为默认子代理提示词）
+	task     string // 成员有效任务：总体任务 + 可选专属任务拼接（leader 分工）
 	degraded string // 降级说明（空表示正常解析）
 }
 
@@ -354,6 +355,16 @@ func (p *AIChatPlugin) resolveTeamMemberSpec(mgr *teamManager, scope, name, role
 	return spec
 }
 
+// teamEffectiveTask 组合成员的有效任务：顶层总体任务必填作为共享背景，
+// 成员专属任务非空时拼接其后（leader 分工模式）；为空/全空白时回退为总体任务。
+func teamEffectiveTask(base, memberTask string) string {
+	memberTask = strings.TrimSpace(memberTask)
+	if memberTask == "" {
+		return base
+	}
+	return base + "\n\n" + memberTask
+}
+
 // runTeam 同步并行执行团队成员：N 个成员各起一个 b.Go goroutine（panic 自动恢复），
 // 全部完成后组装汇总报告返回。成员之间互不可见、互不影响；单成员超时/失败不中断
 // 整体执行（失败进报告）。
@@ -362,7 +373,7 @@ func (p *AIChatPlugin) resolveTeamMemberSpec(mgr *teamManager, scope, name, role
 // 父 ctx deadline 独立压缩预算（预留收尾时间），外层预建会双重压缩损失预算；
 // 也正因为每成员超时都有界，wg.Wait() 必然收敛。
 func (p *AIChatPlugin) runTeam(ctx context.Context, b bot.Bot, id message.QID, isGroup bool,
-	task string, timeoutSec int, specs []teamMemberSpec, parentCbs llmtool.CallBackFuncs) (string, error) {
+	timeoutSec int, specs []teamMemberSpec, parentCbs llmtool.CallBackFuncs) (string, error) {
 	// 预算预检：剩余不足（父 deadline 30s 内）时直接失败，不启动任何成员
 	if _, err := resolveSubagentTimeout(p.teamTimeout(), timeoutSec, ctx); err != nil {
 		return "", fmt.Errorf("无法启动 Agent 团队: %w", err)
@@ -375,7 +386,7 @@ func (p *AIChatPlugin) runTeam(ctx context.Context, b bot.Bot, id message.QID, i
 		wg.Add(1)
 		b.Go(fmt.Sprintf("team:%s:%d:%s", sessionKey(id, isGroup), i, spec.label), func() {
 			defer wg.Done()
-			results[i] = p.runTeamMember(ctx, b, id, isGroup, task, timeoutSec, spec, parentCbs)
+			results[i] = p.runTeamMember(ctx, b, id, isGroup, timeoutSec, spec, parentCbs)
 		})
 	}
 	wg.Wait()
@@ -386,11 +397,11 @@ func (p *AIChatPlugin) runTeam(ctx context.Context, b bot.Bot, id message.QID, i
 // runTeamMember 单个成员的执行：带角色提示词与团队配置的一次性子代理
 // （timeout/maxIterations/maxResultLen 取自团队配置）。
 func (p *AIChatPlugin) runTeamMember(ctx context.Context, b bot.Bot, id message.QID, isGroup bool,
-	task string, timeoutSec int, spec teamMemberSpec, parentCbs llmtool.CallBackFuncs) teamMemberResult {
+	timeoutSec int, spec teamMemberSpec, parentCbs llmtool.CallBackFuncs) teamMemberResult {
 	logger := p.Logger.WithGroup("team")
 	result := teamMemberResult{label: spec.label, degraded: spec.degraded}
 
-	resp, err := p.runSubagentWithOptions(ctx, b, id, isGroup, task, subagentRunOptions{
+	resp, err := p.runSubagentWithOptions(ctx, b, id, isGroup, spec.task, subagentRunOptions{
 		prompt:        spec.prompt,
 		timeout:       p.teamTimeout(),
 		timeoutSec:    timeoutSec,

@@ -340,6 +340,30 @@ func newTeamToolPlugin(t *testing.T) *AIChatPlugin {
 	return p
 }
 
+// TestTeamEffectiveTask leader 分工的任务组合：未填专属任务回退总体任务，
+// 填了专属任务时拼接在总体任务之后。
+func TestTeamEffectiveTask(t *testing.T) {
+	base := "评估项目的代码质量与可测试性"
+
+	// 成员未填专属任务：回退为总体任务
+	if got := teamEffectiveTask(base, ""); got != base {
+		t.Fatalf("未填专属任务应回退总体任务, got %q", got)
+	}
+	// 成员专属任务为纯空白：视为未填，回退总体任务
+	if got := teamEffectiveTask(base, "   "); got != base {
+		t.Fatalf("空白专属任务应回退总体任务, got %q", got)
+	}
+	// 成员填了专属任务：总体任务（背景）+ 专属任务拼接
+	own := "审查 bot/core 目录下的后端代码，重点看并发与错误处理"
+	got := teamEffectiveTask(base, own)
+	if !strings.HasPrefix(got, base) || !strings.HasSuffix(got, own) {
+		t.Fatalf("专属任务应拼接在总体任务之后, got %q", got)
+	}
+	if !strings.Contains(got, "\n\n") {
+		t.Fatalf("总体任务与专属任务之间应有空行分隔, got %q", got)
+	}
+}
+
 func TestTeamRunToolValidation(t *testing.T) {
 	p := newTeamToolPlugin(t)
 	tool := newTeamTools(p, nil, message.FromUint64(123), true)[0]
