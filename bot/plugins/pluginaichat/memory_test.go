@@ -1,16 +1,24 @@
 package pluginaichat
 
 import (
+	"context"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"github.com/jeanhua/AniaBot/bot/component/llmtool"
+	"github.com/jeanhua/AniaBot/common/storage"
 )
 
 func newTestMemoryManager(maxEntries int) *memoryManager {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	return newMemoryManager(newPFake(), logger, maxEntries)
+	return newMemoryManager(newPFake(), logger, maxEntries, nil)
 }
 
 func TestMemoryAddAndList(t *testing.T) {
@@ -173,7 +181,7 @@ func TestFilterMemoryByRelevance(t *testing.T) {
 		{ID: "b", Content: "用户喜欢喝咖啡"},
 		{ID: "c", Content: "随便记的一条", Tags: []string{"咖啡"}},
 	}
-	matched := filterMemoryByRelevance(entries, []string{"咖啡"})
+	matched := filterMemoryByRelevance(entries, []string{"咖啡"}, nil)
 	if len(matched) != 2 {
 		t.Fatalf("零分条目应被过滤，期望 2 条，实际 %d 条", len(matched))
 	}
@@ -183,7 +191,7 @@ func TestFilterMemoryByRelevance(t *testing.T) {
 	}
 
 	// 全部零分时返回空
-	if got := filterMemoryByRelevance(entries, []string{"奶茶"}); len(got) != 0 {
+	if got := filterMemoryByRelevance(entries, []string{"奶茶"}, nil); len(got) != 0 {
 		t.Fatalf("无命中应返回空，实际 %d 条", len(got))
 	}
 }
@@ -222,5 +230,127 @@ func TestMemoryContentTruncation(t *testing.T) {
 	}
 	if got := len([]rune(m.list("g:123")[0].Content)); got != MaxContentRunes+1 {
 		t.Fatalf("update 未截断超长内容，符文数 = %d", got)
+	}
+}
+
+// ---- 记忆向量混合检索 ----
+
+// fakeEmbeddingsServer 测试用 embedding 服务：按文本关键词返回固定方向向量。
+// 语义同义词（喜爱/喜欢）映射到同一方向，用于验证向量加分命中路径。
+func fakeEmbeddingsServer(t *testing.T) *httptest.Server {
+	t.Helper()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var req struct {
+			Model string   `json:"model"`
+			Input []string `json:"input"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&req)
+		w.Header().Set("Content-Type", "application/json")
+		var sb strings.Builder
+		sb.WriteString(`{"object":"list","data":[`)
+		for i, text := range req.Input {
+			var x, y float64
+			switch {
+			case strings.Contains(text, "喜爱") || strings.Contains(text, "喜欢"):
+				x, y = 1, 0
+			case strings.Contains(text, "天气"):
+				x, y = 0, 1
+			default:
+				x, y = 0.1, 0.1
+			}
+			if i > 0 {
+				sb.WriteString(",")
+			}
+			fmt.Fprintf(&sb, `{"object":"embedding","index":%d,"embedding":[%g,%g]}`, i, x, y)
+		}
+		sb.WriteString(`],"model":"` + req.Model + `"}`)
+		fmt.Fprint(w, sb.String())
+	}))
+	return srv
+}
+
+func newTestMemoryManagerWithEmbedder(store storage.PersistentStorage, baseURL string) *memoryManager {
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	emb := newEmbedder(baseURL, "test-key", "test-embed", logger)
+	return newMemoryManager(store, logger, 0, emb)
+}
+
+// TestMemoryAddStoresEmb 入库时计算语义向量并随条目持久化。
+func TestMemoryAddStoresEmb(t *testing.T) {
+	srv := fakeEmbeddingsServer(t)
+	defer srv.Close()
+
+	store := newPFake()
+	m := newTestMemoryManagerWithEmbedder(store, srv.URL)
+	if _, err := m.add("g:123", "", "小明喜爱熬夜打榜", nil); err != nil {
+		t.Fatal(err)
+	}
+	entries := m.list("g:123")
+	if len(entries) != 1 || len(entries[0].Emb) == 0 {
+		t.Fatalf("入库应计算向量: %+v", entries)
+	}
+
+	// 向量随条目持久化：重建管理器回读仍在（模拟重启）
+	m2 := newTestMemoryManagerWithEmbedder(store, srv.URL)
+	entries = m2.list("g:123")
+	if len(entries) != 1 || len(entries[0].Emb) == 0 {
+		t.Fatalf("重启后向量应保留: %+v", entries)
+	}
+}
+
+// TestMemorySearchVectorOnlyHit 同义不同词（喜爱 vs 喜欢）无关键词命中时，
+// 仅靠向量相似度加分即可命中；无关记忆仍被零分过滤。
+func TestMemorySearchVectorOnlyHit(t *testing.T) {
+	srv := fakeEmbeddingsServer(t)
+	defer srv.Close()
+
+	m := newTestMemoryManagerWithEmbedder(newPFake(), srv.URL)
+	if _, err := m.add("g:123", "", "小明喜爱熬夜打榜", nil); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := m.add("g:123", "", "今天天气很好", nil); err != nil {
+		t.Fatal(err)
+	}
+
+	tool := newMemoryTools(m, "g:123", "群聊（群号 123）")[1] // memory_search
+	result, err := tool.Execute(context.Background(), &memorySearchParams{Query: "喜欢"}, llmtool.CallBackFuncs{})
+	if err != nil {
+		t.Fatalf("search 失败: %v", err)
+	}
+	if !strings.Contains(result, "小明喜爱熬夜打榜") {
+		t.Fatalf("向量命中丢失，结果: %s", result)
+	}
+	if strings.Contains(result, "今天天气很好") {
+		t.Fatalf("无关记忆不应命中，结果: %s", result)
+	}
+}
+
+// TestMemorySearchVectorDisabled 未启用 embedding（embedder=nil）时保持纯关键词，
+// 同义不同词不命中（与历史行为一致）。
+func TestMemorySearchVectorDisabled(t *testing.T) {
+	m := newTestMemoryManager(0) // embedder=nil
+	if _, err := m.add("g:123", "", "小明喜爱熬夜打榜", nil); err != nil {
+		t.Fatal(err)
+	}
+	tool := newMemoryTools(m, "g:123", "群聊（群号 123）")[1]
+	result, err := tool.Execute(context.Background(), &memorySearchParams{Query: "喜欢"}, llmtool.CallBackFuncs{})
+	if err != nil {
+		t.Fatalf("search 失败: %v", err)
+	}
+	if strings.Contains(result, "小明喜爱熬夜打榜") {
+		t.Fatalf("未启用向量时同义词不应命中，结果: %s", result)
+	}
+}
+
+// TestMemorySearchLegacyEntryNoEmb 旧数据（Emb 缺失）+ 向量查询不崩溃，
+// 无关键词命中时被过滤。
+func TestMemorySearchLegacyEntryNoEmb(t *testing.T) {
+	entries := []memoryEntry{
+		{ID: "old", Content: "小明喜爱熬夜打榜"}, // 旧数据无 Emb
+	}
+	queryVec := []float32{1, 0}
+	matched := filterMemoryByRelevance(entries, []string{"喜欢"}, queryVec)
+	if len(matched) != 0 {
+		t.Fatalf("Emb 缺失的旧数据无关键词命中时应被过滤，got %d 条", len(matched))
 	}
 }

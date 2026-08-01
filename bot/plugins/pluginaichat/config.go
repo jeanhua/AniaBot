@@ -77,10 +77,13 @@ type kbConfig struct {
 }
 
 type subagentConfig struct {
-	Enable        bool `cfg:"enable" label:"启用子代理" group:"AI 对话 · 子代理" help:"允许主 AI 把复杂子任务委派给一次性子代理执行，子代理拥有全部工具能力且上下文独立" default:"true"`
-	TimeoutSec    int  `cfg:"timeout_sec" label:"默认超时(秒)" group:"AI 对话 · 子代理" default:"300"`
-	MaxIterations int  `cfg:"max_iterations" label:"最大工具迭代轮数" group:"AI 对话 · 子代理" default:"10"`
-	MaxResultLen  int  `cfg:"max_result_len" label:"结果最大字符数" group:"AI 对话 · 子代理" help:"子代理返回结果超出该长度时截断，防止污染主对话上下文" default:"4000"`
+	Enable        bool   `cfg:"enable" label:"启用子代理" group:"AI 对话 · 子代理" help:"允许主 AI 把复杂子任务委派给一次性子代理执行，子代理拥有全部工具能力且上下文独立" default:"true"`
+	TimeoutSec    int    `cfg:"timeout_sec" label:"默认超时(秒)" group:"AI 对话 · 子代理" default:"300"`
+	MaxIterations int    `cfg:"max_iterations" label:"最大工具迭代轮数" group:"AI 对话 · 子代理" default:"10"`
+	MaxResultLen  int    `cfg:"max_result_len" label:"结果最大字符数" group:"AI 对话 · 子代理" help:"子代理返回结果超出该长度时截断，防止污染主对话上下文" default:"4000"`
+	BaseURL       string `cfg:"base_url" label:"子代理 Base URL" group:"AI 对话 · 子代理" help:"留空使用主模型配置；可填更便宜的模型以降低子任务成本"`
+	APIKey        string `cfg:"api_key" label:"子代理 API Key" type:"password" sensitive:"true" group:"AI 对话 · 子代理" help:"留空使用主模型配置"`
+	Model         string `cfg:"model" label:"子代理模型" group:"AI 对话 · 子代理" help:"留空使用主模型；子代理与 AI 定时任务共用该模型"`
 }
 
 type teamConfig struct {
@@ -94,6 +97,33 @@ type teamConfig struct {
 type queryLogConfig struct {
 	Enable     bool `cfg:"enable" label:"启用 Query 日志" group:"AI 对话 · 查询日志" help:"在面板记录每次 AI 回复的完整执行过程（耗时、token、工具调用详情）" default:"true"`
 	MaxEntries int  `cfg:"max_entries" label:"日志保留条数" group:"AI 对话 · 查询日志" default:"200"`
+}
+
+// compressorConfig 上下文压缩专用模型配置：留空回退主模型配置。
+type compressorConfig struct {
+	BaseURL string `cfg:"base_url" label:"压缩器 Base URL" group:"AI 对话 · 模型" help:"留空使用主模型配置"`
+	APIKey  string `cfg:"api_key" label:"压缩器 API Key" type:"password" sensitive:"true" group:"AI 对话 · 模型" help:"留空使用主模型配置"`
+	Model   string `cfg:"model" label:"压缩器模型" group:"AI 对话 · 模型" help:"留空使用主模型；建议填更便宜的模型降低历史压缩成本"`
+}
+
+// retryConfig 应用层重试配置：429/5xx/网络错误时指数退避重试。
+type retryConfig struct {
+	MaxAttempts  int `cfg:"max_attempts" label:"最大尝试次数" group:"AI 对话 · 模型" help:"0 或 1 表示不重试；429/5xx/网络错误时指数退避重试（SDK 已内置 429/5xx 重试，此值为应用层补充）" default:"3"`
+	BaseDelaySec int `cfg:"base_delay_sec" label:"退避基准(秒)" group:"AI 对话 · 模型" help:"每次重试等待 基准×2^n 秒（带随机抖动）" default:"2"`
+}
+
+// fallbackConfig 备用模型配置：主模型重试耗尽或遇到不可重试错误时自动切换重试一次。
+type fallbackConfig struct {
+	BaseURL string `cfg:"base_url" label:"备用模型 Base URL" group:"AI 对话 · 模型" help:"留空使用主模型配置"`
+	APIKey  string `cfg:"api_key" label:"备用模型 API Key" type:"password" sensitive:"true" group:"AI 对话 · 模型" help:"留空使用主模型配置"`
+	Model   string `cfg:"model" label:"备用模型" group:"AI 对话 · 模型" help:"留空表示不启用备用模型；主模型重试耗尽后自动切换重试一次（仅主对话与上下文压缩）"`
+}
+
+// quotaConfig 每日 Token 配额限制配置：按会话与全局两个维度限制每日消耗。
+type quotaConfig struct {
+	Enable            bool `cfg:"enable" label:"启用每日配额限制" group:"AI 对话 · 配额" help:"按会话与全局两个维度限制每日 Token 消耗，超限后 AI 请求被拒绝" default:"false"`
+	DailyTokens       int  `cfg:"daily_tokens" label:"每会话每日 Token 上限" group:"AI 对话 · 配额" help:"0 表示不限制；超出后该会话当日 AI 请求将被拒绝（含子代理、定时任务消耗）" default:"0"`
+	GlobalDailyTokens int  `cfg:"global_daily_tokens" label:"全局每日 Token 上限" group:"AI 对话 · 配额" help:"0 表示不限制；所有会话合计消耗超限后 AI 请求全部拒绝" default:"0"`
 }
 
 type aiChatConfig struct {
@@ -122,12 +152,16 @@ type aiChatConfig struct {
 
 	OCR ocrConfig `cfg:"plugin.ai_chat_bot.ocr"`
 
-	Clock    clockConfig    `cfg:"plugin.ai_chat_bot.clock"`
-	Memory   memoryConfig   `cfg:"plugin.ai_chat_bot.memory"`
-	Kb       kbConfig       `cfg:"plugin.ai_chat_bot.kb"`
-	Subagent subagentConfig `cfg:"plugin.ai_chat_bot.subagent"`
-	Team     teamConfig     `cfg:"plugin.ai_chat_bot.team"`
-	QueryLog queryLogConfig `cfg:"plugin.ai_chat_bot.query_log"`
+	Clock      clockConfig      `cfg:"plugin.ai_chat_bot.clock"`
+	Memory     memoryConfig     `cfg:"plugin.ai_chat_bot.memory"`
+	Kb         kbConfig         `cfg:"plugin.ai_chat_bot.kb"`
+	Subagent   subagentConfig   `cfg:"plugin.ai_chat_bot.subagent"`
+	Team       teamConfig       `cfg:"plugin.ai_chat_bot.team"`
+	QueryLog   queryLogConfig   `cfg:"plugin.ai_chat_bot.query_log"`
+	Compressor compressorConfig `cfg:"plugin.ai_chat_bot.compressor"`
+	Retry      retryConfig      `cfg:"plugin.ai_chat_bot.retry"`
+	Fallback   fallbackConfig   `cfg:"plugin.ai_chat_bot.fallback"`
+	Quota      quotaConfig      `cfg:"plugin.ai_chat_bot.quota"`
 }
 
 // ConfigSchema 实现 plugin.ConfigSchemaProvider：返回配置结构体指针，

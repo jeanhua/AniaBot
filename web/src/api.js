@@ -102,6 +102,10 @@ export const api = {
   // token 多维详细统计：{ range, summary, today, by_source, by_chat_type, by_status, top_targets[], hourly[](24h分来源), daily[](窗口内分来源), iterations, avg_iterations }
   // params.range 时间维度：today / yesterday / 7d / 30d / month / all（默认 all）/ custom（需配合 start、end=YYYY-MM-DD，跨度 1~62 天）
   getTokenStatsDetail: (params = {}) => request(`/api/tokenstats/detail${qs(params)}`),
+  // 每日配额汇总：{ date, global_used, global_limit, global_remaining, global_reached, sessions[] }
+  getQuota: () => request('/api/quota'),
+  // 清零配额：scope 为 g:群号 / f:QQ号 / all
+  resetQuota: (scope) => request('/api/quota/reset', { method: 'POST', body: JSON.stringify({ scope }) }),
   createClock: (task) =>
     request('/api/clocks', { method: 'POST', body: JSON.stringify(task) }),
   updateClock: (id, fields) =>

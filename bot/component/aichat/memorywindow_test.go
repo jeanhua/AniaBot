@@ -252,6 +252,46 @@ func TestMaybeCompressFailureDegradesToTruncation(t *testing.T) {
 	}
 }
 
+// TestMaybeCompressUsesCompressorClient 指定压缩器客户端时压缩走独立 client，
+// 未指定时复用主对话 client。
+func TestMaybeCompressUsesCompressorClient(t *testing.T) {
+	mainClient := &LLMClient{model: "main"}
+	compressorClient := &LLMClient{model: "compressor"}
+
+	var got *LLMClient
+	recordCompressor := func(ctx context.Context, client *LLMClient, oldMsgs []Message) ([]Message, error) {
+		got = client
+		return []Message{TextMessage(RoleUser, "[对话摘要]")}, nil
+	}
+	makeWindow := func(w *messageWindow) {
+		for i := 0; i < 4; i++ {
+			w.append(TextMessage(RoleUser, fmt.Sprintf("消息%d", i)))
+		}
+		w.RecordUsage(TokenUsage{LastPromptTokens: 900}) // 超阈值触发压缩
+	}
+
+	// 指定了独立压缩器 client：压缩请求应发给它
+	w := newMessageWindow(1000, mainClient, recordCompressor, &fakeHistoryStore{}, compressorClient)
+	makeWindow(w)
+	if err := w.MaybeCompress(context.Background()); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got != compressorClient {
+		t.Fatalf("压缩 client = %v, want compressorClient", got)
+	}
+
+	// 未指定：压缩复用主对话 client
+	got = nil
+	w2 := newMessageWindow(1000, mainClient, recordCompressor, &fakeHistoryStore{})
+	makeWindow(w2)
+	if err := w2.MaybeCompress(context.Background()); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got != mainClient {
+		t.Fatalf("压缩 client = %v, want mainClient", got)
+	}
+}
+
 func TestNeedsCompressionFallbackWithoutUsage(t *testing.T) {
 	// 上游未上报 usage（lastPromptTokens == 0）时，字符数粗估超阈值也应触发压缩
 	w := newMessageWindow(100, nil, nil, nil)

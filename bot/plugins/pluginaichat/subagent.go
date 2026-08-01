@@ -137,9 +137,12 @@ func (p *AIChatPlugin) runSubagentWithOptions(ctx context.Context, b bot.Bot, id
 		prompt = defaultSubagentPrompt
 	}
 	prompt += p.buildScenePrompt(b, id, isGroup)
+	// 子代理可配置独立模型（留空回退主模型）；团队成员同样经此路径（team.go 复用本函数）
+	saBaseURL, saAPIKey, saModel := p.subagentLLMConfig()
 	chat, err := aichat.NewChatBot(
-		p.cfg.BaseURL, p.cfg.APIKey, p.cfg.Model,
+		saBaseURL, saAPIKey, saModel,
 		prompt, p.cfg.MaxContextTokens, sessionExecutor, nil,
+		aichat.WithClientOptions(p.llmClientOptions()...),
 	)
 	if err != nil {
 		return "", fmt.Errorf("创建子代理失败: %w", err)
@@ -160,6 +163,9 @@ func (p *AIChatPlugin) runSubagentWithOptions(ctx context.Context, b bot.Bot, id
 	start := time.Now()
 	resp, usage, err := chat.Chat(runCtx, "【子代理任务】\n"+task, cbs, p.buildChatOptions())
 	duration := time.Since(start)
+	// 子代理（含团队成员）消耗计入所属会话与全局配额——发起方已做前置检查，
+	// 这里只累加计数，不重复拒绝
+	p.quotaManager.Add(sessionKey(id, isGroup), usage)
 	if err != nil {
 		switch {
 		case errors.Is(err, context.DeadlineExceeded) && ctx.Err() == nil:

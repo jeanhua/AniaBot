@@ -70,7 +70,7 @@ type memorySearchTool struct {
 	memoryToolBase
 }
 
-func (t *memorySearchTool) Execute(_ context.Context, params any, _ llmtool.CallBackFuncs) (string, error) {
+func (t *memorySearchTool) Execute(ctx context.Context, params any, _ llmtool.CallBackFuncs) (string, error) {
 	p := params.(*memorySearchParams)
 	entries := t.mgr.list(t.scope)
 	if len(entries) == 0 {
@@ -79,9 +79,14 @@ func (t *memorySearchTool) Execute(_ context.Context, params any, _ llmtool.Call
 
 	total := len(entries)
 	if q := strings.TrimSpace(p.Query); q != "" {
-		// 关键词打分：命中 tag 权重高于正文；零分条目直接过滤，
-		// 避免无关记忆占用上下文、干扰模型判断
-		entries = filterMemoryByRelevance(entries, strings.Fields(q))
+		// 混合打分：关键词命中（tag 权重高于正文）+ 语义向量相似度加分
+		//（复用知识库 embedding 服务，未启用或失败时 queryVec 为 nil，退化为纯关键词）；
+		// 零分条目直接过滤，避免无关记忆占用上下文、干扰模型判断
+		var queryVec []float32
+		if t.mgr.embedder != nil {
+			queryVec = t.mgr.embedder.EmbedOne(ctx, q)
+		}
+		entries = filterMemoryByRelevance(entries, strings.Fields(q), queryVec)
 		if len(entries) == 0 {
 			return fmt.Sprintf("没有找到与「%s」相关的记忆（当前共 %d 条记忆，不传 query 可查看全部）", q, total), nil
 		}
@@ -106,7 +111,9 @@ func (t *memorySearchTool) Execute(_ context.Context, params any, _ llmtool.Call
 }
 
 // scoreMemory 计算单条记忆与关键词集合的相关度：正文命中 +10，tag 命中 +20。
-func scoreMemory(e memoryEntry, terms []string) int {
+// queryVec 非空且条目带向量时，追加语义相似度加分（int(sim*40)，权重与知识库
+// 检索一致），让同义不同词（如「喜欢」vs「喜爱」）也能命中。
+func scoreMemory(e memoryEntry, terms []string, queryVec []float32) int {
 	score := 0
 	content := strings.ToLower(e.Content)
 	for _, term := range terms {
@@ -120,18 +127,24 @@ func scoreMemory(e memoryEntry, terms []string) int {
 			}
 		}
 	}
+	if queryVec != nil && len(e.Emb) > 0 && len(e.Emb) == len(queryVec) {
+		if sim := cosineSimilarity(e.Emb, queryVec); sim > 0 {
+			score += int(sim * 40)
+		}
+	}
 	return score
 }
 
 // filterMemoryByRelevance 过滤掉零分记忆，其余按相关度降序返回（稳定排序）。
-func filterMemoryByRelevance(entries []memoryEntry, terms []string) []memoryEntry {
+// queryVec 为 nil 时保持纯关键词打分（与历史行为一致）。
+func filterMemoryByRelevance(entries []memoryEntry, terms []string, queryVec []float32) []memoryEntry {
 	type scored struct {
 		e     memoryEntry
 		score int
 	}
 	matched := make([]scored, 0, len(entries))
 	for _, e := range entries {
-		if s := scoreMemory(e, terms); s > 0 {
+		if s := scoreMemory(e, terms, queryVec); s > 0 {
 			matched = append(matched, scored{e, s})
 		}
 	}

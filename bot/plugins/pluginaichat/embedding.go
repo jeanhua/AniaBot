@@ -37,6 +37,32 @@ func newEmbedder(baseURL, apiKey, model string, logger *slog.Logger) *embedder {
 	}
 }
 
+// buildKBEmbedder 按 plugin.ai_chat_bot.kb.embedding 配置构造知识库与长期记忆
+// 共享的语义向量计算器；未启用或配置不完整时返回 nil（对应功能自动退化为
+// 纯关键词检索）。embedder 无状态且 openai.Client 并发安全，可跨功能共享。
+func (p *AIChatPlugin) buildKBEmbedder() *embedder {
+	if !p.cfg.Kb.Embedding.Enable {
+		return nil
+	}
+	embBaseURL := p.cfg.Kb.Embedding.BaseURL
+	embAPIKey := p.cfg.Kb.Embedding.APIKey
+	embModel := p.cfg.Kb.Embedding.Model
+	if embBaseURL == "" {
+		embBaseURL = p.cfg.BaseURL
+	}
+	if embAPIKey == "" {
+		embAPIKey = p.cfg.APIKey
+	}
+	if embModel == "" {
+		embModel = "jina-embeddings-v3"
+	}
+	emb := newEmbedder(embBaseURL, embAPIKey, embModel, p.Logger.WithGroup("kb-embedding"))
+	if emb == nil {
+		p.Logger.Warn("向量检索未启用：Embedding 配置不完整（base_url/api_key/model 缺项）")
+	}
+	return emb
+}
+
 // EmbedMany 批量计算文本向量，与输入顺序一一对应；出错返回 nil。
 // 内部强制请求超时：调用方即使传入 context.Background()（如 kb_add 入库路径），
 // embedding 服务无响应时也会超时退回关键词检索，而不是永久挂起。

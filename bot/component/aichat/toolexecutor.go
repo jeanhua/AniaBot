@@ -3,6 +3,7 @@ package aichat
 import (
 	"context"
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/jeanhua/AniaBot/bot/component/llmtool"
@@ -44,8 +45,9 @@ func (o *ToolOrchestrator) SetMaxIterations(max int) {
 	o.maxIterations = max
 }
 
-// SetToolObserver 设置工具调用观察者：每次工具执行完成后回调一次（与执行同 goroutine，
-// 同步调用），传 nil 取消。调用方需保证同一 orchestrator 的 ExecuteWithTools 串行执行。
+// SetToolObserver 设置工具调用观察者：每次工具执行完成后回调一次（传 nil 取消）。
+// 同一轮多个工具并行执行时回调在互斥锁内串行调用，观察者无需自行加锁。
+// 调用方需保证同一 orchestrator 的 ExecuteWithTools 串行执行。
 func (o *ToolOrchestrator) SetToolObserver(fn func(ToolCallInfo)) {
 	o.toolObserver = fn
 }
@@ -157,28 +159,138 @@ func (o *ToolOrchestrator) executeToolCalls(
 	toolCalls []llmtool.ToolCall,
 	callbacks llmtool.CallBackFuncs,
 ) ([]Message, error) {
-	results := make([]Message, 0, len(toolCalls))
+	// 并行执行同一轮的多个工具调用：结果切片预分配、每个工具按 index 回填，
+	// 保证 tool 结果消息与 assistant 消息中 tool_calls 数组的顺序一一对应
+	// （OpenAI API 要求结果消息按工具调用顺序配对）。
+	// 工具执行互不依赖，适合并行；回调与观察者涉及共享状态，单独串行化。
+	results := make([]Message, len(toolCalls))
+	var obsMu sync.Mutex // 观察者回调串行化（观察者可能对共享 slice 追加）
+	lockedCbs := o.lockedCallbacks(callbacks)
 
-	for _, call := range toolCalls {
-		start := time.Now()
-		result, err := o.executor.Execute(ctx, call, callbacks)
-		if o.toolObserver != nil {
-			o.toolObserver(ToolCallInfo{
-				Name:       call.Name,
-				Arguments:  call.Arguments,
-				Result:     result,
-				DurationMs: time.Since(start).Milliseconds(),
-				Err:        err,
-			})
-		}
-		if err != nil {
-			if ctx.Err() != nil {
-				return nil, ctx.Err()
+	var (
+		mu     sync.Mutex
+		ctxErr error // 上下文取消时记录，等待全部工具收尾后统一返回
+	)
+	var wg sync.WaitGroup
+	for i, call := range toolCalls {
+		wg.Add(1)
+		go func(i int, call llmtool.ToolCall) {
+			defer wg.Done()
+			// 单个工具 panic 不传染整个进程：转为错误文本回填给 LLM
+			defer func() {
+				if r := recover(); r != nil {
+					results[i] = o.msgBuilder.BuildToolMessage(call.ID, call.Name,
+						fmt.Sprintf("Error executing tool: %v", r))
+				}
+			}()
+
+			start := time.Now()
+			result, err := o.executor.Execute(ctx, call, lockedCbs)
+
+			obsMu.Lock()
+			if o.toolObserver != nil {
+				o.toolObserver(ToolCallInfo{
+					Name:       call.Name,
+					Arguments:  call.Arguments,
+					Result:     result,
+					DurationMs: time.Since(start).Milliseconds(),
+					Err:        err,
+				})
 			}
-			result = fmt.Sprintf("Error executing tool: %v", err)
-		}
-		results = append(results, o.msgBuilder.BuildToolMessage(call.ID, call.Name, result))
-	}
+			obsMu.Unlock()
 
+			if err != nil {
+				if ctx.Err() != nil {
+					mu.Lock()
+					if ctxErr == nil {
+						ctxErr = ctx.Err()
+					}
+					mu.Unlock()
+				}
+				result = fmt.Sprintf("Error executing tool: %v", err)
+			}
+			results[i] = o.msgBuilder.BuildToolMessage(call.ID, call.Name, result)
+		}(i, call)
+	}
+	wg.Wait()
+
+	if ctxErr != nil {
+		return nil, ctxErr
+	}
 	return results, nil
+}
+
+// lockedCallbacks 为并行工具执行构造回调代理：所有回调经同一互斥锁串行化。
+// 工具回调（QQ 消息发送、图片加载队列等）内部可能修改共享状态
+// （如 configureImageCallbacks 的 loadedImages 队列），并行调用存在数据竞争；
+// 串行化后消息发送顺序取决于各工具的启动顺序，可能不再等于工具调用顺序，
+// 但不影响工具结果回填 LLM 的顺序（由 results 下标保证）。
+func (o *ToolOrchestrator) lockedCallbacks(callbacks llmtool.CallBackFuncs) llmtool.CallBackFuncs {
+	var mu sync.Mutex
+	strWrap := func(fn func(string) (string, error)) func(string) (string, error) {
+		if fn == nil {
+			return nil
+		}
+		return func(s string) (string, error) {
+			mu.Lock()
+			defer mu.Unlock()
+			return fn(s)
+		}
+	}
+	return llmtool.CallBackFuncs{
+		SendText:          strWrap(callbacks.SendText),
+		SendImage:         strWrap(callbacks.SendImage),
+		SendFile:          str2Wrap(callbacks.SendFile, &mu),
+		GetMsgHistory:     wrap2(callbacks.GetMsgHistory, &mu),
+		GetPrivateFileURL: strWrap(callbacks.GetPrivateFileURL),
+		LoadImages:        wrap0(callbacks.LoadImages, &mu),
+		TakeLoadedImages:  wrap0s(callbacks.TakeLoadedImages, &mu),
+		LoadLocalImage:    strWrap(callbacks.LoadLocalImage),
+	}
+}
+
+// str2Wrap 为 func(string, string) (string, error) 签名的回调套互斥锁。
+func str2Wrap(fn func(string, string) (string, error), mu *sync.Mutex) func(string, string) (string, error) {
+	if fn == nil {
+		return nil
+	}
+	return func(a, b string) (string, error) {
+		mu.Lock()
+		defer mu.Unlock()
+		return fn(a, b)
+	}
+}
+
+// 以下 wrap* 辅助为不同签名的回调套互斥锁；nil 回调原样保留。
+func wrap2(fn func(int, int) (string, error), mu *sync.Mutex) func(int, int) (string, error) {
+	if fn == nil {
+		return nil
+	}
+	return func(a, b int) (string, error) {
+		mu.Lock()
+		defer mu.Unlock()
+		return fn(a, b)
+	}
+}
+
+func wrap0(fn func() (string, error), mu *sync.Mutex) func() (string, error) {
+	if fn == nil {
+		return nil
+	}
+	return func() (string, error) {
+		mu.Lock()
+		defer mu.Unlock()
+		return fn()
+	}
+}
+
+func wrap0s(fn func() []string, mu *sync.Mutex) func() []string {
+	if fn == nil {
+		return nil
+	}
+	return func() []string {
+		mu.Lock()
+		defer mu.Unlock()
+		return fn()
+	}
 }

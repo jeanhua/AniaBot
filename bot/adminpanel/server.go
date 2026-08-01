@@ -93,6 +93,15 @@ type MemorySource interface {
 	MemoryDelete(scope, id string) error
 }
 
+// QuotaSource 可选接口：插件实现后，面板「配额管理」页可查看每日 Token 用量
+// 并清零（当前由 AI 对话插件实现）。改动即时生效，无需重启。
+type QuotaSource interface {
+	// QuotaSummary 返回当日配额汇总（全局 + 各会话明细）
+	QuotaSummary() (plugininfo.QuotaSummaryInfo, error)
+	// QuotaReset 清零配额计数：scope 为 "all" 清空当日全部，否则仅清除指定会话（g:/f: 前缀）
+	QuotaReset(scope string) error
+}
+
 // TeamSource 可选接口：插件实现后，面板「Agent 团队」页可对其自定义团队
 // 做列表 / 新增 / 编辑 / 删除（当前由 AI 对话插件实现）。改动即时生效，无需重启。
 type TeamSource interface {
@@ -148,6 +157,7 @@ type Options struct {
 	Memories      MemorySource                                       // AI 长期记忆管理（可为 nil）
 	Knowledge     KnowledgeBaseSource                                // AI 知识库管理（可为 nil）
 	Teams         TeamSource                                         // Agent 团队管理（可为 nil）
+	Quota         QuotaSource                                        // 每日 Token 配额管理（可为 nil）
 	QueryLogs     func(f querylog.Filter) []querylog.Entry           // AI Query 日志（可为 nil）
 	ConsoleLogs   func(limit int, beforeID uint64) []consollog.Entry // 控制台日志（slog + log 输出，可为 nil）
 	Logger        *slog.Logger
@@ -236,6 +246,8 @@ func (s *Server) routes() {
 	s.mux.Handle("POST /api/team", s.requireAuth(http.HandlerFunc(s.handleTeamCreate)))
 	s.mux.Handle("PUT /api/team", s.requireAuth(http.HandlerFunc(s.handleTeamUpdate)))
 	s.mux.Handle("DELETE /api/team", s.requireAuth(http.HandlerFunc(s.handleTeamDelete)))
+	s.mux.Handle("GET /api/quota", s.requireAuth(http.HandlerFunc(s.handleQuota)))
+	s.mux.Handle("POST /api/quota/reset", s.requireAuth(http.HandlerFunc(s.handleQuotaReset)))
 	s.mux.Handle("GET /api/knowledge/scopes", s.requireAuth(http.HandlerFunc(s.handleKnowledgeScopes)))
 	s.mux.Handle("GET /api/knowledge/list", s.requireAuth(http.HandlerFunc(s.handleKnowledgeList)))
 	s.mux.Handle("POST /api/knowledge", s.requireAuth(http.HandlerFunc(s.handleKnowledgeCreate)))
@@ -900,6 +912,47 @@ func (s *Server) handleSkillDelete(w http.ResponseWriter, r *http.Request) {
 // ---- memory handlers（AI 长期记忆管理） ----
 
 // handleMemoryScopes 返回已有记忆的会话 scope 列表及条数（功能未启用时返回空数组）。
+// handleQuota 返回当日配额汇总（全局 + 各会话明细）。
+func (s *Server) handleQuota(w http.ResponseWriter, _ *http.Request) {
+	if s.opt.Quota == nil {
+		writeError(w, http.StatusNotFound, "配额功能未启用")
+		return
+	}
+	info, err := s.opt.Quota.QuotaSummary()
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	if info.Sessions == nil {
+		info.Sessions = []plugininfo.QuotaSessionInfo{}
+	}
+	writeJSON(w, http.StatusOK, info)
+}
+
+// handleQuotaReset 清零配额计数，body 形如 {"scope":"g:123"|"f:123"|"all"}。
+func (s *Server) handleQuotaReset(w http.ResponseWriter, r *http.Request) {
+	if s.opt.Quota == nil {
+		writeError(w, http.StatusNotFound, "配额功能未启用")
+		return
+	}
+	var req struct {
+		Scope string `json:"scope"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "请求体格式错误")
+		return
+	}
+	if req.Scope == "" {
+		writeError(w, http.StatusBadRequest, "scope 不能为空（g:群号 / f:QQ号 / all）")
+		return
+	}
+	if err := s.opt.Quota.QuotaReset(req.Scope); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
+}
+
 func (s *Server) handleMemoryScopes(w http.ResponseWriter, _ *http.Request) {
 	if s.opt.Memories == nil {
 		writeJSON(w, http.StatusOK, []any{})

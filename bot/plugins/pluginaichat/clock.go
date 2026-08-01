@@ -505,6 +505,9 @@ func (m *clockManager) runTask(task *ClockTask) {
 	}
 	m.bot.Go("clock:"+task.ID, func() {
 		start := time.Now()
+		// 任务目标会话（与对话 sessionKey 一致，配额按此归集）
+		isGroup := task.TargetType == clockTargetGroup
+		targetQID, _ := strconv.ParseUint(task.TargetID, 10, 64)
 		logEntry := m.log.Record(tasklog.Entry{
 			TaskID:         task.ID,
 			TaskTitle:      task.Title,
@@ -544,9 +547,27 @@ func (m *clockManager) runTask(task *ClockTask) {
 		ctx, cancel := context.WithTimeout(context.Background(), timeout)
 		defer cancel()
 
+		// 每日配额检查：任务所属会话超限时跳过执行并告知用户
+		// （目标会话 key 与对话一致：g:群号 / f:QQ号）
+		if reason, denied := m.plugin.quotaManager.Check(sessionKey(message.FromUint64(targetQID), isGroup)); denied {
+			m.logger.Warn("定时任务因配额限制跳过", "task", task.ID, "title", task.Title, "reason", reason)
+			if targetQID > 0 {
+				m.plugin.sendPlainText(m.bot, message.FromUint64(targetQID), isGroup, "定时任务「"+task.Title+"」未执行："+reason)
+			}
+			m.log.Update(logEntry.ID, func(e *tasklog.Entry) {
+				e.Status = tasklog.StatusError
+				e.Error = "今日配额已用尽，任务跳过"
+				e.FinishedAt = time.Now()
+			})
+			finished = true
+			return
+		}
+
 		rec := &taskRecorder{}
 		resp, usage, runErr := m.executeTask(ctx, task, rec)
 		duration := time.Since(start)
+		// 定时任务消耗计入目标会话与全局配额
+		m.plugin.quotaManager.Add(sessionKey(message.FromUint64(targetQID), isGroup), usage)
 
 		// fillExecution 回填执行过程明细（LLM 轮数 / 工具调用 / 最终回复 / token 用量）
 		fillExecution := func(e *tasklog.Entry) {
@@ -617,9 +638,12 @@ func (m *clockManager) executeTask(ctx context.Context, task *ClockTask, rec *ta
 		// 兜底：任意路径返回前取消仍运行中的子代理（正常路径 drainClockSubagents 已处理）
 		defer subagents.cancelPending()
 	}
+	// 定时任务与子代理共用独立模型配置（留空回退主模型）
+	saBaseURL, saAPIKey, saModel := p.subagentLLMConfig()
 	chat, err := aichat.NewChatBot(
-		p.cfg.BaseURL, p.cfg.APIKey, p.cfg.Model,
+		saBaseURL, saAPIKey, saModel,
 		prompt, p.cfg.MaxContextTokens, sessionExecutor, nil,
+		aichat.WithClientOptions(p.llmClientOptions()...),
 	)
 	if err != nil {
 		return "", aichat.TokenUsage{}, fmt.Errorf("创建对话失败: %w", err)

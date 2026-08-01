@@ -77,6 +77,9 @@ type AIChatPlugin struct {
 
 	// queryLogger Query 日志记录器（面板「Query 日志」页数据源）；为 nil 表示功能未启用
 	queryLogger *querylog.Logger
+
+	// quotaManager 每日 Token 配额管理器；为 nil 表示功能未启用
+	quotaManager *quotaManager
 }
 
 const (
@@ -308,6 +311,15 @@ func (p *AIChatPlugin) processChatBatch(ctx context.Context, b bot.Bot, id messa
 	}
 	p.configureImageCallbacks(ctx, b, &msgFuncs, batch...)
 
+	// 每日配额检查：超限直接拒绝并丢弃排队消息（含子代理/定时任务的消耗，
+	// 见各调用点 Add）。检查放在 beginQuery 之前，避免被拒请求留下无效的
+	// Query 日志记录（running 状态悬挂）
+	if reason, denied := p.quotaManager.Check(sessionKey(id, isGroup)); denied {
+		p.sendPlainText(b, id, isGroup, reason)
+		p.drainPending(id, isGroup)
+		return false
+	}
+
 	chatOpts := p.buildChatOptions()
 	recorder := p.beginQuery(chat, id, isGroup, batch, extraText)
 
@@ -325,6 +337,8 @@ func (p *AIChatPlugin) processChatBatch(ctx context.Context, b bot.Bot, id messa
 
 	resp, usage, err := chat.Chat(ctx, extraText, msgFuncs, chatOpts)
 	p.finishQuery(recorder, chat, usage, resp, err)
+	// 主对话消耗计入会话与全局配额（子代理/团队/定时任务在其各自调用点累加）
+	p.quotaManager.Add(sessionKey(id, isGroup), usage)
 	if err != nil {
 		// 出错或取消时丢弃剩余排队消息，避免连续报错刷屏
 		p.drainPending(id, isGroup)
@@ -471,7 +485,9 @@ func (p *AIChatPlugin) Start(ctx context.Context, cfg *viper.Viper) error {
 
 	if p.cfg.OCR.Enable {
 		p.Logger.Info("已启用备用图片识别 LLM")
-		ocrllm, err := aichat.NewChatBot(p.cfg.OCR.BaseURL, p.cfg.OCR.APIKey, p.cfg.OCR.Model, p.cfg.OCR.Prompt, 0, nil, nil)
+		// OCR 客户端同样附加应用层重试（不配备用模型切换）
+		ocrllm, err := aichat.NewChatBot(p.cfg.OCR.BaseURL, p.cfg.OCR.APIKey, p.cfg.OCR.Model, p.cfg.OCR.Prompt, 0, nil, nil,
+			aichat.WithClientOptions(p.llmClientOptions()...))
 		if err != nil {
 			p.Logger.Error("无法初始化备用图片识别 LLM", "error", err.Error())
 		} else {
@@ -539,15 +555,19 @@ func (p *AIChatPlugin) Start(ctx context.Context, cfg *viper.Viper) error {
 		p.Logger.Info("AI定时任务功能未启用（plugin.ai_chat_bot.clock.enable=false）")
 	}
 
+	// 语义向量计算器：知识库与长期记忆共享（复用 kb.embedding 配置）
+	embedder := p.buildKBEmbedder()
+
 	// AI 长期记忆：由 AI 通过 memory_save/search/forget 工具自行管理的跨会话记忆，
-	// 按群聊/好友 scope 隔离，持久化到 PersistentStorage（memory: 命名空间）
+	// 按群聊/好友 scope 隔离，持久化到 PersistentStorage（memory: 命名空间）。
+	// 嵌入向量开启时检索走关键词+语义混合打分，未开启则纯关键词
 	if p.cfg.Memory.Enable {
 		maxEntries := p.cfg.Memory.MaxEntries
 		if maxEntries <= 0 {
 			maxEntries = 200
 		}
-		p.memoryManager = newMemoryManager(p.PersistentStorage, p.Logger.WithGroup("memory"), maxEntries)
-		p.Logger.Info("已启用AI长期记忆功能", "max_entries", maxEntries)
+		p.memoryManager = newMemoryManager(p.PersistentStorage, p.Logger.WithGroup("memory"), maxEntries, embedder)
+		p.Logger.Info("已启用AI长期记忆功能", "max_entries", maxEntries, "vector", embedder != nil)
 	} else {
 		p.Logger.Info("AI长期记忆功能未启用（plugin.ai_chat_bot.memory.enable=false）")
 	}
@@ -559,29 +579,22 @@ func (p *AIChatPlugin) Start(ctx context.Context, cfg *viper.Viper) error {
 		if maxDocs <= 0 {
 			maxDocs = 500
 		}
-		var emb *embedder
-		if p.cfg.Kb.Embedding.Enable {
-			embBaseURL := p.cfg.Kb.Embedding.BaseURL
-			embAPIKey := p.cfg.Kb.Embedding.APIKey
-			embModel := p.cfg.Kb.Embedding.Model
-			if embBaseURL == "" {
-				embBaseURL = p.cfg.BaseURL
-			}
-			if embAPIKey == "" {
-				embAPIKey = p.cfg.APIKey
-			}
-			if embModel == "" {
-				embModel = "jina-embeddings-v3"
-			}
-			emb = newEmbedder(embBaseURL, embAPIKey, embModel, p.Logger.WithGroup("kb-embedding"))
-			if emb == nil {
-				p.Logger.Warn("向量检索未启用：Embedding 配置不完整（base_url/api_key/model 缺项）")
-			}
-		}
-		p.knowledgeManager = newKnowledgeManager(p.PersistentStorage, p.Logger.WithGroup("knowledge"), maxDocs, emb)
-		p.Logger.Info("已启用知识库功能", "max_docs", maxDocs, "vector", emb != nil, "auto_inject", p.cfg.Kb.AutoInject)
+		p.knowledgeManager = newKnowledgeManager(p.PersistentStorage, p.Logger.WithGroup("knowledge"), maxDocs, embedder)
+		p.Logger.Info("已启用知识库功能", "max_docs", maxDocs, "vector", embedder != nil, "auto_inject", p.cfg.Kb.AutoInject)
 	} else {
 		p.Logger.Info("知识库功能未启用（plugin.ai_chat_bot.kb.enable=false）")
+	}
+
+	// 每日 Token 配额：按每会话与全局两个维度限制 AI 消耗，计数持久化、
+	// 重启不丢；启动时惰性清理 3 天前的过期日期键
+	if p.cfg.Quota.Enable {
+		p.quotaManager = newQuotaManager(p.PersistentStorage, p.Logger.WithGroup("quota"),
+			p.cfg.Quota.DailyTokens, p.cfg.Quota.GlobalDailyTokens)
+		p.quotaManager.pruneOld(3)
+		p.Logger.Info("已启用每日配额限制",
+			"daily_tokens", p.cfg.Quota.DailyTokens, "global_daily_tokens", p.cfg.Quota.GlobalDailyTokens)
+	} else {
+		p.Logger.Info("每日配额限制未启用（plugin.ai_chat_bot.quota.enable=false）")
 	}
 
 	// AI 子代理：主 AI 可通过 subagent_run 工具把复杂子任务委派给一次性子代理

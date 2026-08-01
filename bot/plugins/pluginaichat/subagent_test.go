@@ -302,3 +302,69 @@ func TestSubagentRunToolEmptyTask(t *testing.T) {
 		t.Fatal("空 task 应返回错误")
 	}
 }
+
+// ---- 子代理/压缩器独立模型配置回退 ----
+
+func TestSubagentLLMConfigFallback(t *testing.T) {
+	p := &AIChatPlugin{}
+	p.cfg.BaseURL = "https://main.example.com"
+	p.cfg.APIKey = "main-key"
+	p.cfg.Model = "main-model"
+
+	// 全部留空：回退主模型
+	base, key, model := p.subagentLLMConfig()
+	if base != "https://main.example.com" || key != "main-key" || model != "main-model" {
+		t.Fatalf("全空应回退主模型, got %q/%q/%q", base, key, model)
+	}
+
+	// 部分填充：只覆盖模型
+	p.cfg.Subagent.Model = "cheap-model"
+	_, _, model = p.subagentLLMConfig()
+	if model != "cheap-model" {
+		t.Fatalf("model = %q, want cheap-model", model)
+	}
+	if base, _, _ := p.subagentLLMConfig(); base != "https://main.example.com" {
+		t.Fatalf("base_url 未填应回退主模型, got %q", base)
+	}
+
+	// 全部填充
+	p.cfg.Subagent.BaseURL = "https://sub.example.com"
+	p.cfg.Subagent.APIKey = "sub-key"
+	base, key, model = p.subagentLLMConfig()
+	if base != "https://sub.example.com" || key != "sub-key" || model != "cheap-model" {
+		t.Fatalf("独立配置未生效, got %q/%q/%q", base, key, model)
+	}
+}
+
+func TestCompressorLLMConfigFallback(t *testing.T) {
+	p := &AIChatPlugin{}
+	p.cfg.BaseURL = "https://main.example.com"
+	p.cfg.APIKey = "main-key"
+	p.cfg.Model = "main-model"
+
+	base, key, model := p.compressorLLMConfig()
+	if base != "https://main.example.com" || key != "main-key" || model != "main-model" {
+		t.Fatalf("全空应回退主模型, got %q/%q/%q", base, key, model)
+	}
+
+	p.cfg.Compressor.Model = "summary-model"
+	if _, _, model := p.compressorLLMConfig(); model != "summary-model" {
+		t.Fatalf("model = %q, want summary-model", model)
+	}
+}
+
+func TestBuildCompressorClientNilWhenEmpty(t *testing.T) {
+	p := &AIChatPlugin{}
+	p.cfg.BaseURL = "https://main.example.com"
+	p.cfg.APIKey = "main-key"
+	p.cfg.Model = "main-model"
+	// 三字段全空：返回 nil（压缩复用主对话客户端）
+	if c := p.buildCompressorClient(); c != nil {
+		t.Fatalf("三字段全空时应返回 nil, got %v", c)
+	}
+	// 配置了模型则构造独立客户端
+	p.cfg.Compressor.Model = "summary-model"
+	if c := p.buildCompressorClient(); c == nil {
+		t.Fatal("配置了模型应返回独立客户端")
+	}
+}

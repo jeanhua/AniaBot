@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/jeanhua/AniaBot/bot/component/aichat"
 	"github.com/jeanhua/AniaBot/bot/component/llmtool"
@@ -109,6 +110,68 @@ func (p *AIChatPlugin) mainMaxIterations() int {
 	return p.cfg.MaxIterations
 }
 
+// llmClientOptions 从插件配置构造 LLM 客户端可选参数（应用层重试 + 备用模型）。
+// 供主对话 / 子代理 / 定时任务 / OCR 的所有客户端统一使用。
+func (p *AIChatPlugin) llmClientOptions() []aichat.LLMClientOption {
+	var opts []aichat.LLMClientOption
+	if p.cfg.Retry.MaxAttempts > 1 {
+		baseDelay := time.Duration(p.cfg.Retry.BaseDelaySec) * time.Second
+		if baseDelay <= 0 {
+			baseDelay = 2 * time.Second
+		}
+		opts = append(opts, aichat.WithRetry(p.cfg.Retry.MaxAttempts, baseDelay))
+	}
+	if p.cfg.Fallback.Model != "" {
+		opts = append(opts, aichat.WithFallback(p.cfg.Fallback.BaseURL, p.cfg.Fallback.APIKey, p.cfg.Fallback.Model))
+	}
+	return opts
+}
+
+// subagentLLMConfig 子代理模型配置：留空字段回退主模型配置。
+func (p *AIChatPlugin) subagentLLMConfig() (baseURL, apiKey, model string) {
+	baseURL, apiKey, model = p.cfg.BaseURL, p.cfg.APIKey, p.cfg.Model
+	if p.cfg.Subagent.BaseURL != "" {
+		baseURL = p.cfg.Subagent.BaseURL
+	}
+	if p.cfg.Subagent.APIKey != "" {
+		apiKey = p.cfg.Subagent.APIKey
+	}
+	if p.cfg.Subagent.Model != "" {
+		model = p.cfg.Subagent.Model
+	}
+	return baseURL, apiKey, model
+}
+
+// compressorLLMConfig 压缩器模型配置：留空字段回退主模型配置。
+func (p *AIChatPlugin) compressorLLMConfig() (baseURL, apiKey, model string) {
+	baseURL, apiKey, model = p.cfg.BaseURL, p.cfg.APIKey, p.cfg.Model
+	if p.cfg.Compressor.BaseURL != "" {
+		baseURL = p.cfg.Compressor.BaseURL
+	}
+	if p.cfg.Compressor.APIKey != "" {
+		apiKey = p.cfg.Compressor.APIKey
+	}
+	if p.cfg.Compressor.Model != "" {
+		model = p.cfg.Compressor.Model
+	}
+	return baseURL, apiKey, model
+}
+
+// buildCompressorClient 构造上下文压缩专用 LLM 客户端；配置三字段全空时
+// 返回 nil（压缩复用主对话客户端）。构造失败仅记日志并返回 nil 降级。
+func (p *AIChatPlugin) buildCompressorClient() *aichat.LLMClient {
+	if p.cfg.Compressor.BaseURL == "" && p.cfg.Compressor.APIKey == "" && p.cfg.Compressor.Model == "" {
+		return nil
+	}
+	baseURL, apiKey, model := p.compressorLLMConfig()
+	client, err := aichat.NewLLMClient(baseURL, apiKey, model, p.llmClientOptions()...)
+	if err != nil {
+		p.Logger.Error("创建压缩器 LLM 客户端失败，压缩将复用主对话模型", "error", err.Error())
+		return nil
+	}
+	return client
+}
+
 func (p *AIChatPlugin) getChat(b bot.Bot, id message.QID, isGroup bool, prompt string) *aichat.ChatBot {
 	key := sessionKey(id, isGroup)
 	chat, ok := p.chats.Load(key)
@@ -147,6 +210,8 @@ func (p *AIChatPlugin) getChat(b bot.Bot, id message.QID, isGroup bool, prompt s
 			p.cfg.MaxContextTokens,
 			sessionExecutor,
 			historyStore,
+			aichat.WithClientOptions(p.llmClientOptions()...),
+			aichat.WithCompressorClient(p.buildCompressorClient()),
 		)
 		if err != nil {
 			p.Logger.Error("创建 ChatBot 失败", "error", err.Error())

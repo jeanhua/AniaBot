@@ -16,17 +16,24 @@ type messageWindow struct {
 	maxContextTokens int
 	llmClient        *LLMClient
 	compressor       CompressorFunc
+	// compressorClient 上下文压缩专用 LLM 客户端（可独立配置更便宜的模型）；
+	// nil 时复用主对话 llmClient。
+	compressorClient *LLMClient
 	lastPromptTokens int
 	store            HistoryStore
 }
 
-func newMessageWindow(maxContextTokens int, llmClient *LLMClient, compressor CompressorFunc, store HistoryStore) *messageWindow {
-	return &messageWindow{
+func newMessageWindow(maxContextTokens int, llmClient *LLMClient, compressor CompressorFunc, store HistoryStore, compressorClient ...*LLMClient) *messageWindow {
+	w := &messageWindow{
 		maxContextTokens: maxContextTokens,
 		llmClient:        llmClient,
 		compressor:       compressor,
 		store:            store,
 	}
+	if len(compressorClient) > 0 {
+		w.compressorClient = compressorClient[0]
+	}
+	return w
 }
 
 // load 从持久化存储回放历史；存储为空或未注入时保持空窗口。
@@ -198,7 +205,13 @@ func (w *messageWindow) MaybeCompress(ctx context.Context) error {
 		return nil
 	}
 
-	compressed, err := w.compressor(ctx, w.llmClient, w.messages)
+	// 压缩客户端可选独立配置：未设置时复用主对话 client
+	client := w.llmClient
+	if w.compressorClient != nil {
+		client = w.compressorClient
+	}
+
+	compressed, err := w.compressor(ctx, client, w.messages)
 	if err != nil {
 		// 压缩失败（网络抖动/限流恰好在上下文最满时最易发生）不能阻断对话：
 		// 直接丢弃最旧一半历史降级，保证本轮用户消息能正常处理与落盘。

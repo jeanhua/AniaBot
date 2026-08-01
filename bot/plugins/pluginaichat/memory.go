@@ -28,6 +28,9 @@ type memoryEntry struct {
 	Content   string    `json:"content"`
 	Tags      []string  `json:"tags,omitempty"`
 	CreatedAt time.Time `json:"created_at"`
+	// Emb 内容的语义向量（与知识库共用 embedding 服务）；计算失败或服务未
+	// 启用时为 nil。旧数据无此字段，检索时跳过语义加分，兼容性良好。
+	Emb []float32 `json:"emb,omitempty"`
 }
 
 // ErrMemoryFull 单会话记忆条数达到上限时返回，提示 AI 先清理或合并旧记忆。
@@ -46,15 +49,19 @@ type memoryManager struct {
 	store      storage.PersistentStorage
 	logger     *slog.Logger
 	maxEntries int // 单 scope 记忆条数上限，<=0 表示不限制
+	// embedder 语义向量计算器：与知识库共享同一实例（复用 kb.embedding 配置）；
+	// nil 时记忆检索保持纯关键词（与历史行为一致）。
+	embedder *embedder
 
 	mu sync.Mutex
 }
 
-func newMemoryManager(store storage.PersistentStorage, logger *slog.Logger, maxEntries int) *memoryManager {
+func newMemoryManager(store storage.PersistentStorage, logger *slog.Logger, maxEntries int, embedder *embedder) *memoryManager {
 	return &memoryManager{
 		store:      store.Clone("memory:"),
 		logger:     logger,
 		maxEntries: maxEntries,
+		embedder:   embedder,
 	}
 }
 
@@ -109,12 +116,25 @@ func (m *memoryManager) add(scope, userID, content string, tags []string) (memor
 		Tags:      tags,
 		CreatedAt: time.Now(),
 	}
+	// 入库时计算语义向量（记忆写入频率极低，锁内调用可接受；失败静默降级为纯关键词）
+	m.embedEntry(&entry)
 	entries = append(entries, entry)
 	if ok := m.store.Set(context.Background(), scope, entries); !ok {
 		m.logger.Error("保存记忆失败", "scope", scope)
 		return memoryEntry{}, errors.New("记忆保存失败，请查看日志")
 	}
 	return entry, nil
+}
+
+// embedEntry 计算单条记忆的语义向量；embedder 未启用（nil）或计算失败时
+// 保持 nil，检索时自动跳过语义加分（纯关键词），不阻断记忆写入。
+func (m *memoryManager) embedEntry(entry *memoryEntry) {
+	if m.embedder == nil {
+		return
+	}
+	if vec := m.embedder.EmbedOne(context.Background(), entry.Content); len(vec) > 0 {
+		entry.Emb = vec
+	}
 }
 
 // remove 按 ID 删除指定 scope 中的一条记忆；ID 不存在时返回 false。
@@ -167,6 +187,8 @@ func (m *memoryManager) update(scope, id, userID, content string, tags []string)
 			entries[i].UserID = strings.TrimSpace(userID)
 			entries[i].Content = content
 			entries[i].Tags = tags
+			// 内容变更后语义向量需要重新计算
+			m.embedEntry(&entries[i])
 			if ok := m.store.Set(context.Background(), scope, entries); !ok {
 				m.logger.Error("更新记忆后落盘失败", "scope", scope, "id", id)
 				return errors.New("记忆保存失败，请查看日志")

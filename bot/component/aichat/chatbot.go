@@ -14,8 +14,37 @@ type ChatBot struct {
 	window           *messageWindow
 }
 
-func NewChatBot(baseURL, apiKey, model, prompt string, maxContextTokens int, toolExecutor ToolExecutor, historyStore HistoryStore) (*ChatBot, error) {
-	llmClient, err := NewLLMClient(baseURL, apiKey, model)
+// chatBotConfig 收集 NewChatBot 的可选参数。
+type chatBotConfig struct {
+	clientOpts       []LLMClientOption // 主对话 LLM 客户端的可选配置（重试/备用模型）
+	compressorClient *LLMClient        // 上下文压缩专用客户端；nil 复用主对话客户端
+}
+
+// ChatBotOption 配置 ChatBot 的可选参数（函数选项模式）。
+type ChatBotOption func(*chatBotConfig)
+
+// WithClientOptions 为主对话 LLM 客户端附加可选配置（如 WithRetry / WithFallback）。
+func WithClientOptions(opts ...LLMClientOption) ChatBotOption {
+	return func(c *chatBotConfig) {
+		c.clientOpts = append(c.clientOpts, opts...)
+	}
+}
+
+// WithCompressorClient 指定上下文压缩专用 LLM 客户端（可独立配置更便宜的模型）。
+// 未设置时压缩复用主对话客户端。
+func WithCompressorClient(client *LLMClient) ChatBotOption {
+	return func(c *chatBotConfig) {
+		c.compressorClient = client
+	}
+}
+
+func NewChatBot(baseURL, apiKey, model, prompt string, maxContextTokens int, toolExecutor ToolExecutor, historyStore HistoryStore, opts ...ChatBotOption) (*ChatBot, error) {
+	cfg := chatBotConfig{}
+	for _, opt := range opts {
+		opt(&cfg)
+	}
+
+	llmClient, err := NewLLMClient(baseURL, apiKey, model, cfg.clientOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -24,7 +53,7 @@ func NewChatBot(baseURL, apiKey, model, prompt string, maxContextTokens int, too
 	toolOrchestrator := NewToolOrchestrator(toolExecutor, msgBuilder)
 
 	compressor := NewContextCompressor(prompt)
-	window := newMessageWindow(maxContextTokens, llmClient, compressor, historyStore)
+	window := newMessageWindow(maxContextTokens, llmClient, compressor, historyStore, cfg.compressorClient)
 
 	return &ChatBot{
 		llmClient:        llmClient,
