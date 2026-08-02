@@ -2,6 +2,7 @@ package telegram
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"sync"
 	"time"
@@ -77,8 +78,8 @@ func (a *telegramAdapter) sendStream(target message.QID, segs []message.OB11Segm
 }
 
 // telegramStreamHandle Telegram 流式消息句柄：Patch 经 editMessageText 更新内容
-// （节流）；End 强制最终内容（幂等），配置 markdownv2 时最终编辑尝试按
-// MarkdownV2 渲染，失败（未转义特殊字符等 400）降级纯文本重发保证最终内容落地。
+// （节流）；End 强制最终内容（幂等），配置 parse_mode 时最终编辑尝试渲染，
+// 失败（未转义特殊字符等 400）降级纯文本重发保证最终内容落地。
 type telegramStreamHandle struct {
 	a      *telegramAdapter
 	chatID int64
@@ -89,8 +90,9 @@ type telegramStreamHandle struct {
 	mu        sync.Mutex
 	content   string
 	lastPatch time.Time
-	// lastSent 最后一次成功编辑的内容：End 时内容未变化则跳过编辑
-	// （Telegram 拒绝未变化的编辑，400 "message is not modified"）
+	// lastSent 最后一次成功编辑的文本：纯文本编辑且内容未变化时跳过
+	// （Telegram 拒绝未变化的编辑，400 "message is not modified"）；
+	// 带 parse_mode 的最终编辑不适用——渲染生成的实体使消息内容变化
 	lastSent string
 	closed   bool
 }
@@ -122,16 +124,28 @@ func (h *telegramStreamHandle) End() {
 	h.closed = true
 }
 
-// patchLocked 以当前内容编辑消息；final 为 true 时尝试 MarkdownV2 渲染
-// （仅最终内容完整时才可能渲染成功），400 解析失败降级纯文本重发，
-// 网关异常响应（code 0）原样重试一次。内容与上次成功编辑一致时跳过
-// （Telegram 拒绝未变化的编辑）。调用方需持有 h.mu。
+// errAlreadyShown 降级重发的内容与已展示的纯文本一致：重发必被拒（400
+// "message is not modified"），消息本就完整，跳过无意义的重发。
+var errAlreadyShown = errors.New("telegram: 内容已展示，跳过重发")
+
+// patchLocked 以当前内容编辑消息；final 为 true 时尝试按配置的 parse_mode
+// 渲染（仅最终内容完整时才可能渲染成功，参考 aiogram 流式写法：流式阶段
+// 纯文本、最终编辑无条件应用 Markdown——即使内容与最后一条纯文本一致也要
+// 尝试，渲染生成的实体使消息内容变化），解析失败降级纯文本重发，网关异常
+// 响应（code 0）原样重试一次。纯文本编辑且内容与上次成功编辑一致时跳过。
+// 调用方需持有 h.mu。
 func (h *telegramStreamHandle) patchLocked(final bool) error {
 	if h.a == nil || h.a.client == nil || h.msgID == 0 {
 		return nil
 	}
 	content := truncateRunes(h.prefix+h.content, maxEditTextLen)
-	if content == h.lastSent {
+	pm := ""
+	if final {
+		pm = h.a.parseMode()
+	}
+	// 纯文本且内容未变化：跳过（必然 "message is not modified"）。
+	// 带 parse_mode 的最终编辑不在此列——实体变化时 Telegram 接受编辑。
+	if pm == "" && content == h.lastSent {
 		return nil
 	}
 	params := map[string]any{
@@ -139,15 +153,22 @@ func (h *telegramStreamHandle) patchLocked(final bool) error {
 		"message_id": h.msgID,
 		"text":       content,
 	}
-	if final && h.a.mdEnabled() {
-		params["parse_mode"] = "MarkdownV2"
+	if pm != "" {
+		params["parse_mode"] = pm
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	// 400 解析失败→纯文本重发；网关异常响应（code 0）→原样重试一次
+	// 400 解析失败→纯文本重发；网关异常响应（code 0）→原样重试一次。
+	// 降级重发的内容若已以纯文本展示过则跳过（重发必被拒，消息本就完整）。
 	err := retryAPIError(ctx, params, func(p map[string]any) error {
+		if _, has := p["parse_mode"]; !has && content == h.lastSent {
+			return errAlreadyShown
+		}
 		return h.a.client.call(ctx, "editMessageText", p, nil)
 	})
+	if errors.Is(err, errAlreadyShown) {
+		return nil
+	}
 	if err != nil {
 		h.a.logger.Warn("Telegram 流式回复更新失败", "messageId", h.msgID, "error", err)
 		return err

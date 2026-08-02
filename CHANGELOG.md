@@ -20,7 +20,7 @@
 - 面板状态接口返回各平台适配器状态数组（`GET /api/status` → `adapters`），概览页按平台展示连接状态
 - 飞书发消息改用 **post + markdown 渲染**：文本走 `msg_type=post` 的 `md` 元素，飞书客户端原生渲染标题/加粗/代码块/列表等；@提及拆为独立 at 元素（保证通知送达），图片元素追加到正文末尾
 - 首次设置向导支持**多平台接入**：平台步骤可勾选 QQ(NapCat) 与/或飞书与/或 Telegram 并分别填写连接配置（飞书含 App ID/Secret 与 webhook 参数，Telegram 含 Bot Token/代理），管理员 ID 支持带平台前缀的字符串，至少启用一个平台
-- **Telegram MarkdownV2 渲染**（`bot.telegram.parse_mode`，默认 `off`）：配置为 `markdownv2` 后，一次性文本发送与流式回复的最终编辑按 MarkdownV2 渲染 AI 的 markdown 输出（标题/加粗/代码块/列表等）；流式中间编辑保持纯文本（流式过程标记不完整），AI 输出含未转义特殊字符或 4096 截断切断闭合标记时 Telegram 返回 400，自动降级纯文本发送/编辑，不影响现有纯文本行为
+- **Telegram Markdown 渲染**（`bot.telegram.parse_mode`，默认 `off`，可选 `markdown`/`markdownv2`）：配置后一次性文本发送与流式回复的最终编辑按所选模式渲染 AI 的 markdown 输出（标题/加粗/代码块/列表等）。`markdown`=旧版（仅需转义 `_ * [ ]`，词中下划线不解析，对 AI 输出最宽容，参考 aiogram 流式写法）；`markdownv2`=新版（转义严格）。流式中间编辑保持纯文本（流式过程标记不完整），AI 输出含未转义特殊字符或 4096 截断切断闭合标记时 Telegram 返回 400，自动降级纯文本发送/编辑，不影响现有纯文本行为
 
 
 ### 变更
@@ -49,6 +49,7 @@
 
 ### 修复
 
+- **流式最终 Markdown 渲染被内容去重误杀**：`End` 时内容与最后一条纯文本编辑一致时直接跳过最终编辑，Markdown 渲染从未真正尝试——消息恒为纯文本、日志无任何输出；现带 parse_mode 的最终编辑不受内容去重限制（渲染生成的实体使消息内容变化，Telegram 接受编辑，参考 aiogram 流式写法「流式 ParseMode.NONE、最终无条件应用 Markdown」）；最终渲染失败且内容已展示时跳过降级重发，消除 `message is not modified` 噪音
 - **Telegram 错误码解析丢失**（此前「流式回复没发完」的真实根因）：resty 只把 2xx 响应的 body 解析进 `SetResult`，**4xx/5xx 的错误 JSON 不会填充**——官方 API 的 `error_code`/`description` 全部丢失，一切 400 错误（如 MarkdownV2 解析失败）都显示为 `telegram api error 0 (http 400)`，导致 400 降级纯文本重发从不触发，流式最终内容停留在节流窗口内未发出的旧版本；`unpack` 改为自行解析响应 body（429 识别与 MarkdownV2 纯文本降级恢复），错误日志附带 HTTP 状态码与响应体片段（截断 200 字符）便于诊断；响应体不可解析（错误页/空/截断）时 5xx/未知仍按瞬时故障保留 parse_mode 原样重试一次，4xx 按确定性拒绝直接纯文本降级；流式最终内容与已展示内容一致时跳过无意义的最终编辑（消除 `message is not modified` 400 噪音）
 - 飞书**图文（post 富文本）消息被静默丢弃**：接收事件的 post content 是顶层 `title`/`content` 结构（无 `zh_cn` 包装，与发送/API 侧不同），`parsePostContent` 强制要求 `zh_cn` 导致翻译为空段，`onReceive` 静默跳过——面板无日志、AI 不响应；现兼容两种结构（zh_cn 包装 + 顶层，顶层 content 为空时回退 content_v2），并修复 post 消息 at 元素占位符（`@_user_N`）未反查 open_id、直接输出 `fs:@_user_N` 的问题，新增回归测试
 - 飞书流式回复卡片 JSON 结构错误：schema 2.0 卡片中 `elements` 必须位于 `body` 下，此前放在根层级导致发消息/更新消息被 API 拒绝（code 230099 / 200621，`unknown property: elements`），已修正并更新测试

@@ -329,13 +329,13 @@ func TestStreamEndGatewayRetry(t *testing.T) {
 	}
 }
 
-// TestStreamEndSkipWhenUnchanged 内容与上次成功编辑一致时跳过编辑
+// TestStreamEndSkipWhenUnchanged 纯文本编辑且内容与上次成功编辑一致时跳过
 // （Telegram 拒绝未变化的编辑，消除 "message is not modified" 噪音）。
 func TestStreamEndSkipWhenUnchanged(t *testing.T) {
 	f := newFakeAPI()
 	a, srv := testAdapterWithServer(f)
 	defer srv.Close()
-	a.cfg.parseMode = "markdownv2"
+	// 未配置 parse_mode（纯文本模式）
 
 	h := &telegramStreamHandle{a: a, chatID: -100, msgID: 7}
 	h.content = "hi"
@@ -346,6 +346,59 @@ func TestStreamEndSkipWhenUnchanged(t *testing.T) {
 	h.End()
 	if n := f.count("editMessageText"); n != 1 {
 		t.Fatalf("editMessageText 调用 = %d, want 1（未变化跳过）", n)
+	}
+}
+
+// TestStreamEndMarkdownRendersWhenUnchanged 配置 markdown 渲染时，End 的最终
+// 编辑即使内容与最后一条纯文本一致也必须尝试（渲染生成的实体使消息内容变化，
+// 参考 aiogram 流式写法：流式 ParseMode.NONE，最终无条件应用 Markdown）。
+func TestStreamEndMarkdownRendersWhenUnchanged(t *testing.T) {
+	f := newFakeAPI()
+	a, srv := testAdapterWithServer(f)
+	defer srv.Close()
+	a.cfg.parseMode = "markdown"
+
+	h := &telegramStreamHandle{a: a, chatID: -100, msgID: 7}
+	h.content = "**加粗**\n\n- 列表项"
+	if err := h.patchLocked(false); err != nil {
+		t.Fatalf("中间编辑失败: %v", err)
+	}
+	// 内容未变化，但 End 必须尝试 Markdown 渲染
+	h.End()
+	if n := f.count("editMessageText"); n != 2 {
+		t.Fatalf("editMessageText 调用 = %d, want 2（中间纯文本 + 最终 Markdown 渲染）", n)
+	}
+	r1 := f.req(1)
+	if r1.json["parse_mode"] != "Markdown" {
+		t.Fatalf("最终编辑应带 parse_mode=Markdown, got %+v", r1.json)
+	}
+	if r1.json["text"] != "**加粗**\n\n- 列表项" {
+		t.Fatalf("最终编辑内容错误, got %+v", r1.json)
+	}
+}
+
+// TestStreamEndMarkdownFallbackSkipsNoise 内容已以纯文本展示、最终 Markdown
+// 渲染失败（400）时：降级纯文本重发与已展示内容一致，跳过重发（消息本就
+// 完整），不产生 "message is not modified" 噪音。
+func TestStreamEndMarkdownFallbackSkipsNoise(t *testing.T) {
+	f := newFakeAPI()
+	f.parseModeFail = 1
+	a, srv := testAdapterWithServer(f)
+	defer srv.Close()
+	a.cfg.parseMode = "markdownv2"
+
+	h := &telegramStreamHandle{a: a, chatID: -100, msgID: 7}
+	h.content = "**加粗**"
+	if err := h.patchLocked(false); err != nil {
+		t.Fatalf("中间编辑失败: %v", err)
+	}
+	h.End()
+	// 仅 2 次编辑：中间纯文本 + 最终 Markdown 尝试（400 后跳过相同的纯文本重发）
+	if n := f.count("editMessageText"); n != 2 {
+		t.Fatalf("editMessageText 调用 = %d, want 2（无降级重发噪音）", n)
+	}
+	if f.req(1).json["parse_mode"] != "MarkdownV2" {
+		t.Fatalf("最终编辑应带 parse_mode, got %+v", f.req(1).json)
 	}
 }
 
