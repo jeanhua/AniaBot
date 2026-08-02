@@ -36,7 +36,7 @@ func NewPlugin() *MyPlugin {
 | `AdminOnly` | `bool` | 为 `true` 时仅管理员能在 `/help` 中看到 |
 | `ShowFor` | `ShowFor` | 显示范围：`ShowForGroup` / `ShowForFriend` / `ShowForNone`，可按位或 |
 | `Order` | `int` | 执行顺序，从小到大 |
-| `Platforms` | `[]string` | 插件支持的平台列表（如 `[]string{"qq"}`、`[]string{"qq","feishu"}`）；**空 = 支持全部平台**（默认）。core 按事件来源平台过滤，不匹配的插件收不到该平台事件 |
+| `Platforms` | `[]string` | 插件支持的平台列表（如 `[]string{"qq"}`、`[]string{"qq","feishu"}`、`[]string{"qq","feishu","telegram"}`）；**空 = 支持全部平台**（默认）。core 按事件来源平台过滤，不匹配的插件收不到该平台事件 |
 | `Author` / `Version` | `string` | 作者与版本信息 |
 
 ## 执行顺序（Order）
@@ -142,8 +142,9 @@ func (p *MyPlugin) OnGroupMsg(ctx context.Context, b bot.Bot, cmd command.Comman
 
 ```go
 import (
-    _ "github.com/jeanhua/AniaBot/bot/adapter/napcat"  // QQ 平台
-    _ "github.com/jeanhua/AniaBot/bot/adapter/feishu"  // 飞书平台（可选）
+    _ "github.com/jeanhua/AniaBot/bot/adapter/napcat"    // QQ 平台
+    _ "github.com/jeanhua/AniaBot/bot/adapter/feishu"    // 飞书平台（可选）
+    _ "github.com/jeanhua/AniaBot/bot/adapter/telegram"  // Telegram 平台（可选）
     "github.com/jeanhua/AniaBot/bot/core"
     "github.com/jeanhua/AniaBot/bot/plugins/pluginsys"
     "github.com/jeanhua/AniaBot/custom/plugins/myplugin"

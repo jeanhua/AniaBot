@@ -9,12 +9,14 @@ bot:
     enable: true # 是否启用 Web 控制面板
     listen: "127.0.0.1:7700" # 监听地址（如需局域网访问改为 0.0.0.0:7700，注意面板有密码保护）
 
-  # 平台适配器启用开关（可多平台并存：QQ + 飞书……）。默认仅启用 QQ(NapCat)。
+  # 平台适配器启用开关（可多平台并存：QQ + 飞书 + Telegram……）。默认仅启用 QQ(NapCat)。
   platform:
     napcat:
       enable: true # 是否启用 QQ 平台
     feishu:
       enable: false # 是否启用飞书平台（需同时配置下方 bot.feishu.*）
+    telegram:
+      enable: false # 是否启用 Telegram 平台（需同时配置下方 bot.telegram.*）
 
   # 飞书适配器
   feishu:
@@ -26,6 +28,14 @@ bot:
       path: /webhook/event # webhook 模式回调路径
       verification_token: # webhook 模式在飞书「事件订阅」页配置
       encrypt_key: # webhook 模式可选的事件加密密钥
+
+  # Telegram 适配器（Bot API 长轮询，无需公网地址）
+  telegram:
+    token: # 向 @BotFather 创建机器人后获取的 Bot Token
+    api_base: https://api.telegram.org # 官方 Bot API 地址；国内部署可填自建 Bot API 网关/反代
+    proxy: # HTTP/SOCKS5 代理（http://host:port 或 socks5://host:port），留空直连
+    polling:
+      timeout: 30 # getUpdates 长轮询等待秒数（建议 10-50）
 
   # napcat网络交换适配器，websocket/http二选一
   adapter:

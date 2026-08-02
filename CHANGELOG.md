@@ -14,11 +14,12 @@
 
 - **多平台适配器框架**：`common/adapter` 抽象为公共契约（`Adapter`）+ 平台专属能力（`QQExt` 可选接口）+ 适配器注册表（`Definition`/`Register`/`RegisterBotWrapper`）。新增平台只需实现 `Adapter`、提供 `Definition` 并在 `cmd/main.go` 空白导入触发注册即可，框架核心零改动；支持 QQ + 飞书等多平台并存，按配置 `bot.platform.<name>.enable` 启用
 - **飞书（Lark）适配器**（`bot/adapter/feishu`，基于 `larksuite/oapi-sdk-go/v3`）：WebSocket 长连接（默认，无需公网地址）/ Webhook 双模式事件订阅；消息收发翻译（文本/@提及/富文本/图片/文件/回复），图片与文件经 `im.messageResource.get` 下载为 data URI 供 AI 插件直接加载；撤回/表情回应/成员进出等通知映射到公共事件，机器人入群、卡片回调等平台特定事件走新增的 `OnPlatformEvent` 统一入口；`bot.QQ` 类型断言探测 QQ 专属能力
+- **Telegram 适配器**（`bot/adapter/telegram`，resty 手写 Bot API 客户端，零新增 SDK 依赖）：**Bot API 长轮询**（getUpdates，无需公网地址/协议端），支持 `bot.telegram.proxy`（HTTP/SOCKS5 代理）与 `bot.telegram.api_base`（自建 Bot API 网关/反代）；消息收发翻译（文本/@提及/图片/文件/语音/视频/回复），图片经 `getFile` 下载为 data URI 供 AI 插件直接加载；@bot 提及映射为 at 段（@username 大小写不敏感匹配 getMe 自身，群聊 @ 触发 AI）；成员进出/表情回应映射公共通知（成员变动仅管理员或关闭隐私模式可见），机器人被拉群/移出走 `OnPlatformEvent`；**流式回复**（`editMessageText` 打字机，600ms 节流，@username 前缀在每次更新保留）；ID 前缀 `tg:`，消息 ID 编码为 `tg:<chat_id>:<message_id>`；长轮询 at-least-once 语义下适配器级 update_id 去重 + core 按消息 ID 兜底；Bot API 无消息历史/单条查询端点，`GetMsgDetail`/历史由内存缓存兜底（每会话最近 200 条）；文本超 4096 分包、媒体 caption 1024 上限截断
 - **平台 ID 前缀体系**：QQ 历史数字 ID 无前缀（存量数据零迁移），其他平台 ID 统一加前缀（如飞书 `fs:`），core 按前缀路由到对应适配器；`QID` 放松为任意字符串（数字仍规范化）
 - **插件平台声明**：`plugin.Meta.Platforms` 字段（空 = 支持全部平台，向后兼容），core 按事件来源平台过滤插件；防撤回插件声明 QQ-only（依赖合并转发与 rkey）
 - 面板状态接口返回各平台适配器状态数组（`GET /api/status` → `adapters`），概览页按平台展示连接状态
 - 飞书发消息改用 **post + markdown 渲染**：文本走 `msg_type=post` 的 `md` 元素，飞书客户端原生渲染标题/加粗/代码块/列表等；@提及拆为独立 at 元素（保证通知送达），图片元素追加到正文末尾
-- 首次设置向导支持**多平台接入**：平台步骤可勾选 QQ(NapCat) 与/或飞书并分别填写连接配置（飞书含 App ID/Secret 与 webhook 参数），管理员 ID 支持带平台前缀的字符串，至少启用一个平台
+- 首次设置向导支持**多平台接入**：平台步骤可勾选 QQ(NapCat) 与/或飞书与/或 Telegram 并分别填写连接配置（飞书含 App ID/Secret 与 webhook 参数，Telegram 含 Bot Token/代理），管理员 ID 支持带平台前缀的字符串，至少启用一个平台
 
 
 ### 变更

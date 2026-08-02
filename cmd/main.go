@@ -8,6 +8,7 @@ import (
 	// 空白导入各平台适配器包以触发其 init() 注册（新增平台在此追加导入即可）
 	_ "github.com/jeanhua/AniaBot/bot/adapter/feishu"
 	_ "github.com/jeanhua/AniaBot/bot/adapter/napcat"
+	_ "github.com/jeanhua/AniaBot/bot/adapter/telegram"
 	"github.com/jeanhua/AniaBot/bot/core"
 	"github.com/jeanhua/AniaBot/bot/plugins/pluginaichat"
 	"github.com/jeanhua/AniaBot/bot/plugins/pluginantiwithdrawal"

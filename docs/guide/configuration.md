@@ -59,14 +59,15 @@ AniaBot 的全部配置存储在**数据库**中（持久化存储的 `ania_kv` 
 
 ### platform —— 平台适配器开关
 
-多平台并存，各自独立开关（`bot.platform.<name>.enable`）。默认仅启用 QQ，飞书默认关闭：
+多平台并存，各自独立开关（`bot.platform.<name>.enable`）。默认仅启用 QQ，飞书 / Telegram 默认关闭：
 
 | 配置键 | 默认值 | 说明 |
 | --- | --- | --- |
 | `bot.platform.napcat.enable` | `true` | 是否启用 QQ（NapCat）平台 |
 | `bot.platform.feishu.enable` | `false` | 是否启用飞书平台（需同时配置下方 `bot.feishu.*`） |
+| `bot.platform.telegram.enable` | `false` | 是否启用 Telegram 平台（需同时配置下方 `bot.telegram.*`） |
 
-勾选后**重启生效**。未来新增平台（Telegram 等）同样在此出现对应开关。
+勾选后**重启生效**。未来新增平台同样在此出现对应开关。
 
 ### feishu —— 飞书适配器
 
@@ -84,6 +85,21 @@ AniaBot 的全部配置存储在**数据库**中（持久化存储的 `ania_kv` 
 
 ::: tip 飞书能做什么 / 不能做什么
 飞书适配器支持文本 / @提及 / 富文本 / 图片 / 文件 / 回复，撤回 / 表情回应 / 成员进出会映射到对应公共通知。合并转发、戳一戳、群签到、rkey 等 QQ 专属能力飞书**没有**——依赖它们的插件（如防撤回）在飞书不生效。
+:::
+
+### telegram —— Telegram 适配器
+
+在 Telegram 中向 [@BotFather](https://t.me/BotFather) 发送 `/newbot` 创建机器人并获取 **Bot Token**，然后在面板勾选启用 Telegram 并填写。Telegram 采用 **Bot API 长轮询**（`getUpdates`）接收事件，**无需公网地址、无需部署协议端**：
+
+| 配置键 | 默认值 | 说明 |
+| --- | --- | --- |
+| `bot.telegram.token` | 空 | Bot Token（敏感字段），形如 `123456:ABC-DEF...` |
+| `bot.telegram.api_base` | `https://api.telegram.org` | Bot API 地址；国内部署可填自建 Bot API 网关/反代地址 |
+| `bot.telegram.proxy` | 空 | HTTP/SOCKS5 代理（`http://host:port` 或 `socks5://host:port`），留空直连 |
+| `bot.telegram.polling.timeout` | `30` | `getUpdates` 长轮询等待秒数（建议 10-50） |
+
+::: tip Telegram 能做什么 / 不能做什么
+Telegram 适配器支持文本 / @提及 / 图片 / 文件 / 语音 / 视频 / 回复，成员进出、表情回应、机器人被拉群/移出会映射到对应公共通知与平台事件；群聊中 @机器人 触发 AI 对话。**平台限制**：@ 只能以 `@username` 形式（无按 ID @ 的 API）；仅当机器人是管理员或关闭隐私模式时才能收到其他成员的加入/离开消息与表情回应；Bot API 无消息历史端点，历史消息仅覆盖适配器运行期间的缓存（AI 会话历史不受影响，由持久化存储承载）；消息撤回、合并转发等 QQ 专属能力 Telegram **没有**。
 :::
 
 ### adapter —— QQ(NapCat) 协议适配器

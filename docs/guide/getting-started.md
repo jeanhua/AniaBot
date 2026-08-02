@@ -9,6 +9,7 @@
 | Go | **1.25+** | 见 `go.mod`，交叉编译友好 |
 | NapCat | 任意近期版本 | **QQ 平台**协议端，提供 OneBot v11 接口（不玩 QQ 可跳过） |
 | 飞书自建应用 | 任意 | **飞书平台**：开放平台创建应用 + 开通权限（不玩飞书可跳过） |
+| Telegram Bot Token | 任意 | **Telegram 平台**：向 [@BotFather](https://t.me/BotFather) 创建机器人获取 Token，长轮询无需公网地址（不玩 Telegram 可跳过） |
 | Redis | 可选 | 缓存后端之一；默认使用内存缓存，无需安装 |
 | LLM API Key | 可选 | 启用 AI 对话时需要（DeepSeek / OpenAI 等） |
 
@@ -46,9 +47,9 @@ AniaBot 的配置存储在数据库中，**首次启动**会自动写入默认�
 ============================================================
 ```
 
-使用该密码登录 `http://127.0.0.1:7700`，首次登录会自动进入**设置向导**：先在「平台接入」步骤勾选要启用的平台（QQ(NapCat) 默认勾选，飞书可选，填写对应连接配置与管理员 ID），再填 AI 模型配置（Base URL / API Key / 模型），保存后一键重启即可生效。
+使用该密码登录 `http://127.0.0.1:7700`，首次登录会自动进入**设置向导**：先在「平台接入」步骤勾选要启用的平台（QQ(NapCat) 默认勾选，飞书 / Telegram 可选，填写对应连接配置与管理员 ID），再填 AI 模型配置（Base URL / API Key / 模型），保存后一键重启即可生效。
 
-默认启用 QQ 平台。要同时接入飞书，在向导中勾选「飞书」并填写 App ID/Secret 即可（或稍后在「配置 → 平台适配器」启用，详见 [配置详解](/guide/configuration#feishu-飞书适配器)）。多平台可同时在线。
+默认启用 QQ 平台。要同时接入飞书或 Telegram，在向导中勾选对应平台并填写 App ID/Secret 或 Bot Token 即可（或稍后在「配置 → 平台适配器」启用，详见 [配置详解](/guide/configuration#feishu-飞书适配器) 与 [Telegram 适配器](/guide/configuration#telegram-telegram-适配器)）。多平台可同时在线；Telegram 为 Bot API 长轮询，无需部署额外协议端，国内部署可在配置中填写代理或自建 API 网关地址。
 
 完整配置项说明见 [配置详解](/guide/configuration)，面板使用见 [Web 控制面板](/guide/web-panel)。
 
@@ -89,6 +90,7 @@ AniaBot/
 │   ├── adminpanel/        # Web 控制面板后端（配置/状态 API + 内嵌前端）
 │   ├── adapter/napcat/    # NapCat WebSocket / HTTP 适配器（QQ 平台）
 │   ├── adapter/feishu/    # 飞书适配器（官方 SDK，长连接 / Webhook）
+│   ├── adapter/telegram/  # Telegram 适配器（Bot API，长轮询）
 │   ├── component/         # AI 引擎：aichat / llmtool / functool
 │   ├── plugins/           # 七个内置插件（系统/日志/复读/防撤回/请求拦截/AI/每日新闻）
 │   └── utils/             # 命令解析、消息提取等工具
