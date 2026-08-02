@@ -10,6 +10,8 @@
 
 ## [Unreleased]
 
+## [v4.1.0] - 2026-08-03
+
 ### 新增
 
 - **QQ 官方机器人适配器**（`bot/adapter/qqofficial`，平台标识 `qqofficial`，resty + gorilla/websocket 手写 QQ 开放平台 API v2 客户端，零新增依赖）：
