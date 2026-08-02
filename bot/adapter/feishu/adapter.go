@@ -25,6 +25,7 @@ import (
 	"github.com/jeanhua/AniaBot/common/msgchain"
 	lark "github.com/larksuite/oapi-sdk-go/v3"
 	"github.com/larksuite/oapi-sdk-go/v3/channel/normalize"
+	"github.com/larksuite/oapi-sdk-go/v3/channel/safety"
 	"github.com/larksuite/oapi-sdk-go/v3/channel/types"
 	larkcore "github.com/larksuite/oapi-sdk-go/v3/core"
 	"github.com/larksuite/oapi-sdk-go/v3/core/httpserverext"
@@ -67,12 +68,20 @@ type feishuAdapter struct {
 	lastErr   string
 	started   atomic.Bool
 
+	// dedup 事件幂等去重：飞书事件订阅为 at-least-once 投递，
+	// 断线重连/ACK 丢失会重推同一事件，以消息 ID 为键去重避免重复响应。
+	// 使用官方 SDK 的 channel/safety.DedupCache（LRU + TTL）。
+	dedup *safety.DedupCache
+
 	logger *slog.Logger
 }
 
 func NewAdapter(cfg *viper.Viper) *feishuAdapter {
 	a := &feishuAdapter{
-		http:   resty.New(),
+		http: resty.New(),
+		// 去重窗口 1 小时：飞书重推可能因断线重连/ACK 丢失延迟数分钟才到达，
+		// 同一 message_id 永远不会被合法地处理两次，窗口长只占 LRU 容量（4096 有界）
+		dedup:  safety.NewDedupCache(4096, time.Hour),
 		logger: slog.Default().With("adapter", "feishu"),
 	}
 	return a
@@ -247,6 +256,13 @@ func (a *feishuAdapter) onReceive(ctx context.Context, event *larkim.P2MessageRe
 	}
 	em := ev.Message
 
+	// 幂等去重：飞书 at-least-once 投递，断线重连/ACK 丢失会重推同一事件，
+	// 按 message_id 去重（官方推荐，勿用 event_id——每次投递 event_id 可能不同）
+	if em.MessageId != nil && a.dedup.IsDuplicate("msg:"+*em.MessageId) {
+		a.logger.Debug("跳过重复投递的消息事件", "messageId", *em.MessageId)
+		return nil
+	}
+
 	chatType := ""
 	if em.ChatType != nil {
 		chatType = *em.ChatType
@@ -275,35 +291,40 @@ func (a *feishuAdapter) onReceive(ctx context.Context, event *larkim.P2MessageRe
 		}
 	}
 
-	ob := a.eventMessageToOB11(em)
-	if len(ob) == 0 {
-		return nil
-	}
-	msg := message.Message{
-		Time:        msTimeToUint(em.CreateTime),
-		PostType:    "message",
-		MessageType: chatType, // group / p2p
-		MessageId:   message.QID(idPrefix + deref(em.MessageId)),
-		GroupId:     message.QID(idPrefix + deref(em.ChatId)),
-		UserId:      message.QID(idPrefix + openID),
-		Message:     ob,
-		RawMessage:  segmentsPlainText(ob),
-		Sender:      message.MessageSender{UserId: message.QID(idPrefix + openID)},
-		SelfId:      a.selfID(),
-		Platform:    Platform,
-	}
-
+	// 异步处理：翻译（含图片/文件资源下载，单次最多 20s）与插件链分发都放到
+	// 独立 goroutine——飞书长连接要求尽快回 ACK（SDK 在处理完事件后才写 ACK 帧），
+	// 任何耗时操作阻塞在这里都会导致 ACK 延迟/丢失，飞书随即按 at-least-once 重推
+	// 同一事件造成重复响应。去重与缓存写入（无 I/O）已在上方同步完成，顺序语义不变。
 	trig := a.triggerOf()
-	switch chatType {
-	case "group":
-		if trig.OnGroupMsg != nil {
-			trig.OnGroupMsg(msg)
+	go func() {
+		ob := a.eventMessageToOB11(em)
+		if len(ob) == 0 {
+			return
 		}
-	case "p2p":
-		if trig.OnFriendMsg != nil {
-			trig.OnFriendMsg(msg)
+		msg := message.Message{
+			Time:        msTimeToUint(em.CreateTime),
+			PostType:    "message",
+			MessageType: chatType, // group / p2p
+			MessageId:   message.QID(idPrefix + deref(em.MessageId)),
+			GroupId:     message.QID(idPrefix + deref(em.ChatId)),
+			UserId:      message.QID(idPrefix + openID),
+			Message:     ob,
+			RawMessage:  segmentsPlainText(ob),
+			Sender:      message.MessageSender{UserId: message.QID(idPrefix + openID)},
+			SelfId:      a.selfID(),
+			Platform:    Platform,
 		}
-	}
+		switch chatType {
+		case "group":
+			if trig.OnGroupMsg != nil {
+				trig.OnGroupMsg(msg)
+			}
+		case "p2p":
+			if trig.OnFriendMsg != nil {
+				trig.OnFriendMsg(msg)
+			}
+		}
+	}()
 	return nil
 }
 
@@ -311,6 +332,9 @@ func (a *feishuAdapter) onReceive(ctx context.Context, event *larkim.P2MessageRe
 func (a *feishuAdapter) onRecall(ctx context.Context, event *larkim.P2MessageRecalledV1) error {
 	ev := event.Event
 	if ev == nil || ev.ChatId == nil {
+		return nil
+	}
+	if ev.MessageId != nil && a.dedup.IsDuplicate("recall:"+*ev.MessageId) {
 		return nil
 	}
 	trig := a.triggerOf()
@@ -346,6 +370,12 @@ func (a *feishuAdapter) onRecall(ctx context.Context, event *larkim.P2MessageRec
 func (a *feishuAdapter) onReaction(ctx context.Context, event *larkim.P2MessageReactionCreatedV1) error {
 	ev := event.Event
 	if ev == nil || ev.MessageId == nil || ev.ReactionType == nil || ev.ReactionType.EmojiType == nil {
+		return nil
+	}
+	// 同一消息可被不同人/不同表情多次回应，去重键需带上操作者与表情与时间
+	reactKey := "reaction:" + *ev.MessageId + ":" + deref(ev.ReactionType.EmojiType) + ":" +
+		userIDOf(ev.UserId) + ":" + deref(ev.ActionTime)
+	if a.dedup.IsDuplicate(reactKey) {
 		return nil
 	}
 	chatID, _ := a.msgChats.Load(*ev.MessageId)

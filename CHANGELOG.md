@@ -20,15 +20,6 @@
 - 飞书发消息改用 **post + markdown 渲染**：文本走 `msg_type=post` 的 `md` 元素，飞书客户端原生渲染标题/加粗/代码块/列表等；@提及拆为独立 at 元素（保证通知送达），图片元素追加到正文末尾
 - 首次设置向导支持**多平台接入**：平台步骤可勾选 QQ(NapCat) 与/或飞书并分别填写连接配置（飞书含 App ID/Secret 与 webhook 参数），管理员 ID 支持带平台前缀的字符串，至少启用一个平台
 
-### 优化
-
-- 面板密码校验改用 `subtle.ConstantTimeCompare` 常数时间比较，消除计时侧信道；存储值哈希段长度不符 SHA-256 时直接拒绝
-- AI 对话 / 每日新闻插件的初始化失败改为返回 `fmt.Errorf("%w: 具体原因（含配置键名）", aniaerror.ParameterInitializeError)` 包装错误并交由框架统一记录，消除插件侧重复日志与裸哨兵错误丢失上下文的问题；插件开发文档（patterns.md）的初始化示例同步更新为新范式
-
-### 修复
-
-- 修复面板登录页密码错误时提示「未登录或会话已过期」的问题：前端请求封装对 401 统一吞掉服务端错误体，现优先展示服务端返回的具体错误（如「密码错误」「失败次数过多」）
-- 修复插件生命周期错误被静默丢弃的问题：`Start` / `StartCron` / `Awake` 返回的错误此前被框架直接忽略（如 AI 插件未配置 API KEY、每日新闻 cron 注册失败时启动日志无任何报错），现统一经 `logError` 记录；`logError` 新增 `context.Canceled` 分支，用户 `/stop` 主动取消不再误记为「执行错误」
 
 ### 变更
 
@@ -36,7 +27,6 @@
 - 插件事件回调不再收到裸 `*core.AniaBot`，而是平台能力包装后的 `bot.Bot`（`adapter.WrapBot`）：事件来源适配器实现 `QQExt` 时断言 `bot.QQ` 成功，否则失败（其他平台插件无感退化）
 - `bot.admin_id` 由 int 改为 string（支持带平台前缀的 ID）；请求拦截/每日新闻插件的群号/QQ号名单由 `[]int` 改为 `[]string`（支持 `fs:` 前缀 ID）
 - AI 对话插件定时任务与 Prompt 覆盖的目标 ID 解析支持多平台：纯数字（QQ）规范化为 QID，带前缀（如 `fs:oc_xxx`）原样保留
-- `common/aniaerror` 移除未被使用的 `UnknownError`、`NetworkError`、`JsonSeralizeError`（原名有拼写错误）与 `Timeout`（`context.DeadlineExceeded` 别名），仅保留实际使用的 `ParameterInitializeError`
 
 ## [v3.7.0] - 2026-08-01
 
@@ -48,14 +38,24 @@
 - 新增备用模型自动切换（`plugin.ai_chat_bot.fallback.model`，空表示不启用；base_url/api_key 留空回退主模型）：主对话与上下文压缩在主模型重试耗尽或遇到不可重试错误时自动改用备用模型重试一次，主模型 API 故障时对话不再整轮失败
 - 子代理与 AI 定时任务支持独立模型配置（`plugin.ai_chat_bot.subagent.base_url/api_key/model`，留空回退主模型；Agent 团队成员复用子代理配置）：可用更便宜的模型跑子任务
 - 上下文压缩支持独立模型配置（`plugin.ai_chat_bot.compressor.base_url/api_key/model`，留空回退主模型）：可用更便宜的模型做历史摘要，降低压缩成本
+- 面板登录防爆破：按来源 IP 统计登录失败次数，10 分钟窗口内连续失败 5 次即锁定 10 分钟（返回 HTTP 429 与 `Retry-After` 头），登录成功自动清零计数；失败响应附加固定 500ms 延迟拖慢在线爆破；记录数超阈值时惰性清理过期记录防止内存无界增长；纯内存计数，重启后清零。来源 IP 提取仅在直连对端为回环地址时（本机反代场景）才信任 `X-Forwarded-For` / `X-Real-IP`，防止外部伪造头部变换身份绕过锁定
+- 面板登录/锁定/登录成功均记录 slog 日志（含来源 IP），爆破尝试可在控制台日志页直接观测
 
 ### 优化
 
 - 同一轮 LLM 返回的多个工具调用并行执行（此前串行逐个执行）：结果按原顺序回填保证与 assistant 消息的 tool_calls 配对，工具观察者回调与 QQ 发送等回调经互斥串行化（无数据竞争），单个工具 panic 转为错误文本不中断整轮
+- 面板密码校验改用 `subtle.ConstantTimeCompare` 常数时间比较，消除计时侧信道；存储值哈希段长度不符 SHA-256 时直接拒绝
+- AI 对话 / 每日新闻插件的初始化失败改为返回 `fmt.Errorf("%w: 具体原因（含配置键名）", aniaerror.ParameterInitializeError)` 包装错误并交由框架统一记录，消除插件侧重复日志与裸哨兵错误丢失上下文的问题；插件开发文档（patterns.md）的初始化示例同步更新为新范式
+
+### 修复
+
+- 修复面板登录页密码错误时提示「未登录或会话已过期」的问题：前端请求封装对 401 统一吞掉服务端错误体，现优先展示服务端返回的具体错误（如「密码错误」「失败次数过多」）
+- 修复插件生命周期错误被静默丢弃的问题：`Start` / `StartCron` / `Awake` 返回的错误此前被框架直接忽略（如 AI 插件未配置 API KEY、每日新闻 cron 注册失败时启动日志无任何报错），现统一经 `logError` 记录；`logError` 新增 `context.Canceled` 分支，用户 `/stop` 主动取消不再误记为「执行错误」
 
 ### 变更
 
 - 长期记忆检索支持语义向量混合打分：`plugin.ai_chat_bot.kb.embedding` 启用时，记忆入库自动计算向量，`memory_search` 在关键词打分基础上叠加语义相似度加分（权重与知识库一致），同义不同词（如「喜爱」vs「喜欢」）也能命中；未启用 embedding 时保持纯关键词（与旧行为一致），旧数据（无向量字段）自动跳过语义加分
+- `common/aniaerror` 移除未被使用的 `UnknownError`、`NetworkError`、`JsonSeralizeError`（原名有拼写错误）与 `Timeout`（`context.DeadlineExceeded` 别名），仅保留实际使用的 `ParameterInitializeError`
 
 ## [v3.6.0] - 2026-07-31
 
