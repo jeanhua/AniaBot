@@ -36,6 +36,7 @@ func NewPlugin() *MyPlugin {
 | `AdminOnly` | `bool` | 为 `true` 时仅管理员能在 `/help` 中看到 |
 | `ShowFor` | `ShowFor` | 显示范围：`ShowForGroup` / `ShowForFriend` / `ShowForNone`，可按位或 |
 | `Order` | `int` | 执行顺序，从小到大 |
+| `Platforms` | `[]string` | 插件支持的平台列表（如 `[]string{"qq"}`、`[]string{"qq","feishu"}`）；**空 = 支持全部平台**（默认）。core 按事件来源平台过滤，不匹配的插件收不到该平台事件 |
 | `Author` / `Version` | `string` | 作者与版本信息 |
 
 ## 执行顺序（Order）
@@ -107,11 +108,27 @@ OnPanic(ctx, bot, name, err)  ← 任何插件 panic 时触发
 | 类别 | 方法 | 说明 |
 | --- | --- | --- |
 | 消息 | `OnGroupMsg` / `OnFriendMsg` | 群聊 / 私聊消息，中间件链 |
-| 通知 | `OnGroupUpload` `OnGroupAdmin` `OnGroupDecrease` `OnGroupIncrease` `OnGroupBan` `OnFriendAdd` `OnGroupRecall` `OnFriendRecall` `OnPoke` `OnLuckyKing` `OnHonor` `OnGroupMsgEmojiLike` `OnEssence` `OnGroupCard` | 14 种通知，广播制 |
+| 通知 | `OnGroupUpload` `OnGroupAdmin` `OnGroupDecrease` `OnGroupIncrease` `OnGroupBan` `OnFriendAdd` `OnGroupRecall` `OnFriendRecall` `OnPoke` `OnLuckyKing` `OnHonor` `OnGroupMsgEmojiLike` `OnEssence` `OnGroupCard` | 14 种通知，广播制；戳一戳/运气王/荣誉/精华/名片/禁言/上传等为 QQ 专属，非 QQ 平台不触发 |
+| 平台特定 | `OnPlatformEvent`（可选接口 `plugin.PlatformEventHandler`） | 无法映射为公共事件/通知的平台自有事件（如飞书卡片回调、机器人入群），广播制 |
 | 启动 | `Start` / `StartCron` / `Awake` | 生命周期钩子 |
 | 异常 | `OnPanic` | panic 通知 |
 
 事件字段详见 [API · 事件接口](/api/events)。
+
+## 多平台能力探测
+
+事件回调里的 `bot.Bot` 是**事件来源平台能力包装**后的外观。公共能力（发消息、查消息/群/历史）所有平台可用；QQ 专属能力（合并转发、戳一戳、rkey 等）在可选接口 `bot.QQ` 中，类型断言探测：
+
+```go
+func (p *MyPlugin) OnGroupMsg(ctx context.Context, b bot.Bot, cmd command.Command, msg message.Message) (bool, error) {
+    if qb, ok := b.(bot.QQ); ok { // 仅事件来源为 QQ 时断言成功
+        qb.SendPokeMsg(msg.Sender.UserId, nil)
+    }
+    return true, nil
+}
+```
+
+依赖 QQ 专属能力的插件应在 `Meta.Platforms` 声明只支持 QQ（如防撤回插件），其余平台自动跳过。
 
 ## 并发模型与 panic 恢复
 
@@ -121,18 +138,28 @@ OnPanic(ctx, bot, name, err)  ← 任何插件 panic 时触发
 
 ## 注册插件
 
-在 `cmd/main.go` 中：
+在 `cmd/main.go` 中（平台适配器由各平台包的 `init()` 自动注册，空白导入即可）：
 
 ```go
-bot := core.NewAniaBot(nil, core.WithAdapterFactory(napcat.NewAdapter))
+import (
+    _ "github.com/jeanhua/AniaBot/bot/adapter/napcat"  // QQ 平台
+    _ "github.com/jeanhua/AniaBot/bot/adapter/feishu"  // 飞书平台（可选）
+    "github.com/jeanhua/AniaBot/bot/core"
+    "github.com/jeanhua/AniaBot/bot/plugins/pluginsys"
+    "github.com/jeanhua/AniaBot/custom/plugins/myplugin"
+)
 
-bot.AddPlugin(pluginsys.NewPluginSys())
-bot.AddPlugin(myplugin.NewPlugin())   // ← 你的插件
+func main() {
+    bot := core.NewAniaBot(nil)
 
-bot.Run()
+    bot.AddPlugin(pluginsys.NewPluginSys())
+    bot.AddPlugin(myplugin.NewPlugin())   // ← 你的插件
+
+    bot.Run()
+}
 ```
 
-适配器模式由配置键 `bot.adapter.mode`（`ws` / `http`）在运行时决定，参考 `cmd/main.go`。
+启用的平台由配置键 `bot.platform.<name>.enable` 决定（默认仅 QQ），多平台可并存。新增平台只需在 `bot/adapter/` 实现一个 `Adapter` 并在 `init()` 里 `adapter.Register(...)`，然后在此加一行空白导入，框架核心零改动。
 
 ## 下一步
 

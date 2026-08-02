@@ -87,10 +87,14 @@ func (p *DicePlugin) OnGroupMsg(ctx context.Context, b bot.Bot, cmd command.Comm
 编辑 `cmd/main.go`：
 
 ```go
-import "github.com/jeanhua/AniaBot/custom/plugins/plugindice"
+import (
+	_ "github.com/jeanhua/AniaBot/bot/adapter/napcat" // 平台适配器（空白导入触发 init 注册）
+	"github.com/jeanhua/AniaBot/bot/core"
+	"github.com/jeanhua/AniaBot/custom/plugins/plugindice"
+)
 
 func main() {
-	bot := core.NewAniaBot(nil, core.WithAdapterFactory(napcat.NewAdapter))
+	bot := core.NewAniaBot(nil)
 
 	bot.AddPlugin(pluginsys.NewPluginSys())
 	// ... 其他插件
@@ -100,7 +104,7 @@ func main() {
 }
 ```
 
-适配器模式由配置键 `bot.adapter.mode`（`ws` / `http`）在运行时决定，参考 `cmd/main.go`。
+启用的平台由配置键 `bot.platform.<name>.enable` 决定（默认仅 QQ，多平台可并存），参考 `cmd/main.go`。
 
 ## 第五步：运行测试
 

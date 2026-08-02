@@ -46,7 +46,7 @@ AniaBot 的全部配置存储在**数据库**中（持久化存储的 `ania_kv` 
 
 | 配置键 | 默认值 | 说明 |
 | --- | --- | --- |
-| `bot.admin_id` | `123456789` | 管理员 QQ 号。拥有最高权限：远程 `/exit` 退出、强制执行定时推送、查看全部定时任务、接收 panic 告警与启动通知等 |
+| `bot.admin_id` | `123456789` | 管理员 ID。QQ 为纯数字 QQ 号，其他平台为带前缀的 ID（如飞书 `fs:ou_xxx`）。拥有最高权限：远程 `/exit` 退出、强制执行定时推送、查看全部定时任务、接收 panic 告警与启动通知等 |
 
 ### admin_panel —— Web 控制面板
 
@@ -57,7 +57,36 @@ AniaBot 的全部配置存储在**数据库**中（持久化存储的 `ania_kv` 
 
 首次启动会在控制台打印**随机初始密码**（仅显示一次），登录后可在面板右上角修改。详见 [Web 控制面板](/guide/web-panel)。
 
-### adapter —— 协议适配器
+### platform —— 平台适配器开关
+
+多平台并存，各自独立开关（`bot.platform.<name>.enable`）。默认仅启用 QQ，飞书默认关闭：
+
+| 配置键 | 默认值 | 说明 |
+| --- | --- | --- |
+| `bot.platform.napcat.enable` | `true` | 是否启用 QQ（NapCat）平台 |
+| `bot.platform.feishu.enable` | `false` | 是否启用飞书平台（需同时配置下方 `bot.feishu.*`） |
+
+勾选后**重启生效**。未来新增平台（Telegram 等）同样在此出现对应开关。
+
+### feishu —— 飞书适配器
+
+在飞书开放平台创建企业自建应用，在「凭证与基础信息」拿到 App ID / Secret，并在「权限管理」开通 `im:message`、`im:message:send_as_bot`、`im:resource` 等权限，然后在面板勾选启用飞书并填写：
+
+| 配置键 | 默认值 | 说明 |
+| --- | --- | --- |
+| `bot.feishu.app_id` | 空 | 应用 App ID |
+| `bot.feishu.app_secret` | 空 | 应用 App Secret（敏感字段） |
+| `bot.feishu.mode` | `ws` | 事件订阅方式：`ws`（WebSocket 长连接，推荐，**无需公网地址**）/ `webhook`（需公网 HTTPS 回调地址） |
+| `bot.feishu.webhook.listen` | `127.0.0.1:7777` | webhook 模式本地监听地址 |
+| `bot.feishu.webhook.path` | `/webhook/event` | webhook 模式回调路径，飞书后台填 `https://<公网地址><此路径>` |
+| `bot.feishu.webhook.verification_token` | 空 | webhook 模式在飞书「事件订阅」页配置（ws 模式无需） |
+| `bot.feishu.webhook.encrypt_key` | 空 | webhook 模式可选的事件加密密钥（ws 模式无需） |
+
+::: tip 飞书能做什么 / 不能做什么
+飞书适配器支持文本 / @提及 / 富文本 / 图片 / 文件 / 回复，撤回 / 表情回应 / 成员进出会映射到对应公共通知。合并转发、戳一戳、群签到、rkey 等 QQ 专属能力飞书**没有**——依赖它们的插件（如防撤回）在飞书不生效。
+:::
+
+### adapter —— QQ(NapCat) 协议适配器
 
 WebSocket 与 HTTP **二选一**，由配置键 `bot.adapter.mode`（`ws` / `http`）决定。在[首次设置向导](/guide/web-panel#首次设置向导)中选择，也可在面板「配置编辑」中修改，**重启后生效**：
 
@@ -214,8 +243,8 @@ HTTP 模式下 NapCat 向 `localhost` 上报会失败，请将 NapCat 的 HTTP C
 | --- | --- | --- |
 | `plugin.interceptor.enable` | `false` | 是否启用请求拦截，关闭时放行全部消息 |
 | `plugin.interceptor.mode` | `blacklist` | 名单模式：`blacklist` 名单内屏蔽 / `whitelist` 仅名单内放行 |
-| `plugin.interceptor.groups` | `[]` | 群号名单，每行一个 |
-| `plugin.interceptor.friends` | `[]` | QQ 号名单，每行一个，对私聊及群聊消息发送者均生效 |
+| `plugin.interceptor.groups` | `[]` | 群 ID 名单，每行一个（QQ 为群号，其他平台为带前缀的群 ID，如 `fs:oc_xxx`） |
+| `plugin.interceptor.friends` | `[]` | 用户 ID 名单，每行一个（QQ 为 QQ 号，其他平台带前缀），对私聊及群聊消息发送者均生效 |
 
 被拦截的会话消息不再传播到后续插件（AI 对话插件收不到，不产生 AI 请求）。
 
@@ -231,7 +260,7 @@ HTTP 模式下 NapCat 向 `localhost` 上报会失败，请将 NapCat 的 HTTP C
 | --- | --- | --- |
 | `plugin.dailyNews.api` | `https://60s.viki.moe/v2/60s?encoding=image-proxy` | 新闻图 API |
 | `plugin.dailyNews.cron` | `0 18 * * *` | cron 表达式，默认每天 18:00 触发 |
-| `plugin.dailyNews.groups` | `[123456, 7891011]` | 接收推送的群号列表 |
+| `plugin.dailyNews.groups` | `[123456, 7891011]` | 接收推送的群 ID 列表（QQ 为群号，其他平台带前缀） |
 
 ## files.mcp_json —— MCP 服务定义
 

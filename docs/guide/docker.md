@@ -83,8 +83,8 @@ docker logs aniabot
 
 浏览器访问 `http://<服务器IP>:7700`，用初始密码登录，首次登录会进入**设置向导**：依次填写 NapCat 连接地址、管理员 QQ 与 AI 模型配置，保存后自动重启生效。
 
-::: warning NapCat 需要单独部署
-容器内只运行 AniaBot 本体，QQ 协议端 NapCat 请参照 [快速开始](/guide/getting-started#第一步：部署-napcat) 另行部署（宿主机或另一个容器均可，host 网络模式下直接填 `127.0.0.1` 的地址）。
+::: warning QQ 需要单独部署 NapCat
+容器内只运行 AniaBot 本体，QQ 协议端 NapCat 请参照 [快速开始](/guide/getting-started#第一步：部署-napcat) 另行部署（宿主机或另一个容器均可，host 网络模式下直接填 `127.0.0.1` 的地址）。**飞书平台则无需任何额外协议端**——配置 App ID/Secret 走 WebSocket 长连接即可。
 :::
 
 ## 第四步：配置自动更新（关键一步）

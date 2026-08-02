@@ -2,6 +2,26 @@
 
 插件通过重写 `plugin.Meta` 的对应方法接收事件。所有事件方法签名中的 `bot bot.Bot` 为框架注入的机器人操作接口（见 [Bot 接口](/api/bot)）。
 
+## 平台作用域
+
+框架支持多平台并存（QQ、飞书……），插件收到的事件来自哪个平台，由 `message.Message.Platform` / `BasicNotice.Platform` 标识。
+
+- **`Meta.Platforms []string`**：插件声明支持的平台（如 `[]string{"qq"}`、`[]string{"qq","feishu"}`），空 = 支持全部平台（默认）。core 按事件来源平台过滤插件，不匹配的插件收不到该平台事件。
+- **`bot.QQ` 断言**：事件回调里的 `bot.Bot` 是来源平台能力包装后的外观，QQ 平台可断言为 `bot.QQ`（见 [Bot 接口](/api/bot#qq-专属能力-bot-qq可选接口)）。
+- **`OnPlatformEvent`（可选接口）**：无法映射为公共事件（消息/通知）的平台自有事件（如飞书卡片回调、机器人入群），通过实现 `plugin.PlatformEventHandler` 的 `OnPlatformEvent(ctx, bot, message.PlatformEvent)` 接收，广播制、按 `Meta.Platforms` 过滤：
+
+```go
+type PlatformEvent struct {
+    Platform string // 平台标识（"qq" / "feishu"）
+    Type     string // 事件类型（如 "feishu.card_action"、"feishu.bot_added"）
+    Data     any    // 平台原始事件数据，由各平台适配器包定义
+}
+```
+
+::: tip QQ 专属通知
+戳一戳 / 运气王 / 群荣誉 / 精华 / 群名片 / 禁言 / 群文件上传等 QQ 专属通知在非 QQ 平台**永远不会触发**（飞书无对应事件源），依赖它们的插件（如日志插件）在这些平台上保持静默。公共通知（消息撤回、群成员进出、表情回应）飞书会映射触发。
+:::
+
 ## 消息事件（中间件链）
 
 按 `Order` 从小到大依次执行，返回 `false` 阻断传播。
@@ -20,24 +40,25 @@ OnFriendMsg(ctx context.Context, bot bot.Bot, cmd command.Command, msg message.M
 type Message struct {
     Time        uint            // 消息时间戳
     PostType    string          // 上报类型，"message"
-    MessageType string          // "group" / "private"
+    MessageType string          // "group" / "p2p"（飞书）/ "private"（QQ）
     SubType     string          // 子类型
-    MessageId   QID             // 消息 ID
+    MessageId   QID             // 消息 ID（平台前缀 + 平台原始 ID）
     MessageSeq  int             // 消息序号
-    UserId      QID             // 发送者 QQ
-    GroupId     QID             // 群号（私聊为空字符串）
-    Message     []OB11Segment   // OneBot v11 消息段
+    UserId      QID             // 发送者 ID
+    GroupId     QID             // 群 ID（私聊为空字符串）
+    Message     []OB11Segment   // 通用消息段（规范格式）
     RawMessage  string          // 纯文本
     Sender      MessageSender   // 发送者信息
-    SelfId      QID             // 机器人自身 QQ
+    SelfId      QID             // 机器人自身 ID
+    Platform    string          // 平台标识（"qq" / "feishu"）
 }
 
 type MessageSender struct {
     UserId   QID
     Nickname string
     Sex      string
-    Card     string  // 群名片
-    Role     string  // "owner" / "admin" / "member"
+    Card     string  // 群名片（QQ）
+    Role     string  // "owner" / "admin" / "member"（QQ）
 }
 
 type OB11Segment struct {
@@ -46,7 +67,7 @@ type OB11Segment struct {
 }
 ```
 
-`message.QID` 是 `string`（十进制数字字符串）的封装，提供 `String()` / `Uint64()` 方法与 `FromString()` / `FromUint64()` 构造函数。用整数构造 QID 时**不要**使用 `message.QID(x)`（这会把 int 转成 Unicode 码点），应使用 `message.FromUint64(uint64(x))`。
+`message.QID` 是 `string` 的封装，提供 `String()` / `Uint64()` 方法与 `FromString()` / `FromUint64()` 构造函数。**多平台下 ID 采用前缀体系**：QQ 为裸数字（历史数据零迁移），其他平台带前缀（如飞书 `fs:oc_xxx`）；core 按前缀路由到对应适配器。`Uint64()` 仅对数字 ID（QQ）有效，其他平台返回 0。用整数构造 QID 时**不要**使用 `message.QID(x)`（这会把 int 转成 Unicode 码点），应使用 `message.FromUint64(uint64(x))`。
 
 ### command.Command
 
@@ -72,6 +93,7 @@ type BasicNotice struct {
     PostType   string  // "notice"
     SelfId     QID
     NoticeType string
+    Platform   string  // 平台标识（"qq" / "feishu"）
 }
 ```
 

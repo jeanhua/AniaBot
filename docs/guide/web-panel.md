@@ -47,11 +47,15 @@ ANIA_BOT_ADMIN_PANEL_ENABLE=true ./AniaBot
 
 全新安装的**首次登录**会自动进入设置向导，引导完成最基本的配置（其余配置可随时在面板中完善）：
 
-1. **连接 NapCat** —— WebSocket 地址、Access Token（可选）、管理员 QQ
+1. **连接 NapCat** —— WebSocket 地址、Access Token（可选）、管理员 QQ（默认启用 QQ 平台）
 2. **AI 对话模型** —— Base URL、API Key、模型
 3. **完成** —— 保存到数据库后一键「重启 Bot 生效」
 
 向导只出现一次（也可随时「跳过引导」），之后登录直接进入面板。
+
+::: tip 多平台
+向导只配置 QQ(NapCat)。要接入飞书等平台，在「配置 → 平台适配器」勾选启用并填写对应配置后重启即可，多平台可同时在线（见 [配置详解](/guide/configuration#platform-平台适配器开关)）。
+:::
 
 ## 重启 Bot
 

@@ -24,8 +24,8 @@ const features = [
   },
   {
     icon: 'link',
-    title: '协议兼容',
-    desc: '基于 OneBot v11 协议，支持 NapCat WebSocket / HTTP 双适配器，自由切换接入方式。',
+    title: '多平台接入',
+    desc: 'QQ（OneBot v11，NapCat WebSocket / HTTP）+ 飞书（官方 SDK 长连接 / Webhook），可同时在线、按需扩展新平台。',
   },
   {
     icon: 'database',
@@ -79,12 +79,12 @@ const steps = [
     desc: 'git clone 后 go mod tidy，需要 Go 1.25+',
   },
   {
-    title: '部署 NapCat',
-    desc: '启动 NapCat 并开放 WebSocket / HTTP 接口',
+    title: '部署平台端',
+    desc: 'QQ：部署 NapCat 开放 WebSocket / HTTP 接口；飞书：创建应用并开通权限',
   },
   {
     title: '面板中配置',
-    desc: '启动后在 Web 控制面板填写适配器地址、管理员 QQ 与 AI 的 api_key',
+    desc: '启动后在 Web 控制面板勾选平台、填写连接配置、管理员 ID 与 AI 的 api_key',
   },
   {
     title: '启动！',
@@ -112,7 +112,7 @@ const steps = [
 
   <div class="ania-section">
     <h2 class="ania-section-title">四步跑起来</h2>
-    <p class="ania-section-sub">从零到一个会聊天、会定时、会使用工具的 QQ 机器人</p>
+    <p class="ania-section-sub">从零到一个会聊天、会定时、会使用工具的多平台机器人</p>
     <div class="ania-steps">
       <div v-for="(s, i) in steps" :key="s.title" class="ania-step">
         <span class="step-no">{{ i + 1 }}</span>
