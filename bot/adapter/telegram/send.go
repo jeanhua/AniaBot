@@ -145,8 +145,9 @@ func (a *telegramAdapter) sendChain(ctx context.Context, chatID int64, segs []me
 
 // sendText 发送文本消息。默认 plain text（不设 parse_mode——AI 输出为 markdown
 // 源码，HTML/MarkdownV2 解析会在不完整标记时失败，纯文本最稳）；
-// 配置 bot.telegram.parse_mode=markdown/markdownv2 时先带 parse_mode 发送，
-// 解析失败（400，未转义特殊字符/截断切断标记等）自动降级纯文本重发。
+// 配置 bot.telegram.parse_mode=html/markdown/markdownv2 时按模式转换/携带
+// parse_mode 发送（html 模式先经 renderText 转换），解析失败（400，未转义特殊
+// 字符/截断切断标记等）自动降级纯文本重发（还原未转换的原文）。
 // 超过单条上限分包发送。
 func (a *telegramAdapter) sendText(ctx context.Context, chatID int64, text string, replyTo *int) (int, bool) {
 	if a.client == nil {
@@ -164,9 +165,14 @@ func (a *telegramAdapter) sendText(ctx context.Context, chatID int64, text strin
 		}
 		if pm := a.parseMode(); pm != "" {
 			params["parse_mode"] = pm
+			params["text"] = a.renderText(part)
 		}
 		var res messageSendResult
 		send := func(p map[string]any) error {
+			// 降级纯文本重发：还原未转换的原文（避免把 HTML 标签当文本发出）
+			if _, has := p["parse_mode"]; !has {
+				p["text"] = part
+			}
 			// 429 限流在调用内重试一次
 			_, err := retryOnce(ctx, func() (int, error) {
 				if err := a.client.call(ctx, "sendMessage", p, &res); err != nil {

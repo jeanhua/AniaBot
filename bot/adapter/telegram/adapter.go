@@ -18,7 +18,7 @@ type telegramConfig struct {
 	apiBase     string
 	proxy       string
 	pollTimeout int
-	parseMode   string // ""/"off"=纯文本；"markdown"=旧版 Markdown；"markdownv2"=MarkdownV2（失败降级纯文本）
+	parseMode   string // ""/"off"=纯文本；"html"=AI markdown 转 Telegram HTML 渲染；"markdown"=旧版 Markdown；"markdownv2"=MarkdownV2（原生模式失败降级纯文本）
 }
 
 // telegramAdapter Telegram 平台适配器：Bot API 长轮询。
@@ -174,16 +174,28 @@ func (a *telegramAdapter) mdEnabled() bool {
 }
 
 // parseMode 返回 Bot API 的 parse_mode 参数值：off/空 = ""（纯文本）、
-// markdown = "Markdown"（旧版：仅需转义 _ * [ ]，词中下划线不解析，对 AI
-// 输出最宽容）、markdownv2 = "MarkdownV2"（新版：转义严格）。
+// html = "HTML"（AI markdown 先经 markdownToTelegramHTML 转换为 Telegram HTML，
+// 任意输入都不会解析失败）、markdown = "Markdown"（旧版：仅需转义 _ * [ ]，
+// 词中下划线不解析）、markdownv2 = "MarkdownV2"（新版：转义严格）。
 func (a *telegramAdapter) parseMode() string {
 	switch a.cfg.parseMode {
+	case "html":
+		return "HTML"
 	case "markdown":
 		return "Markdown"
 	case "markdownv2":
 		return "MarkdownV2"
 	}
 	return ""
+}
+
+// renderText 按渲染模式转换待发送文本：html 模式把 AI markdown 源码转换为
+// Telegram HTML；其余模式原样返回（markdown/markdownv2 交给 Telegram 原生解析）。
+func (a *telegramAdapter) renderText(raw string) string {
+	if a.cfg.parseMode == "html" {
+		return markdownToTelegramHTML(raw)
+	}
+	return raw
 }
 
 // Serve 启动 Telegram 适配器（阻塞）：getMe 校验 → 长轮询循环。

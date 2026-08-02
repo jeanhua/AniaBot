@@ -335,6 +335,33 @@ func TestGenerateStreamContent(t *testing.T) {
 	}
 }
 
+// TestGenerateStreamUsageOnFinishChunk usage 附带在 finish_reason 块（Choices 非空）
+// 的提供方形态（DeepSeek 部分响应、智谱等）：usage 同样必须被提取，
+// 否则流式平台（Telegram/飞书）的 token 统计全为 0。
+func TestGenerateStreamUsageOnFinishChunk(t *testing.T) {
+	srv := httptest.NewServer(streamServer([]string{
+		streamEvent(`[{"index":0,"delta":{"role":"assistant","content":"你好"},"finish_reason":null}]`),
+		// usage 附带在最后一个内容块（Choices 非空 + finish_reason=stop），无独立末块
+		`{"id":"chatcmpl-test","object":"chat.completion.chunk","created":1,"model":"test",` +
+			`"choices":[{"index":0,"delta":{},"finish_reason":"stop"}],` +
+			`"usage":{"prompt_tokens":9,"completion_tokens":4,"total_tokens":13}}`,
+	}))
+	defer srv.Close()
+
+	c := newTestClient(srv.URL)
+	resp, usage, err := c.GenerateStream(context.Background(),
+		[]Message{TextMessage(RoleUser, "hello")}, ChatOptions{})
+	if err != nil {
+		t.Fatalf("GenerateStream 失败: %v", err)
+	}
+	if resp.Content != "你好" {
+		t.Fatalf("内容累积不符: %q", resp.Content)
+	}
+	if usage.PromptTokens != 9 || usage.CompletionTokens != 4 || usage.TotalTokens != 13 {
+		t.Fatalf("finish 块携带的 usage 未被提取: %+v", usage)
+	}
+}
+
 // TestGenerateStreamToolCalls 工具调用增量按 Index 组装（乱序到达）。
 func TestGenerateStreamToolCalls(t *testing.T) {
 	srv := httptest.NewServer(streamServer([]string{

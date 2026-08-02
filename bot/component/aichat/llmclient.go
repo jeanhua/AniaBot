@@ -313,18 +313,22 @@ func (a *streamAccumulator) Add(chunk openai.ChatCompletionChunk) {
 			}
 		}
 	}
-	// usage 仅在包含 include_usage 的末块返回（空 Choices）
-	if len(chunk.Choices) == 0 {
-		if chunk.Usage.PromptTokens > 0 {
-			a.usage.PromptTokens = int(chunk.Usage.PromptTokens)
-		}
-		if chunk.Usage.CompletionTokens > 0 {
-			a.usage.CompletionTokens = int(chunk.Usage.CompletionTokens)
-		}
-		if chunk.Usage.TotalTokens > 0 {
-			a.usage.TotalTokens = int(chunk.Usage.TotalTokens)
-		}
-		a.usage.CachedTokens = extractCachedTokens(&chunk.Usage)
+	// usage 提取：OpenAI 标准约定在独立末块（空 Choices）返回；但部分提供方
+	// （DeepSeek 部分响应、智谱等）把 usage 附带在 finish_reason 块（Choices 非空），
+	// 也有网关忽略 stream_options 直接附带在最后一个内容块——这些形态下仅靠
+	// 「空 Choices」判定会丢失全部用量（流式平台 token 统计为 0 的根因），
+	// 因此任何块只要 usage 字段非零就提取。
+	if chunk.Usage.PromptTokens > 0 {
+		a.usage.PromptTokens = int(chunk.Usage.PromptTokens)
+	}
+	if chunk.Usage.CompletionTokens > 0 {
+		a.usage.CompletionTokens = int(chunk.Usage.CompletionTokens)
+	}
+	if chunk.Usage.TotalTokens > 0 {
+		a.usage.TotalTokens = int(chunk.Usage.TotalTokens)
+	}
+	if cached := extractCachedTokens(&chunk.Usage); cached > 0 {
+		a.usage.CachedTokens = cached
 	}
 }
 

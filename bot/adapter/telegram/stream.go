@@ -128,41 +128,47 @@ func (h *telegramStreamHandle) End() {
 // "message is not modified"），消息本就完整，跳过无意义的重发。
 var errAlreadyShown = errors.New("telegram: 内容已展示，跳过重发")
 
-// patchLocked 以当前内容编辑消息；final 为 true 时尝试按配置的 parse_mode
-// 渲染（仅最终内容完整时才可能渲染成功，参考 aiogram 流式写法：流式阶段
-// 纯文本、最终编辑无条件应用 Markdown——即使内容与最后一条纯文本一致也要
-// 尝试，渲染生成的实体使消息内容变化），解析失败降级纯文本重发，网关异常
-// 响应（code 0）原样重试一次。纯文本编辑且内容与上次成功编辑一致时跳过。
+// patchLocked 以当前内容编辑消息；final 为 true 时按配置的 parse_mode 渲染
+// （html 模式先经 renderText 把 AI markdown 转换为 Telegram HTML；仅最终内容
+// 完整时才可能渲染成功，参考 aiogram 流式写法：流式阶段纯文本、最终编辑无条件
+// 应用渲染——即使内容与最后一条纯文本一致也要尝试，渲染生成的实体使消息内容
+// 变化），解析失败降级纯文本重发（还原未转换的原文），网关异常响应（code 0）
+// 原样重试一次。纯文本编辑且内容与上次成功编辑一致时跳过。
 // 调用方需持有 h.mu。
 func (h *telegramStreamHandle) patchLocked(final bool) error {
 	if h.a == nil || h.a.client == nil || h.msgID == 0 {
 		return nil
 	}
-	content := truncateRunes(h.prefix+h.content, maxEditTextLen)
+	raw := truncateRunes(h.prefix+h.content, maxEditTextLen)
 	pm := ""
+	text := raw
 	if final {
 		pm = h.a.parseMode()
+		text = h.a.renderText(raw)
 	}
 	// 纯文本且内容未变化：跳过（必然 "message is not modified"）。
 	// 带 parse_mode 的最终编辑不在此列——实体变化时 Telegram 接受编辑。
-	if pm == "" && content == h.lastSent {
+	if pm == "" && raw == h.lastSent {
 		return nil
 	}
 	params := map[string]any{
 		"chat_id":    h.chatID,
 		"message_id": h.msgID,
-		"text":       content,
+		"text":       text,
 	}
 	if pm != "" {
 		params["parse_mode"] = pm
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	// 400 解析失败→纯文本重发；网关异常响应（code 0）→原样重试一次。
+	// 400 解析失败→纯文本重发（还原原文）；网关异常响应（code 0）→原样重试一次。
 	// 降级重发的内容若已以纯文本展示过则跳过（重发必被拒，消息本就完整）。
 	err := retryAPIError(ctx, params, func(p map[string]any) error {
-		if _, has := p["parse_mode"]; !has && content == h.lastSent {
-			return errAlreadyShown
+		if _, has := p["parse_mode"]; !has {
+			if raw == h.lastSent {
+				return errAlreadyShown
+			}
+			p["text"] = raw // 降级纯文本：还原未转换的原文（避免发出 HTML 标签）
 		}
 		return h.a.client.call(ctx, "editMessageText", p, nil)
 	})
@@ -173,7 +179,7 @@ func (h *telegramStreamHandle) patchLocked(final bool) error {
 		h.a.logger.Warn("Telegram 流式回复更新失败", "messageId", h.msgID, "error", err)
 		return err
 	}
-	h.lastSent = content
+	h.lastSent = raw
 	h.lastPatch = time.Now()
 	return nil
 }

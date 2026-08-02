@@ -22,7 +22,7 @@ var telegramConfigFields = []pluginconfig.Field{
 	{Key: "bot.telegram.api_base", Label: "API Base URL", Type: "string", Group: "Telegram 适配器", Help: "官方为 https://api.telegram.org；国内部署可填自建 Bot API 网关/反代地址", Default: "https://api.telegram.org"},
 	{Key: "bot.telegram.proxy", Label: "HTTP/SOCKS5 代理", Type: "string", Group: "Telegram 适配器", Help: "格式 http://host:port 或 socks5://host:port；留空直连"},
 	{Key: "bot.telegram.polling.timeout", Label: "长轮询超时（秒）", Type: "int", Group: "Telegram 适配器", Help: "getUpdates 长轮询等待秒数，默认 30（建议 10-50）", Default: 30},
-	{Key: "bot.telegram.parse_mode", Label: "消息渲染模式", Type: "select", Options: []string{"off", "markdown", "markdownv2"}, Group: "Telegram 适配器", Help: "off=纯文本（默认，最稳定）；markdown=旧版 Markdown（仅需转义 _ * [ ]，词中下划线不解析，对 AI 输出最宽容）；markdownv2=新版（转义严格，需转义 _ * [ ] ( ) ~ ` > # + - = | { } . !）；流式结束/发送时渲染，解析失败自动降级纯文本", Default: "off"},
+	{Key: "bot.telegram.parse_mode", Label: "消息渲染模式", Type: "select", Options: []string{"off", "html", "markdown", "markdownv2"}, Group: "Telegram 适配器", Help: "off=纯文本；html=推荐：AI markdown 转换为 Telegram HTML 渲染（标题/加粗/代码块/列表/链接/引用），任意输入都不会解析失败；markdown=旧版 Telegram Markdown 原生解析（仅需转义 _ * [ ]）；markdownv2=新版原生解析（转义严格，AI 输出极易解析失败）；原生模式解析失败自动降级纯文本。流式结束/发送时渲染", Default: "html"},
 }
 
 // init 注册 Telegram 适配器定义。

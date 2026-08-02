@@ -452,6 +452,112 @@ func TestStreamEndGatewayRejectParseMode(t *testing.T) {
 	}
 }
 
+// TestSendTextHTML html 模式：AI markdown 转换为 Telegram HTML 携带 parse_mode=HTML。
+func TestSendTextHTML(t *testing.T) {
+	f := newFakeAPI()
+	a, srv := testAdapterWithServer(f)
+	defer srv.Close()
+	a.cfg.parseMode = "html"
+
+	if _, ok := a.sendText(t.Context(), -100, "# 标题\n\n**加粗** 与 `代码`", nil); !ok {
+		t.Fatal("html 模式发送应成功")
+	}
+	r := f.req(0)
+	if r.json["parse_mode"] != "HTML" {
+		t.Fatalf("应携带 parse_mode=HTML, got %+v", r.json)
+	}
+	want := "<b>标题</b>\n\n<b>加粗</b> 与 <code>代码</code>"
+	if r.json["text"] != want {
+		t.Fatalf("text = %q, want %q（markdown 已转换为 HTML）", r.json["text"], want)
+	}
+}
+
+// TestSendTextHTMLFallbackRestoresRaw html 解析失败降级纯文本重发时：
+// 必须还原未转换的原文（不能把 HTML 标签当纯文本发出）。
+func TestSendTextHTMLFallbackRestoresRaw(t *testing.T) {
+	f := newFakeAPI()
+	f.parseModeFail = 1
+	a, srv := testAdapterWithServer(f)
+	defer srv.Close()
+	a.cfg.parseMode = "html"
+
+	if _, ok := a.sendText(t.Context(), -100, "**加粗**", nil); !ok {
+		t.Fatal("html 解析失败降级纯文本应发送成功")
+	}
+	if n := f.count("sendMessage"); n != 2 {
+		t.Fatalf("sendMessage 调用 = %d, want 2（HTML + 纯文本降级）", n)
+	}
+	r0, r1 := f.req(0), f.req(1)
+	if r0.json["parse_mode"] != "HTML" || r0.json["text"] != "<b>加粗</b>" {
+		t.Fatalf("首次应为 HTML 转换后的内容, got %+v", r0.json)
+	}
+	if _, has := r1.json["parse_mode"]; has {
+		t.Fatalf("降级重发不应带 parse_mode, got %+v", r1.json)
+	}
+	if r1.json["text"] != "**加粗**" {
+		t.Fatalf("降级重发应还原原文, got %q, want %q", r1.json["text"], "**加粗**")
+	}
+}
+
+// TestStreamEndHTML 流式 html 模式：中间编辑纯文本（原文），End 最终编辑
+// 转换 HTML 携带 parse_mode=HTML。
+func TestStreamEndHTML(t *testing.T) {
+	f := newFakeAPI()
+	a, srv := testAdapterWithServer(f)
+	defer srv.Close()
+	a.cfg.parseMode = "html"
+
+	h := &telegramStreamHandle{a: a, chatID: -100, msgID: 7}
+	h.content = "## 结论\n\n**加粗** 内容"
+	if err := h.patchLocked(false); err != nil {
+		t.Fatalf("中间编辑失败: %v", err)
+	}
+	h.End()
+	if n := f.count("editMessageText"); n != 2 {
+		t.Fatalf("editMessageText 调用 = %d, want 2（中间纯文本 + 最终 HTML 渲染）", n)
+	}
+	r0, r1 := f.req(0), f.req(1)
+	if _, has := r0.json["parse_mode"]; has {
+		t.Fatalf("流式中间编辑不应带 parse_mode, got %+v", r0.json)
+	}
+	if r0.json["text"] != "## 结论\n\n**加粗** 内容" {
+		t.Fatalf("中间编辑应为原文, got %+v", r0.json)
+	}
+	if r1.json["parse_mode"] != "HTML" {
+		t.Fatalf("最终编辑应带 parse_mode=HTML, got %+v", r1.json)
+	}
+	if want := "<b>结论</b>\n\n<b>加粗</b> 内容"; r1.json["text"] != want {
+		t.Fatalf("最终编辑 text = %q, want %q", r1.json["text"], want)
+	}
+}
+
+// TestStreamEndHTMLFallbackRestoresRaw 流式 End 的 HTML 渲染失败时：
+// 降级纯文本重发还原原文（不发出 HTML 标签）。
+func TestStreamEndHTMLFallbackRestoresRaw(t *testing.T) {
+	f := newFakeAPI()
+	f.parseModeFail = 1
+	a, srv := testAdapterWithServer(f)
+	defer srv.Close()
+	a.cfg.parseMode = "html"
+
+	h := &telegramStreamHandle{a: a, chatID: -100, msgID: 7}
+	h.content = "**最终**"
+	h.End()
+	if n := f.count("editMessageText"); n != 2 {
+		t.Fatalf("editMessageText 调用 = %d, want 2（HTML + 纯文本降级）", n)
+	}
+	r0, r1 := f.req(0), f.req(1)
+	if r0.json["parse_mode"] != "HTML" || r0.json["text"] != "<b>最终</b>" {
+		t.Fatalf("首次应为 HTML 转换后的内容, got %+v", r0.json)
+	}
+	if _, has := r1.json["parse_mode"]; has {
+		t.Fatalf("降级重发不应带 parse_mode, got %+v", r1.json)
+	}
+	if r1.json["text"] != "**最终**" {
+		t.Fatalf("降级重发应还原原文, got %q, want %q", r1.json["text"], "**最终**")
+	}
+}
+
 // TestClientGatewayErrorStatus 网关错误页的错误信息附带 HTTP 状态码（诊断用）。
 func TestClientGatewayErrorStatus(t *testing.T) {
 	f := newFakeAPI()
