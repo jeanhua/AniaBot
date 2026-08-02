@@ -5,7 +5,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jeanhua/AniaBot/bot/utils"
 	"github.com/jeanhua/AniaBot/common/adapter"
+	"github.com/jeanhua/AniaBot/common/model/command"
 	"github.com/jeanhua/AniaBot/common/model/message"
 )
 
@@ -428,6 +430,44 @@ func TestHandleUpdateReaction(t *testing.T) {
 	}
 	if got.Platform != "telegram" || got.NoticeType != "group_msg_emoji_like" {
 		t.Fatalf("通知平台/类型 = %s/%s", got.Platform, got.NoticeType)
+	}
+}
+
+// TestGroupMentionEndToEnd 端到端：Telegram 原始消息（supergroup + mention 实体）
+// → 适配器翻译 → utils.ParseCommand 应识别为 Mention（@bot 触发 aichat 的前提）。
+// 防止 at 段 qq 与 msg.SelfId 格式不一致导致群内艾特静默失效。
+func TestGroupMentionEndToEnd(t *testing.T) {
+	a := testAdapter()
+	cmds := make(chan command.Command, 2)
+	a.SetTrigger(adapter.TriggerWrapper{
+		OnGroupMsg: func(msg message.Message) { cmds <- utils.ParseCommand(msg) },
+	})
+	for _, tc := range []struct {
+		text     string
+		entity   MessageEntity
+		entities []MessageEntity
+	}{
+		{text: "@MyBot 你好", entity: MessageEntity{Type: "mention", Offset: 0, Length: len("@MyBot")}},
+		{text: "@mybot", entity: MessageEntity{Type: "mention", Offset: 0, Length: len("@mybot")}},
+		// text_mention：Telegram 在用户从群成员列表选择 bot 展示名时生成
+		{text: "你好", entities: []MessageEntity{{Type: "text_mention", Offset: 0, Length: 0, User: &User{ID: 100, FirstName: "Bot"}}}},
+	} {
+		m := textMsg(-100, "supergroup", 222, tc.text)
+		m.MessageID = 42
+		if tc.entity.Type != "" {
+			m.Entities = []MessageEntity{tc.entity}
+		} else {
+			m.Entities = tc.entities
+		}
+		a.handleUpdate(&Update{UpdateID: 1, Message: m})
+		select {
+		case cmd := <-cmds:
+			if !cmd.Mention {
+				t.Fatalf("%q: 群内艾特应识别为 Mention, cmd=%+v", tc.text, cmd)
+			}
+		case <-time.After(2 * time.Second):
+			t.Fatalf("%q: 群消息未分发到回调", tc.text)
+		}
 	}
 }
 

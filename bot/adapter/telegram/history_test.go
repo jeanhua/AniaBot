@@ -3,6 +3,7 @@ package telegram
 import (
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/jeanhua/AniaBot/common/model/message"
 )
@@ -38,17 +39,25 @@ func TestMsgCachePushFind(t *testing.T) {
 }
 
 // TestMsgCacheCap 每会话消息数上限淘汰最旧；会话数上限淘汰最久未更新。
+// 注入假时钟保证 lastPush 严格递增，避免真实时钟 tick 内并发推入造成淘汰随机
+// （此前依赖 map 随机迭代序，真实环境 flaky）。
 func TestMsgCacheCap(t *testing.T) {
 	c := newMsgCache(3, 2)
+	now := time.Unix(1700000000, 0)
+	c.now = func() time.Time { return now }
+	push := func(chatID int64, mid int, text string) {
+		c.Push(chatIDRaw(chatID), cachedMsg(chatID, mid, text))
+		now = now.Add(time.Millisecond)
+	}
 	for i := 0; i < 5; i++ {
-		c.Push("-100", cachedMsg(-100, i+1, fmt.Sprintf("m%d", i+1)))
+		push(-100, i+1, fmt.Sprintf("m%d", i+1))
 	}
 	if msgs := c.History("-100", 0); len(msgs) != 3 || msgs[0].RawMessage != "m5" {
 		t.Fatalf("每会话上限淘汰失败: %+v", msgs)
 	}
 	// 会话数上限：-100 与 111 先入，222 入后淘汰最旧的 -100
-	c.Push("111", cachedMsg(111, 1, "x"))
-	c.Push("222", cachedMsg(222, 1, "y"))
+	push(111, 1, "x")
+	push(222, 1, "y")
 	if _, ok := c.Find("-100", 5); ok {
 		t.Fatal("超出会话数上限应淘汰最久未更新的会话")
 	}

@@ -120,9 +120,9 @@ type fallbackConfig struct {
 }
 
 // streamConfig 流式回复配置：平台支持「先发后改」时逐字展示回复
-// （如飞书卡片实时更新）；平台不支持或出错时自动退化为一次性回复。
+// （如飞书卡片/Telegram 消息实时更新）；平台不支持或出错时自动退化为一次性回复。
 type streamConfig struct {
-	Enable bool `cfg:"enable" label:"启用流式回复" group:"AI 对话 · 回复" help:"平台支持时逐字展示回复（飞书卡片实时更新）；不支持或出错时自动退化为一次性回复" default:"true"`
+	Enable bool `cfg:"enable" label:"启用流式回复" group:"AI 对话 · 回复" help:"平台支持时逐字展示回复（飞书卡片/Telegram 消息实时更新）；不支持或出错时自动退化为一次性回复" default:"true"`
 }
 
 // quotaConfig 每日 Token 配额限制配置：按会话与全局两个维度限制每日消耗。

@@ -23,6 +23,7 @@ type msgCache struct {
 	msgs     map[string]msgCacheEntry // chatID(原始) -> 消息列表（最新在前）
 	perChat  int                      // 每会话消息数上限
 	maxChats int                      // 会话数上限
+	now      func() time.Time         // 时钟（测试注入；nil 时用 time.Now）
 }
 
 type msgCacheEntry struct {
@@ -31,7 +32,7 @@ type msgCacheEntry struct {
 }
 
 func newMsgCache(perChat, maxChats int) *msgCache {
-	return &msgCache{msgs: map[string]msgCacheEntry{}, perChat: perChat, maxChats: maxChats}
+	return &msgCache{msgs: map[string]msgCacheEntry{}, perChat: perChat, maxChats: maxChats, now: time.Now}
 }
 
 // Push 记录一条消息；会话列表超上限时淘汰最旧，会话数超上限时淘汰最久未更新的会话。
@@ -43,7 +44,7 @@ func (c *msgCache) Push(chatID string, m message.Message) {
 	if len(e.msgs) > c.perChat {
 		e.msgs = e.msgs[:c.perChat]
 	}
-	e.lastPush = time.Now()
+	e.lastPush = c.now()
 	c.msgs[chatID] = e
 	if len(c.msgs) > c.maxChats {
 		var oldest string

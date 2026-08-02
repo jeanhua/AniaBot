@@ -321,7 +321,7 @@ func (p *AIChatPlugin) processChatBatch(ctx context.Context, b bot.Bot, id messa
 
 	chatOpts := p.buildChatOptions()
 
-	// 流式回复：平台支持「先发后改」（如飞书卡片 Patch）时逐字展示；
+	// 流式回复：平台支持「先发后改」（如飞书卡片/Telegram 消息 Patch）时逐字展示；
 	// 平台不支持或流式创建失败时自动退化为一次性回复（下方原发送路径）。
 	// 群聊首个增量携带本批全部发言者的 @ 提及（与一次性路径的提及集一致）。
 	var streamHandle bot.StreamHandle
