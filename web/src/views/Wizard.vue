@@ -8,7 +8,7 @@
       <!-- 步骤指示 -->
       <div class="flex border-b border-slate-100">
         <div
-          v-for="(label, i) in ['欢迎', '连接 NapCat', 'AI 配置', '完成']"
+          v-for="(label, i) in ['欢迎', '平台接入', 'AI 配置', '完成']"
           :key="i"
           class="flex-1 py-3.5 text-center text-xs transition-colors"
           :class="i === step ? 'text-zinc-700 font-semibold border-b-2 border-zinc-900 -mb-px' : i < step ? 'text-emerald-600' : 'text-slate-400'"
@@ -26,46 +26,109 @@
           <h1 class="text-xl font-bold text-slate-800">欢迎使用 AniaBot 🎉</h1>
           <p class="text-sm text-slate-500 leading-relaxed">
             这是首次启动，接下来用两步完成最基本的配置：<br />
-            <b>连接 NapCat</b>（QQ 协议端）和 <b>AI 对话模型</b>。<br />
+            <b>接入平台</b>（QQ / 飞书，可多选）和 <b>AI 对话模型</b>。<br />
             其余配置（插件、MCP、Prompt 覆盖等）可稍后在控制面板中完善。
           </p>
           <p class="text-xs text-slate-400">所有配置保存在数据库中，也可随时跳过，之后在「配置管理」中修改。</p>
         </div>
 
-        <!-- 步骤 1: 连接 NapCat -->
+        <!-- 步骤 1: 平台接入 -->
         <div v-else-if="step === 1" class="space-y-4">
-          <h2 class="text-base font-semibold text-slate-800">连接 NapCat</h2>
-          <div>
-            <label class="block text-xs font-medium text-slate-600 mb-1.5">连接模式</label>
-            <select v-model="form.mode" :class="inputClass">
-              <option value="ws">WebSocket（推荐）</option>
-              <option value="http">HTTP（Webhook 上报）</option>
-            </select>
+          <h2 class="text-base font-semibold text-slate-800">平台接入</h2>
+
+          <!-- QQ(NapCat) -->
+          <div :class="['border rounded-xl p-4 space-y-3 transition-colors', form.enableNapcat ? 'border-slate-300 bg-slate-50' : 'border-slate-200']">
+            <label class="flex items-center gap-2.5 cursor-pointer select-none">
+              <input type="checkbox" v-model="form.enableNapcat" class="w-4 h-4 accent-zinc-900" />
+              <span class="text-sm font-medium text-slate-700">
+                QQ（NapCat）
+                <span class="text-xs text-slate-400 font-normal">· OneBot v11 协议端，默认启用</span>
+              </span>
+            </label>
+            <template v-if="form.enableNapcat">
+              <div>
+                <label class="block text-xs font-medium text-slate-600 mb-1.5">连接模式</label>
+                <select v-model="form.mode" :class="inputClass">
+                  <option value="ws">WebSocket（推荐）</option>
+                  <option value="http">HTTP（Webhook 上报）</option>
+                </select>
+              </div>
+              <div v-if="form.mode === 'ws'">
+                <label class="block text-xs font-medium text-slate-600 mb-1.5">WebSocket 地址</label>
+                <input v-model="form.wsAddress" type="text" placeholder="ws://localhost:4455" :class="inputClass" />
+                <p class="text-xs text-slate-400 mt-1.5">NapCat 的 WebSocket 服务端地址；Docker 部署时把 localhost 换成内网 IP</p>
+              </div>
+              <template v-else>
+                <div>
+                  <label class="block text-xs font-medium text-slate-600 mb-1.5">HTTP 目标地址</label>
+                  <input v-model="form.httpTargetUrl" type="text" placeholder="http://localhost:6680" :class="inputClass" />
+                  <p class="text-xs text-slate-400 mt-1.5">NapCat 开放的 HTTP 调用地址；Docker 部署时把 localhost 换成内网 IP</p>
+                </div>
+                <div>
+                  <label class="block text-xs font-medium text-slate-600 mb-1.5">HTTP 监听端口</label>
+                  <input v-model="form.httpListenPort" type="number" placeholder="6679" :class="inputClass" />
+                  <p class="text-xs text-slate-400 mt-1.5">本机端口，NapCat 的 HTTP Client 向此端口上报事件</p>
+                </div>
+              </template>
+              <div>
+                <label class="block text-xs font-medium text-slate-600 mb-1.5">Access Token（可选）</label>
+                <input v-model="form.token" type="password" placeholder="NapCat 端设置了 token 时填写" :class="inputClass" />
+              </div>
+            </template>
           </div>
-          <div v-if="form.mode === 'ws'">
-            <label class="block text-xs font-medium text-slate-600 mb-1.5">WebSocket 地址</label>
-            <input v-model="form.wsAddress" type="text" placeholder="ws://localhost:4455" :class="inputClass" />
-            <p class="text-xs text-slate-400 mt-1.5">NapCat 的 WebSocket 服务端地址；Docker 部署时把 localhost 换成内网 IP</p>
+
+          <!-- 飞书(Lark) -->
+          <div :class="['border rounded-xl p-4 space-y-3 transition-colors', form.enableFeishu ? 'border-slate-300 bg-slate-50' : 'border-slate-200']">
+            <label class="flex items-center gap-2.5 cursor-pointer select-none">
+              <input type="checkbox" v-model="form.enableFeishu" class="w-4 h-4 accent-zinc-900" />
+              <span class="text-sm font-medium text-slate-700">
+                飞书（Lark）
+                <span class="text-xs text-slate-400 font-normal">· 官方 SDK，默认长连接无需公网地址</span>
+              </span>
+            </label>
+            <template v-if="form.enableFeishu">
+              <div>
+                <label class="block text-xs font-medium text-slate-600 mb-1.5">App ID</label>
+                <input v-model="form.feishuAppId" type="text" placeholder="cli_xxxxxxxx" :class="inputClass" />
+                <p class="text-xs text-slate-400 mt-1.5">飞书开放平台「凭证与基础信息」中的应用 App ID</p>
+              </div>
+              <div>
+                <label class="block text-xs font-medium text-slate-600 mb-1.5">App Secret</label>
+                <input v-model="form.feishuAppSecret" type="password" placeholder="应用 App Secret" :class="inputClass" />
+              </div>
+              <div>
+                <label class="block text-xs font-medium text-slate-600 mb-1.5">事件订阅方式</label>
+                <select v-model="form.feishuMode" :class="inputClass">
+                  <option value="ws">WebSocket 长连接（推荐，无需公网地址）</option>
+                  <option value="webhook">Webhook（需公网 HTTPS 回调地址）</option>
+                </select>
+              </div>
+              <template v-if="form.feishuMode === 'webhook'">
+                <div>
+                  <label class="block text-xs font-medium text-slate-600 mb-1.5">监听地址</label>
+                  <input v-model="form.feishuWebhookListen" type="text" placeholder="127.0.0.1:7777" :class="inputClass" />
+                </div>
+                <div>
+                  <label class="block text-xs font-medium text-slate-600 mb-1.5">回调路径</label>
+                  <input v-model="form.feishuWebhookPath" type="text" placeholder="/webhook/event" :class="inputClass" />
+                  <p class="text-xs text-slate-400 mt-1.5">飞书后台请求地址填 https://&lt;公网地址&gt;&lt;此路径&gt;</p>
+                </div>
+                <div>
+                  <label class="block text-xs font-medium text-slate-600 mb-1.5">Verification Token（可选）</label>
+                  <input v-model="form.feishuVerificationToken" type="text" placeholder="飞书「事件订阅」页配置" :class="inputClass" />
+                </div>
+                <div>
+                  <label class="block text-xs font-medium text-slate-600 mb-1.5">Encrypt Key（可选）</label>
+                  <input v-model="form.feishuEncryptKey" type="password" placeholder="事件加密密钥" :class="inputClass" />
+                </div>
+              </template>
+              <p class="text-xs text-slate-400">还需在飞书开放平台开通权限：im:message、im:message:send_as_bot、im:resource 等</p>
+            </template>
           </div>
-          <template v-else>
-            <div>
-              <label class="block text-xs font-medium text-slate-600 mb-1.5">HTTP 目标地址</label>
-              <input v-model="form.httpTargetUrl" type="text" placeholder="http://localhost:6680" :class="inputClass" />
-              <p class="text-xs text-slate-400 mt-1.5">NapCat 开放的 HTTP 调用地址；Docker 部署时把 localhost 换成内网 IP</p>
-            </div>
-            <div>
-              <label class="block text-xs font-medium text-slate-600 mb-1.5">HTTP 监听端口</label>
-              <input v-model="form.httpListenPort" type="number" placeholder="6679" :class="inputClass" />
-              <p class="text-xs text-slate-400 mt-1.5">本机端口，NapCat 的 HTTP Client 向此端口上报事件</p>
-            </div>
-          </template>
+
           <div>
-            <label class="block text-xs font-medium text-slate-600 mb-1.5">Access Token（可选）</label>
-            <input v-model="form.token" type="password" placeholder="NapCat 端设置了 token 时填写" :class="inputClass" />
-          </div>
-          <div>
-            <label class="block text-xs font-medium text-slate-600 mb-1.5">管理员 QQ</label>
-            <input v-model="form.adminId" type="number" placeholder="你的 QQ 号，接收启动/异常通知" :class="inputClass" />
+            <label class="block text-xs font-medium text-slate-600 mb-1.5">管理员 ID</label>
+            <input v-model="form.adminId" type="text" placeholder="QQ 号或带前缀的 ID（如 fs:ou_xxx），接收启动/异常通知" :class="inputClass" />
           </div>
         </div>
 
@@ -111,8 +174,9 @@
           <button v-if="step > 0 && step < 3" class="px-4 py-2 text-sm text-slate-500 hover:bg-slate-100 rounded-lg transition-colors" @click="step--">上一步</button>
           <button v-else class="px-4 py-2 text-sm text-slate-400 hover:text-slate-600 transition-colors" @click="onSkip">跳过引导</button>
 
-          <button v-if="step < 2" class="px-5 py-2 text-sm bg-zinc-900 text-white rounded-lg hover:bg-zinc-800 transition-colors" @click="step++">下一步</button>
+          <button v-if="step === 1" class="px-5 py-2 text-sm bg-zinc-900 text-white rounded-lg hover:bg-zinc-800 transition-colors" @click="onNext">下一步</button>
           <button v-else-if="step === 2" class="px-5 py-2 text-sm bg-zinc-900 text-white rounded-lg hover:bg-zinc-800 transition-colors" @click="onSave">保存并继续</button>
+          <button v-else-if="step === 0" class="px-5 py-2 text-sm bg-zinc-900 text-white rounded-lg hover:bg-zinc-800 transition-colors" @click="step++">下一步</button>
           <button v-else class="px-5 py-2 text-sm bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors" @click="onRestart">重启 Bot 生效</button>
         </div>
       </div>
@@ -131,25 +195,40 @@ const step = ref(0)
 const error = ref('')
 const restarting = ref(false)
 const form = reactive({
+  enableNapcat: true,
+  enableFeishu: false,
   mode: 'ws',
   wsAddress: '',
   httpTargetUrl: '',
   httpListenPort: '',
   token: '',
+  feishuAppId: '',
+  feishuAppSecret: '',
+  feishuMode: 'ws',
+  feishuWebhookListen: '',
+  feishuWebhookPath: '',
+  feishuVerificationToken: '',
+  feishuEncryptKey: '',
   adminId: '',
   baseUrl: '',
   apiKey: '',
   model: '',
 })
 
-// 预填当前默认/已迁移值
+// 预填当前默认/已迁移值（敏感字段不回填，用户留空则不修改）
 onMounted(async () => {
   try {
     const cfg = await api.getConfig()
+    form.enableNapcat = cfg['bot.platform.napcat.enable'] !== false
+    form.enableFeishu = cfg['bot.platform.feishu.enable'] === true
     form.mode = cfg['bot.adapter.mode'] || 'ws'
     form.wsAddress = cfg['bot.adapter.ws.address'] || ''
     form.httpTargetUrl = cfg['bot.adapter.http.target_url'] || ''
     form.httpListenPort = cfg['bot.adapter.http.listen_port'] ? String(cfg['bot.adapter.http.listen_port']) : ''
+    form.feishuAppId = cfg['bot.feishu.app_id'] || ''
+    form.feishuMode = cfg['bot.feishu.mode'] || 'ws'
+    form.feishuWebhookListen = cfg['bot.feishu.webhook.listen'] || ''
+    form.feishuWebhookPath = cfg['bot.feishu.webhook.path'] || ''
     form.baseUrl = cfg['plugin.ai_chat_bot.base_url'] || ''
     form.model = cfg['plugin.ai_chat_bot.model'] || ''
     const adminId = cfg['bot.admin_id']
@@ -157,20 +236,58 @@ onMounted(async () => {
   } catch { /* 忽略，使用空表单 */ }
 })
 
+// 平台步骤校验：至少启用一个平台
+function onNext() {
+  error.value = ''
+  if (!form.enableNapcat && !form.enableFeishu) {
+    error.value = '请至少启用一个平台（QQ 或飞书），也可「跳过引导」稍后在配置管理中设置'
+    return
+  }
+  step.value++
+}
+
 async function onSave() {
   error.value = ''
-  const updates = {}
-  updates['bot.adapter.mode'] = form.mode
-  if (form.mode === 'ws') {
-    if (form.wsAddress.trim()) updates['bot.adapter.ws.address'] = form.wsAddress.trim()
-  } else {
-    if (form.httpTargetUrl.trim()) updates['bot.adapter.http.target_url'] = form.httpTargetUrl.trim()
-    const port = parseInt(form.httpListenPort, 10)
-    if (!Number.isNaN(port) && port > 0) updates['bot.adapter.http.listen_port'] = port
+  if (!form.enableNapcat && !form.enableFeishu) {
+    error.value = '请至少启用一个平台（QQ 或飞书），也可「跳过引导」稍后在配置管理中设置'
+    return
   }
-  if (form.token.trim()) updates['bot.adapter.token'] = form.token.trim()
-  const adminId = parseInt(form.adminId, 10)
-  if (!Number.isNaN(adminId) && adminId > 0) updates['bot.admin_id'] = adminId
+  const updates = {}
+
+  // 平台开关
+  updates['bot.platform.napcat.enable'] = form.enableNapcat
+  updates['bot.platform.feishu.enable'] = form.enableFeishu
+
+  // QQ(NapCat)
+  if (form.enableNapcat) {
+    updates['bot.adapter.mode'] = form.mode
+    if (form.mode === 'ws') {
+      if (form.wsAddress.trim()) updates['bot.adapter.ws.address'] = form.wsAddress.trim()
+    } else {
+      if (form.httpTargetUrl.trim()) updates['bot.adapter.http.target_url'] = form.httpTargetUrl.trim()
+      const port = parseInt(form.httpListenPort, 10)
+      if (!Number.isNaN(port) && port > 0) updates['bot.adapter.http.listen_port'] = port
+    }
+    if (form.token.trim()) updates['bot.adapter.token'] = form.token.trim()
+  }
+
+  // 飞书
+  if (form.enableFeishu) {
+    if (form.feishuAppId.trim()) updates['bot.feishu.app_id'] = form.feishuAppId.trim()
+    if (form.feishuAppSecret.trim()) updates['bot.feishu.app_secret'] = form.feishuAppSecret.trim()
+    updates['bot.feishu.mode'] = form.feishuMode
+    if (form.feishuMode === 'webhook') {
+      if (form.feishuWebhookListen.trim()) updates['bot.feishu.webhook.listen'] = form.feishuWebhookListen.trim()
+      if (form.feishuWebhookPath.trim()) updates['bot.feishu.webhook.path'] = form.feishuWebhookPath.trim()
+      if (form.feishuVerificationToken.trim()) updates['bot.feishu.webhook.verification_token'] = form.feishuVerificationToken.trim()
+      if (form.feishuEncryptKey.trim()) updates['bot.feishu.webhook.encrypt_key'] = form.feishuEncryptKey.trim()
+    }
+  }
+
+  // 管理员 ID（字符串，可带平台前缀）
+  if (form.adminId.trim()) updates['bot.admin_id'] = form.adminId.trim()
+
+  // AI 对话
   if (form.baseUrl.trim()) updates['plugin.ai_chat_bot.base_url'] = form.baseUrl.trim()
   if (form.apiKey.trim()) updates['plugin.ai_chat_bot.api_key'] = form.apiKey.trim()
   if (form.model.trim()) updates['plugin.ai_chat_bot.model'] = form.model.trim()
