@@ -110,11 +110,21 @@ func (c *telegramClient) url(method string) string {
 	return c.apiBase + "/bot" + c.token + "/" + method
 }
 
-// unpack 解包 apiResponse：ok=false 时区分 429（telegramRateLimit）与业务错误。
+// unpack 解包响应。注意：resty 仅把 2xx 响应的 body 解析进 SetResult 的对象，
+// 4xx/5xx 的错误 body 不会填充（实测 HTTP 400 + JSON 时 ErrorCode/Description
+// 全部丢失，表现为 "api error 0"），因此这里一律自行解析 resp.Body()，
+// 官方错误 JSON 的 error_code/description 才能正确读出。
 func (c *telegramClient) unpack(method string, resp *resty.Response, result any) error {
-	ar, ok := resp.Result().(*apiResponse)
-	if !ok || ar == nil {
-		return errors.New("telegram: 无法解析 API 响应")
+	var ar apiResponse
+	if len(resp.Body()) > 0 {
+		if err := json.Unmarshal(resp.Body(), &ar); err != nil {
+			// 响应体不可解析（网关错误页/空/非 JSON）：保留 HTTP 状态码，错误码置 0
+			desc := strings.TrimSpace(string(resp.Body()))
+			if len(desc) > 200 {
+				desc = desc[:200]
+			}
+			return &telegramAPIError{status: resp.StatusCode(), code: 0, description: desc}
+		}
 	}
 	if !ar.OK {
 		if ar.ErrorCode == 429 {
@@ -143,7 +153,7 @@ func isBadRequest(err error) bool {
 }
 
 // isRetryableError 判断是否值得降级重试：MarkdownV2 解析失败（400）或
-// 网关异常响应（ok:false 无错误码/不可解析，多为反代瞬时故障，HTTP 状态非 200）。
+// 网关异常响应（ok:false 无错误码/不可解析）。
 func isRetryableError(err error) bool {
 	var ae *telegramAPIError
 	if !errors.As(err, &ae) {
@@ -152,10 +162,22 @@ func isRetryableError(err error) bool {
 	return ae.code == 400 || ae.code == 0
 }
 
+// isTransientGateway 判断是否为网关瞬时故障：错误码解析不出（code 0，响应体
+// 不可解析——错误页/空/截断）且 HTTP 状态为 5xx 或未知。官方 API 的 4xx 错误
+// 均带 error_code，code 0 + 4xx 只可能来自网关自有格式的确定性拒绝，非瞬时。
+func isTransientGateway(err error) bool {
+	var ae *telegramAPIError
+	if !errors.As(err, &ae) || ae.code != 0 {
+		return false
+	}
+	return ae.status == 0 || ae.status >= 500
+}
+
 // retryAPIError 对一次发送/编辑调用按错误类型降级重试：
-//  1. MarkdownV2 解析失败（400）→ 去掉 parse_mode 纯文本重发；
-//  2. 网关异常响应（code 0）→ 视为瞬时故障原样重试一次（保留 parse_mode），
-//     若重试后仍为 400 再走纯文本降级。
+//  1. MarkdownV2 解析失败（400）或网关自有格式拒绝（code 0 + 4xx，如不支持
+//     parse_mode）→ 去掉 parse_mode 纯文本重发；
+//  2. 网关瞬时故障（code 0 + 5xx/未知）→ 视为瞬时故障原样重试一次（保留
+//     parse_mode），仍失败再走纯文本降级。
 //
 // 429 限流重试（retryOnce）由调用方负责，网络错误不重试。
 func retryAPIError(ctx context.Context, params map[string]any, call func(map[string]any) error) error {
@@ -163,13 +185,12 @@ func retryAPIError(ctx context.Context, params map[string]any, call func(map[str
 	if err == nil || !isRetryableError(err) {
 		return err
 	}
-	var ae *telegramAPIError
-	if errors.As(err, &ae) && ae.code == 0 {
+	if isTransientGateway(err) {
 		if err = call(params); err == nil {
 			return nil
 		}
 	}
-	if isBadRequest(err) {
+	if isRetryableError(err) {
 		delete(params, "parse_mode")
 		return call(params)
 	}

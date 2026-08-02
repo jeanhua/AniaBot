@@ -49,7 +49,7 @@
 
 ### 修复
 
-- Telegram 发送/流式编辑遇**网关异常响应**（`ok:false` 无错误码或响应体不可解析，多为反代/网关瞬时故障，日志显示 `telegram api error 0`）时此前不重试，流式最终内容可能停留在节流窗口内未发出的旧版本；现视为瞬时故障原样重试一次（保留 parse_mode，仍失败且为 400 再降级纯文本），错误日志附带 HTTP 状态码便于诊断；流式最终内容与已展示内容一致时跳过无意义的最终编辑（消除 `message is not modified` 400 噪音）
+- **Telegram 错误码解析丢失**（此前「流式回复没发完」的真实根因）：resty 只把 2xx 响应的 body 解析进 `SetResult`，**4xx/5xx 的错误 JSON 不会填充**——官方 API 的 `error_code`/`description` 全部丢失，一切 400 错误（如 MarkdownV2 解析失败）都显示为 `telegram api error 0 (http 400)`，导致 400 降级纯文本重发从不触发，流式最终内容停留在节流窗口内未发出的旧版本；`unpack` 改为自行解析响应 body（429 识别与 MarkdownV2 纯文本降级恢复），错误日志附带 HTTP 状态码与响应体片段（截断 200 字符）便于诊断；响应体不可解析（错误页/空/截断）时 5xx/未知仍按瞬时故障保留 parse_mode 原样重试一次，4xx 按确定性拒绝直接纯文本降级；流式最终内容与已展示内容一致时跳过无意义的最终编辑（消除 `message is not modified` 400 噪音）
 - 飞书**图文（post 富文本）消息被静默丢弃**：接收事件的 post content 是顶层 `title`/`content` 结构（无 `zh_cn` 包装，与发送/API 侧不同），`parsePostContent` 强制要求 `zh_cn` 导致翻译为空段，`onReceive` 静默跳过——面板无日志、AI 不响应；现兼容两种结构（zh_cn 包装 + 顶层，顶层 content 为空时回退 content_v2），并修复 post 消息 at 元素占位符（`@_user_N`）未反查 open_id、直接输出 `fs:@_user_N` 的问题，新增回归测试
 - 飞书流式回复卡片 JSON 结构错误：schema 2.0 卡片中 `elements` 必须位于 `body` 下，此前放在根层级导致发消息/更新消息被 API 拒绝（code 230099 / 200621，`unknown property: elements`），已修正并更新测试
 

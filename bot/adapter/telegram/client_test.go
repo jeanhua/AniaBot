@@ -2,6 +2,7 @@ package telegram
 
 import (
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -27,6 +28,9 @@ type fakeAPI struct {
 	parseModeFail int
 	// htmlFail 后续请求返回 502 错误页的剩余次数（模拟网关异常响应：非 JSON、无 error_code）
 	htmlFail int
+	// text400Fail 后续请求返回 400 纯文本响应体的剩余次数（模拟网关自有错误格式：
+	// 拒绝请求但不带 error_code，如不支持 parse_mode）
+	text400Fail int
 }
 
 type recordedRequest struct {
@@ -88,6 +92,7 @@ func (f *fakeAPI) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		f.flaky429[method] = flaky - 1
 		f.mu.Unlock()
 		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusTooManyRequests)
 		_, _ = w.Write([]byte(`{"ok":false,"error_code":429,"description":"Too Many Requests","parameters":{"retry_after":1}}`))
 		return
 	}
@@ -103,6 +108,7 @@ func (f *fakeAPI) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	f.mu.Unlock()
 	if pmf > 0 {
 		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
 		_, _ = w.Write([]byte(`{"ok":false,"error_code":400,"description":"can't parse entities"}`))
 		return
 	}
@@ -118,6 +124,20 @@ func (f *fakeAPI) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if htmlf > 0 {
 		w.WriteHeader(http.StatusBadGateway)
 		_, _ = w.Write([]byte("<html>502 Bad Gateway</html>"))
+		return
+	}
+
+	// 网关自有格式 400：纯文本响应体，无 error_code（unpack 得 code 0 + http 400）
+	f.mu.Lock()
+	tf := 0
+	if f.text400Fail > 0 {
+		f.text400Fail--
+		tf = 1
+	}
+	f.mu.Unlock()
+	if tf > 0 {
+		w.WriteHeader(http.StatusBadRequest)
+		_, _ = w.Write([]byte("Bad Request: can't parse entities"))
 		return
 	}
 
@@ -212,6 +232,46 @@ func TestClientMultipartUpload(t *testing.T) {
 	}
 	if string(rec.file) != "HELLOPNG" {
 		t.Fatalf("上传字节 = %q, want HELLOPNG", rec.file)
+	}
+}
+
+// TestClientUnpackRealAPI400 官方 API 错误格式（HTTP 400 + JSON error_code）：
+// 错误码与描述应正确解析——resty 不会把 4xx 响应的 body 解析进 Result
+// （实测 ErrorCode/Description 全丢，表现为 code 0），unpack 需自行解析 body。
+func TestClientUnpackRealAPI400(t *testing.T) {
+	f := newFakeAPI()
+	f.parseModeFail = 1
+	a, srv := testAdapterWithServer(f)
+	defer srv.Close()
+
+	var res messageSendResult
+	err := a.client.call(t.Context(), "sendMessage", map[string]any{
+		"chat_id":    int64(-100),
+		"text":       "**加粗**",
+		"parse_mode": "MarkdownV2",
+	}, &res)
+	if err == nil {
+		t.Fatal("400 应返回错误")
+	}
+	var ae *telegramAPIError
+	if !errors.As(err, &ae) {
+		t.Fatalf("错误类型 = %T, want *telegramAPIError", err)
+	}
+	if ae.code != 400 {
+		t.Fatalf("error_code = %d, want 400（此前 resty 不解析 4xx body 导致 code 0）", ae.code)
+	}
+	if !strings.Contains(ae.description, "can't parse entities") {
+		t.Fatalf("description = %q, want 含 can't parse entities", ae.description)
+	}
+	if ae.status != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400", ae.status)
+	}
+	// 官方 400：应命中 MarkdownV2 降级判定（isBadRequest），不是网关瞬时故障
+	if !isBadRequest(err) {
+		t.Fatal("isBadRequest 应命中官方 400")
+	}
+	if isTransientGateway(err) {
+		t.Fatal("官方 400 不应判定为网关瞬时故障")
 	}
 }
 

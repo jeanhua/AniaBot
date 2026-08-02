@@ -349,6 +349,56 @@ func TestStreamEndSkipWhenUnchanged(t *testing.T) {
 	}
 }
 
+// TestSendTextGatewayRejectParseMode 网关以自有格式拒绝 parse_mode（code 0 + http 400）：
+// 非瞬时，直接去掉 parse_mode 纯文本重发。
+func TestSendTextGatewayRejectParseMode(t *testing.T) {
+	f := newFakeAPI()
+	f.text400Fail = 1
+	a, srv := testAdapterWithServer(f)
+	defer srv.Close()
+	a.cfg.parseMode = "markdownv2"
+
+	if _, ok := a.sendText(t.Context(), -100, "**加粗**", nil); !ok {
+		t.Fatal("网关拒绝 parse_mode 后应降级纯文本发送成功")
+	}
+	if n := f.count("sendMessage"); n != 2 {
+		t.Fatalf("sendMessage 调用 = %d, want 2（parse_mode + 纯文本降级，无原样重试）", n)
+	}
+	if f.req(0).json["parse_mode"] != "MarkdownV2" {
+		t.Fatalf("首次应带 parse_mode, got %+v", f.req(0).json)
+	}
+	if _, has := f.req(1).json["parse_mode"]; has {
+		t.Fatalf("降级重发不应带 parse_mode, got %+v", f.req(1).json)
+	}
+}
+
+// TestStreamEndGatewayRejectParseMode 流式 End 被网关拒绝 parse_mode（code 0 + http 400）：
+// 降级纯文本重发，最终内容落地，消息不再停在中间内容。
+func TestStreamEndGatewayRejectParseMode(t *testing.T) {
+	f := newFakeAPI()
+	f.text400Fail = 1
+	a, srv := testAdapterWithServer(f)
+	defer srv.Close()
+	a.cfg.parseMode = "markdownv2"
+
+	h := &telegramStreamHandle{a: a, chatID: -100, msgID: 7}
+	h.content = "**最终内容**"
+	h.End()
+	if n := f.count("editMessageText"); n != 2 {
+		t.Fatalf("editMessageText 调用 = %d, want 2（parse_mode + 纯文本降级，无原样重试）", n)
+	}
+	r0, r1 := f.req(0), f.req(1)
+	if r0.json["parse_mode"] != "MarkdownV2" {
+		t.Fatalf("首次应带 parse_mode, got %+v", r0.json)
+	}
+	if _, has := r1.json["parse_mode"]; has {
+		t.Fatalf("降级重发不应带 parse_mode, got %+v", r1.json)
+	}
+	if r1.json["text"] != "**最终内容**" {
+		t.Fatalf("降级重发应含最终内容, got %+v", r1.json)
+	}
+}
+
 // TestClientGatewayErrorStatus 网关错误页的错误信息附带 HTTP 状态码（诊断用）。
 func TestClientGatewayErrorStatus(t *testing.T) {
 	f := newFakeAPI()
