@@ -47,6 +47,7 @@
 
 ### 修复
 
+- 飞书**图文（post 富文本）消息被静默丢弃**：接收事件的 post content 是顶层 `title`/`content` 结构（无 `zh_cn` 包装，与发送/API 侧不同），`parsePostContent` 强制要求 `zh_cn` 导致翻译为空段，`onReceive` 静默跳过——面板无日志、AI 不响应；现兼容两种结构（zh_cn 包装 + 顶层，顶层 content 为空时回退 content_v2），并修复 post 消息 at 元素占位符（`@_user_N`）未反查 open_id、直接输出 `fs:@_user_N` 的问题，新增回归测试
 - 飞书流式回复卡片 JSON 结构错误：schema 2.0 卡片中 `elements` 必须位于 `body` 下，此前放在根层级导致发消息/更新消息被 API 拒绝（code 230099 / 200621，`unknown property: elements`），已修正并更新测试
 
 ## [v3.7.0] - 2026-08-01

@@ -813,25 +813,46 @@ type feishuPostElement struct {
 	UserName string `json:"user_name"`
 }
 
+// parsePostContent 解析富文本 post 消息，兼容两种 content 结构：
+//   - 发送/消息 API 侧：{"zh_cn": {"title": ..., "content": [...]}}
+//   - 接收事件侧：title/content/content_v2 在顶层（无 zh_cn 包装，
+//     content_v2 为含 md 标签的 markdown 版本，content 为空时回退）
 func (a *feishuAdapter) parsePostContent(content string, mentions []feishuMention) []message.OB11Segment {
 	var raw struct {
-		ZhCN *struct {
+		Title     string                `json:"title"`
+		Content   [][]feishuPostElement `json:"content"`
+		ContentV2 [][]feishuPostElement `json:"content_v2"`
+		ZhCN      *struct {
 			Title   string                `json:"title"`
 			Content [][]feishuPostElement `json:"content"`
 		} `json:"zh_cn"`
 	}
-	if err := json.Unmarshal([]byte(content), &raw); err != nil || raw.ZhCN == nil {
+	if err := json.Unmarshal([]byte(content), &raw); err != nil {
 		return nil
 	}
-	segs := make([]message.OB11Segment, 0)
-	if raw.ZhCN.Title != "" {
-		segs = appendTextSeg(segs, raw.ZhCN.Title+"\n")
+	title := raw.Title
+	lines := raw.Content
+	switch {
+	case raw.ZhCN != nil:
+		// 发送/消息 API 侧结构：zh_cn 语言键包装
+		title, lines = raw.ZhCN.Title, raw.ZhCN.Content
+	case len(lines) == 0 && len(raw.ContentV2) > 0:
+		// 接收事件侧 markdown 场景：content 为空时回退 content_v2
+		lines = raw.ContentV2
 	}
-	mentionByID := map[string]string{}
+	segs := make([]message.OB11Segment, 0, len(lines)+1)
+	if title != "" {
+		segs = appendTextSeg(segs, title+"\n")
+	}
+	// 接收事件侧 at 元素的 user_id 是占位符（@_user_N），需经 mentions 反查 open_id；
+	// 发送/消息 API 侧则是真实 open_id，可直接使用
+	openIDByPlaceholder := map[string]string{}
 	for _, m := range mentions {
-		mentionByID[m.openID] = m.key
+		if m.key != "" {
+			openIDByPlaceholder[m.key] = m.openID
+		}
 	}
-	for _, line := range raw.ZhCN.Content {
+	for _, line := range lines {
 		for _, el := range line {
 			switch el.Tag {
 			case "text":
@@ -841,11 +862,10 @@ func (a *feishuAdapter) parsePostContent(content string, mentions []feishuMentio
 					segs = appendTextSeg(segs, fmt.Sprintf("%s(%s)", el.Text, el.Href))
 				}
 			case "at":
-				if el.UserID != "" {
+				if openID, ok := openIDByPlaceholder[el.UserID]; ok && openID != "" {
+					segs = append(segs, message.OB11Segment{Type: message.SegmentMention, Data: message.MentionMessage{QQ: message.QID(idPrefix + openID)}.Marshal()})
+				} else if el.UserID != "" {
 					segs = append(segs, message.OB11Segment{Type: message.SegmentMention, Data: message.MentionMessage{QQ: message.QID(idPrefix + el.UserID)}.Marshal()})
-				} else if placeholder, ok := mentionByID[el.UserID]; ok {
-					segs = append(segs, message.OB11Segment{Type: message.SegmentMention, Data: message.MentionMessage{QQ: message.QID(idPrefix + el.UserID)}.Marshal()})
-					_ = placeholder
 				}
 			case "img":
 				if el.ImageKey != "" {
@@ -864,6 +884,7 @@ func (a *feishuAdapter) parsePostContent(content string, mentions []feishuMentio
 			case "hr":
 				segs = appendTextSeg(segs, "\n")
 			default:
+				// 含 md 等标签：text 键即为内容，直接按文本处理
 				segs = appendTextSeg(segs, el.Text)
 			}
 		}
