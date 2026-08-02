@@ -10,6 +10,25 @@
 
 ## [Unreleased]
 
+### 新增
+
+- **QQ 官方机器人适配器**（`bot/adapter/qqofficial`，平台标识 `qqofficial`，resty + gorilla/websocket 手写 QQ 开放平台 API v2 客户端，零新增依赖）：
+  - **接入方式**：AppID/AppSecret 经 `getAppAccessToken` 换取 access_token（自动到期刷新、401 自动失效重取；旧版 Token 鉴权已废弃不支持），WebSocket 网关（`GET /gateway` → wss）接收事件，REST OpenAPI 发送消息；**无需公网地址、无需部署协议端**；支持沙箱环境开关（`bot.qqofficial.sandbox`，机器人未上架前联调）与 API 地址自定义
+  - **WebSocket 网关**：OpCode 2 Identify / OpCode 6 Resume 断线会话恢复（seq 补发遗漏事件）、周期心跳 + 双周期未 ACK 僵尸连接主动断开重连、服务端 OpCode 7/9 重连与会话失效指令处理、指数退避重连循环；intents 固定订阅 `GROUP_AND_C2C_EVENT (1<<25)`（群@消息/单聊消息/好友与群机器人事件，频道场景不在范围）
+  - **消息收发翻译**：群@事件自动注入 `qq=SelfId` 的 at 段（官方群事件本就是 @机器人才推送，aichat 群聊 @ 触发开箱即用）；文本/图片/语音（优先 WAV 链接）/视频/文件附件映射通用段，mentions 映射 at 段，引用消息（message_type=103）正文为空时取引用内容兜底；出站文本/图片/语音/视频/文件/引用回复（`message_reference`），at 段按平台限制静默退化（官方群消息不支持 @ 成员），无显式 reply 段时自动隐式引用触发消息（被动回复凭证的 msg_id），引用气泡即群聊回复 UX 的主要表达
+  - **被动回复机制**：入站事件 msg_id 记录为会话回复凭证（群聊 5 分钟内最多 5 次、单聊 60 分钟内最多 4 次，`msg_seq` 递增），凭证过期/次数耗尽或收到 304026/304027/304103/40034005/40034024/40034128 时自动降级主动消息重试一次
+  - **媒体上传**：URL 直传（`/files`，平台下载转存）+ 本地字节**分片上传**（`upload_prepare` → 逐片 PUT 预签名 URL → `upload_part_finish` → `/files` 合并，携带整文件 md5/sha1/md5_10m 与分片 md5 校验），base64/data/file 源（meme、send_file 工具产物）均可发送
+  - **Markdown 渲染**（`bot.qqofficial.markdown`，默认关）：AI 文本回复以 msg_type=2 Markdown 消息发送（标题/加粗/列表富文本渲染），被拒（22006/50055/50056/50057/304036/40034124/40034127）自动降级纯文本
+  - **平台限制如实退化**：官方无消息历史/单条消息查询/群资料 API——`GetMsgDetail`/历史由内存缓存兜底（每会话最近 200 条，消息 ID 全局索引反查），`GetGroupDetail` 返回不支持；无消息编辑 API 不支持流式回复（自动退化一次性发送）；好友添加映射 `FriendAddNotice`，机器人被拉群/移出/删除、通知开关变更走 `OnPlatformEvent`（`qqofficial.*`）
+  - ID 前缀 `qo:`（openid 为 per-AppID 身份：同一用户群聊 member_openid 与单聊 user_openid 不同，与 NapCat 数字 QQ 号无关）；core 按 `EventKeyer.MessageKey`（消息 ID）去重官方明确的「相同 msg_id 可能重复推送」
+- **首次设置向导支持 QQ 官方接入**：平台步骤可勾选 QQ 官方机器人并填写 AppID/AppSecret（敏感字段留空不修改）与沙箱开关；平台配置字段经注册表自动渲染进「配置管理」页（QQ 官方适配器组）
+- 文档：配置详解新增 `qqofficial` 适配器章节（接入步骤、配置键、平台能力/限制清单），快速开始/项目介绍/Web 面板指南同步补充 QQ 官方平台说明
+
+### 修复
+
+- **QQ 官方适配器支持群消息全量模式**：后台开启「接收所有消息」后平台推送 `GROUP_MESSAGE_CREATE`（群内每条消息）而非仅 `GROUP_AT_MESSAGE_CREATE`，此前该事件被忽略导致群内 @ 无响应；现两种事件共用群消息翻译：AT 事件必然注入 `qq=SelfId` 的 at 段，全量事件按 mentions 是否含机器人自身决定是否注入（非 @ 消息不带 at 段、正常流经插件链，与 NapCat 语义一致，AI 仍只在被 @ 时响应）；机器人自己发送的消息（author.id 等于自身）被过滤防止自我循环
+- **QQ 官方全量模式 @ 识别修复**：READY 的 `user.id` 与群聊场景 `member_openid` 不同源，按 ID 比对 mentions 永远不匹配（@ 消息未注入 SelfId at 段，AI 不响应）；现按官方 User 结构的 `bot` 标志识别机器人条目并辅以用户名比对（同群多机器人场景，ID 全等兜底），@ 的是其他机器人时不误触发；全量模式 content 残留的 `<@openid>` 提及标记（文档称已剥离，实测未剥离）按 mentions 自动剥离，不再污染 AI 输入
+
 ## [v4.0.0] - 2026-08-02
 
 🎉 v4.0.0版本正式发布，新增飞书、telegram平台接入

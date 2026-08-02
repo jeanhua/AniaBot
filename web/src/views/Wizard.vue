@@ -26,7 +26,7 @@
           <h1 class="text-xl font-bold text-slate-800">欢迎使用 AniaBot 🎉</h1>
           <p class="text-sm text-slate-500 leading-relaxed">
             这是首次启动，接下来用两步完成最基本的配置：<br />
-            <b>接入平台</b>（QQ / 飞书 / Telegram，可多选）和 <b>AI 对话模型</b>。<br />
+            <b>接入平台</b>（QQ / QQ 官方 / 飞书 / Telegram，可多选）和 <b>AI 对话模型</b>。<br />
             其余配置（插件、MCP、Prompt 覆盖等）可稍后在控制面板中完善。
           </p>
           <p class="text-xs text-slate-400">所有配置保存在数据库中，也可随时跳过，之后在「配置管理」中修改。</p>
@@ -74,6 +74,34 @@
                 <label class="block text-xs font-medium text-slate-600 mb-1.5">Access Token（可选）</label>
                 <input v-model="form.token" type="password" placeholder="NapCat 端设置了 token 时填写" :class="inputClass" />
               </div>
+            </template>
+          </div>
+
+          <!-- QQ 官方机器人 -->
+          <div :class="['border rounded-xl p-4 space-y-3 transition-colors', form.enableQQOfficial ? 'border-slate-300 bg-slate-50' : 'border-slate-200']">
+            <label class="flex items-center gap-2.5 cursor-pointer select-none">
+              <input type="checkbox" v-model="form.enableQQOfficial" class="w-4 h-4 accent-zinc-900" />
+              <span class="text-sm font-medium text-slate-700">
+                QQ 官方机器人
+                <span class="text-xs text-slate-400 font-normal">· QQ 开放平台官方接口，WebSocket 收事件无需公网地址</span>
+              </span>
+            </label>
+            <template v-if="form.enableQQOfficial">
+              <div>
+                <label class="block text-xs font-medium text-slate-600 mb-1.5">AppID</label>
+                <input v-model="form.qqofficialAppId" type="text" placeholder="机器人 AppID" :class="inputClass" />
+                <p class="text-xs text-slate-400 mt-1.5">QQ 开放平台（q.qq.com）管理端「开发 → 开发设置」中的 AppID</p>
+              </div>
+              <div>
+                <label class="block text-xs font-medium text-slate-600 mb-1.5">AppSecret</label>
+                <input v-model="form.qqofficialAppSecret" type="password" placeholder="机器人 AppSecret" :class="inputClass" />
+                <p class="text-xs text-slate-400 mt-1.5">用于换取 access_token；旧版 Token 鉴权已废弃，请勿填写 Token</p>
+              </div>
+              <label class="flex items-center gap-2.5 cursor-pointer select-none">
+                <input type="checkbox" v-model="form.qqofficialSandbox" class="w-4 h-4 accent-zinc-900" />
+                <span class="text-xs text-slate-600">沙箱环境（机器人未上架前联调使用）</span>
+              </label>
+              <p class="text-xs text-slate-400">还需在开放平台「功能配置」中勾选群聊/单聊场景的事件订阅（WebSocket 方式）</p>
             </template>
           </div>
 
@@ -222,6 +250,7 @@ const error = ref('')
 const restarting = ref(false)
 const form = reactive({
   enableNapcat: true,
+  enableQQOfficial: false,
   enableFeishu: false,
   enableTelegram: false,
   mode: 'ws',
@@ -229,6 +258,9 @@ const form = reactive({
   httpTargetUrl: '',
   httpListenPort: '',
   token: '',
+  qqofficialAppId: '',
+  qqofficialAppSecret: '',
+  qqofficialSandbox: false,
   feishuAppId: '',
   feishuAppSecret: '',
   feishuMode: 'ws',
@@ -250,11 +282,14 @@ onMounted(async () => {
   try {
     const cfg = await api.getConfig()
     form.enableNapcat = cfg['bot.platform.napcat.enable'] !== false
+    form.enableQQOfficial = cfg['bot.platform.qqofficial.enable'] === true
     form.enableFeishu = cfg['bot.platform.feishu.enable'] === true
     form.mode = cfg['bot.adapter.mode'] || 'ws'
     form.wsAddress = cfg['bot.adapter.ws.address'] || ''
     form.httpTargetUrl = cfg['bot.adapter.http.target_url'] || ''
     form.httpListenPort = cfg['bot.adapter.http.listen_port'] ? String(cfg['bot.adapter.http.listen_port']) : ''
+    form.qqofficialAppId = cfg['bot.qqofficial.app_id'] || ''
+    form.qqofficialSandbox = cfg['bot.qqofficial.sandbox'] === true
     form.feishuAppId = cfg['bot.feishu.app_id'] || ''
     form.feishuMode = cfg['bot.feishu.mode'] || 'ws'
     form.feishuWebhookListen = cfg['bot.feishu.webhook.listen'] || ''
@@ -272,7 +307,7 @@ onMounted(async () => {
 // 平台步骤校验：至少启用一个平台
 function onNext() {
   error.value = ''
-  if (!form.enableNapcat && !form.enableFeishu && !form.enableTelegram) {
+  if (!form.enableNapcat && !form.enableQQOfficial && !form.enableFeishu && !form.enableTelegram) {
     error.value = '请至少启用一个平台（QQ、飞书或 Telegram），也可「跳过引导」稍后在配置管理中设置'
     return
   }
@@ -281,7 +316,7 @@ function onNext() {
 
 async function onSave() {
   error.value = ''
-  if (!form.enableNapcat && !form.enableFeishu && !form.enableTelegram) {
+  if (!form.enableNapcat && !form.enableQQOfficial && !form.enableFeishu && !form.enableTelegram) {
     error.value = '请至少启用一个平台（QQ、飞书或 Telegram），也可「跳过引导」稍后在配置管理中设置'
     return
   }
@@ -289,6 +324,7 @@ async function onSave() {
 
   // 平台开关
   updates['bot.platform.napcat.enable'] = form.enableNapcat
+  updates['bot.platform.qqofficial.enable'] = form.enableQQOfficial
   updates['bot.platform.feishu.enable'] = form.enableFeishu
   updates['bot.platform.telegram.enable'] = form.enableTelegram
 
@@ -303,6 +339,13 @@ async function onSave() {
       if (!Number.isNaN(port) && port > 0) updates['bot.adapter.http.listen_port'] = port
     }
     if (form.token.trim()) updates['bot.adapter.token'] = form.token.trim()
+  }
+
+  // QQ 官方（AppSecret 敏感字段：留空不修改）
+  if (form.enableQQOfficial) {
+    if (form.qqofficialAppId.trim()) updates['bot.qqofficial.app_id'] = form.qqofficialAppId.trim()
+    if (form.qqofficialAppSecret.trim()) updates['bot.qqofficial.app_secret'] = form.qqofficialAppSecret.trim()
+    updates['bot.qqofficial.sandbox'] = form.qqofficialSandbox
   }
 
   // 飞书

@@ -1,6 +1,6 @@
 # 项目介绍
 
-**AniaBot** 是一个基于 Go 语言开发的高性能、插件驱动型**多平台**机器人框架。它通过可插拔的适配器接入各平台 —— QQ 经 [NapCat](https://napneko.github.io/) 以 OneBot v11 协议，飞书/Lark 经官方 SDK（WebSocket 长连接 / Webhook），Telegram 经 Bot API（长轮询，无需公网地址）——并内置了一套由 OpenAI 兼容大模型驱动的 AI 对话引擎 —— 支持工具调用（Tool Use）、MCP（Model Context Protocol）、Skill 系统与 AI 定时任务。
+**AniaBot** 是一个基于 Go 语言开发的高性能、插件驱动型**多平台**机器人框架。它通过可插拔的适配器接入各平台 —— QQ 经 [NapCat](https://napneko.github.io/) 以 OneBot v11 协议、QQ 官方经 QQ 开放平台 API v2（WebSocket 网关，无需公网地址）、飞书/Lark 经官方 SDK（WebSocket 长连接 / Webhook）、Telegram 经 Bot API（长轮询，无需公网地址）——并内置了一套由 OpenAI 兼容大模型驱动的 AI 对话引擎 —— 支持工具调用（Tool Use）、MCP（Model Context Protocol）、Skill 系统与 AI 定时任务。
 
 ## 设计理念
 
@@ -12,9 +12,9 @@ AniaBot 的核心哲学是 **「一切皆为插件」**：
 
 ## 多平台模型
 
-框架把所有平台归一化为 **OneBot v11 消息段格式**（`OB11Segment{Type, Data}`）作为通用消息形态，适配器在边界做双向翻译。多平台可并存（QQ + 飞书 + Telegram 同时在线）：
+框架把所有平台归一化为 **OneBot v11 消息段格式**（`OB11Segment{Type, Data}`）作为通用消息形态，适配器在边界做双向翻译。多平台可并存（QQ + QQ 官方 + 飞书 + Telegram 同时在线）：
 
-- **ID 前缀体系**：QQ 历史裸数字 ID 无前缀（存量数据零迁移），其他平台统一加前缀（如飞书 `fs:`、Telegram `tg:`）；core 按前缀路由到对应适配器
+- **ID 前缀体系**：QQ 历史裸数字 ID 无前缀（存量数据零迁移），其他平台统一加前缀（如 QQ 官方 `qo:`、飞书 `fs:`、Telegram `tg:`）；core 按前缀路由到对应适配器
 - **能力分层**：公共能力（发群/私聊消息、查消息/群/历史）在 `bot.Bot`，平台专属能力（合并转发、戳一戳、rkey 等）在可选接口 `bot.QQ`，插件类型断言探测、自动退化
 - **新增平台** = 实现一个适配器包 + `cmd/main.go` 加一行空白导入，框架核心零改动（见 [快速开始](/guide/getting-started)）
 
@@ -24,9 +24,11 @@ AniaBot 的核心哲学是 **「一切皆为插件」**：
 flowchart TB
     QQ[QQ 服务器] <--> NapCat[NapCat 协议端]
     NapCat <-->|WebSocket / HTTP| NAdapter[NapCat 适配器<br/>bot/adapter/napcat · QQ]
+    QQOfficial[QQ 开放平台] <-->|WebSocket 网关 / OpenAPI| QAdapter[QQ 官方适配器<br/>bot/adapter/qqofficial]
     Feishu[飞书/Lark] <-->|长连接 / Webhook| FAdapter[飞书适配器<br/>bot/adapter/feishu]
     Telegram[Telegram] <-->|Bot API 长轮询| TAdapter[Telegram 适配器<br/>bot/adapter/telegram]
     NAdapter --> Registry[适配器注册表<br/>common/adapter]
+    QAdapter --> Registry
     FAdapter --> Registry
     TAdapter --> Registry
     Registry --> Core[AniaBot 核心<br/>bot/core]

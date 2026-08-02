@@ -9,14 +9,24 @@ bot:
     enable: true # 是否启用 Web 控制面板
     listen: "127.0.0.1:7700" # 监听地址（如需局域网访问改为 0.0.0.0:7700，注意面板有密码保护）
 
-  # 平台适配器启用开关（可多平台并存：QQ + 飞书 + Telegram……）。默认仅启用 QQ(NapCat)。
+  # 平台适配器启用开关（可多平台并存：QQ + QQ 官方 + 飞书 + Telegram……）。默认仅启用 QQ(NapCat)。
   platform:
     napcat:
       enable: true # 是否启用 QQ 平台
+    qqofficial:
+      enable: false # 是否启用 QQ 官方平台（需同时配置下方 bot.qqofficial.*）
     feishu:
       enable: false # 是否启用飞书平台（需同时配置下方 bot.feishu.*）
     telegram:
       enable: false # 是否启用 Telegram 平台（需同时配置下方 bot.telegram.*）
+
+  # QQ 官方适配器（QQ 开放平台 API v2，WebSocket 网关收事件，无需公网地址）
+  qqofficial:
+    app_id: # QQ 开放平台管理端「开发 → 开发设置」中的机器人 AppID
+    app_secret: # 机器人 AppSecret（用于换取 access_token；旧 Token 鉴权已废弃）
+    sandbox: false # 沙箱环境开关（机器人未上架前只能连接沙箱环境联调）
+    api_base: https://api.sgroup.qq.com # OpenAPI 地址（沙箱开关优先于此配置）
+    markdown: false # AI 文本回复以 Markdown 消息发送（发送失败自动降级纯文本）
 
   # 飞书适配器
   feishu:
