@@ -6,6 +6,8 @@ import (
 	"errors"
 	"fmt"
 	"math/rand"
+	"sort"
+	"strings"
 	"time"
 
 	"github.com/jeanhua/AniaBot/bot/component/llmtool"
@@ -170,6 +172,174 @@ func (c *LLMClient) generateOnce(ctx context.Context, apiMessages []openai.ChatC
 
 	resp, usage := c.parseResponse(completion)
 	return resp, usage, nil
+}
+
+// GenerateStream 流式生成：与 Generate 相同的重试/备用模型语义，
+// 唯一差异——已输出首字节后失败不重试、不切换备用（避免重复输出），
+// 返回已积累的（部分）内容与错误。opts.OnStreamDelta 为 nil 时退化为一次性。
+func (c *LLMClient) GenerateStream(ctx context.Context, messages []Message, opts ChatOptions) (GenerateResponse, TokenUsage, error) {
+	apiMessages, err := c.convertMessages(messages)
+	if err != nil {
+		return GenerateResponse{}, TokenUsage{}, err
+	}
+
+	for attempt := 0; ; attempt++ {
+		resp, usage, started, err := c.streamOnce(ctx, apiMessages, opts)
+		if err == nil {
+			return resp, usage, nil
+		}
+
+		if ctx.Err() != nil {
+			// 取消/超时不重试，原样返回（上层据此区分超时与普通错误）
+			return GenerateResponse{}, TokenUsage{}, ctx.Err()
+		}
+
+		// 已输出首字节：不重试不切换备用，避免用户看到重复输出
+		if started {
+			return resp, usage, fmt.Errorf("LLM stream failed after partial output: %w", err)
+		}
+
+		if !retryableLLMError(err) || c.retry == nil || attempt+1 >= c.retry.maxAttempts {
+			if c.fallback != nil {
+				fbResp, fbUsage, fbErr := c.fallback.GenerateStream(ctx, messages, opts)
+				if fbErr == nil {
+					return fbResp, fbUsage, nil
+				}
+				if ctx.Err() != nil {
+					return GenerateResponse{}, TokenUsage{}, ctx.Err()
+				}
+				return GenerateResponse{}, TokenUsage{}, fmt.Errorf("LLM generation failed (fallback): %w", fbErr)
+			}
+			return GenerateResponse{}, TokenUsage{}, fmt.Errorf("LLM generation failed: %w", err)
+		}
+
+		delay := retryDelay(c.retry.baseDelay, attempt)
+		select {
+		case <-ctx.Done():
+			return GenerateResponse{}, TokenUsage{}, ctx.Err()
+		case <-time.After(delay):
+		}
+	}
+}
+
+// streamOnce 单次流式请求：累积内容/reasoning/tool calls（按 Index 组装）/usage，
+// 返回 started 表示是否已收到任何数据块（首字节前失败可安全重试）。
+func (c *LLMClient) streamOnce(ctx context.Context, apiMessages []openai.ChatCompletionMessageParamUnion, opts ChatOptions) (GenerateResponse, TokenUsage, bool, error) {
+	params := openai.ChatCompletionNewParams{
+		Model:    shared.ChatModel(c.model),
+		Messages: apiMessages,
+	}
+	c.applyOptions(&params, opts)
+	params.StreamOptions = openai.ChatCompletionStreamOptionsParam{IncludeUsage: openai.Bool(true)}
+
+	stream := c.client.Chat.Completions.NewStreaming(ctx, params)
+	defer stream.Close()
+
+	acc := newStreamAccumulator()
+	started := false
+	for stream.Next() {
+		chunk := stream.Current()
+		acc.Add(chunk)
+		// 真实数据块（有 choices 或 usage）才算已开始输出；
+		// SDK 对流内 error 事件不产出 chunk（Next 直接返回 false 并置 Err）
+		if len(chunk.Choices) > 0 || chunk.Usage.PromptTokens > 0 ||
+			chunk.Usage.CompletionTokens > 0 || chunk.Usage.TotalTokens > 0 {
+			started = true
+		}
+		// 增量回调在流读取 goroutine 串行调用
+		if opts.OnStreamDelta != nil && len(chunk.Choices) > 0 && chunk.Choices[0].Delta.Content != "" {
+			opts.OnStreamDelta(chunk.Choices[0].Delta.Content)
+		}
+	}
+	if err := stream.Err(); err != nil {
+		if ctx.Err() != nil {
+			return acc.Result(), acc.usage, started, ctx.Err()
+		}
+		return acc.Result(), acc.usage, started, err
+	}
+
+	resp := acc.Result()
+	if resp.Content == "" && len(resp.ToolCalls) == 0 {
+		return resp, acc.usage, started, fmt.Errorf("no choices returned from LLM")
+	}
+	return resp, acc.usage, started, nil
+}
+
+// streamAccumulator 流式块累积器：内容、reasoning_content、按 Index 组装的
+// tool calls（首块带 ID/Name，后续块为 Arguments 增量）与末块 usage。
+type streamAccumulator struct {
+	content   strings.Builder
+	reasoning strings.Builder
+	toolCalls map[int64]*llmtool.ToolCall
+	toolOrder []int64
+	usage     TokenUsage
+}
+
+func newStreamAccumulator() *streamAccumulator {
+	return &streamAccumulator{toolCalls: map[int64]*llmtool.ToolCall{}}
+}
+
+func (a *streamAccumulator) Add(chunk openai.ChatCompletionChunk) {
+	for _, choice := range chunk.Choices {
+		d := choice.Delta
+		if d.Content != "" {
+			a.content.WriteString(d.Content)
+		}
+		// reasoning_content 为扩展字段，从块原始 JSON 提取
+		if raw := d.RawJSON(); raw != "" {
+			var rawMap map[string]any
+			if err := json.Unmarshal([]byte(raw), &rawMap); err == nil {
+				if rc, ok := rawMap["reasoning_content"].(string); ok && rc != "" {
+					a.reasoning.WriteString(rc)
+				}
+			}
+		}
+		for _, tc := range d.ToolCalls {
+			cur, ok := a.toolCalls[tc.Index]
+			if !ok {
+				cur = &llmtool.ToolCall{ID: tc.ID, Name: tc.Function.Name}
+				a.toolCalls[tc.Index] = cur
+				a.toolOrder = append(a.toolOrder, tc.Index)
+				continue
+			}
+			if tc.ID != "" {
+				cur.ID = tc.ID
+			}
+			if tc.Function.Name != "" {
+				cur.Name = tc.Function.Name
+			}
+			if tc.Function.Arguments != "" {
+				cur.Arguments += tc.Function.Arguments
+			}
+		}
+	}
+	// usage 仅在包含 include_usage 的末块返回（空 Choices）
+	if len(chunk.Choices) == 0 {
+		if chunk.Usage.PromptTokens > 0 {
+			a.usage.PromptTokens = int(chunk.Usage.PromptTokens)
+		}
+		if chunk.Usage.CompletionTokens > 0 {
+			a.usage.CompletionTokens = int(chunk.Usage.CompletionTokens)
+		}
+		if chunk.Usage.TotalTokens > 0 {
+			a.usage.TotalTokens = int(chunk.Usage.TotalTokens)
+		}
+		a.usage.CachedTokens = extractCachedTokens(&chunk.Usage)
+	}
+}
+
+func (a *streamAccumulator) Result() GenerateResponse {
+	resp := GenerateResponse{
+		Content:          a.content.String(),
+		ReasoningContent: a.reasoning.String(),
+	}
+	// 按 Index 升序输出（模型的规范顺序），与流到达顺序无关
+	order := append([]int64(nil), a.toolOrder...)
+	sort.Slice(order, func(i, j int) bool { return order[i] < order[j] })
+	for _, idx := range order {
+		resp.ToolCalls = append(resp.ToolCalls, *a.toolCalls[idx])
+	}
+	return resp
 }
 
 // retryableLLMError 判断错误是否值得重试：HTTP 429/5xx 可重试；

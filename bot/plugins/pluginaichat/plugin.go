@@ -320,6 +320,63 @@ func (p *AIChatPlugin) processChatBatch(ctx context.Context, b bot.Bot, id messa
 	}
 
 	chatOpts := p.buildChatOptions()
+
+	// 流式回复：平台支持「先发后改」（如飞书卡片 Patch）时逐字展示；
+	// 平台不支持或流式创建失败时自动退化为一次性回复（下方原发送路径）。
+	// 群聊首个增量携带本批全部发言者的 @ 提及（与一次性路径的提及集一致）。
+	var streamHandle bot.StreamHandle
+	var streamBuf strings.Builder
+	streaming := false
+	streamUnsupported := false
+	if p.cfg.Stream.Enable {
+		if ss, ok := b.(bot.StreamSender); ok {
+			chatOpts.OnStreamDelta = func(delta string) {
+				if delta == "" || streamUnsupported {
+					return
+				}
+				streamBuf.WriteString(delta)
+				if streamHandle != nil {
+					streamHandle.Patch(aichat.RemoveThinkContent(streamBuf.String()))
+					return
+				}
+				// 首个增量：创建流式消息（初始内容即当前已积累文本）
+				if isGroup {
+					builder := msgchain.Builder().Group()
+					seen := make(map[message.QID]struct{}, len(batch))
+					for i := range batch {
+						uid := batch[i].Sender.UserId
+						if uid == message.FromUint64(0) {
+							continue // 跳过子代理结果等合成消息，避免 @ 到无效用户
+						}
+						if _, ok := seen[uid]; ok {
+							continue
+						}
+						seen[uid] = struct{}{}
+						builder.Mention(uid)
+					}
+					builder.Text(" " + aichat.RemoveThinkContent(streamBuf.String()))
+					streamHandle, streaming = ss.SendGroupStream(id, builder.Build())
+				} else {
+					builder := msgchain.Builder().Friend()
+					builder.Text(aichat.RemoveThinkContent(streamBuf.String()))
+					streamHandle, streaming = ss.SendFriendStream(id, builder.Build())
+				}
+				if !streaming {
+					// 平台不支持流式：忽略后续增量，走一次性兜底
+					streamUnsupported = true
+					streamHandle = nil
+				}
+			}
+			// 工具调用轮结束：结束当前流式消息；下一轮首个增量创建新消息
+			chatOpts.OnStreamRoundEnd = func() {
+				if streamHandle != nil {
+					streamHandle.End()
+					streamHandle = nil
+				}
+			}
+		}
+	}
+
 	recorder := p.beginQuery(chat, id, isGroup, batch, extraText)
 
 	// 知识库自动注入：对用户消息做轻量关键词检索，命中相关文档时把片段拼到
@@ -335,6 +392,11 @@ func (p *AIChatPlugin) processChatBatch(ctx context.Context, b bot.Bot, id messa
 	}
 
 	resp, usage, err := chat.Chat(ctx, extraText, msgFuncs, chatOpts)
+	// 流式回复收尾：Chat 返回后结束流式消息（幂等；工具轮边界已由 OnStreamRoundEnd 处理）
+	if streamHandle != nil {
+		streamHandle.End()
+		streamHandle = nil
+	}
 	p.finishQuery(recorder, chat, usage, resp, err)
 	// 主对话消耗计入会话与全局配额（子代理/团队/定时任务在其各自调用点累加）
 	p.quotaManager.Add(sessionKey(id, isGroup), usage)
@@ -359,6 +421,11 @@ func (p *AIChatPlugin) processChatBatch(ctx context.Context, b bot.Bot, id messa
 	}
 
 	p.Logger.Info("AI请求token消耗", "id", id, "is_group", isGroup, "batch", len(batch), "prompt_tokens", usage.PromptTokens, "completion_tokens", usage.CompletionTokens, "total_tokens", usage.TotalTokens)
+
+	// 流式已发出回复时不再走一次性发送（内容已逐字展示在流式消息中）
+	if streaming {
+		return true
+	}
 
 	if isGroup {
 		// 群聊中 @ 本批所有发言者（去重），让排队消息的每个人都收到回应

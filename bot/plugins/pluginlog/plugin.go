@@ -180,13 +180,13 @@ func (p *LogPlugin) OnFriendAdd(ctx context.Context, bot bot.Bot, n message.Frie
 
 func (p *LogPlugin) OnGroupRecall(ctx context.Context, bot bot.Bot, n message.GroupRecallNotice) error {
 	p.notice(n.GroupId, n.UserId, "群消息撤回",
-		fmt.Sprintf("%s 的消息（%d）被 %s 撤回", n.UserId.String(), n.MessageId, n.OperatorId.String()))
+		fmt.Sprintf("%s 的消息（%s）被 %s 撤回", n.UserId.String(), n.MessageId.String(), n.OperatorId.String()))
 	return nil
 }
 
 func (p *LogPlugin) OnFriendRecall(ctx context.Context, bot bot.Bot, n message.FriendRecallNotice) error {
 	p.notice("", n.UserId, "好友消息撤回",
-		fmt.Sprintf("%s 撤回了消息（%d）", n.UserId.String(), n.MessageId))
+		fmt.Sprintf("%s 撤回了消息（%s）", n.UserId.String(), n.MessageId.String()))
 	return nil
 }
 

@@ -21,6 +21,7 @@ import (
 
 	"github.com/go-resty/resty/v2"
 	"github.com/jeanhua/AniaBot/common/adapter"
+	"github.com/jeanhua/AniaBot/common/bot"
 	"github.com/jeanhua/AniaBot/common/model/message"
 	"github.com/jeanhua/AniaBot/common/msgchain"
 	lark "github.com/larksuite/oapi-sdk-go/v3"
@@ -32,6 +33,7 @@ import (
 	larkevent "github.com/larksuite/oapi-sdk-go/v3/event"
 	"github.com/larksuite/oapi-sdk-go/v3/event/dispatcher"
 	"github.com/larksuite/oapi-sdk-go/v3/event/dispatcher/callback"
+	larkcontact "github.com/larksuite/oapi-sdk-go/v3/service/contact/v3"
 	larkim "github.com/larksuite/oapi-sdk-go/v3/service/im/v1"
 	larkws "github.com/larksuite/oapi-sdk-go/v3/ws"
 	"github.com/spf13/viper"
@@ -63,6 +65,8 @@ type feishuAdapter struct {
 	p2pChats sync.Map
 	// messageID -> chatID 缓存：表情回应等事件不含 chat_id，需由消息反查
 	msgChats sync.Map
+	// nameCache open_id -> 用户昵称缓存（通讯录查询结果，飞书消息事件本身不含发送者昵称）
+	nameCache sync.Map
 
 	connState string
 	lastErr   string
@@ -89,6 +93,115 @@ func NewAdapter(cfg *viper.Viper) *feishuAdapter {
 
 func (a *feishuAdapter) Name() string     { return "feishu" }
 func (a *feishuAdapter) Platform() string { return Platform }
+
+// MessageKey 实现 adapter.EventKeyer：按 message_id 去重（官方推荐，勿用 event_id——
+// 每次投递 event_id 可能不同）。core 层以此为键做幂等去重；与适配器自身的早期
+// 去重（省图片下载）互不冲突。
+func (a *feishuAdapter) MessageKey(msg message.Message) (string, bool) {
+	raw := msg.MessageId.TrimPrefix(idPrefix)
+	if raw == "" {
+		return "", false
+	}
+	return "msg:" + raw, true
+}
+
+// NoticeKey 实现 adapter.EventKeyer：撤回通知按 message_id 去重（与适配器早期
+// 去重的键一致）；表情回应无可靠 core 键，维持适配器级去重（core 层返回 false）。
+func (a *feishuAdapter) NoticeKey(noticeType string, notice any) (string, bool) {
+	switch v := notice.(type) {
+	case message.GroupRecallNotice:
+		if raw := v.MessageId.TrimPrefix(idPrefix); raw != "" {
+			return "recall:" + raw, true
+		}
+	case message.FriendRecallNotice:
+		if raw := v.MessageId.TrimPrefix(idPrefix); raw != "" {
+			return "recall:" + raw, true
+		}
+	}
+	return "", false
+}
+
+// SelfID 实现 adapter.SelfIDProvider：返回机器人自身 open_id（带 fs: 前缀）。
+func (a *feishuAdapter) SelfID() message.QID {
+	return a.selfID()
+}
+
+// feishuSegments 飞书出站支持的通用段类型；其余段（face/video/json/music/forward）
+// 在 segmentsToContent 的 default 分支被忽略，core 会对发送这类段告警。
+var feishuSegments = []string{
+	message.SegmentText, message.SegmentMention, message.SegmentImage,
+	message.SegmentReply, message.SegmentFile, message.SegmentRecord,
+}
+
+// SupportedSegments 实现 adapter.SegmentSupport。
+func (a *feishuAdapter) SupportedSegments() []string { return feishuSegments }
+
+// SendGroupStream 实现 adapter.StreamSenderExt：以 interactive 卡片创建流式群聊消息。
+func (a *feishuAdapter) SendGroupStream(groupId message.QID, chain msgchain.GroupChain) (bot.StreamHandle, bool) {
+	return a.sendStream(context.Background(), groupId.TrimPrefix(idPrefix), "chat_id", chain.GetGroupMsg())
+}
+
+// SendFriendStream 实现 adapter.StreamSenderExt：优先复用缓存的 p2p chat_id，
+// 否则按 open_id 直接创建流式私聊消息。
+func (a *feishuAdapter) SendFriendStream(userId message.QID, chain msgchain.FriendChain) (bot.StreamHandle, bool) {
+	openID := userId.TrimPrefix(idPrefix)
+	if openID == "" {
+		return nil, false
+	}
+	if chatID, ok := a.p2pChats.Load(openID); ok {
+		if h, ok2 := a.sendStream(context.Background(), chatID.(string), "chat_id", chain.GetFriendMsg()); ok2 {
+			return h, true
+		}
+	}
+	return a.sendStream(context.Background(), openID, "open_id", chain.GetFriendMsg())
+}
+
+// sendStream 以 interactive 卡片创建流式消息：段 → markdown（text 拼接、at 转
+// <at user_id> 标记、@all 转 <at user_id="all">）；图片/文件等无法入卡片的段忽略
+// （core 已按 SupportedSegments 告警）；首条 reply 段作为回复目标（走 im.message.reply）。
+// 提及（@）单独收集为 prefix：后续 Patch 替换整个卡片内容时重新带上，保证 @ 不消失。
+func (a *feishuAdapter) sendStream(ctx context.Context, receiveID, receiveType string, segs []message.OB11Segment) (bot.StreamHandle, bool) {
+	if a.client == nil {
+		return nil, false
+	}
+	var textSb, mentionSb strings.Builder
+	var replyTo string
+	for _, s := range segs {
+		switch s.Type {
+		case message.SegmentText:
+			if t, ok := s.Data["text"].(string); ok {
+				textSb.WriteString(t)
+			}
+		case message.SegmentMention:
+			if qq, ok := s.Data["qq"].(string); ok {
+				if qq == "all" {
+					mentionSb.WriteString(`<at user_id="all"></at>`)
+				} else if openID := message.QID(qq).TrimPrefix(idPrefix); openID != "" {
+					mentionSb.WriteString(`<at user_id="` + openID + `"></at>`)
+				}
+			}
+		case message.SegmentReply:
+			if replyTo == "" {
+				if id, ok := s.Data["id"].(string); ok {
+					replyTo = message.QID(id).TrimPrefix(idPrefix)
+				}
+			}
+		}
+	}
+	prefix, text := mentionSb.String(), textSb.String()
+	content := buildCardJSON(prefix + text)
+	var msgID string
+	var ok bool
+	if replyTo != "" {
+		msgID, ok = a.sendReply(ctx, replyTo, "interactive", content)
+	} else {
+		msgID, ok = a.sendCreate(ctx, receiveID, receiveType, "interactive", content)
+	}
+	if !ok || msgID == "" {
+		return nil, false
+	}
+	return &feishuStreamHandle{a: a, msgID: msgID, prefix: prefix, content: text}, true
+}
 
 func (a *feishuAdapter) SetTrigger(trigger adapter.TriggerWrapper) {
 	a.mu.Lock()
@@ -134,6 +247,37 @@ func (a *feishuAdapter) selfID() message.QID {
 		return ""
 	}
 	return message.QID(idPrefix + a.selfOpenID)
+}
+
+// resolveName 查询用户昵称（带缓存）。飞书消息事件本身不含发送者昵称，
+// 需经通讯录 contact/v3/user/get 查询（需 contact:user.base:readonly 权限）；
+// 权限缺失/用户不可见/查询失败时静默返回空串（调用方降级为空昵称兜底显示）。
+// 仅在异步分发 goroutine 内调用（2s 超时不阻塞 ACK），sender_type==bot 已在上游过滤。
+func (a *feishuAdapter) resolveName(openID string) string {
+	if openID == "" {
+		return ""
+	}
+	if v, ok := a.nameCache.Load(openID); ok {
+		return v.(string)
+	}
+	if a.client == nil {
+		return ""
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	resp, err := a.client.Contact.V3.User.Get(ctx, larkcontact.NewGetUserReqBuilder().
+		UserId(openID).
+		UserIdType("open_id").
+		Build())
+	if err != nil || resp == nil || !resp.Success() || resp.Data == nil ||
+		resp.Data.User == nil || resp.Data.User.Name == nil {
+		return ""
+	}
+	if name := deref(resp.Data.User.Name); name != "" {
+		a.nameCache.Store(openID, name)
+		return name
+	}
+	return ""
 }
 
 func (a *feishuAdapter) setSelfOpenID(openID string) {
@@ -301,16 +445,22 @@ func (a *feishuAdapter) onReceive(ctx context.Context, event *larkim.P2MessageRe
 		if len(ob) == 0 {
 			return
 		}
+		// 对齐 OneBot v11 消息类型语义：p2p 私聊 = private + sub_type=friend
+		msgType, subType := chatType, ""
+		if chatType == "p2p" {
+			msgType, subType = "private", "friend"
+		}
 		msg := message.Message{
 			Time:        msTimeToUint(em.CreateTime),
 			PostType:    "message",
-			MessageType: chatType, // group / p2p
+			MessageType: msgType,
+			SubType:     subType,
 			MessageId:   message.QID(idPrefix + deref(em.MessageId)),
 			GroupId:     message.QID(idPrefix + deref(em.ChatId)),
 			UserId:      message.QID(idPrefix + openID),
 			Message:     ob,
 			RawMessage:  segmentsPlainText(ob),
-			Sender:      message.MessageSender{UserId: message.QID(idPrefix + openID)},
+			Sender:      message.MessageSender{UserId: message.QID(idPrefix + openID), Nickname: a.resolveName(openID)},
 			SelfId:      a.selfID(),
 			Platform:    Platform,
 		}
@@ -341,7 +491,7 @@ func (a *feishuAdapter) onRecall(ctx context.Context, event *larkim.P2MessageRec
 	chatID := *ev.ChatId
 	if a.chatTypeOf(chatID) == "p2p" {
 		if trig.OnFriendRecall != nil {
-			n := message.FriendRecallNotice{UserId: "", MessageId: 0}
+			n := message.FriendRecallNotice{UserId: "", MessageId: message.QID(idPrefix + deref(ev.MessageId))}
 			n.Time = uint(time.Now().Unix())
 			n.PostType = "notice"
 			n.NoticeType = "friend_recall"
@@ -352,14 +502,12 @@ func (a *feishuAdapter) onRecall(ctx context.Context, event *larkim.P2MessageRec
 		return nil
 	}
 	if trig.OnGroupRecall != nil {
-		n := message.GroupRecallNotice{GroupId: message.QID(idPrefix + chatID)}
+		n := message.GroupRecallNotice{GroupId: message.QID(idPrefix + chatID), MessageId: message.QID(idPrefix + deref(ev.MessageId))}
 		n.Time = uint(time.Now().Unix())
 		n.PostType = "notice"
 		n.NoticeType = "group_recall"
 		n.SelfId = a.selfID()
 		n.SetPlatform(Platform)
-		// 飞书 message_id 为字符串，OneBot 模型的 uint 字段无法承载，仅记日志
-		a.logger.Debug("群消息撤回", "chatId", chatID, "messageId", deref(ev.MessageId))
 		trig.OnGroupRecall(n)
 	}
 	return nil
@@ -544,9 +692,9 @@ func (a *feishuAdapter) eventMessageToOB11(em *larkim.EventMessage) []message.OB
 	case "audio":
 		segs = a.parseAudioContent(content, msgID)
 	case "merge_forward":
-		segs = []message.OB11Segment{{Type: message.SegmentText, Data: map[string]any{"text": "[合并转发消息]"}}}
+		segs = []message.OB11Segment{{Type: message.SegmentText, Data: message.TextMessage{Text: "[合并转发消息]"}.Marshal()}}
 	default:
-		segs = []message.OB11Segment{{Type: message.SegmentText, Data: map[string]any{"text": "[" + *em.MessageType + "]"}}}
+		segs = []message.OB11Segment{{Type: message.SegmentText, Data: message.TextMessage{Text: "[" + *em.MessageType + "]"}.Marshal()}}
 	}
 	// 图片段补齐 URL（下载为 data URI）
 	for i := range segs {
@@ -593,7 +741,7 @@ func (a *feishuAdapter) apiMessageToOB11(m *larkim.Message) []message.OB11Segmen
 	case "audio":
 		segs = a.parseAudioContent(content, msgID)
 	default:
-		segs = []message.OB11Segment{{Type: message.SegmentText, Data: map[string]any{"text": "[" + *m.MsgType + "]"}}}
+		segs = []message.OB11Segment{{Type: message.SegmentText, Data: message.TextMessage{Text: "[" + *m.MsgType + "]"}.Marshal()}}
 	}
 	for i := range segs {
 		if segs[i].Type == message.SegmentImage {
@@ -623,7 +771,7 @@ func (a *feishuAdapter) parseTextContent(content string, mentions []feishuMentio
 	if strings.Contains(text, "@_all") {
 		parts := strings.Split(text, "@_all")
 		segs = appendTextSeg(segs, parts[0])
-		segs = append(segs, message.OB11Segment{Type: message.SegmentMention, Data: map[string]any{"qq": "all"}})
+		segs = append(segs, message.OB11Segment{Type: message.SegmentMention, Data: message.MentionMessage{IsAll: true}.Marshal()})
 		text = strings.Join(parts[1:], "")
 	}
 	// 按 mentions 的占位符拆分文本
@@ -636,7 +784,7 @@ func (a *feishuAdapter) parseTextContent(content string, mentions []feishuMentio
 			continue
 		}
 		segs = appendTextSeg(segs, text[:idx])
-		segs = append(segs, message.OB11Segment{Type: message.SegmentMention, Data: map[string]any{"qq": idPrefix + m.openID}})
+		segs = append(segs, message.OB11Segment{Type: message.SegmentMention, Data: message.MentionMessage{QQ: message.QID(idPrefix + m.openID)}.Marshal()})
 		text = text[idx+len(m.key):]
 	}
 	// 兜底：消息 API 的文本可能使用 <at> 标记而非占位符
@@ -646,7 +794,7 @@ func (a *feishuAdapter) parseTextContent(content string, mentions []feishuMentio
 		pos := 0
 		for _, loc := range idxs {
 			segs = appendTextSeg(segs, text[pos:loc[0]])
-			segs = append(segs, message.OB11Segment{Type: message.SegmentMention, Data: map[string]any{"qq": idPrefix + text[loc[2]:loc[3]]}})
+			segs = append(segs, message.OB11Segment{Type: message.SegmentMention, Data: message.MentionMessage{QQ: message.QID(idPrefix + text[loc[2]:loc[3]])}.Marshal()})
 			pos = loc[1]
 		}
 		text = text[pos:]
@@ -694,20 +842,20 @@ func (a *feishuAdapter) parsePostContent(content string, mentions []feishuMentio
 				}
 			case "at":
 				if el.UserID != "" {
-					segs = append(segs, message.OB11Segment{Type: message.SegmentMention, Data: map[string]any{"qq": idPrefix + el.UserID}})
+					segs = append(segs, message.OB11Segment{Type: message.SegmentMention, Data: message.MentionMessage{QQ: message.QID(idPrefix + el.UserID)}.Marshal()})
 				} else if placeholder, ok := mentionByID[el.UserID]; ok {
-					segs = append(segs, message.OB11Segment{Type: message.SegmentMention, Data: map[string]any{"qq": idPrefix + el.UserID}})
+					segs = append(segs, message.OB11Segment{Type: message.SegmentMention, Data: message.MentionMessage{QQ: message.QID(idPrefix + el.UserID)}.Marshal()})
 					_ = placeholder
 				}
 			case "img":
 				if el.ImageKey != "" {
-					segs = append(segs, message.OB11Segment{Type: message.SegmentImage, Data: map[string]any{"file": el.ImageKey}})
+					segs = append(segs, message.OB11Segment{Type: message.SegmentImage, Data: message.ImageMessage{File: el.ImageKey}.Marshal()})
 				}
 			case "media":
 				if el.ImageKey != "" {
-					segs = append(segs, message.OB11Segment{Type: message.SegmentImage, Data: map[string]any{"file": el.ImageKey}})
+					segs = append(segs, message.OB11Segment{Type: message.SegmentImage, Data: message.ImageMessage{File: el.ImageKey}.Marshal()})
 				} else if el.FileKey != "" {
-					segs = append(segs, message.OB11Segment{Type: message.SegmentFile, Data: map[string]any{"file": el.FileKey, "file_id": el.FileKey}})
+					segs = append(segs, message.OB11Segment{Type: message.SegmentFile, Data: message.FileMessage{File: el.FileKey, FileId: el.FileKey}.Marshal()})
 				}
 			case "emotion":
 				segs = appendTextSeg(segs, "["+el.Text+"]")
@@ -731,7 +879,7 @@ func (a *feishuAdapter) parseImageContent(content, msgID string) []message.OB11S
 	if err := json.Unmarshal([]byte(content), &raw); err != nil || raw.ImageKey == "" {
 		return nil
 	}
-	return []message.OB11Segment{{Type: message.SegmentImage, Data: map[string]any{"file": raw.ImageKey}}}
+	return []message.OB11Segment{{Type: message.SegmentImage, Data: message.ImageMessage{File: raw.ImageKey}.Marshal()}}
 }
 
 func (a *feishuAdapter) parseFileContent(content, msgID string) []message.OB11Segment {
@@ -742,7 +890,7 @@ func (a *feishuAdapter) parseFileContent(content, msgID string) []message.OB11Se
 	if err := json.Unmarshal([]byte(content), &raw); err != nil || raw.FileKey == "" {
 		return nil
 	}
-	return []message.OB11Segment{{Type: message.SegmentFile, Data: map[string]any{"file": raw.FileKey, "file_id": raw.FileKey, "name": raw.FileName}}}
+	return []message.OB11Segment{{Type: message.SegmentFile, Data: message.FileMessage{File: raw.FileKey, FileId: raw.FileKey, Name: raw.FileName}.Marshal()}}
 }
 
 func (a *feishuAdapter) parseAudioContent(content, msgID string) []message.OB11Segment {
@@ -752,7 +900,7 @@ func (a *feishuAdapter) parseAudioContent(content, msgID string) []message.OB11S
 	if err := json.Unmarshal([]byte(content), &raw); err != nil || raw.FileKey == "" {
 		return nil
 	}
-	return []message.OB11Segment{{Type: message.SegmentRecord, Data: map[string]any{"file": raw.FileKey}}}
+	return []message.OB11Segment{{Type: message.SegmentRecord, Data: message.RecordMessage{URL: raw.FileKey}.Marshal()}}
 }
 
 // downloadResource 通过 im.messageResource.get 下载消息资源并转为 data URI。
@@ -793,7 +941,7 @@ func appendTextSeg(segs []message.OB11Segment, text string) []message.OB11Segmen
 		segs[len(segs)-1].Data["text"] = prev + text
 		return segs
 	}
-	return append(segs, message.OB11Segment{Type: message.SegmentText, Data: map[string]any{"text": text}})
+	return append(segs, message.OB11Segment{Type: message.SegmentText, Data: message.TextMessage{Text: text}.Marshal()})
 }
 
 // segmentsPlainText 消息段的纯文本（供 RawMessage 复读判等）。
@@ -964,8 +1112,12 @@ func (a *feishuAdapter) segmentsToContent(ctx context.Context, segs []message.OB
 		case message.SegmentFile, message.SegmentRecord:
 			// 文件单独发送，不进正文
 		default:
+			// 不支持的段类型（face/video/json/music/forward 等）：
+			// 有 text 键时退化为文本，否则忽略（core 层已按 SupportedSegments 告警）
 			if t, ok := s.Data["text"].(string); ok {
 				md.WriteString(t)
+			} else {
+				a.logger.Debug("忽略飞书不支持的通用消息段", "segment", s.Type)
 			}
 		}
 	}

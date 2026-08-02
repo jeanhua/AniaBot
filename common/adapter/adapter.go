@@ -1,6 +1,7 @@
 package adapter
 
 import (
+	"github.com/jeanhua/AniaBot/common/bot"
 	"github.com/jeanhua/AniaBot/common/model/message"
 	"github.com/jeanhua/AniaBot/common/msgchain"
 	"github.com/spf13/viper"
@@ -92,6 +93,40 @@ type TriggerWrapper struct {
 	OnGroupCard         GroupCardHandler
 	// OnPlatformEvent 平台特定事件（如飞书卡片回调），可选触发
 	OnPlatformEvent PlatformEventHandler
+}
+
+// EventKeyer 事件幂等去重键提供者，可选接口。
+// 事件订阅为 at-least-once 投递的平台（如飞书断线重连/ACK 丢失会重推同一事件）实现此接口，
+// core 在事件进入插件链前按返回的键去重；无法提供稳定键时返回 false。
+// 未实现此接口的适配器走 core 兜底：消息按「平台 + MessageId」去重（如 NapCat/OneBot），
+// 通知不做兜底（避免组合键误伤）。
+type EventKeyer interface {
+	// MessageKey 消息去重键；消息无稳定 ID 时返回 false。
+	// 注意：键应基于消息内容/消息 ID，而非投递事件 ID（飞书每次投递 event_id 可能不同）。
+	MessageKey(msg message.Message) (string, bool)
+	// NoticeKey 通知去重键；noticeType 为 NoticeType 字段值（如 "group_recall"）。
+	// 无法提供稳定键时返回 false（core 不做组合兜底键）。
+	NoticeKey(noticeType string, notice any) (string, bool)
+}
+
+// SelfIDProvider 机器人自身 ID 提供者，可选接口。
+// 事件未携带 self_id（如飞书首次被 @ 前的空窗期）时，core 用其兜底填充
+// msg.SelfId，使自消息过滤与 @ 提及检测生效。
+type SelfIDProvider interface {
+	SelfID() message.QID
+}
+
+// SegmentSupport 支持的消息段类型声明者，可选接口。
+// 适配器声明其出站能渲染的通用段类型集合（值对应 message.SegmentXxx 常量）；
+// core 在发送时对不支持的段类型告警（替代适配器出站静默丢弃），仅告警不阻断。
+type SegmentSupport interface {
+	SupportedSegments() []string
+}
+
+// StreamSenderExt 适配器侧流式发送能力（与插件侧外观接口 bot.StreamSender 对应）。
+type StreamSenderExt interface {
+	SendGroupStream(groupId message.QID, chain msgchain.GroupChain) (bot.StreamHandle, bool)
+	SendFriendStream(userId message.QID, chain msgchain.FriendChain) (bot.StreamHandle, bool)
 }
 
 type SendMsg interface {

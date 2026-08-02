@@ -20,6 +20,11 @@ func (n *BasicNotice) GetPlatform() string {
 	return n.Platform
 }
 
+// GetNoticeType 返回通知类型（NoticeType 字段值）。
+func (n *BasicNotice) GetNoticeType() string {
+	return n.NoticeType
+}
+
 // GroupUploadNotice 群文件上传
 type GroupUploadNotice struct {
 	BasicNotice
@@ -78,17 +83,17 @@ type FriendAddNotice struct {
 // GroupRecallNotice 群消息撤回
 type GroupRecallNotice struct {
 	BasicNotice
-	GroupId    QID  `json:"group_id"`
-	UserId     QID  `json:"user_id"`
-	OperatorId QID  `json:"operator_id"`
-	MessageId  uint `json:"message_id"`
+	GroupId    QID `json:"group_id"`
+	UserId     QID `json:"user_id"`
+	OperatorId QID `json:"operator_id"`
+	MessageId  QID `json:"message_id"` // QID 承载字符串消息 ID（飞书 om_xxx）
 }
 
 // FriendRecallNotice 好友消息撤回
 type FriendRecallNotice struct {
 	BasicNotice
-	UserId    QID  `json:"user_id"`
-	MessageId uint `json:"message_id"`
+	UserId    QID `json:"user_id"`
+	MessageId QID `json:"message_id"` // QID 承载字符串消息 ID（飞书 om_xxx）
 }
 
 // PokeNotice 戳一戳

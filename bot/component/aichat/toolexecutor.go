@@ -77,8 +77,17 @@ func (o *ToolOrchestrator) ExecuteWithTools(
 ) (string, []Message, TokenUsage, error) {
 	var totalUsage TokenUsage
 
+	// 流式模式：opts.OnStreamDelta 非空时所有 LLM 调用走 GenerateStream
+	useStream := opts.OnStreamDelta != nil
+	gen := func(ctx context.Context, msgs []Message, o ChatOptions) (GenerateResponse, TokenUsage, error) {
+		if useStream {
+			return llmClient.GenerateStream(ctx, msgs, o)
+		}
+		return llmClient.Generate(ctx, msgs, o)
+	}
+
 	if o.executor == nil || len(o.executor.Tools()) == 0 {
-		resp, usage, err := llmClient.Generate(ctx, messages, opts)
+		resp, usage, err := gen(ctx, messages, opts)
 		if err != nil {
 			return "", messages, totalUsage, err
 		}
@@ -94,7 +103,7 @@ func (o *ToolOrchestrator) ExecuteWithTools(
 		tools := o.executor.Tools()
 
 		opts.Tools = tools
-		resp, usage, err := llmClient.Generate(ctx, messages, opts)
+		resp, usage, err := gen(ctx, messages, opts)
 		if err != nil {
 			return "", messages, totalUsage, err
 		}
@@ -111,10 +120,16 @@ func (o *ToolOrchestrator) ExecuteWithTools(
 			return resp.Content, messages, totalUsage, nil
 		}
 
+		// 工具边界：流式模式下通知调用方结束当前流式消息（下一轮首个增量创建新消息）
+		if opts.OnStreamRoundEnd != nil {
+			opts.OnStreamRoundEnd()
+		}
+
 		messages = append(messages, o.msgBuilder.BuildAIMessageWithReasoning(resp.Content, resp.ToolCalls, resp.ReasoningContent))
 
-		content := removeThinkContent(resp.Content)
-		if callbacks.SendText != nil && len(content) > 0 {
+		// 流式模式下内容已通过 OnStreamDelta 增量发出，不再重复发送
+		content := RemoveThinkContent(resp.Content)
+		if !useStream && callbacks.SendText != nil && len(content) > 0 {
 			callbacks.SendText(content)
 		}
 
@@ -135,7 +150,7 @@ func (o *ToolOrchestrator) ExecuteWithTools(
 			// 否则模型可能继续发起工具调用而被静默丢弃（仅取 Content），导致空响应
 			finalOpts := opts
 			finalOpts.Tools = nil
-			finalResp, finalUsage, err := llmClient.Generate(ctx, messages, finalOpts)
+			finalResp, finalUsage, err := gen(ctx, messages, finalOpts)
 			if err != nil {
 				return "", messages, totalUsage, err
 			}

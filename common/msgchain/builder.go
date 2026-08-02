@@ -115,150 +115,114 @@ func (c *friendChainBuilder) GetFriendMsg() []message.OB11Segment {
 func (c *chainBuilder) Mention(userId message.QID) {
 	c.message = append(c.message, message.OB11Segment{
 		Type: "at",
-		Data: map[string]any{
-			"qq": userId.String(),
-		},
+		Data: message.MentionMessage{QQ: userId}.Marshal(),
 	})
 }
 
 func (c *chainBuilder) Text(text string) {
 	c.message = append(c.message, message.OB11Segment{
 		Type: "text",
-		Data: map[string]any{
-			"text": text,
-		},
+		Data: message.TextMessage{Text: text}.Marshal(),
 	})
 }
 
 func (c *chainBuilder) Face(faceId int) {
 	c.message = append(c.message, message.OB11Segment{
 		Type: "face",
-		Data: map[string]any{
-			"id": faceId,
-		},
+		Data: message.FaceMessage{Id: faceId}.Marshal(),
 	})
 }
 
 func (c *chainBuilder) ImageUrl(url string) {
+	// 同时写 file 与 url：ParseImage 依赖 url（FriendlyText 渲染 / 历史回放）
 	c.message = append(c.message, message.OB11Segment{
 		Type: "image",
-		Data: map[string]any{
-			"file":    url,
-			"summary": "[图片]",
-		},
+		Data: message.ImageMessage{File: url, Url: url, Summary: "[图片]"}.Marshal(),
 	})
 }
 
 func (c *chainBuilder) ImageBase64(bs64code string) {
 	c.message = append(c.message, message.OB11Segment{
 		Type: "image",
-		Data: map[string]any{
-			"file":    "base64://" + bs64code,
-			"summary": "[图片]",
-		},
+		Data: message.ImageMessage{File: "base64://" + bs64code, Url: "base64://" + bs64code, Summary: "[图片]"}.Marshal(),
 	})
 }
 
 func (c *chainBuilder) ImageLocal(path string) {
 	c.message = append(c.message, message.OB11Segment{
 		Type: "image",
-		Data: map[string]any{
-			"file":    "file://" + path,
-			"summary": "[图片]",
-		},
+		Data: message.ImageMessage{File: "file://" + path, Url: "file://" + path, Summary: "[图片]"}.Marshal(),
 	})
 }
 
 func (c *chainBuilder) VideoUrl(url string) {
+	// 同时写 file 与 url：ParseVideo 依赖 url
 	c.message = append(c.message, message.OB11Segment{
 		Type: "video",
-		Data: map[string]any{
-			"file": url,
-		},
+		Data: message.VideoMessage{URL: url}.Marshal(),
 	})
 }
 
 func (c *chainBuilder) VideoLocal(path string) {
 	c.message = append(c.message, message.OB11Segment{
 		Type: "video",
-		Data: map[string]any{
-			"file": "file://" + path,
-		},
+		Data: message.VideoMessage{URL: "file://" + path}.Marshal(),
 	})
 }
 
 func (c *chainBuilder) VideoBase64(bs64code string) {
 	c.message = append(c.message, message.OB11Segment{
 		Type: "video",
-		Data: map[string]any{
-			"file": "base64://" + bs64code,
-		},
+		Data: message.VideoMessage{URL: "base64://" + bs64code}.Marshal(),
 	})
 }
 
 func (c *chainBuilder) FileUrl(name, url string) {
 	c.message = append(c.message, message.OB11Segment{
 		Type: "file",
-		Data: map[string]any{
-			"file": url,
-			"name": name,
-		},
+		Data: message.FileMessage{File: url, Name: name}.Marshal(),
 	})
 }
 
 func (c *chainBuilder) FileLocal(name, path string) {
 	c.message = append(c.message, message.OB11Segment{
 		Type: "file",
-		Data: map[string]any{
-			"file": "file://" + path,
-			"name": name,
-		},
+		Data: message.FileMessage{File: "file://" + path, Name: name}.Marshal(),
 	})
 }
 
 func (c *chainBuilder) FileBase64(name, bs64code string) {
 	c.message = append(c.message, message.OB11Segment{
 		Type: "file",
-		Data: map[string]any{
-			"file": "base64://" + bs64code,
-			"name": name,
-		},
+		Data: message.FileMessage{File: "base64://" + bs64code, Name: name}.Marshal(),
 	})
 }
 
 func (c *chainBuilder) Reply(msgId message.QID) {
 	c.message = append(c.message, message.OB11Segment{
 		Type: "reply",
-		Data: map[string]any{
-			"id": msgId.String(),
-		},
+		Data: message.ReplyMessage{Id: msgId}.Marshal(),
 	})
 }
 
 func (c *chainBuilder) RecordUrl(url string) {
 	c.message = append(c.message, message.OB11Segment{
 		Type: "record",
-		Data: map[string]any{
-			"file": url,
-		},
+		Data: message.RecordMessage{URL: url}.Marshal(),
 	})
 }
 
 func (c *chainBuilder) RecordLocal(path string) {
 	c.message = append(c.message, message.OB11Segment{
 		Type: "record",
-		Data: map[string]any{
-			"file": "file://" + path,
-		},
+		Data: message.RecordMessage{URL: "file://" + path}.Marshal(),
 	})
 }
 
 func (c *chainBuilder) RecordBase64(bs64code string) {
 	c.message = append(c.message, message.OB11Segment{
 		Type: "record",
-		Data: map[string]any{
-			"file": "base64://" + bs64code,
-		},
+		Data: message.RecordMessage{URL: "base64://" + bs64code}.Marshal(),
 	})
 }
 

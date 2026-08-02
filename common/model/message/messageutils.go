@@ -52,6 +52,9 @@ func (raw Message) FriendlyText(showUrl bool, opts ...MsgOptFunc) string {
 		if nickname == "" {
 			nickname = raw.Sender.Nickname
 		}
+		if nickname == "" {
+			nickname = "用户" // 昵称不可得（如通讯录查询失败/权限缺失）时的兜底
+		}
 		result.WriteString(fmt.Sprintf("[nickname:%s id:%s]: ", nickname, raw.Sender.UserId.String()))
 	}
 	for _, s := range raw.Message {

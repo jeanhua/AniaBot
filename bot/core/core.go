@@ -9,6 +9,7 @@ import (
 	"os"
 	"sort"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -563,13 +564,56 @@ func (ania *AniaBot) supportsPlatform(p plugin.Plugin, platform string) bool {
 	return p.GetMeta().SupportsPlatform(platform)
 }
 
+// fillSelfID 事件自身未携带 self_id（如飞书首次被 @ 前的空窗期）时用适配器兜底填充，
+// 使自消息过滤与 @ 提及检测（utils.HasMention/ExtraMessageStr 比较 msg.SelfId）生效。
+func (ania *AniaBot) fillSelfID(e *adapterEntry, msg *message.Message) {
+	if msg.SelfId != "" {
+		return
+	}
+	if p, ok := e.adapter.(adapter.SelfIDProvider); ok {
+		msg.SelfId = p.SelfID()
+	}
+}
+
+// segWarn 段类型不受支持告警的计数节流（key: platform|segment，第 1 次与每 100 次告警）。
+var segWarn sync.Map
+
+// checkSegmentSupport 适配器声明了 SupportedSegments 时，对不支持的段类型计数告警
+// （替代适配器出站静默丢弃，仅告警不阻断）。
+func (ania *AniaBot) checkSegmentSupport(a adapter.Adapter, segs []message.OB11Segment) {
+	ss, ok := a.(adapter.SegmentSupport)
+	if !ok || len(segs) == 0 {
+		return
+	}
+	supported := make(map[string]bool, len(ss.SupportedSegments()))
+	for _, t := range ss.SupportedSegments() {
+		supported[t] = true
+	}
+	for _, seg := range segs {
+		if supported[seg.Type] {
+			continue
+		}
+		key := a.Platform() + "|" + seg.Type
+		v, _ := segWarn.LoadOrStore(key, &atomic.Int64{})
+		n := v.(*atomic.Int64).Add(1)
+		if n == 1 || n%100 == 0 {
+			Logger().Warn("消息段不受当前平台支持，将被忽略", "platform", a.Platform(), "segment", seg.Type, "times", n)
+		}
+	}
+}
+
 func (ania *AniaBot) onGroupEvent(e *adapterEntry, msg message.Message) {
 	defer func() {
 		if err := recover(); err != nil {
 			Logger().Error("群聊消息事件触发错误: ", err)
 		}
 	}()
+	ania.fillSelfID(e, &msg)
 	if msg.Sender.UserId == msg.SelfId {
+		return
+	}
+	// 事件幂等去重：at-least-once 投递的平台重推同一事件时跳过（见 dedup.go）
+	if key, ok := ania.messageDedupKey(e, msg); ok && !ania.tryClaimEvent(key) {
 		return
 	}
 
@@ -601,7 +645,12 @@ func (ania *AniaBot) onFriendEvent(e *adapterEntry, msg message.Message) {
 			Logger().Error("私聊消息事件触发错误: ", err)
 		}
 	}()
+	ania.fillSelfID(e, &msg)
 	if msg.Sender.UserId == msg.SelfId {
+		return
+	}
+	// 事件幂等去重：at-least-once 投递的平台重推同一事件时跳过（见 dedup.go）
+	if key, ok := ania.messageDedupKey(e, msg); ok && !ania.tryClaimEvent(key) {
 		return
 	}
 
@@ -652,6 +701,7 @@ func (ania *AniaBot) SendGroupMsg(groupId message.QID, chain msgchain.GroupChain
 	if a == nil {
 		return "", false
 	}
+	ania.checkSegmentSupport(a, chain.GetGroupMsg())
 	return a.SendGroupMsg(groupId, chain)
 }
 
@@ -661,7 +711,32 @@ func (ania *AniaBot) SendFriendMsg(userID message.QID, chain msgchain.FriendChai
 	if a == nil {
 		return "", false
 	}
+	ania.checkSegmentSupport(a, chain.GetFriendMsg())
 	return a.SendFriendMsg(userID, chain)
+}
+
+// SendGroupStream 实现 bot.StreamSender：按群 ID 前缀路由，适配器不支持时返回 false。
+func (ania *AniaBot) SendGroupStream(groupId message.QID, chain msgchain.GroupChain) (bot.StreamHandle, bool) {
+	a := ania.route(groupId)
+	if a == nil {
+		return nil, false
+	}
+	if se, ok := a.(adapter.StreamSenderExt); ok {
+		return se.SendGroupStream(groupId, chain)
+	}
+	return nil, false
+}
+
+// SendFriendStream 实现 bot.StreamSender：按用户 ID 前缀路由，适配器不支持时返回 false。
+func (ania *AniaBot) SendFriendStream(userID message.QID, chain msgchain.FriendChain) (bot.StreamHandle, bool) {
+	a := ania.route(userID)
+	if a == nil {
+		return nil, false
+	}
+	if se, ok := a.(adapter.StreamSenderExt); ok {
+		return se.SendFriendStream(userID, chain)
+	}
+	return nil, false
 }
 
 // GetMsgDetail 获取消息详情（按消息 ID 前缀路由到对应平台适配器）。

@@ -119,6 +119,12 @@ type fallbackConfig struct {
 	Model   string `cfg:"model" label:"备用模型" group:"AI 对话 · 模型" help:"留空表示不启用备用模型；主模型重试耗尽后自动切换重试一次（仅主对话与上下文压缩）"`
 }
 
+// streamConfig 流式回复配置：平台支持「先发后改」时逐字展示回复
+// （如飞书卡片实时更新）；平台不支持或出错时自动退化为一次性回复。
+type streamConfig struct {
+	Enable bool `cfg:"enable" label:"启用流式回复" group:"AI 对话 · 回复" help:"平台支持时逐字展示回复（飞书卡片实时更新）；不支持或出错时自动退化为一次性回复" default:"true"`
+}
+
 // quotaConfig 每日 Token 配额限制配置：按会话与全局两个维度限制每日消耗。
 type quotaConfig struct {
 	Enable            bool `cfg:"enable" label:"启用每日配额限制" group:"AI 对话 · 配额" help:"按会话与全局两个维度限制每日 Token 消耗，超限后 AI 请求被拒绝" default:"false"`
@@ -161,6 +167,7 @@ type aiChatConfig struct {
 	Compressor compressorConfig `cfg:"plugin.ai_chat_bot.compressor"`
 	Retry      retryConfig      `cfg:"plugin.ai_chat_bot.retry"`
 	Fallback   fallbackConfig   `cfg:"plugin.ai_chat_bot.fallback"`
+	Stream     streamConfig     `cfg:"plugin.ai_chat_bot.stream"`
 	Quota      quotaConfig      `cfg:"plugin.ai_chat_bot.quota"`
 }
 

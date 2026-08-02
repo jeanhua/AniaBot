@@ -11,6 +11,10 @@ import (
 // broadcastNotice 向声明支持该平台的插件广播一条通知事件（不可中断）。
 func broadcastNotice[T any](ania *AniaBot, e *adapterEntry, tag string, notice T,
 	fn func(p plugin.Plugin, ctx context.Context, b bot.Bot, n T) error) {
+	// 事件幂等去重：仅当适配器提供稳定键时去重（不做组合兜底，防误伤）
+	if key, ok := ania.noticeDedupKey(e, notice); ok && !ania.tryClaimEvent(key) {
+		return
+	}
 	ctx := context.Background()
 	for _, p := range ania.plugins {
 		if !ania.supportsPlatform(p, e.def.Platform) {

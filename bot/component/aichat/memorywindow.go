@@ -300,7 +300,7 @@ func NewContextCompressor(basePrompt string) CompressorFunc {
 			return nil, err
 		}
 
-		summary = removeThinkContent(summary)
+		summary = RemoveThinkContent(summary)
 
 		return []Message{TextMessage(RoleUser, "以下是之前的对话摘要：\n"+summary)}, nil
 	}

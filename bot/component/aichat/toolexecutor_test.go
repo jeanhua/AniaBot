@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -15,7 +17,8 @@ import (
 
 // fakeToolExecutor 测试用工具执行器：fn 为 nil 时按工具名返回固定文本。
 type fakeToolExecutor struct {
-	fn func(ctx context.Context, call llmtool.ToolCall, callbacks llmtool.CallBackFuncs) (string, error)
+	fn    func(ctx context.Context, call llmtool.ToolCall, callbacks llmtool.CallBackFuncs) (string, error)
+	tools []llmtool.ToolDef
 }
 
 func (f *fakeToolExecutor) Execute(ctx context.Context, call llmtool.ToolCall, callbacks llmtool.CallBackFuncs) (string, error) {
@@ -25,7 +28,7 @@ func (f *fakeToolExecutor) Execute(ctx context.Context, call llmtool.ToolCall, c
 	return "result:" + call.Name, nil
 }
 
-func (f *fakeToolExecutor) Tools() []llmtool.ToolDef { return nil }
+func (f *fakeToolExecutor) Tools() []llmtool.ToolDef { return f.tools }
 
 func newTestOrchestrator(exec ToolExecutor) *ToolOrchestrator {
 	return NewToolOrchestrator(exec, NewMessageBuilder("test prompt"))
@@ -190,5 +193,59 @@ func TestExecuteToolCallsObserverAndCallbacksRace(t *testing.T) {
 		if got := ExtractMessageText(r); got != "result:t"+fmt.Sprint(i) {
 			t.Fatalf("result[%d] = %q", i, got)
 		}
+	}
+}
+
+// TestStreamToolRoundBoundary 流式模式下：工具边界触发 OnStreamRoundEnd、增量回调收到内容、
+// inter-round SendText 被跳过（内容已流式发出，避免重复）。
+func TestStreamToolRoundBoundary(t *testing.T) {
+	var calls atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		if calls.Add(1) == 1 {
+			// 第一轮：先输出一段文本，再发起工具调用
+			fmt.Fprint(w, sseChunk(streamEvent(`[{"index":0,"delta":{"content":"先看下"}}]`)))
+			fmt.Fprint(w, sseChunk(streamEvent(`[{"index":0,"delta":{"tool_calls":[{"index":0,"id":"call_1","function":{"name":"tool_a","arguments":"{}"}}]},"finish_reason":"tool_calls"}]`)))
+		} else {
+			fmt.Fprint(w, sseChunk(streamEvent(`[{"index":0,"delta":{"content":"最终回答"},"finish_reason":"stop"}]`)))
+		}
+		fmt.Fprint(w, sseChunk(usageEvent()))
+		fmt.Fprint(w, "data: [DONE]\n\n")
+	}))
+	defer srv.Close()
+
+	exec := &fakeToolExecutor{fn: func(ctx context.Context, call llmtool.ToolCall, _ llmtool.CallBackFuncs) (string, error) {
+		return "tool result", nil
+	}}
+	exec.tools = []llmtool.ToolDef{{Function: llmtool.FunctionDef{Name: "tool_a"}}}
+	o := newTestOrchestrator(exec)
+	o.SetMaxIterations(5)
+
+	var deltas []string
+	roundEnds := atomic.Int32{}
+	sendTextCalls := atomic.Int32{}
+	c := newTestClient(srv.URL)
+
+	content, _, _, err := o.ExecuteWithTools(context.Background(), c,
+		[]Message{TextMessage(RoleUser, "hi")},
+		llmtool.CallBackFuncs{SendText: func(s string) (string, error) { sendTextCalls.Add(1); return "", nil }},
+		ChatOptions{
+			OnStreamDelta:    func(d string) { deltas = append(deltas, d) },
+			OnStreamRoundEnd: func() { roundEnds.Add(1) },
+		})
+	if err != nil {
+		t.Fatalf("ExecuteWithTools 失败: %v", err)
+	}
+	if content != "最终回答" {
+		t.Fatalf("最终内容不符: %q", content)
+	}
+	if got := strings.Join(deltas, ""); got != "先看下最终回答" {
+		t.Fatalf("流式增量不符: %q", got)
+	}
+	if roundEnds.Load() != 1 {
+		t.Fatalf("工具边界应触发一次 OnStreamRoundEnd, got %d", roundEnds.Load())
+	}
+	if sendTextCalls.Load() != 0 {
+		t.Fatalf("流式模式下不应调用 SendText, got %d", sendTextCalls.Load())
 	}
 }

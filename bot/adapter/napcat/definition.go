@@ -104,7 +104,29 @@ func (q *qqBot) GetNCrkey() ([]message.NCrkey, bool) {
 	return q.qq.GetNCrkey()
 }
 
+// SendGroupStream/SendFriendStream 显式覆盖为不支持：qqBot 嵌入 bot.Bot 接口，
+// 不覆盖会把 *AniaBot 的 StreamSender 方法提升上来，使插件断言 bot.StreamSender
+// 意外成功。OneBot v11 无消息编辑 API，QQ 平台流式回复退化为一次性。
+func (q *qqBot) SendGroupStream(groupId message.QID, chain msgchain.GroupChain) (bot.StreamHandle, bool) {
+	return nil, false
+}
+
+func (q *qqBot) SendFriendStream(userId message.QID, chain msgchain.FriendChain) (bot.StreamHandle, bool) {
+	return nil, false
+}
+
 func (n *napcatWebSocketAdapter) Name() string     { return "napcat" }
 func (n *napcatWebSocketAdapter) Platform() string { return "qq" }
 func (n *napcatHttpAdapter) Name() string          { return "napcat" }
 func (n *napcatHttpAdapter) Platform() string      { return "qq" }
+
+// onebot11Segments OneBot v11 支持的全部通用段类型（出站原样透传给 NapCat）。
+var onebot11Segments = []string{
+	message.SegmentText, message.SegmentFace, message.SegmentImage, message.SegmentRecord,
+	message.SegmentVideo, message.SegmentMention, message.SegmentReply, message.SegmentForward,
+	message.SegmentFile, message.SegmentJson, message.SegmentMusic,
+}
+
+// SupportedSegments 实现 adapter.SegmentSupport：OneBot v11 全量段。
+func (n *napcatWebSocketAdapter) SupportedSegments() []string { return onebot11Segments }
+func (n *napcatHttpAdapter) SupportedSegments() []string      { return onebot11Segments }

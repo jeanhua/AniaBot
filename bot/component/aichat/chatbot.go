@@ -90,7 +90,7 @@ func (b *ChatBot) Chat(ctx context.Context, userInput string, callbacks llmtool.
 		b.window.append(updatedMessages[newMessagesStart:]...)
 	}
 
-	response = removeThinkContent(response)
+	response = RemoveThinkContent(response)
 
 	return response, usage, nil
 }

@@ -69,6 +69,14 @@ type ChatOptions struct {
 	TopK               *int // 非标准参数，部分兼容 API 使用
 	Tools              []llmtool.ToolDef
 	ReasoningEffort    *string // "low", "medium", "high"
+
+	// OnStreamDelta 流式文本增量回调（nil = 一次性生成）。
+	// 注意：在流读取的同一 goroutine 串行调用，回调内勿做重 IO；
+	// 回调收到的 delta 尚未去除 <think> 块（由调用方在缓冲上统一处理）。
+	OnStreamDelta func(string)
+	// OnStreamRoundEnd 工具调用轮结束回调（toolexecutor 在工具边界调用）：
+	// 调用方应 End 当前流式消息；下一轮首个增量创建新消息。
+	OnStreamRoundEnd func()
 }
 
 func TextPart(text string) ContentPart {

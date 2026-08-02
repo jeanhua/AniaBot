@@ -68,6 +68,44 @@ func TestOnReceiveDedup(t *testing.T) {
 	}
 }
 
+// TestMessageKey 验证 core 层去重键（adapter.EventKeyer.MessageKey）：去掉 fs: 前缀、以 msg: 为键。
+func TestMessageKey(t *testing.T) {
+	a := NewAdapter(nil)
+
+	if key, ok := a.MessageKey(message.Message{MessageId: message.QID("fs:om_abc")}); !ok || key != "msg:om_abc" {
+		t.Fatalf("MessageKey(fs:om_abc) = (%q,%v), want (msg:om_abc,true)", key, ok)
+	}
+	if key, ok := a.MessageKey(message.Message{MessageId: message.QID("")}); ok {
+		t.Fatalf("空 MessageId 应返回 false, got key=%q", key)
+	}
+	// NoticeKey：撤回通知按 message_id 提供稳定键；其他通知类型返回 false
+	if key, ok := a.NoticeKey("group_recall", message.GroupRecallNotice{MessageId: message.QID("fs:om_r1")}); !ok || key != "recall:om_r1" {
+		t.Fatalf("NoticeKey(group_recall) = (%q,%v), want (recall:om_r1,true)", key, ok)
+	}
+	if key, ok := a.NoticeKey("group_recall", message.GroupRecallNotice{MessageId: message.QID("")}); ok {
+		t.Fatalf("空 MessageId 的通知应返回 false, got key=%q", key)
+	}
+	if _, ok := a.NoticeKey("group_msg_emoji_like", message.GroupMsgEmojiLikeNotice{}); ok {
+		t.Fatal("表情回应通知应返回 false（core 无可靠键，维持适配器级去重）")
+	}
+}
+
+// TestResolveName 昵称解析：client==nil（测试/离线）不 panic 返回空串；缓存命中直接返回。
+func TestResolveName(t *testing.T) {
+	a := NewAdapter(nil)
+	if name := a.resolveName("ou_xxx"); name != "" {
+		t.Fatalf("client==nil 时应返回空串, got %q", name)
+	}
+
+	a.nameCache.Store("ou_cached", "小明")
+	if name := a.resolveName("ou_cached"); name != "小明" {
+		t.Fatalf("缓存命中应返回昵称, got %q", name)
+	}
+	if name := a.resolveName(""); name != "" {
+		t.Fatalf("空 openID 应返回空串, got %q", name)
+	}
+}
+
 // TestOnReceiveDifferentMessage 不同 message_id 不应互相去重。
 func TestOnReceiveDifferentMessage(t *testing.T) {
 	a := NewAdapter(nil)

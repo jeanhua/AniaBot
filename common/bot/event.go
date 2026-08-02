@@ -46,6 +46,26 @@ type pluginItf interface {
 	GetPluginList() []plugininfo.PluginInfo
 }
 
+// StreamHandle 流式消息句柄：Patch 更新已发送消息的内容；End 结束（此后不可再 Patch）。
+type StreamHandle interface {
+	// Patch 将已发送消息的内容替换为 text（实现方负责节流与内容上限）
+	Patch(text string) error
+	// End 结束流式消息（强制发送最终内容，幂等）
+	End()
+}
+
+// StreamSender 流式回复能力，可选接口（与 bot.QQ 同模式）。
+// 平台支持「先发后改」（如飞书卡片 Patch）时，事件回调收到的 bot.Bot 可断言为
+// bot.StreamSender；QQ/OneBot v11 无消息编辑 API，断言失败退化为一次性回复。
+type StreamSender interface {
+	// SendGroupStream 以 chain 的初始内容创建一条流式群聊消息，返回可更新的句柄。
+	// 平台不支持时返回 (nil, false)。
+	SendGroupStream(groupId message.QID, chain msgchain.GroupChain) (StreamHandle, bool)
+	// SendFriendStream 以 chain 的初始内容创建一条流式私聊消息，返回可更新的句柄。
+	// 平台不支持时返回 (nil, false)。
+	SendFriendStream(userId message.QID, chain msgchain.FriendChain) (StreamHandle, bool)
+}
+
 // QQ QQ（NapCat/OneBot v11）平台专属能力，可选接口。
 // 事件来源为 QQ 适配器时，事件回调收到的 bot.Bot 可断言为 bot.QQ。
 type QQ interface {

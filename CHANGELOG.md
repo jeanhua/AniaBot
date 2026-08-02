@@ -27,6 +27,16 @@
 - 插件事件回调不再收到裸 `*core.AniaBot`，而是平台能力包装后的 `bot.Bot`（`adapter.WrapBot`）：事件来源适配器实现 `QQExt` 时断言 `bot.QQ` 成功，否则失败（其他平台插件无感退化）
 - `bot.admin_id` 由 int 改为 string（支持带平台前缀的 ID）；请求拦截/每日新闻插件的群号/QQ号名单由 `[]int` 改为 `[]string`（支持 `fs:` 前缀 ID）
 - AI 对话插件定时任务与 Prompt 覆盖的目标 ID 解析支持多平台：纯数字（QQ）规范化为 QID，带前缀（如 `fs:oc_xxx`）原样保留
+- **核心事件幂等去重服务**（消息体系重构 Phase A）：core 在事件进入插件链前统一去重，新增可选能力接口 `adapter.EventKeyer`（`MessageKey`/`NoticeKey`），适配器可提供稳定去重键；未实现时消息按「平台 + MessageId」兜底（NapCat/OneBot 由此获得去重），通知不做组合兜底避免误伤。存储复用 `storage.Storage`（内存后端原子 check-and-set，redis 后端 SET NX EX，多实例共享），TTL 10 分钟有界；飞书适配器实现 `MessageKey`（按 message_id，勿用 event_id 的原则写进接口注释），其早期适配器级去重保留
+- **消息模型字段修复**（消息体系重构 Phase D）：`GroupRecallNotice.MessageId`/`FriendRecallNotice.MessageId` 由 `uint` 改为 `QID`，飞书撤回通知不再丢失字符串消息 ID（此前仅记日志）；新增可选能力接口 `adapter.SelfIDProvider`，事件未携带 self_id 时（飞书首次被 @ 前的空窗期）core 用适配器兜底填充，修复自消息过滤与 @ 提及检测失效；飞书私聊消息 `MessageType` 对齐 OneBot v11（`private` + `sub_type=friend`）；飞书适配器实现 `EventKeyer.NoticeKey`（撤回通知按 message_id 去重）
+- **段能力声明 + 类型化段数据**（消息体系重构 Phase B）：typed 消息（TextMessage/MentionMessage/ImageMessage/ReplyMessage/FileMessage/RecordMessage/VideoMessage/FaceMessage/MusicMessage）新增 `Marshal()` 成为段数据构造的单一事实来源，msgchain 构造器与飞书适配器入站翻译统一迁移；修复图片/视频段同时写 `file` 与 `url`（ParseImage/ParseVideo 依赖 url，此前 Bot 发送的图片在 FriendlyText/历史回放中丢 URL）、`ParseFile` 补读 `name` 键；新增可选能力接口 `adapter.SegmentSupport`（`SupportedSegments()`），core 发送前对平台不支持的段类型计数告警（第 1 次与每 100 次），替代飞书出站静默丢弃（NapCat 声明 OneBot v11 全量段，飞书声明 text/at/image/reply/file/record）
+- **飞书发送者昵称解析**（消息体系重构 Phase E）：飞书消息事件本身不含发送者昵称（此前日志与 AI 消息前缀显示空昵称 `[nickname: id:fs:ou_...]`），适配器在异步分发时经通讯录 `contact/v3/user/get` 解析昵称（带缓存、2s 超时、需 `contact:user.base:readonly` 权限；权限缺失/查询失败静默降级）；`FriendlyText` 昵称不可得时兜底显示「用户」
+- **流式回复（打字机）**（消息体系重构 Phase C，`plugin.ai_chat_bot.stream.enable` 默认开启）：
+  - LLM 层：`LLMClient.GenerateStream` 走 openai-go `NewStreaming`，流式累积内容/reasoning_content/按 Index 组装的工具调用/末块 token 用量；重试与备用模型语义与一次性一致，**首字节后失败不重试**（避免重复输出）
+  - 工具循环：`ChatOptions` 新增 `OnStreamDelta`/`OnStreamRoundEnd`（nil 保持一次性，定时任务/子代理/团队调用方零改动）；工具边界结束当前流式消息，下一轮首块创建新消息；流式模式下 inter-round `SendText` 不再重复发送
+  - 发送层：新增可选能力接口 `bot.StreamSender`/`adapter.StreamSenderExt`（`SendGroupStream`/`SendFriendStream` 返回可更新的 `StreamHandle{Patch/End}`）；core 按 ID 前缀路由委托；**QQ/OneBot v11 无消息编辑 API，qqBot 显式覆盖返回不支持，断言失败自动退化一次性**
+  - 飞书实现：以 schema 2.0 interactive 卡片创建消息，`im.message.patch` 节流更新（600ms），28KB 内容上限字节安全截断；@ 提及前缀在每次 Patch 保留不消失；支持回复目标
+  - 主对话接线：首个增量懒创建消息（群聊携带本批全部 @ 提及），流式创建失败/平台不支持自动回退一次性路径；`/stop` 取消先收尾流式消息再发停止提示
 - **面板多平台适配**：管理面板全面去除 QQ 框架残留假设
   - 定时任务页：目标 ID 校验由「纯数字」放宽为任意非空 ID（支持 `fs:oc_xxx` / `fs:ou_xxx`），「群号 / QQ 号」文案改为「群 ID / 用户 ID」，创建者不再硬编码 QQ 前缀；编辑弹窗支持修改触发对象类型/目标 ID/单次标记（后端 `ClockTaskUpdate` 新增 `target_type`/`target_id`/`run_once` 字段）
   - 记忆/知识库/团队/配额页的会话 scope 校验由 `^[gf]:\d+$` 放宽为 `^[gf]:.+$`（如 `g:fs:oc_xxx`），此前飞书会话的数据在面板上完全无法查看/管理；`ClockTaskInfo.CreatedBy` 由 uint64 改为 string，飞书创建者不再显示为 0
