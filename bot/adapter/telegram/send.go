@@ -165,23 +165,22 @@ func (a *telegramAdapter) sendText(ctx context.Context, chatID int64, text strin
 			params["parse_mode"] = "MarkdownV2"
 		}
 		var res messageSendResult
-		send := func() (int, error) {
-			if err := a.client.call(ctx, "sendMessage", params, &res); err != nil {
-				return 0, err
-			}
-			return res.MessageID, nil
+		send := func(p map[string]any) error {
+			// 429 限流在调用内重试一次
+			_, err := retryOnce(ctx, func() (int, error) {
+				if err := a.client.call(ctx, "sendMessage", p, &res); err != nil {
+					return 0, err
+				}
+				return res.MessageID, nil
+			})
+			return err
 		}
-		id, err := retryOnce(ctx, send)
-		// MarkdownV2 渲染失败（400 业务错误）→ 去掉 parse_mode 纯文本重发
-		if err != nil && isBadRequest(err) {
-			delete(params, "parse_mode")
-			id, err = retryOnce(ctx, send)
-		}
-		if err != nil {
+		// 400 解析失败→纯文本重发；网关异常响应（code 0）→原样重试一次
+		if err := retryAPIError(ctx, params, send); err != nil {
 			a.logSendFail("sendMessage", err, "chatId", chatID)
 			return last, last > 0 // 部分成功也上报最后成功消息
 		}
-		last = id
+		last = res.MessageID
 	}
 	return last, true
 }

@@ -89,7 +89,10 @@ type telegramStreamHandle struct {
 	mu        sync.Mutex
 	content   string
 	lastPatch time.Time
-	closed    bool
+	// lastSent 最后一次成功编辑的内容：End 时内容未变化则跳过编辑
+	// （Telegram 拒绝未变化的编辑，400 "message is not modified"）
+	lastSent string
+	closed   bool
 }
 
 // Patch 更新消息内容：距上次成功编辑超过节流间隔时立即发送，否则仅记录最新内容
@@ -120,13 +123,17 @@ func (h *telegramStreamHandle) End() {
 }
 
 // patchLocked 以当前内容编辑消息；final 为 true 时尝试 MarkdownV2 渲染
-// （仅最终内容完整时才可能渲染成功），400 解析失败降级纯文本重发。
-// 调用方需持有 h.mu。
+// （仅最终内容完整时才可能渲染成功），400 解析失败降级纯文本重发，
+// 网关异常响应（code 0）原样重试一次。内容与上次成功编辑一致时跳过
+// （Telegram 拒绝未变化的编辑）。调用方需持有 h.mu。
 func (h *telegramStreamHandle) patchLocked(final bool) error {
 	if h.a == nil || h.a.client == nil || h.msgID == 0 {
 		return nil
 	}
 	content := truncateRunes(h.prefix+h.content, maxEditTextLen)
+	if content == h.lastSent {
+		return nil
+	}
 	params := map[string]any{
 		"chat_id":    h.chatID,
 		"message_id": h.msgID,
@@ -137,17 +144,15 @@ func (h *telegramStreamHandle) patchLocked(final bool) error {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	err := h.a.client.call(ctx, "editMessageText", params, nil)
-	// 最终 MarkdownV2 编辑失败（未转义字符/截断切断闭合标记等 400）→ 纯文本重发，
-	// 避免消息停留在节流窗口内未发出的旧内容
-	if err != nil && isBadRequest(err) {
-		delete(params, "parse_mode")
-		err = h.a.client.call(ctx, "editMessageText", params, nil)
-	}
+	// 400 解析失败→纯文本重发；网关异常响应（code 0）→原样重试一次
+	err := retryAPIError(ctx, params, func(p map[string]any) error {
+		return h.a.client.call(ctx, "editMessageText", p, nil)
+	})
 	if err != nil {
 		h.a.logger.Warn("Telegram 流式回复更新失败", "messageId", h.msgID, "error", err)
 		return err
 	}
+	h.lastSent = content
 	h.lastPatch = time.Now()
 	return nil
 }

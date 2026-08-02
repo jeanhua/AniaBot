@@ -285,6 +285,90 @@ func TestStreamEndPlainWhenDisabled(t *testing.T) {
 	}
 }
 
+// TestSendTextGatewayRetry 网关异常响应（502 错误页，code 0）：原样重试一次，
+// 保留 parse_mode（不降级），重试成功。
+func TestSendTextGatewayRetry(t *testing.T) {
+	f := newFakeAPI()
+	f.htmlFail = 1
+	a, srv := testAdapterWithServer(f)
+	defer srv.Close()
+	a.cfg.parseMode = "markdownv2"
+
+	if _, ok := a.sendText(t.Context(), -100, "**加粗**", nil); !ok {
+		t.Fatal("网关异常重试后应发送成功")
+	}
+	if n := f.count("sendMessage"); n != 2 {
+		t.Fatalf("sendMessage 调用 = %d, want 2（502 + 重试）", n)
+	}
+	for i := 0; i < 2; i++ {
+		if f.req(i).json["parse_mode"] != "MarkdownV2" {
+			t.Fatalf("重试应保留 parse_mode（原样重试）, req%d = %+v", i, f.req(i).json)
+		}
+	}
+}
+
+// TestStreamEndGatewayRetry 流式 End 遇网关异常响应（502）：原样重试一次，
+// 最终内容与 parse_mode 保留。
+func TestStreamEndGatewayRetry(t *testing.T) {
+	f := newFakeAPI()
+	f.htmlFail = 1
+	a, srv := testAdapterWithServer(f)
+	defer srv.Close()
+	a.cfg.parseMode = "markdownv2"
+
+	h := &telegramStreamHandle{a: a, chatID: -100, msgID: 7}
+	h.content = "**最终内容**"
+	h.End()
+	if n := f.count("editMessageText"); n != 2 {
+		t.Fatalf("editMessageText 调用 = %d, want 2（502 + 重试）", n)
+	}
+	for i := 0; i < 2; i++ {
+		if f.req(i).json["parse_mode"] != "MarkdownV2" || f.req(i).json["text"] != "**最终内容**" {
+			t.Fatalf("重试应保留 parse_mode 与内容, req%d = %+v", i, f.req(i).json)
+		}
+	}
+}
+
+// TestStreamEndSkipWhenUnchanged 内容与上次成功编辑一致时跳过编辑
+// （Telegram 拒绝未变化的编辑，消除 "message is not modified" 噪音）。
+func TestStreamEndSkipWhenUnchanged(t *testing.T) {
+	f := newFakeAPI()
+	a, srv := testAdapterWithServer(f)
+	defer srv.Close()
+	a.cfg.parseMode = "markdownv2"
+
+	h := &telegramStreamHandle{a: a, chatID: -100, msgID: 7}
+	h.content = "hi"
+	if err := h.patchLocked(false); err != nil {
+		t.Fatalf("首次编辑失败: %v", err)
+	}
+	// 内容未变化：End 应跳过编辑
+	h.End()
+	if n := f.count("editMessageText"); n != 1 {
+		t.Fatalf("editMessageText 调用 = %d, want 1（未变化跳过）", n)
+	}
+}
+
+// TestClientGatewayErrorStatus 网关错误页的错误信息附带 HTTP 状态码（诊断用）。
+func TestClientGatewayErrorStatus(t *testing.T) {
+	f := newFakeAPI()
+	f.htmlFail = 1
+	a, srv := testAdapterWithServer(f)
+	defer srv.Close()
+
+	var res messageSendResult
+	err := a.client.call(t.Context(), "sendMessage", map[string]any{"chat_id": int64(-100), "text": "hi"}, &res)
+	if err == nil {
+		t.Fatal("502 错误页应返回错误")
+	}
+	if !strings.Contains(err.Error(), "http 502") {
+		t.Fatalf("错误信息应附带 HTTP 状态码, got %q", err.Error())
+	}
+	if !strings.Contains(err.Error(), "telegram api error 0") {
+		t.Fatalf("错误信息应含 code 0, got %q", err.Error())
+	}
+}
+
 // TestSendStreamNilClient client 为 nil 时流式创建失败（不 panic）。
 func TestSendStreamNilClient(t *testing.T) {
 	a := testAdapter()

@@ -25,6 +25,8 @@ type fakeAPI struct {
 	flaky429 map[string]int // method -> 后续调用返回 429 的剩余次数
 	// parseModeFail 携带 parse_mode 的请求后续返回 400 的剩余次数（模拟 MarkdownV2 解析失败）
 	parseModeFail int
+	// htmlFail 后续请求返回 502 错误页的剩余次数（模拟网关异常响应：非 JSON、无 error_code）
+	htmlFail int
 }
 
 type recordedRequest struct {
@@ -102,6 +104,20 @@ func (f *fakeAPI) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if pmf > 0 {
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{"ok":false,"error_code":400,"description":"can't parse entities"}`))
+		return
+	}
+
+	// 网关异常响应模拟：返回 502 HTML 错误页（不可解析，unpack 得 code 0）
+	f.mu.Lock()
+	htmlf := 0
+	if f.htmlFail > 0 {
+		f.htmlFail--
+		htmlf = 1
+	}
+	f.mu.Unlock()
+	if htmlf > 0 {
+		w.WriteHeader(http.StatusBadGateway)
+		_, _ = w.Write([]byte("<html>502 Bad Gateway</html>"))
 		return
 	}
 

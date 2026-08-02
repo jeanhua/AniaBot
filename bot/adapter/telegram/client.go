@@ -33,12 +33,18 @@ func (e *telegramRateLimit) Error() string {
 }
 
 // telegramAPIError 业务错误（ok=false）：携带 error_code 与描述，如 403 权限不足。
+// 真实 Bot API 返回 ok=false 时 error_code 恒非零；code=0 说明响应体异常
+// （网关/反代错误页、截断等，HTTP status 往往非 200），视为瞬时故障处理。
 type telegramAPIError struct {
+	status      int // HTTP 状态码（诊断用）
 	code        int
 	description string
 }
 
 func (e *telegramAPIError) Error() string {
+	if e.status != 0 && e.status != http.StatusOK {
+		return fmt.Sprintf("telegram api error %d (http %d): %s", e.code, e.status, e.description)
+	}
 	return fmt.Sprintf("telegram api error %d: %s", e.code, e.description)
 }
 
@@ -118,7 +124,7 @@ func (c *telegramClient) unpack(method string, resp *resty.Response, result any)
 			}
 			return &telegramRateLimit{retryAfter: retry}
 		}
-		return &telegramAPIError{code: ar.ErrorCode, description: ar.Description}
+		return &telegramAPIError{status: resp.StatusCode(), code: ar.ErrorCode, description: ar.Description}
 	}
 	if result == nil || len(ar.Result) == 0 {
 		return nil
@@ -134,6 +140,40 @@ func (c *telegramClient) unpack(method string, resp *resty.Response, result any)
 func isBadRequest(err error) bool {
 	var ae *telegramAPIError
 	return errors.As(err, &ae) && ae.code == 400
+}
+
+// isRetryableError 判断是否值得降级重试：MarkdownV2 解析失败（400）或
+// 网关异常响应（ok:false 无错误码/不可解析，多为反代瞬时故障，HTTP 状态非 200）。
+func isRetryableError(err error) bool {
+	var ae *telegramAPIError
+	if !errors.As(err, &ae) {
+		return false
+	}
+	return ae.code == 400 || ae.code == 0
+}
+
+// retryAPIError 对一次发送/编辑调用按错误类型降级重试：
+//  1. MarkdownV2 解析失败（400）→ 去掉 parse_mode 纯文本重发；
+//  2. 网关异常响应（code 0）→ 视为瞬时故障原样重试一次（保留 parse_mode），
+//     若重试后仍为 400 再走纯文本降级。
+//
+// 429 限流重试（retryOnce）由调用方负责，网络错误不重试。
+func retryAPIError(ctx context.Context, params map[string]any, call func(map[string]any) error) error {
+	err := call(params)
+	if err == nil || !isRetryableError(err) {
+		return err
+	}
+	var ae *telegramAPIError
+	if errors.As(err, &ae) && ae.code == 0 {
+		if err = call(params); err == nil {
+			return nil
+		}
+	}
+	if isBadRequest(err) {
+		delete(params, "parse_mode")
+		return call(params)
+	}
+	return err
 }
 
 // retryOnce 429 时按 retry-after 等待后重试一次（等待受 ctx 约束）。
