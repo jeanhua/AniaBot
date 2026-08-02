@@ -43,13 +43,11 @@ func (p *NewsPlugin) Start(ctx context.Context, cfg *viper.Viper) error {
 	}
 	p.cronExpress = p.cfg.Cron
 	if p.cronExpress == "" {
-		p.Logger.Error("读取daily news cron表达式错误")
-		return aniaerror.ParameterInitializeError
+		return fmt.Errorf("%w: 未配置 cron 表达式（plugin.dailynews.cron）", aniaerror.ParameterInitializeError)
 	}
 	p.api = p.cfg.API
 	if p.api == "" {
-		p.Logger.Error("读取daily news api错误")
-		return aniaerror.ParameterInitializeError
+		return fmt.Errorf("%w: 未配置 API 端点（plugin.dailynews.api）", aniaerror.ParameterInitializeError)
 	}
 	for _, g := range p.cfg.Groups {
 		p.Logger.Info("播报群聊注册", "groupId", g)

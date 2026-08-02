@@ -97,8 +97,8 @@ func (p *MyPlugin) ConfigSchema() any { return &p.cfg }
 
 func (p *MyPlugin) Start(ctx context.Context, cfg *viper.Viper) error {
 	if p.cfg.API == "" {
-		p.Logger.Error("未配置 plugin.myplugin.api")
-		return aniaerror.ParameterInitializeError // 初始化失败，阻止启动
+		// 初始化失败：fmt.Errorf 包装哨兵并附具体原因，框架统一记录错误日志
+		return fmt.Errorf("%w: 未配置 plugin.myplugin.api", aniaerror.ParameterInitializeError)
 	}
 	if p.cfg.Timeout <= 0 {
 		p.cfg.Timeout = 30 // 防御性兜底

@@ -1,15 +1,17 @@
 package aniaerror
 
 import (
-	"context"
+	"errors"
+	"fmt"
 	"testing"
 )
 
-func TestErrorsConstants(t *testing.T) {
-	if Timeout != context.DeadlineExceeded {
-		t.Fatalf("Timeout constant mismatch")
+func TestParameterInitializeError(t *testing.T) {
+	wrapped := fmt.Errorf("%w: 未配置 Base Url", ParameterInitializeError)
+	if !errors.Is(wrapped, ParameterInitializeError) {
+		t.Fatal("包装后的错误应能 errors.Is 匹配 ParameterInitializeError")
 	}
-	if UnknownError.Error() != "未知错误" {
-		t.Fatalf("UnknownError text changed: %s", UnknownError.Error())
+	if ParameterInitializeError.Error() != "参数初始化错误" {
+		t.Fatalf("哨兵文本变化: %s", ParameterInitializeError.Error())
 	}
 }

@@ -18,10 +18,16 @@
 ### 优化
 
 - 面板密码校验改用 `subtle.ConstantTimeCompare` 常数时间比较，消除计时侧信道；存储值哈希段长度不符 SHA-256 时直接拒绝
+- AI 对话 / 每日新闻插件的初始化失败改为返回 `fmt.Errorf("%w: 具体原因（含配置键名）", aniaerror.ParameterInitializeError)` 包装错误并交由框架统一记录，消除插件侧重复日志与裸哨兵错误丢失上下文的问题；插件开发文档（patterns.md）的初始化示例同步更新为新范式
 
 ### 修复
 
 - 修复面板登录页密码错误时提示「未登录或会话已过期」的问题：前端请求封装对 401 统一吞掉服务端错误体，现优先展示服务端返回的具体错误（如「密码错误」「失败次数过多」）
+- 修复插件生命周期错误被静默丢弃的问题：`Start` / `StartCron` / `Awake` 返回的错误此前被框架直接忽略（如 AI 插件未配置 API KEY、每日新闻 cron 注册失败时启动日志无任何报错），现统一经 `logError` 记录；`logError` 新增 `context.Canceled` 分支，用户 `/stop` 主动取消不再误记为「执行错误」
+
+### 变更
+
+- `common/aniaerror` 移除未被使用的 `UnknownError`、`NetworkError`、`JsonSeralizeError`（原名有拼写错误）与 `Timeout`（`context.DeadlineExceeded` 别名），仅保留实际使用的 `ParameterInitializeError`
 
 ## [v3.7.0] - 2026-08-01
 

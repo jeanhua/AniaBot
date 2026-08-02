@@ -262,7 +262,8 @@ func (ania *AniaBot) Run() {
 
 			// start
 			startCtx, cancel := context.WithTimeout(ania.ctx, StartEventTimeout)
-			p.Start(startCtx, ania.cfg)
+			err := p.Start(startCtx, ania.cfg)
+			logError(err, p, "初始化")
 			cancel()
 		})
 	}
@@ -273,7 +274,8 @@ func (ania *AniaBot) Run() {
 	for _, p := range ania.plugins {
 		safeExecute("初始化cron", p, func(p plugin.Plugin) {
 			startCtx, cancel := context.WithTimeout(ania.ctx, StartCronEventTimeout)
-			p.StartCron(startCtx, ania, c)
+			err := p.StartCron(startCtx, ania, c)
+			logError(err, p, "初始化cron")
 			cancel()
 		})
 	}
@@ -297,7 +299,8 @@ func (ania *AniaBot) Run() {
 			for _, p := range ania.plugins {
 				safeExecute("Awake", p, func(p plugin.Plugin) {
 					awakeCtx, cancel := context.WithTimeout(ania.ctx, AwakeEventTimeout)
-					p.Awake(awakeCtx, ania)
+					err := p.Awake(awakeCtx, ania)
+					logError(err, p, "Awake")
 					cancel()
 				})
 			}

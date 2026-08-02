@@ -449,16 +449,13 @@ func (p *AIChatPlugin) Start(ctx context.Context, cfg *viper.Viper) error {
 	p.rateCh = make(chan struct{}, rateLimit)
 
 	if p.cfg.BaseURL == "" {
-		p.Logger.Error("初始化失败：未配置 Base Url")
-		return aniaerror.ParameterInitializeError
+		return fmt.Errorf("%w: 未配置 Base Url（plugin.ai_chat_bot.base_url）", aniaerror.ParameterInitializeError)
 	}
 	if p.cfg.Model == "" {
-		p.Logger.Error("初始化失败：未配置 Model")
-		return aniaerror.ParameterInitializeError
+		return fmt.Errorf("%w: 未配置 Model（plugin.ai_chat_bot.model）", aniaerror.ParameterInitializeError)
 	}
 	if p.cfg.APIKey == "" {
-		p.Logger.Error("初始化失败：未配置 API KEY")
-		return aniaerror.ParameterInitializeError
+		return fmt.Errorf("%w: 未配置 API KEY（plugin.ai_chat_bot.api_key）", aniaerror.ParameterInitializeError)
 	}
 	if p.cfg.Prompt == "" {
 		p.Logger.Warn("未配置 Prompt，将使用预设的默认提示词")
@@ -534,8 +531,7 @@ func (p *AIChatPlugin) Start(ctx context.Context, cfg *viper.Viper) error {
 		p.cfg.Skills,
 	)
 	if err != nil {
-		p.Logger.Error("创建工具执行器失败", "error", err.Error())
-		return aniaerror.ParameterInitializeError
+		return fmt.Errorf("%w: 创建工具执行器失败: %w", aniaerror.ParameterInitializeError, err)
 	}
 	p.Logger.Info("工具执行器初始化完成")
 
