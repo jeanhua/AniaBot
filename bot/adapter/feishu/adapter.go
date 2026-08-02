@@ -24,6 +24,8 @@ import (
 	"github.com/jeanhua/AniaBot/common/model/message"
 	"github.com/jeanhua/AniaBot/common/msgchain"
 	lark "github.com/larksuite/oapi-sdk-go/v3"
+	"github.com/larksuite/oapi-sdk-go/v3/channel/normalize"
+	"github.com/larksuite/oapi-sdk-go/v3/channel/types"
 	larkcore "github.com/larksuite/oapi-sdk-go/v3/core"
 	"github.com/larksuite/oapi-sdk-go/v3/core/httpserverext"
 	larkevent "github.com/larksuite/oapi-sdk-go/v3/event"
@@ -900,87 +902,122 @@ func (a *feishuAdapter) sendChain(ctx context.Context, receiveID, receiveType st
 }
 
 // segmentsToContent 将正文段翻译为（msgType, content, 已上传图片 key 列表）。
+// 文本统一走 post + md 元素：Feishu 客户端原生渲染 markdown（标题/加粗/代码块/列表等），
+// @提及拆为独立 at 元素前置（保证通知送达）；图片元素追加到正文末尾。
 func (a *feishuAdapter) segmentsToContent(ctx context.Context, segs []message.OB11Segment) (string, string, []string) {
-	hasImage := false
+	var md strings.Builder
+	var mentions []normalizeMention
 	var imageKeys []string
-	for _, s := range segs {
-		if s.Type == message.SegmentImage {
-			hasImage = true
-			if key, ok := a.uploadImage(ctx, s); ok {
-				imageKeys = append(imageKeys, key)
-			}
-		}
-	}
+	hasImage := false
+	atAll := false
 
-	if hasImage {
-		// 富文本 post 承载文本/at/图片
-		content := larkim.NewMessagePost()
-		pc := larkim.NewMessagePostContent()
-		var elements []larkim.MessagePostElement
-		imgIdx := 0
-		for _, s := range segs {
-			switch s.Type {
-			case message.SegmentText:
-				if t, ok := s.Data["text"].(string); ok && t != "" {
-					elements = append(elements, &larkim.MessagePostText{Text: t})
-				}
-			case message.SegmentMention:
-				if qq, ok := s.Data["qq"].(string); ok {
-					if qq == "all" {
-						elements = append(elements, &larkim.MessagePostText{Text: " @所有人 "})
-					} else {
-						elements = append(elements, &larkim.MessagePostAt{UserId: message.QID(qq).TrimPrefix(idPrefix)})
-					}
-				}
-			case message.SegmentImage:
-				if imgIdx < len(imageKeys) {
-					elements = append(elements, &larkim.MessagePostImage{ImageKey: imageKeys[imgIdx]})
-					imgIdx++
-				}
-			}
-		}
-		pc.AppendContent(elements)
-		content.ZhCn(pc)
-		contentStr, err := content.Build()
-		if err != nil {
-			return "", "", imageKeys
-		}
-		return larkim.MsgTypePost, contentStr, imageKeys
-	}
-
-	// 纯文本/at：text 消息（用 json.Marshal 正确转义，SDK 的 MessageTextBuilder 不做转义，
-	// AI 回复中的引号/换行会破坏 content JSON）
-	var sb strings.Builder
 	for _, s := range segs {
 		switch s.Type {
 		case message.SegmentText:
 			if t, ok := s.Data["text"].(string); ok {
-				sb.WriteString(t)
+				md.WriteString(t)
 			}
 		case message.SegmentMention:
 			if qq, ok := s.Data["qq"].(string); ok {
 				if qq == "all" {
-					sb.WriteString(`<at user_id="all"></at>`)
+					atAll = true
 				} else {
-					sb.WriteString(`<at user_id="` + message.QID(qq).TrimPrefix(idPrefix) + `"> </at>`)
+					openID := message.QID(qq).TrimPrefix(idPrefix)
+					mentions = append(mentions, normalizeMention{UserID: openID, OpenID: openID, Key: openID})
 				}
+			}
+		case message.SegmentImage:
+			hasImage = true
+			if key, ok := a.uploadImage(ctx, s); ok {
+				imageKeys = append(imageKeys, key)
 			}
 		case message.SegmentFile, message.SegmentRecord:
 			// 文件单独发送，不进正文
 		default:
 			if t, ok := s.Data["text"].(string); ok {
-				sb.WriteString(t)
+				md.WriteString(t)
 			}
 		}
 	}
-	if sb.Len() == 0 {
+
+	text := strings.TrimSpace(md.String())
+	if text == "" && len(mentions) == 0 && !hasImage {
 		return "", "", nil
 	}
-	contentBytes, err := json.Marshal(map[string]string{"text": sb.String()})
+
+	// 纯图片（无文本/提及）：直接构造含 img 元素的 post
+	if text == "" && len(mentions) == 0 {
+		rows := make([][]map[string]any, 0, 1)
+		if len(imageKeys) > 0 {
+			row := make([]map[string]any, 0, len(imageKeys))
+			for _, key := range imageKeys {
+				row = append(row, map[string]any{"tag": "img", "image_key": key})
+			}
+			rows = append(rows, row)
+		}
+		b, err := json.Marshal(map[string]any{"zh_cn": map[string]any{"title": "", "content": rows}})
+		if err != nil {
+			return "", "", imageKeys
+		}
+		return larkim.MsgTypePost, string(b), imageKeys
+	}
+
+	// post 无 @all 元素，注入文本标记尽力而为（post 的 md 元素对原始 <at> 支持有限）
+	if atAll {
+		text = `<at user_id="all"></at> ` + text
+	}
+
+	content, err := normalize.SimpleMarkdownToPost("", text, mentionList(mentions))
 	if err != nil {
-		return "", "", nil
+		return "", "", imageKeys
 	}
-	return larkim.MsgTypeText, string(contentBytes), nil
+	// 有图片时把 img 元素追加到正文末尾（post 内容行）
+	if len(imageKeys) > 0 {
+		content = appendImagesToPost(content, imageKeys)
+	}
+	return larkim.MsgTypePost, content, imageKeys
+}
+
+// normalizeMention 与 channel/types.Mention 字段对齐（避免引入额外依赖暴露面的别名）。
+type normalizeMention struct {
+	Key    string
+	UserID string
+	OpenID string
+	Name   string
+	IsBot  bool
+}
+
+func mentionList(ms []normalizeMention) []types.Mention {
+	out := make([]types.Mention, 0, len(ms))
+	for _, m := range ms {
+		out = append(out, types.Mention{Key: m.Key, UserID: m.UserID, OpenID: m.OpenID, Name: m.Name, IsBot: m.IsBot})
+	}
+	return out
+}
+
+// appendImagesToPost 把图片 key 追加进 post content 的最后一个段落（正文之后）。
+func appendImagesToPost(content string, imageKeys []string) string {
+	var post struct {
+		ZhCN *struct {
+			Title   string             `json:"title"`
+			Content [][]map[string]any `json:"content"`
+		} `json:"zh_cn"`
+	}
+	if err := json.Unmarshal([]byte(content), &post); err != nil || post.ZhCN == nil {
+		return content
+	}
+	if len(post.ZhCN.Content) == 0 {
+		post.ZhCN.Content = append(post.ZhCN.Content, []map[string]any{})
+	}
+	last := len(post.ZhCN.Content) - 1
+	for _, key := range imageKeys {
+		post.ZhCN.Content[last] = append(post.ZhCN.Content[last], map[string]any{"tag": "img", "image_key": key})
+	}
+	b, err := json.Marshal(post)
+	if err != nil {
+		return content
+	}
+	return string(b)
 }
 
 func (a *feishuAdapter) sendCreate(ctx context.Context, receiveID, receiveType, msgType, content string) (string, bool) {
