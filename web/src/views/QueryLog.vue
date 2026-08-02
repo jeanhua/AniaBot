@@ -28,11 +28,11 @@
     <section class="bg-white rounded-xl shadow-sm border border-slate-200/60 px-5 py-4">
       <div class="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3">
         <label class="block">
-          <span class="text-[10px] tracking-[0.15em] uppercase text-zinc-400">触发人 QQ</span>
+          <span class="text-[10px] tracking-[0.15em] uppercase text-zinc-400">触发人 ID</span>
           <input v-model.trim="filters.sender" type="text" placeholder="精确匹配" :class="inputClass" @keyup.enter="applyFilters" />
         </label>
         <label class="block">
-          <span class="text-[10px] tracking-[0.15em] uppercase text-zinc-400">群号 / 对方 QQ</span>
+          <span class="text-[10px] tracking-[0.15em] uppercase text-zinc-400">目标会话 ID</span>
           <input v-model.trim="filters.target_id" type="text" placeholder="精确匹配" :class="inputClass" @keyup.enter="applyFilters" />
         </label>
         <label class="block">

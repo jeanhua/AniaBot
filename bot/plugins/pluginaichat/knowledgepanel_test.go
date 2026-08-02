@@ -82,7 +82,7 @@ func TestKnowledgePanelCRUD(t *testing.T) {
 func TestKnowledgePanelScopeValidation(t *testing.T) {
 	p := newTestKnowledgePlugin()
 
-	for _, bad := range []string{"", "g:", "x:123", "g:abc", "g:123/../../", "../admin", "f:12 3", "Global", "GLOBAL"} {
+	for _, bad := range []string{"", "g:", "f:", "x:123", "abc", "123", "../admin", "Global", "GLOBAL", "global "} {
 		if _, err := p.KnowledgeList(bad); err == nil {
 			t.Fatalf("非法 scope %q 应被拒绝（KnowledgeList）", bad)
 		}
@@ -91,6 +91,16 @@ func TestKnowledgePanelScopeValidation(t *testing.T) {
 		}
 		if err := p.KnowledgeDelete(bad, "deadbeef"); err == nil {
 			t.Fatalf("非法 scope %q 应被拒绝（KnowledgeDelete）", bad)
+		}
+	}
+
+	// 多平台合法 scope：global、QQ 数字 ID 与带平台前缀的 ID（如飞书 fs:）均接受
+	for _, good := range []string{"global", "g:123", "f:456", "g:fs:oc_xxx", "f:fs:ou_xxx"} {
+		if _, err := p.KnowledgeList(good); err != nil {
+			t.Fatalf("合法 scope %q 应被接受（KnowledgeList）: %v", good, err)
+		}
+		if _, err := p.KnowledgeCreate(plugininfo.KnowledgeDocUpsert{Scope: good, Content: "x"}); err != nil {
+			t.Fatalf("合法 scope %q 应被接受（KnowledgeCreate）: %v", good, err)
 		}
 	}
 

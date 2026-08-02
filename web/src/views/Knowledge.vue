@@ -114,8 +114,8 @@
       <form class="bg-white rounded-2xl shadow-2xl p-6 w-136 space-y-4" @submit.prevent="onSubmit">
         <h2 class="text-base font-semibold text-slate-800">{{ form.id ? '编辑文档' : '新增文档' }}</h2>
         <div v-if="!form.id">
-          <label class="block text-xs text-slate-500 mb-1.5">作用域（下拉可选用已有作用域，或手输 global / g:群号 / f:QQ号）</label>
-          <input v-model="form.scope" list="kb-scope-options" placeholder="如 global 或 g:123456" required :class="inputClass" />
+          <label class="block text-xs text-slate-500 mb-1.5">作用域（下拉可选用已有作用域，或手输 global / g:会话ID / f:用户ID，支持前缀如 g:fs:oc_xxx）</label>
+          <input v-model="form.scope" list="kb-scope-options" placeholder="如 global、g:123456 或 g:fs:oc_xxx" required :class="inputClass" />
           <datalist id="kb-scope-options">
             <option v-for="s in scopeSuggestions" :key="s" :value="s" />
           </datalist>
@@ -149,7 +149,7 @@
       <form class="bg-white rounded-2xl shadow-2xl p-6 w-136 space-y-4" @submit.prevent="onImport">
         <h2 class="text-base font-semibold text-slate-800">从 URL 导入</h2>
         <div>
-          <label class="block text-xs text-slate-500 mb-1.5">作用域（下拉可选用已有作用域，或手输 global / g:群号 / f:QQ号）</label>
+          <label class="block text-xs text-slate-500 mb-1.5">作用域（下拉可选用已有作用域，或手输 global / g:会话ID / f:用户ID，支持前缀如 g:fs:oc_xxx）</label>
           <input v-model="importForm.scope" list="kb-scope-options" placeholder="如 global 或 g:123456" required :class="inputClass" />
           <datalist id="kb-scope-options">
             <option v-for="s in scopeSuggestions" :key="s" :value="s" />
@@ -196,7 +196,7 @@ const form = reactive({ scope: '', id: '', title: '', content: '', tagsText: '',
 const showImport = ref(false)
 const importForm = reactive({ scope: '', url: '', msg: '' })
 
-const scopePattern = /^(global|[gf]:\d+)$/
+const scopePattern = /^(global|[gf]:.+)$/
 
 const filteredScopes = computed(() =>
   kindFilter.value === 'all' ? scopes.value : scopes.value.filter((s) => s.kind === kindFilter.value),
@@ -213,7 +213,7 @@ const scopeSuggestions = computed(() => {
 
 function displayName(s) {
   if (s.scope === 'global') return '全局知识库'
-  return s.kind === 'group' ? `群 ${s.target ?? ''}` : `QQ ${s.target ?? ''}`
+  return s.kind === 'group' ? `群 ${s.target ?? ''}` : `私聊 ${s.target ?? ''}`
 }
 
 function fmtDate(iso) {
@@ -288,7 +288,7 @@ async function onSubmit() {
   form.msg = ''
   const scope = form.scope.trim()
   if (!scopePattern.test(scope)) {
-    form.msg = '作用域应为 global、g:群号 或 f:QQ号'
+    form.msg = '作用域应为 global、g:会话ID 或 f:用户ID（如 g:fs:oc_xxx）'
     return
   }
   const entry = {
@@ -343,7 +343,7 @@ async function onImport() {
   importForm.msg = ''
   const scope = importForm.scope.trim()
   if (!scopePattern.test(scope)) {
-    importForm.msg = '作用域应为 global、g:群号 或 f:QQ号'
+    importForm.msg = '作用域应为 global、g:会话ID 或 f:用户ID（如 g:fs:oc_xxx）'
     return
   }
   try {

@@ -45,11 +45,11 @@ type ClockTask struct {
 	Title      string      `json:"title"`       // 任务标题
 	Content    string      `json:"content"`     // 任务内容，触发时作为对话内容发送给 AI
 	TargetType string      `json:"target_type"` // group / friend
-	TargetID   string      `json:"target_id"`   // 群号或 QQ 号
+	TargetID   string      `json:"target_id"`   // 目标会话 ID（QQ 为数字，其他平台带前缀）
 	Enabled    bool        `json:"enabled"`
 	RunOnce    bool        `json:"run_once"`    // 单次任务：触发执行完成后自动销毁
 	TimeoutSec int         `json:"timeout_sec"` // 单次执行超时秒数，<=0 用默认值
-	CreatedBy  message.QID `json:"created_by"`  // 创建者 QQ（用于群聊 @ 提醒），0 表示无
+	CreatedBy  message.QID `json:"created_by"`  // 创建者 ID（用于群聊 @ 提醒），空表示无
 	Note       string      `json:"note,omitempty"`
 	CreatedAt  time.Time   `json:"created_at"`
 	UpdatedAt  time.Time   `json:"updated_at"`
@@ -139,7 +139,7 @@ func (m *clockManager) taskInfos() []plugininfo.ClockTaskInfo {
 			Enabled:    t.Enabled,
 			RunOnce:    t.RunOnce,
 			TimeoutSec: t.TimeoutSec,
-			CreatedBy:  t.CreatedBy.Uint64(),
+			CreatedBy:  t.CreatedBy.String(),
 			CreatedAt:  t.CreatedAt,
 			LastRunAt:  t.LastRunAt,
 			NextRunAt:  t.NextRunAt,
@@ -186,6 +186,9 @@ func (p *AIChatPlugin) UpdateClockTask(id string, f plugininfo.ClockTaskUpdate) 
 		Note:       f.Note,
 		TimeoutSec: f.TimeoutSec,
 		Enabled:    f.Enabled,
+		TargetType: f.TargetType,
+		TargetID:   f.TargetID,
+		RunOnce:    f.RunOnce,
 	})
 	return err
 }

@@ -76,7 +76,7 @@
               <p class="text-sm text-slate-800 leading-relaxed whitespace-pre-wrap break-words">{{ e.content }}</p>
               <div class="flex items-center gap-1.5 mt-2 flex-wrap">
                 <span class="text-[11px] font-mono text-slate-400">{{ e.id }}</span>
-                <span v-if="e.user_id" class="text-[11px] px-2 py-0.5 rounded-full bg-zinc-900/5 text-zinc-500 border border-zinc-200/60 font-mono">QQ {{ e.user_id }}</span>
+                <span v-if="e.user_id" class="text-[11px] px-2 py-0.5 rounded-full bg-zinc-900/5 text-zinc-500 border border-zinc-200/60 font-mono">{{ e.user_id }}</span>
                 <span v-for="t in e.tags" :key="t" class="text-[11px] px-2 py-0.5 rounded-full bg-zinc-100 text-zinc-600">{{ t }}</span>
                 <span class="text-[11px] text-slate-400">记于 {{ fmtDate(e.created_at) }}</span>
               </div>
@@ -105,16 +105,16 @@
       <form class="bg-white rounded-2xl shadow-2xl p-6 w-[28rem] space-y-4" @submit.prevent="onSubmit">
         <h2 class="text-base font-semibold text-slate-800">{{ form.id ? '编辑记忆' : '新增记忆' }}</h2>
         <div v-if="!form.id">
-          <label class="block text-xs text-slate-500 mb-1.5">会话 scope（g:群号 / f:QQ号）</label>
-          <input v-model="form.scope" placeholder="如 g:123456" required :class="inputClass" />
+          <label class="block text-xs text-slate-500 mb-1.5">会话 scope（g:会话ID / f:用户ID）</label>
+          <input v-model="form.scope" placeholder="如 g:123456 或 g:fs:oc_xxx" required :class="inputClass" />
         </div>
         <div>
           <label class="block text-xs text-slate-500 mb-1.5">内容（一条完整自洽的事实）</label>
-          <textarea v-model="form.content" rows="4" placeholder="如：群主小明（QQ 12345）讨厌被半夜@" required :class="inputClass" />
+          <textarea v-model="form.content" rows="4" placeholder="如：群主小明讨厌被半夜@" required :class="inputClass" />
         </div>
         <div>
-          <label class="block text-xs text-slate-500 mb-1.5">关联 QQ（可空，表示属于整个会话）</label>
-          <input v-model="form.user_id" placeholder="群成员 QQ 号" :class="inputClass" />
+          <label class="block text-xs text-slate-500 mb-1.5">关联用户 ID（可空，表示属于整个会话）</label>
+          <input v-model="form.user_id" placeholder="用户 ID（QQ 数字 / 飞书 fs:ou_xxx）" :class="inputClass" />
         </div>
         <div>
           <label class="block text-xs text-slate-500 mb-1.5">标签（逗号分隔，可空）</label>
@@ -153,7 +153,7 @@ const msgOk = ref(false)
 const showForm = ref(false)
 const form = reactive({ scope: '', id: '', user_id: '', content: '', tagsText: '', msg: '' })
 
-const scopePattern = /^[gf]:\d+$/
+const scopePattern = /^[gf]:.+$/
 
 const filteredScopes = computed(() =>
   kindFilter.value === 'all' ? scopes.value : scopes.value.filter((s) => s.kind === kindFilter.value),
@@ -161,7 +161,7 @@ const filteredScopes = computed(() =>
 
 function displayName(s) {
   if (names.value[s.scope]) return names.value[s.scope]
-  return s.kind === 'group' ? `群 ${s.target}` : `QQ ${s.target}`
+  return s.kind === 'group' ? `群 ${s.target}` : `私聊 ${s.target}`
 }
 
 function fmtDate(iso) {
@@ -244,7 +244,7 @@ async function onSubmit() {
   form.msg = ''
   const scope = form.scope.trim()
   if (!scopePattern.test(scope)) {
-    form.msg = '会话 scope 格式应为 g:群号 或 f:QQ号'
+    form.msg = '会话 scope 格式应为 g:会话ID 或 f:用户ID（如 g:fs:oc_xxx）'
     return
   }
   const entry = {

@@ -161,7 +161,7 @@ type tokenDayDetail struct {
 	Total tokenStatAcc `json:"total"`
 }
 
-// tokenTargetStat 按会话目标（群号 / QQ）聚合的用量。
+// tokenTargetStat 按会话目标（目标会话 ID / 用户 ID）聚合的用量。
 type tokenTargetStat struct {
 	tokenStatAcc
 	ChatType string `json:"chat_type"` // group / friend

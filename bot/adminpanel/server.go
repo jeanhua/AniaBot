@@ -854,7 +854,8 @@ func (s *Server) handleClockUpdate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if req.Cron == nil && req.Title == nil && req.Content == nil && req.Note == nil &&
-		req.TimeoutSec == nil && req.Enabled == nil {
+		req.TimeoutSec == nil && req.Enabled == nil && req.TargetType == nil &&
+		req.TargetID == nil && req.RunOnce == nil {
 		writeError(w, http.StatusBadRequest, "没有需要更新的字段")
 		return
 	}
@@ -986,7 +987,7 @@ func (s *Server) handleQuotaReset(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if req.Scope == "" {
-		writeError(w, http.StatusBadRequest, "scope 不能为空（g:群号 / f:QQ号 / all）")
+		writeError(w, http.StatusBadRequest, "scope 不能为空（g:会话ID / f:用户ID / all）")
 		return
 	}
 	if err := s.opt.Quota.QuotaReset(req.Scope); err != nil {

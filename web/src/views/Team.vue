@@ -116,7 +116,7 @@
           </div>
           <div v-if="!form.originName">
             <label class="block text-xs text-slate-500 mb-1.5">会话 scope</label>
-            <input v-model="form.scope" list="team-scope-options" placeholder="如 global 或 g:123456" required :class="inputClass" />
+            <input v-model="form.scope" list="team-scope-options" placeholder="如 global、g:123456 或 g:fs:oc_xxx" required :class="inputClass" />
             <datalist id="team-scope-options">
               <option v-for="s in scopeOptions" :key="s" :value="s" />
             </datalist>
@@ -194,7 +194,7 @@ const msgOk = ref(false)
 const showForm = ref(false)
 const form = reactive({ scope: '', name: '', originName: '', desc: '', members: [], msg: '' })
 
-const scopePattern = /^(global|[gf]:\d+)$/
+const scopePattern = /^(global|[gf]:.+)$/
 
 const filteredScopes = computed(() =>
   kindFilter.value === 'all' ? scopes.value : scopes.value.filter((s) => s.kind === kindFilter.value),
@@ -227,7 +227,7 @@ function onPresetChange(m, event) {
 function displayName(s) {
   if (names.value[s.scope]) return names.value[s.scope]
   if (s.scope === 'global') return '全局团队'
-  return s.kind === 'group' ? `群 ${s.target}` : `QQ ${s.target}`
+  return s.kind === 'group' ? `群 ${s.target}` : `私聊 ${s.target}`
 }
 
 function fmtDate(iso) {
@@ -311,7 +311,7 @@ async function onSubmit() {
   form.msg = ''
   const scope = form.scope.trim()
   if (!scopePattern.test(scope)) {
-    form.msg = '会话 scope 应为 global、g:群号 或 f:QQ号'
+    form.msg = '会话 scope 应为 global、g:会话ID 或 f:用户ID（如 g:fs:oc_xxx）'
     return
   }
   const team = {

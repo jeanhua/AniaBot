@@ -32,13 +32,13 @@ func (p *AIChatPlugin) clearActiveContext(id message.QID, isGroup bool) {
 }
 
 // buildScenePrompt 生成当前对话场景描述，注入到 system prompt 末尾，
-// 让 AI 明确自己处于群聊还是私聊，以及消息 [nickname:昵称 id:QQ号] 前缀中
+// 让 AI 明确自己处于群聊还是私聊，以及消息 [nickname:昵称 id:用户ID] 前缀中
 // id 的含义（用于 @人、填写定时任务 created_by 等场景）。
 func (p *AIChatPlugin) buildScenePrompt(b bot.Bot, id message.QID, isGroup bool) string {
 	var sb strings.Builder
 	sb.WriteString("\n\n【当前对话场景】\n")
 	if isGroup {
-		sb.WriteString("你正在一个QQ群聊中与多位成员对话，群号：" + id.String())
+		sb.WriteString("你正在一个群聊中与多位成员对话，会话 ID：" + id.String())
 		if b != nil {
 			if info, ok := b.GetGroupDetail(id); ok && info != nil {
 				if info.GroupName != "" {
@@ -50,9 +50,9 @@ func (p *AIChatPlugin) buildScenePrompt(b bot.Bot, id message.QID, isGroup bool)
 			}
 		}
 	} else {
-		sb.WriteString("你正在与一位QQ用户私聊，对方QQ：" + id.String())
+		sb.WriteString("你正在与一位用户私聊，对方 ID：" + id.String())
 	}
-	sb.WriteString("\n用户消息以 [nickname:昵称 id:QQ号] 开头，id 即该发言者的QQ号。")
+	sb.WriteString("\n用户消息以 [nickname:昵称 id:用户ID] 开头，id 即该发言者在当前平台的用户 ID。")
 	if p.memoryManager != nil {
 		sb.WriteString("\n\n【长期记忆】你拥有跨会话的长期记忆能力：对话中得知的用户称呼/偏好/重要信息、群里的约定或值得记住的事件，应主动调用 memory_save 保存；当对话涉及过去的事情或你不确定的背景时，先调用 memory_search 回忆；记忆有误或用户要求忘记时用 memory_forget 删除。记忆仅在当前会话内可见。")
 	}
@@ -80,10 +80,10 @@ func (p *AIChatPlugin) registerScopedTools(sessionExecutor *llmtool.SessionToolE
 	// 从机制上保证记忆不会跨会话泄露
 	if p.memoryManager != nil {
 		scope := "f:" + id.String()
-		sessionDesc := "私聊（对方QQ " + id.String() + "）"
+		sessionDesc := "私聊（对方 ID " + id.String() + "）"
 		if isGroup {
 			scope = "g:" + id.String()
-			sessionDesc = "群聊（群号 " + id.String() + "）"
+			sessionDesc = "群聊（会话 ID " + id.String() + "）"
 		}
 		for _, tool := range newMemoryTools(p.memoryManager, scope, sessionDesc) {
 			sessionExecutor.RegisterSession(tool)
@@ -92,10 +92,10 @@ func (p *AIChatPlugin) registerScopedTools(sessionExecutor *llmtool.SessionToolE
 	// 注册知识库工具，scope 绑定当前会话；知识库检索同时覆盖该会话库与全局库
 	if p.knowledgeManager != nil {
 		scope := "f:" + id.String()
-		sessionDesc := "私聊（对方QQ " + id.String() + "）"
+		sessionDesc := "私聊（对方 ID " + id.String() + "）"
 		if isGroup {
 			scope = "g:" + id.String()
-			sessionDesc = "群聊（群号 " + id.String() + "）"
+			sessionDesc = "群聊（会话 ID " + id.String() + "）"
 		}
 		for _, tool := range newKnowledgeTools(p.knowledgeManager, scope, sessionDesc) {
 			sessionExecutor.RegisterSession(tool)

@@ -27,6 +27,12 @@
 - 插件事件回调不再收到裸 `*core.AniaBot`，而是平台能力包装后的 `bot.Bot`（`adapter.WrapBot`）：事件来源适配器实现 `QQExt` 时断言 `bot.QQ` 成功，否则失败（其他平台插件无感退化）
 - `bot.admin_id` 由 int 改为 string（支持带平台前缀的 ID）；请求拦截/每日新闻插件的群号/QQ号名单由 `[]int` 改为 `[]string`（支持 `fs:` 前缀 ID）
 - AI 对话插件定时任务与 Prompt 覆盖的目标 ID 解析支持多平台：纯数字（QQ）规范化为 QID，带前缀（如 `fs:oc_xxx`）原样保留
+- **面板多平台适配**：管理面板全面去除 QQ 框架残留假设
+  - 定时任务页：目标 ID 校验由「纯数字」放宽为任意非空 ID（支持 `fs:oc_xxx` / `fs:ou_xxx`），「群号 / QQ 号」文案改为「群 ID / 用户 ID」，创建者不再硬编码 QQ 前缀；编辑弹窗支持修改触发对象类型/目标 ID/单次标记（后端 `ClockTaskUpdate` 新增 `target_type`/`target_id`/`run_once` 字段）
+  - 记忆/知识库/团队/配额页的会话 scope 校验由 `^[gf]:\d+$` 放宽为 `^[gf]:.+$`（如 `g:fs:oc_xxx`），此前飞书会话的数据在面板上完全无法查看/管理；`ClockTaskInfo.CreatedBy` 由 uint64 改为 string，飞书创建者不再显示为 0
+  - 日志插件（pluginlog）通知文本改用 `QID.String()` 渲染，飞书撤回/表情回应/成员进出不再记录为 0，并修复通知文本中消息 ID 的格式串错误
+  - AI 场景提示词与工具描述去除「QQ 群聊 / 群号 / QQ号」措辞，改为平台中性的「会话 ID / 用户 ID」（多平台下 AI 不再误以为自己在 QQ 上）
+  - Prompt 覆盖编辑器移除 `inputmode="numeric"`，联系人页表头、日志筛选标签、Quota reset 错误文案等同步改为平台中性表述；文档示例（cron 插件教程）同步更新为 `[]string` 群 ID
 
 ## [v3.7.0] - 2026-08-01
 

@@ -73,7 +73,7 @@
                   <dt class="text-[10px] tracking-[0.15em] uppercase text-zinc-400 self-center">超时时间</dt>
                   <dd class="text-zinc-700">{{ t.timeout_sec > 0 ? t.timeout_sec + ' 秒' : '默认' }}</dd>
                   <dt class="text-[10px] tracking-[0.15em] uppercase text-zinc-400 self-center">创建者</dt>
-                  <dd class="text-zinc-700">{{ t.created_by ? 'QQ ' + t.created_by : '—' }}</dd>
+                  <dd class="text-zinc-700 font-mono">{{ t.created_by || '—' }}</dd>
                   <dt class="text-[10px] tracking-[0.15em] uppercase text-zinc-400 self-center">创建时间</dt>
                   <dd class="text-zinc-700">{{ fmtTimeFull(t.created_at) }}</dd>
                 </dl>
@@ -137,7 +137,7 @@
           </select>
         </label>
         <label class="block">
-          <span class="text-[10px] tracking-[0.15em] uppercase text-zinc-400">群号 / 对方 QQ</span>
+          <span class="text-[10px] tracking-[0.15em] uppercase text-zinc-400">目标会话 ID</span>
           <input v-model.trim="filters.target_id" type="text" placeholder="精确匹配" :class="inputClass" @keyup.enter="applyFilters" />
         </label>
         <label class="block">
@@ -342,14 +342,14 @@
             <div class="grid grid-cols-2 gap-4">
               <div>
                 <label class="form-label">触发对象 <span class="text-red-500">*</span></label>
-                <select v-model="clockForm.target_type" class="form-input" :disabled="!!clockForm.id">
+                <select v-model="clockForm.target_type" class="form-input">
                   <option value="group">群聊</option>
                   <option value="friend">好友</option>
                 </select>
               </div>
               <div>
-                <label class="form-label">{{ clockForm.target_type === 'group' ? '群号' : 'QQ 号' }} <span class="text-red-500">*</span></label>
-                <input v-model.trim="clockForm.target_id" type="text" class="form-input" :disabled="!!clockForm.id" placeholder="数字" />
+                <label class="form-label">{{ clockForm.target_type === 'group' ? '群 ID' : '用户 ID' }} <span class="text-red-500">*</span></label>
+                <input v-model.trim="clockForm.target_id" type="text" class="form-input" placeholder="如 123456 或 fs:oc_xxx" />
               </div>
             </div>
             <div>
@@ -357,7 +357,7 @@
               <input v-model.trim="clockForm.note" type="text" class="form-input" placeholder="可选，触发时附带给 AI" />
             </div>
             <label class="flex items-center gap-2 text-xs text-zinc-700 select-none">
-              <input v-model="clockForm.run_once" type="checkbox" class="accent-zinc-900" :disabled="!!clockForm.id" />
+              <input v-model="clockForm.run_once" type="checkbox" class="accent-zinc-900" />
               单次任务（触发一次后自动删除）
             </label>
             <p v-if="clockFormError" class="text-xs text-red-600">{{ clockFormError }}</p>
@@ -464,10 +464,7 @@ async function saveClock() {
   const f = clockForm.value
   if (!f.content) { clockFormError.value = '任务内容不能为空'; return }
   if (!f.cron) { clockFormError.value = 'Cron 表达式不能为空'; return }
-  if (!f.id) {
-    if (!f.target_id) { clockFormError.value = '目标 ID 不能为空'; return }
-    if (!/^\d+$/.test(f.target_id)) { clockFormError.value = '目标 ID 必须是数字'; return }
-  }
+  if (!f.target_id) { clockFormError.value = '目标 ID 不能为空'; return }
   clockFormError.value = ''
   clockSaving.value = true
   try {
@@ -478,6 +475,9 @@ async function saveClock() {
         cron: f.cron,
         note: f.note,
         timeout_sec: f.timeout_sec || 0,
+        target_type: f.target_type,
+        target_id: f.target_id,
+        run_once: f.run_once,
       })
     } else {
       await api.createClock({

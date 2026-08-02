@@ -22,9 +22,9 @@ type subagentToolBase struct {
 // newSubagentTools 创建子代理相关工具，注册到当前会话的执行器中。
 func newSubagentTools(p *AIChatPlugin, b bot.Bot, id message.QID, isGroup bool) []llmtool.Tool {
 	base := subagentToolBase{plugin: p, bot: b, id: id, isGroup: isGroup}
-	sessionDesc := "私聊（对方QQ " + id.String() + "）"
+	sessionDesc := "私聊（对方 ID " + id.String() + "）"
 	if isGroup {
-		sessionDesc = "群聊（群号 " + id.String() + "）"
+		sessionDesc = "群聊（会话 ID " + id.String() + "）"
 	}
 	runDesc := "将一个复杂/耗时的子任务委派给一次性子代理异步执行。子代理以全新上下文运行（看不到当前对话历史），" +
 		"拥有与你一致的工具能力（以其实际可用的工具列表为准），执行完毕后结果会自动发送到当前会话。" +

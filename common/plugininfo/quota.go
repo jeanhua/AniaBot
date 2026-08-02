@@ -2,9 +2,9 @@ package plugininfo
 
 // QuotaSessionInfo 一个会话（群聊/私聊）当日的 Token 用量概览，供面板「配额管理」页展示。
 type QuotaSessionInfo struct {
-	Key       string `json:"key"`       // 会话 key：g:群号 / f:QQ号
+	Key       string `json:"key"`       // 会话 key：g:会话ID / f:用户ID
 	Kind      string `json:"kind"`      // group / friend
-	Target    string `json:"target"`    // 群号或 QQ 号
+	Target    string `json:"target"`    // 目标会话 ID
 	Used      int64  `json:"used"`      // 当日已用 token
 	Limit     int64  `json:"limit"`     // 每会话每日上限（0 表示不限制）
 	Remaining int64  `json:"remaining"` // 剩余额度（负值按 0 展示）

@@ -105,7 +105,7 @@ export const api = {
   getTokenStatsDetail: (params = {}) => request(`/api/tokenstats/detail${qs(params)}`),
   // 每日配额汇总：{ date, global_used, global_limit, global_remaining, global_reached, sessions[] }
   getQuota: () => request('/api/quota'),
-  // 清零配额：scope 为 g:群号 / f:QQ号 / all
+  // 清零配额：scope 为 g:会话ID / f:用户ID（如 g:fs:oc_xxx）/ all
   resetQuota: (scope) => request('/api/quota/reset', { method: 'POST', body: JSON.stringify({ scope }) }),
   createClock: (task) =>
     request('/api/clocks', { method: 'POST', body: JSON.stringify(task) }),

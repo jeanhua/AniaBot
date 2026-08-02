@@ -21,7 +21,7 @@
       <table v-if="current === 'groups'" class="w-full text-sm">
         <thead>
           <tr class="text-left text-xs text-slate-400 bg-slate-50/60 border-b border-slate-100">
-            <th class="px-6 py-3 font-medium">群号</th>
+            <th class="px-6 py-3 font-medium">群 ID</th>
             <th class="px-6 py-3 font-medium">群名称</th>
             <th class="px-6 py-3 font-medium">成员数</th>
           </tr>
@@ -38,7 +38,7 @@
       <table v-else class="w-full text-sm">
         <thead>
           <tr class="text-left text-xs text-slate-400 bg-slate-50/60 border-b border-slate-100">
-            <th class="px-6 py-3 font-medium">QQ 号</th>
+            <th class="px-6 py-3 font-medium">用户 ID</th>
             <th class="px-6 py-3 font-medium">昵称</th>
             <th class="px-6 py-3 font-medium">备注</th>
           </tr>

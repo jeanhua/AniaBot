@@ -279,16 +279,16 @@ func TestNewSubagentTools(t *testing.T) {
 	if tool.Name() != "subagent_run" {
 		t.Fatalf("工具名 = %q, want subagent_run", tool.Name())
 	}
-	if !strings.Contains(tool.Description(), "群聊（群号 12345）") {
-		t.Fatalf("群聊会话描述应包含群号, got %q", tool.Description())
+	if !strings.Contains(tool.Description(), "群聊（会话 ID 12345）") {
+		t.Fatalf("群聊会话描述应包含会话 ID, got %q", tool.Description())
 	}
 	if !strings.Contains(tool.Description(), "300 秒") {
 		t.Fatalf("描述应包含默认超时, got %q", tool.Description())
 	}
 
 	friendTools := newSubagentTools(p, nil, message.FromUint64(67890), false)
-	if !strings.Contains(friendTools[0].Description(), "私聊（对方QQ 67890）") {
-		t.Fatalf("私聊会话描述应包含对方QQ, got %q", friendTools[0].Description())
+	if !strings.Contains(friendTools[0].Description(), "私聊（对方 ID 67890）") {
+		t.Fatalf("私聊会话描述应包含对方 ID, got %q", friendTools[0].Description())
 	}
 }
 

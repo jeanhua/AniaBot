@@ -129,7 +129,7 @@
           <p v-if="promptGroups.length === 0" class="text-xs text-slate-400">暂无群聊 Prompt 覆盖</p>
           <div v-for="(item, i) in promptGroups" :key="i" class="space-y-2 bg-slate-50/60 rounded-lg p-4 border border-slate-100">
             <div class="flex items-center gap-2">
-              <input v-model="item.id" type="text" inputmode="numeric" placeholder="群号" :class="inputClass + ' !w-48 bg-white'" />
+              <input v-model="item.id" type="text" placeholder="群 ID（如 123456 或 fs:oc_xxx）" :class="inputClass + ' !w-48 bg-white'" />
               <button class="text-xs text-red-500 hover:text-red-700 shrink-0 transition-colors" @click="promptGroups.splice(i, 1)">删除</button>
             </div>
             <textarea v-model="item.prompt" rows="3" placeholder="该群使用的系统提示词" :class="inputClass + ' bg-white'" />
@@ -146,7 +146,7 @@
           <p v-if="promptFriends.length === 0" class="text-xs text-slate-400">暂无好友 Prompt 覆盖</p>
           <div v-for="(item, i) in promptFriends" :key="i" class="space-y-2 bg-slate-50/60 rounded-lg p-4 border border-slate-100">
             <div class="flex items-center gap-2">
-              <input v-model="item.id" type="text" inputmode="numeric" placeholder="QQ 号" :class="inputClass + ' !w-48 bg-white'" />
+              <input v-model="item.id" type="text" placeholder="用户 ID（如 123456 或 fs:ou_xxx）" :class="inputClass + ' !w-48 bg-white'" />
               <button class="text-xs text-red-500 hover:text-red-700 shrink-0 transition-colors" @click="promptFriends.splice(i, 1)">删除</button>
             </div>
             <textarea v-model="item.prompt" rows="3" placeholder="该好友会话使用的系统提示词" :class="inputClass + ' bg-white'" />
@@ -212,7 +212,7 @@ const KvEditor = defineComponent({
 
 const tabs = [
   { name: 'mcp', label: 'MCP 服务器', desc: '格式: {"servers": [{name, transport(stdio/streamable/sse), command/endpoint, args, env, headers, timeout, description}]}' },
-  { name: 'prompt', label: 'Prompt 覆盖', desc: '格式: {"groups": {"群号": "prompt"}, "friends": {"QQ号": "prompt"}}' },
+  { name: 'prompt', label: 'Prompt 覆盖', desc: '格式: {"groups": {"群ID": "prompt"}, "friends": {"用户ID": "prompt"}}（QQ 为数字，其他平台带前缀）' },
 ]
 
 const current = ref('mcp')

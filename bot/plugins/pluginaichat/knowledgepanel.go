@@ -19,9 +19,9 @@ const kbImportTimeout = 60 * time.Second
 // 知识库面板管理接口（实现 adminpanel.KnowledgeBaseSource）。
 // 改动直接落盘，AI 工具每次调用实时读写存储，因此无需重启即生效。
 
-// kbScopePattern 合法的知识库作用域：global / g:群号 / f:QQ号。
+// kbScopePattern 合法的知识库作用域：global / g:会话ID / f:用户ID（其他平台带前缀，如 g:fs:oc_xxx）。
 // 面板传入的 scope 必须严格匹配，防止越权读写 kb: 命名空间下的任意键。
-var kbScopePattern = regexp.MustCompile(`^(global|[gf]:\d+)$`)
+var kbScopePattern = regexp.MustCompile(`^(global|[gf]:.+)$`)
 
 func validKbScope(scope string) bool {
 	return kbScopePattern.MatchString(scope)

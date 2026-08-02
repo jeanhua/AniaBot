@@ -54,7 +54,7 @@ type teamDefinition struct {
 	CreatedAt time.Time    `json:"created_at,omitempty"`
 }
 
-// teamManager 持久团队管理器：按会话 scope（g:群号 / f:QQ号）隔离存取。
+// teamManager 持久团队管理器：按会话 scope（g:会话ID / f:用户ID）隔离存取。
 //
 // 每个团队是一个 JSON 对象整体读写（PersistentStorage 的 KV 语义），
 // key = scope + ":" + 团队名，如 "g:12345:开发团队"；同 scope 内通过
@@ -115,7 +115,7 @@ func (m *teamManager) get(scope, name string) (teamDefinition, bool) {
 	return m.getLocked(scope + ":" + strings.TrimSpace(name))
 }
 
-// scopes 列出当前已有团队的全部会话 scope（g:群号 / f:QQ号），排序后返回。
+// scopes 列出当前已有团队的全部会话 scope（g:会话ID / f:用户ID），排序后返回。
 // 供 Web 面板的 Agent 团队管理页使用。
 func (m *teamManager) scopes() []string {
 	m.mu.Lock()

@@ -8,7 +8,7 @@ package pluginaichat
 // 仍在 Start 中通过 viper 读取。
 
 // 默认系统提示词（与 Prompt 字段 default 标签保持一致；Start 中作为空值兜底）
-const defaultPrompt = `你是一个ai对话机器人，在QQ上和别人聊天，说话不要长篇大论
+const defaultPrompt = `你是一个ai对话机器人，在即时通讯平台上与用户聊天，说话不要长篇大论
 
 ## 注意
 - 当你不理解用户的问题时，要先获取用户最近的历史消息，再根据历史消息回答用户的问题`
@@ -140,7 +140,7 @@ type aiChatConfig struct {
 	TopP        *float64 `cfg:"plugin.ai_chat_bot.top_p" label:"Top P" group:"AI 对话 · 模型" default:"0.9"`
 	TopK        *int     `cfg:"plugin.ai_chat_bot.top_k" label:"Top K" group:"AI 对话 · 模型" default:"100"`
 	// 与 defaultPrompt 常量保持一致（标签内 \n 会被解析为换行）
-	Prompt   string         `cfg:"plugin.ai_chat_bot.prompt" label:"系统提示词" type:"text" group:"AI 对话 · 模型" default:"你是一个ai对话机器人，在QQ上和别人聊天，说话不要长篇大论\n\n## 注意\n- 当你不理解用户的问题时，要先获取用户最近的历史消息，再根据历史消息回答用户的问题"`
+	Prompt   string         `cfg:"plugin.ai_chat_bot.prompt" label:"系统提示词" type:"text" group:"AI 对话 · 模型" default:"你是一个ai对话机器人，在即时通讯平台上与用户聊天，说话不要长篇大论\n\n## 注意\n- 当你不理解用户的问题时，要先获取用户最近的历史消息，再根据历史消息回答用户的问题"`
 	Thinking thinkingConfig `cfg:"plugin.ai_chat_bot.thinking"`
 	Search   searchConfig   `cfg:"plugin.ai_chat_bot.search"`
 

@@ -264,7 +264,7 @@ func (l *Logger) RecentForTarget(targetType, targetID string, limit int) []Entry
 // Filter 执行日志的查询条件，零值字段不参与过滤。
 type Filter struct {
 	TargetType string    // group / friend
-	TargetID   string    // 群号 / 好友 QQ（精确匹配）
+	TargetID   string    // 目标会话 ID / 用户 ID（精确匹配）
 	TaskID     string    // 任务 ID（精确匹配）
 	Status     Status    // 执行状态（精确匹配）
 	Start      time.Time // 触发起始时间（含），零值不限

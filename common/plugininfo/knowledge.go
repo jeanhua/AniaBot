@@ -4,7 +4,7 @@ import "time"
 
 // KnowledgeScopeInfo 是一个知识库作用域（全局 / 群聊 / 私聊）的概览，供面板左侧列表展示。
 type KnowledgeScopeInfo struct {
-	Scope string `json:"scope"` // 作用域，global / g:群号 / f:QQ号
+	Scope string `json:"scope"` // 作用域，global / g:会话ID / f:用户ID
 	Kind  string `json:"kind"`  // global / group / friend
 	Count int    `json:"count"` // 该作用域下的文档条数
 }

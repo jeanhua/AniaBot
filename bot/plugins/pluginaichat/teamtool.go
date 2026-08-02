@@ -22,9 +22,9 @@ type teamToolBase struct {
 // 注册到主会话执行器。sessionDesc 与预置角色列表写入工具描述。
 func newTeamTools(p *AIChatPlugin, b bot.Bot, id message.QID, isGroup bool) []llmtool.Tool {
 	base := teamToolBase{plugin: p, bot: b, id: id, isGroup: isGroup}
-	sessionDesc := "私聊（对方QQ " + id.String() + "）"
+	sessionDesc := "私聊（对方 ID " + id.String() + "）"
 	if isGroup {
-		sessionDesc = "群聊（群号 " + id.String() + "）"
+		sessionDesc = "群聊（会话 ID " + id.String() + "）"
 	}
 	roles := builtinTeamRoleNames()
 	runDesc := "组建一个多代理团队并同步执行：把任务并行派发给多个成员代理（每个成员以全新上下文运行，" +
@@ -57,7 +57,7 @@ func newTeamTools(p *AIChatPlugin, b bot.Bot, id message.QID, isGroup bool) []ll
 	}
 }
 
-// teamScope 返回当前会话的持久化 scope（与 memory 工具一致：g:群号 / f:QQ号）。
+// teamScope 返回当前会话的持久化 scope（与 memory 工具一致：g:会话ID / f:用户ID）。
 func (b teamToolBase) teamScope() string {
 	if b.isGroup {
 		return "g:" + b.id.String()

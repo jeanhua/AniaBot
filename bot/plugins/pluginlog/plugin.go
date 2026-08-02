@@ -123,7 +123,7 @@ func (p *LogPlugin) notice(groupId, userId message.QID, title, text string) {
 
 func (p *LogPlugin) OnGroupUpload(ctx context.Context, bot bot.Bot, n message.GroupUploadNotice) error {
 	p.notice(n.GroupId, n.UserId, "群文件上传",
-		fmt.Sprintf("%d 上传了文件 %s（%d 字节）", n.UserId.Uint64(), n.File.Name, n.File.Size))
+		fmt.Sprintf("%s 上传了文件 %s（%d 字节）", n.UserId.String(), n.File.Name, n.File.Size))
 	return nil
 }
 
@@ -133,7 +133,7 @@ func (p *LogPlugin) OnGroupAdmin(ctx context.Context, bot bot.Bot, n message.Gro
 		action = "被取消管理员"
 	}
 	p.notice(n.GroupId, n.UserId, "群管理员变动",
-		fmt.Sprintf("%d %s", n.UserId.Uint64(), action))
+		fmt.Sprintf("%s %s", n.UserId.String(), action))
 	return nil
 }
 
@@ -147,7 +147,7 @@ func (p *LogPlugin) OnGroupDecrease(ctx context.Context, bot bot.Bot, n message.
 		action = "离开了群聊"
 	}
 	p.notice(n.GroupId, n.UserId, "群成员减少",
-		fmt.Sprintf("%d %s（操作者 %d）", n.UserId.Uint64(), action, n.OperatorId.Uint64()))
+		fmt.Sprintf("%s %s（操作者 %s）", n.UserId.String(), action, n.OperatorId.String()))
 	return nil
 }
 
@@ -157,36 +157,36 @@ func (p *LogPlugin) OnGroupIncrease(ctx context.Context, bot bot.Bot, n message.
 		action = "被邀请加入群聊"
 	}
 	p.notice(n.GroupId, n.UserId, "群成员增加",
-		fmt.Sprintf("%d %s（操作者 %d）", n.UserId.Uint64(), action, n.OperatorId.Uint64()))
+		fmt.Sprintf("%s %s（操作者 %s）", n.UserId.String(), action, n.OperatorId.String()))
 	return nil
 }
 
 func (p *LogPlugin) OnGroupBan(ctx context.Context, bot bot.Bot, n message.GroupBanNotice) error {
 	if n.SubType == "lift_ban" {
 		p.notice(n.GroupId, n.UserId, "群禁言",
-			fmt.Sprintf("%d 被解除禁言（操作者 %d）", n.UserId.Uint64(), n.OperatorId.Uint64()))
+			fmt.Sprintf("%s 被解除禁言（操作者 %s）", n.UserId.String(), n.OperatorId.String()))
 	} else {
 		p.notice(n.GroupId, n.UserId, "群禁言",
-			fmt.Sprintf("%d 被禁言 %d 秒（操作者 %d）", n.UserId.Uint64(), n.Duration, n.OperatorId.Uint64()))
+			fmt.Sprintf("%s 被禁言 %d 秒（操作者 %s）", n.UserId.String(), n.Duration, n.OperatorId.String()))
 	}
 	return nil
 }
 
 func (p *LogPlugin) OnFriendAdd(ctx context.Context, bot bot.Bot, n message.FriendAddNotice) error {
 	p.notice("", n.UserId, "新好友",
-		fmt.Sprintf("%d 添加了 Bot 为好友", n.UserId.Uint64()))
+		fmt.Sprintf("%s 添加了 Bot 为好友", n.UserId.String()))
 	return nil
 }
 
 func (p *LogPlugin) OnGroupRecall(ctx context.Context, bot bot.Bot, n message.GroupRecallNotice) error {
 	p.notice(n.GroupId, n.UserId, "群消息撤回",
-		fmt.Sprintf("%d 的消息（%d）被 %d 撤回", n.UserId.Uint64(), n.MessageId, n.OperatorId.Uint64()))
+		fmt.Sprintf("%s 的消息（%d）被 %s 撤回", n.UserId.String(), n.MessageId, n.OperatorId.String()))
 	return nil
 }
 
 func (p *LogPlugin) OnFriendRecall(ctx context.Context, bot bot.Bot, n message.FriendRecallNotice) error {
 	p.notice("", n.UserId, "好友消息撤回",
-		fmt.Sprintf("%d 撤回了消息（%d）", n.UserId.Uint64(), n.MessageId))
+		fmt.Sprintf("%s 撤回了消息（%d）", n.UserId.String(), n.MessageId))
 	return nil
 }
 
@@ -196,13 +196,13 @@ func (p *LogPlugin) OnPoke(ctx context.Context, bot bot.Bot, n message.PokeNotic
 		groupId = *n.GroupId
 	}
 	p.notice(groupId, n.UserId, "戳一戳",
-		fmt.Sprintf("%d 戳了戳 %d", n.UserId.Uint64(), n.TargetId.Uint64()))
+		fmt.Sprintf("%s 戳了戳 %s", n.UserId.String(), n.TargetId.String()))
 	return nil
 }
 
 func (p *LogPlugin) OnLuckyKing(ctx context.Context, bot bot.Bot, n message.LuckyKingNotice) error {
 	p.notice(n.GroupId, n.TargetId, "运气王",
-		fmt.Sprintf("%d 发出的红包，%d 成为运气王", n.UserId.Uint64(), n.TargetId.Uint64()))
+		fmt.Sprintf("%s 发出的红包，%s 成为运气王", n.UserId.String(), n.TargetId.String()))
 	return nil
 }
 
@@ -218,13 +218,13 @@ func (p *LogPlugin) OnHonor(ctx context.Context, bot bot.Bot, n message.HonorNot
 		honor = n.HonorType
 	}
 	p.notice(n.GroupId, n.UserId, "群荣誉变更",
-		fmt.Sprintf("%d 获得群荣誉「%s」", n.UserId.Uint64(), honor))
+		fmt.Sprintf("%s 获得群荣誉「%s」", n.UserId.String(), honor))
 	return nil
 }
 
 func (p *LogPlugin) OnGroupMsgEmojiLike(ctx context.Context, bot bot.Bot, n message.GroupMsgEmojiLikeNotice) error {
 	p.notice(n.GroupId, n.UserId, "表情回应",
-		fmt.Sprintf("%d 对消息（%d）添加了 %d 个表情回应", n.UserId.Uint64(), n.MessageId.Uint64(), len(n.Likes)))
+		fmt.Sprintf("%s 对消息（%s）添加了 %d 个表情回应", n.UserId.String(), n.MessageId.String(), len(n.Likes)))
 	return nil
 }
 
@@ -234,12 +234,12 @@ func (p *LogPlugin) OnEssence(ctx context.Context, bot bot.Bot, n message.Essenc
 		action = "被移出精华"
 	}
 	p.notice(n.GroupId, n.SenderId, "群精华消息",
-		fmt.Sprintf("%d 的消息（%d）%s（操作者 %d）", n.SenderId.Uint64(), n.MessageId.Uint64(), action, n.OperatorId.Uint64()))
+		fmt.Sprintf("%s 的消息（%s）%s（操作者 %s）", n.SenderId.String(), n.MessageId.String(), action, n.OperatorId.String()))
 	return nil
 }
 
 func (p *LogPlugin) OnGroupCard(ctx context.Context, bot bot.Bot, n message.GroupCardNotice) error {
 	p.notice(n.GroupId, n.UserId, "群名片变更",
-		fmt.Sprintf("%d 的群名片由「%s」改为「%s」", n.UserId.Uint64(), n.CardOld, n.CardNew))
+		fmt.Sprintf("%s 的群名片由「%s」改为「%s」", n.UserId.String(), n.CardOld, n.CardNew))
 	return nil
 }

@@ -9,7 +9,7 @@ import (
 )
 
 // knowledgeToolBase 为知识库工具共享管理器引用与当前会话 scope。
-// scope 在会话创建时绑定（global / g:群号 / f:QQ号），AI 无法指定其它 scope，
+// scope 在会话创建时绑定（global / g:会话ID / f:用户ID），AI 无法指定其它 scope，
 // 从机制上保证知识库不会跨会话泄露（全局库所有会话可见，属预期行为）。
 type knowledgeToolBase struct {
 	mgr   *knowledgeManager

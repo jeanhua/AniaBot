@@ -9,7 +9,7 @@ import (
 )
 
 // memoryToolBase 为记忆工具共享管理器引用与当前会话 scope。
-// scope 在会话创建时绑定（g:群号 / f:QQ号），AI 无法指定其它 scope，
+// scope 在会话创建时绑定（g:会话ID / f:用户ID），AI 无法指定其它 scope，
 // 从机制上保证群与群、群与私聊之间的记忆隔离。
 type memoryToolBase struct {
 	mgr   *memoryManager
@@ -17,7 +17,7 @@ type memoryToolBase struct {
 }
 
 // newMemoryTools 创建一组长期记忆管理工具，注册到当前会话的执行器中。
-// sessionDesc 为当前会话的可读描述（如 "群聊（群号 123）"），写入工具描述
+// sessionDesc 为当前会话的可读描述（如 "群聊（会话 ID 123）"），写入工具描述
 // 让 AI 明确记忆的归属范围。
 func newMemoryTools(mgr *memoryManager, scope string, sessionDesc string) []llmtool.Tool {
 	base := memoryToolBase{mgr: mgr, scope: scope}
@@ -40,8 +40,8 @@ func newMemoryTools(mgr *memoryManager, scope string, sessionDesc string) []llmt
 // ---- memory_save ----
 
 type memorySaveParams struct {
-	Content string   `json:"content" desc:"要记住的内容，一条完整自洽的事实，如「群主小明（QQ 12345）讨厌被半夜@」；最长 2000 字符，超出会被截断"`
-	UserID  string   `json:"user_id,omitempty" desc:"该记忆关联的群成员QQ号（其消息以 [nickname:昵称 id:QQ号] 开头，取其中的id）；属于整个群/会话的记忆不填"`
+	Content string   `json:"content" desc:"要记住的内容，一条完整自洽的事实，如「群主小明讨厌被半夜@」；最长 2000 字符，超出会被截断"`
+	UserID  string   `json:"user_id,omitempty" desc:"该记忆关联的用户ID（QQ 为数字QQ号，其他平台为带前缀的ID，如 fs:ou_xxx；其消息以 [nickname:昵称 id:用户ID] 开头，取其中的id）；属于整个群/会话的记忆不填"`
 	Tags    []string `json:"tags,omitempty" desc:"分类标签，便于检索，如 [\"偏好\",\"称呼\"]"`
 }
 
@@ -165,7 +165,7 @@ func formatMemoryLine(e memoryEntry) string {
 	var sb strings.Builder
 	sb.WriteString("[" + e.ID + "] ")
 	if e.UserID != "" {
-		sb.WriteString("(QQ " + e.UserID + ") ")
+		sb.WriteString("(" + e.UserID + ") ")
 	}
 	if len(e.Tags) > 0 {
 		sb.WriteString("<" + strings.Join(e.Tags, ",") + "> ")

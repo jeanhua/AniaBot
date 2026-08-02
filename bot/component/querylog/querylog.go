@@ -59,7 +59,7 @@ type Entry struct {
 	ID               string           `json:"id"`
 	Time             time.Time        `json:"time"`
 	ChatType         string           `json:"chat_type"` // group / friend
-	TargetID         string           `json:"target_id"` // 群号 / 好友 QQ
+	TargetID         string           `json:"target_id"` // 目标会话 ID / 用户 ID
 	Senders          []string         `json:"senders,omitempty"`
 	Query            string           `json:"query"` // 合并后的用户输入（可能含排队消息）
 	Status           Status           `json:"status"`
@@ -246,7 +246,7 @@ func (l *Logger) Recent(limit int) []Entry {
 // Filter Query 日志的查询条件，零值字段不参与过滤。
 type Filter struct {
 	ChatType string    // group / friend
-	TargetID string    // 群号 / 好友 QQ（精确匹配）
+	TargetID string    // 目标会话 ID / 用户 ID（精确匹配）
 	Sender   string    // 触发人 QQ（精确匹配，命中批次内任一发言者）
 	Start    time.Time // 起始时间（含），零值不限
 	End      time.Time // 截止时间（含），零值不限

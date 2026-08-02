@@ -44,8 +44,8 @@ type Entry struct {
 	ID       uint64    `json:"id"`
 	Time     time.Time `json:"time"`
 	Type     Type      `json:"type"`
-	GroupId  string    `json:"group_id,omitempty"` // 群号（群消息 / 群通知）
-	UserId   string    `json:"user_id,omitempty"`  // 相关 QQ 号
+	GroupId  string    `json:"group_id,omitempty"` // 会话 ID（群消息 / 群通知）
+	UserId   string    `json:"user_id,omitempty"`  // 相关用户 ID
 	Nickname string    `json:"nickname,omitempty"` // 发送者昵称 / 群名片
 	Title    string    `json:"title,omitempty"`    // 通知标题（仅 notice 类型），如「群成员增加」
 	Text     string    `json:"text"`               // 消息内容 / 通知描述

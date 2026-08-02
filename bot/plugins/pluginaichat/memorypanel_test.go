@@ -81,7 +81,7 @@ func TestMemoryPanelCRUD(t *testing.T) {
 func TestMemoryPanelScopeValidation(t *testing.T) {
 	p := newTestMemoryPlugin()
 
-	for _, bad := range []string{"", "g:", "x:123", "g:abc", "g:123/../../", "../admin", "f:12 3"} {
+	for _, bad := range []string{"", "g:", "f:", "x:123", "abc", "123", "../admin", "memory:g:1", "G:123"} {
 		if _, err := p.MemoryList(bad); err == nil {
 			t.Fatalf("非法 scope %q 应被拒绝（MemoryList）", bad)
 		}
@@ -90,6 +90,16 @@ func TestMemoryPanelScopeValidation(t *testing.T) {
 		}
 		if err := p.MemoryDelete(bad, "deadbeef"); err == nil {
 			t.Fatalf("非法 scope %q 应被拒绝（MemoryDelete）", bad)
+		}
+	}
+
+	// 多平台合法 scope：QQ 数字 ID 与带平台前缀的 ID（如飞书 fs:）均接受
+	for _, good := range []string{"g:123", "f:456", "g:fs:oc_xxx", "f:fs:ou_xxx"} {
+		if _, err := p.MemoryList(good); err != nil {
+			t.Fatalf("合法 scope %q 应被接受（MemoryList）: %v", good, err)
+		}
+		if _, err := p.MemoryCreate(plugininfo.MemoryEntryUpsert{Scope: good, Content: "x"}); err != nil {
+			t.Fatalf("合法 scope %q 应被接受（MemoryCreate）: %v", good, err)
 		}
 	}
 

@@ -36,7 +36,7 @@ const (
 // kbDoc 一条知识库文档。
 type kbDoc struct {
 	ID        string    `json:"id"`
-	Scope     string    `json:"scope"` // global / g:群号 / f:QQ号
+	Scope     string    `json:"scope"` // global / g:会话ID / f:用户ID
 	Title     string    `json:"title"`
 	Content   string    `json:"content"`
 	Tags      []string  `json:"tags,omitempty"`
@@ -50,7 +50,7 @@ type kbDoc struct {
 // ErrKBFull 单 scope 文档条数达到上限时返回，提示先清理旧文档。
 var ErrKBFull = errors.New("知识库文档条数已达上限")
 
-// knowledgeManager 知识库管理器：按作用域（global / g:群号 / f:QQ号）存取文档。
+// knowledgeManager 知识库管理器：按作用域（global / g:会话ID / f:用户ID）存取文档。
 //
 // 与 memoryManager 同构：每个 scope 的文档是一个 JSON 数组整体读写
 // （PersistentStorage 的 KV 语义）。所有变更在 mu 保护下串行落盘；

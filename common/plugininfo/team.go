@@ -4,9 +4,9 @@ import "time"
 
 // TeamScopeInfo 是一个会话（群聊/私聊）的 Agent 团队概览，供面板左侧列表展示。
 type TeamScopeInfo struct {
-	Scope  string `json:"scope"`  // 会话 scope，g:群号 / f:QQ号
+	Scope  string `json:"scope"`  // 会话 scope，g:会话ID / f:用户ID
 	Kind   string `json:"kind"`   // group / friend
-	Target string `json:"target"` // 群号或 QQ 号
+	Target string `json:"target"` // 目标会话 ID
 	Count  int    `json:"count"`  // 该 scope 下的团队数
 }
 

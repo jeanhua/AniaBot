@@ -11,9 +11,9 @@ import (
 // 记忆面板管理接口（实现 adminpanel.MemorySource）。
 // 改动直接落盘，AI 工具每次调用实时读写存储，因此无需重启即生效。
 
-// scopePattern 合法的会话 scope：g:群号 / f:QQ号。
+// scopePattern 合法的会话 scope：g:会话ID / f:用户ID（QQ 为数字，其他平台带前缀，如 g:fs:oc_xxx）。
 // 面板传入的 scope 必须严格匹配，防止越权读写 memory: 命名空间下的任意键。
-var scopePattern = regexp.MustCompile(`^[gf]:\d+$`)
+var scopePattern = regexp.MustCompile(`^[gf]:.+$`)
 
 func validScope(scope string) bool {
 	return scopePattern.MatchString(scope)
@@ -86,7 +86,7 @@ func (p *AIChatPlugin) MemoryCreate(up plugininfo.MemoryEntryUpsert) (string, er
 	return entry.ID, nil
 }
 
-// MemoryUpdate 按 ID 更新一条记忆的内容、关联 QQ 与标签。
+// MemoryUpdate 按 ID 更新一条记忆的内容、关联用户 ID 与标签。
 func (p *AIChatPlugin) MemoryUpdate(up plugininfo.MemoryEntryUpsert) error {
 	if p.memoryManager == nil {
 		return errMemoryDisabled

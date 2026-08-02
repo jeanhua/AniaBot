@@ -47,7 +47,8 @@ import (
 )
 
 type hourlyConfig struct {
-	Groups []int `cfg:"plugin.hourly.groups" label:"报时群列表" group:"整点报时" help:"每行一个群号"`
+	// 多平台下群 ID 不一定是数字（如飞书 fs:oc_xxx），用 []string 承载
+	Groups []string `cfg:"plugin.hourly.groups" label:"报时群 ID 列表" group:"整点报时" help:"每行一个群 ID（QQ 为群号，其他平台带前缀）"`
 }
 
 type HourlyPlugin struct {
@@ -76,7 +77,7 @@ func (p *HourlyPlugin) StartCron(ctx context.Context, b bot.Bot, c plugin.CronMa
 		for _, g := range p.cfg.Groups {
 			chain := msgchain.Builder().Group()
 			chain.Text(text)
-			if _, ok := b.SendGroupMsg(message.FromUint64(uint64(g)), chain.Build()); !ok {
+			if _, ok := b.SendGroupMsg(message.FromString(g), chain.Build()); !ok {
 				p.Logger.Error("报时发送失败", "group", g)
 			}
 		}

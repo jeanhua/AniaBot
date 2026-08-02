@@ -229,7 +229,7 @@ func (p *AIChatPlugin) QuotaReset(scope string) error {
 		return errors.New("配额功能未启用")
 	}
 	if scope != "all" && !validScope(scope) {
-		return fmt.Errorf("非法 scope: %s（应为 g:群号 / f:QQ号 / all）", scope)
+		return fmt.Errorf("非法 scope: %s（应为 g:会话ID / f:用户ID / all，如 g:fs:oc_xxx）", scope)
 	}
 	if !p.quotaManager.Reset(scope) {
 		return errors.New("清零失败，请查看日志")

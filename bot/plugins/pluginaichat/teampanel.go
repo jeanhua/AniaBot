@@ -11,9 +11,9 @@ import (
 // 团队面板管理接口（实现 adminpanel.TeamSource）。
 // 改动直接落盘，AI 工具每次调用实时读写存储，因此无需重启即生效。
 
-// teamScopePattern 合法的团队作用域：global（全局，所有会话共享）/ g:群号 / f:QQ号。
+// teamScopePattern 合法的团队作用域：global（全局，所有会话共享）/ g:会话ID / f:用户ID（其他平台带前缀，如 g:fs:oc_xxx）。
 // 面板传入的 scope 必须严格匹配，防止越权读写 team: 命名空间下的任意键。
-var teamScopePattern = regexp.MustCompile(`^(global|[gf]:\d+)$`)
+var teamScopePattern = regexp.MustCompile(`^(global|[gf]:.+)$`)
 
 func validTeamScope(scope string) bool {
 	return teamScopePattern.MatchString(scope)

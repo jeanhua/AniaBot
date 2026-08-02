@@ -20,11 +20,11 @@ import (
 //
 // 与会话内上下文（messageWindow）不同，长期记忆跨会话、跨重启保留，
 // 由 AI 通过 memory_save / memory_search / memory_forget 工具自行管理。
-// 记忆按会话 scope（g:群号 / f:QQ号）隔离，群与群、群与私聊之间互不可见，
+// 记忆按会话 scope（g:会话ID / f:用户ID）隔离，群与群、群与私聊之间互不可见，
 // 避免跨会话信息泄露。
 type memoryEntry struct {
 	ID        string    `json:"id"`
-	UserID    string    `json:"user_id,omitempty"` // 关联的群成员 QQ 号；空表示属于整个会话（群规、共同约定等）
+	UserID    string    `json:"user_id,omitempty"` // 关联的用户 ID；空表示属于整个会话（群规、共同约定等）
 	Content   string    `json:"content"`
 	Tags      []string  `json:"tags,omitempty"`
 	CreatedAt time.Time `json:"created_at"`
@@ -155,7 +155,7 @@ func (m *memoryManager) remove(scope, id string) bool {
 	return false
 }
 
-// scopes 列出当前已有记忆的全部会话 scope（g:群号 / f:QQ号），排序后返回。
+// scopes 列出当前已有记忆的全部会话 scope（g:会话ID / f:用户ID），排序后返回。
 // 供 Web 面板的记忆管理页使用。
 func (m *memoryManager) scopes() []string {
 	m.mu.Lock()
@@ -170,7 +170,7 @@ func (m *memoryManager) scopes() []string {
 	return keys
 }
 
-// update 按 ID 更新指定 scope 中一条记忆的内容、关联 QQ 与标签；
+// update 按 ID 更新指定 scope 中一条记忆的内容、关联用户 ID 与标签；
 // ID 不存在时返回错误。创建时间保留不变；超长内容按 MaxContentRunes 截断。
 func (m *memoryManager) update(scope, id, userID, content string, tags []string) error {
 	content = tasklog.Truncate(strings.TrimSpace(content), MaxContentRunes)
