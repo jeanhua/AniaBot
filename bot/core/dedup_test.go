@@ -12,6 +12,7 @@ import (
 	"github.com/jeanhua/AniaBot/common/model/command"
 	"github.com/jeanhua/AniaBot/common/model/message"
 	"github.com/jeanhua/AniaBot/common/plugin"
+	"github.com/jeanhua/AniaBot/common/storage"
 )
 
 // countingPlugin 统计消息/通知回调次数的最小插件（嵌入 plugin.Meta 获得其余默认实现）。
@@ -61,10 +62,63 @@ func newDedupTestBot(t *testing.T, a adapter.Adapter) (*AniaBot, *countingPlugin
 	t.Helper()
 	bot := &AniaBot{ctx: context.Background()}
 	bot.storage = NewAniaMemoryStorage(slog.New(slog.NewTextHandler(io.Discard, nil)))
+	bot.logger = slog.New(slog.NewTextHandler(io.Discard, nil))
 	cp := &countingPlugin{}
 	bot.plugins = []plugin.Plugin{cp}
 	bot.adapters = []*adapterEntry{{def: adapter.Definition{Name: "test", Platform: "test", IDPrefix: ""}, adapter: a}}
 	return bot, cp
+}
+
+// flakyDedupStorage 模拟去重存储故障：failSet 打开时 SetString 直接返回 false
+// （不落盘，模拟 redis 断连），GetString 正常委托真实后端——
+// 用于验证 tryClaimEvent 的 fail-open 复核逻辑。
+type flakyDedupStorage struct {
+	storage.Storage
+	failSet *atomic.Bool
+}
+
+func (f *flakyDedupStorage) Clone(prefix string) storage.Storage {
+	// Clone 也要套娃，否则 eventDedup() 内部的 Clone 会拿到未包装的后端
+	return &flakyDedupStorage{Storage: f.Storage.Clone(prefix), failSet: f.failSet}
+}
+
+func (f *flakyDedupStorage) SetString(ctx context.Context, key, val string, opts ...storage.Option) bool {
+	if f.failSet.Load() {
+		return false
+	}
+	return f.Storage.SetString(ctx, key, val, opts...)
+}
+
+// TestMessageDedupFailOpenOnStorageError 回归：去重存储故障时
+// 已占用键仍判重（丢弃重复投递），新键 fail-open 放行（不静默丢消息）。
+func TestMessageDedupFailOpenOnStorageError(t *testing.T) {
+	a, cp := newDedupTestBot(t, &fakeAdapter{name: "test", platform: "test"})
+	e := a.adapters[0]
+	failSet := &atomic.Bool{}
+	a.storage = &flakyDedupStorage{Storage: a.storage, failSet: failSet}
+
+	msg := message.Message{MessageId: message.FromUint64(20001), SelfId: message.FromUint64(1), UserId: message.FromUint64(2)}
+	// 存储正常：首次占用成功，处理
+	a.onGroupEvent(e, msg)
+	if cp.groupMsgs.Load() != 1 {
+		t.Fatalf("首次投递应处理, got %d", cp.groupMsgs.Load())
+	}
+
+	// 模拟存储故障
+	failSet.Store(true)
+
+	// 同一消息重推：SetString 失败但键已存在 → 真重复，仍丢弃
+	a.onGroupEvent(e, msg)
+	if cp.groupMsgs.Load() != 1 {
+		t.Fatalf("存储故障期间已占用键的重推仍应去重, got %d", cp.groupMsgs.Load())
+	}
+
+	// 新消息：SetString 失败且键不存在 → 存储故障，fail-open 放行
+	msg2 := message.Message{MessageId: message.FromUint64(20002), SelfId: message.FromUint64(1), UserId: message.FromUint64(2)}
+	a.onGroupEvent(e, msg2)
+	if cp.groupMsgs.Load() != 2 {
+		t.Fatalf("存储故障期间新消息应 fail-open 放行, got %d", cp.groupMsgs.Load())
+	}
 }
 
 // TestMessageDedupFallback 无 EventKeyer 的适配器（NapCat/OneBot）按「平台+MessageId」兜底去重。

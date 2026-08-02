@@ -167,6 +167,15 @@ func TestQuotaDisabled(t *testing.T) {
 	}
 }
 
+// TestQuotaSummaryNilReceiver 回归：quota 未启用时接收者为 nil，
+// Summary 应返回错误而非 nil 解引用 panic。
+func TestQuotaSummaryNilReceiver(t *testing.T) {
+	var q *quotaManager
+	if _, err := q.Summary(); err == nil {
+		t.Fatal("nil 接收者应返回错误")
+	}
+}
+
 // TestQuotaSummary 汇总包含全局与各会话（按用量降序），字段完整。
 func TestQuotaSummary(t *testing.T) {
 	q := newTestQuotaManager(newPFake(), 100, 500)

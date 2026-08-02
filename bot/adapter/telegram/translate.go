@@ -137,9 +137,13 @@ func (a *telegramAdapter) splitEntities(text string, entities []MessageEntity) [
 		return segs
 	}
 	offs := utf16Offsets(text)
-	pos := 0
+	pos := 0    // 字节偏移游标，仅用于切字符串
+	posU16 := 0 // UTF-16 code unit 游标，用于实体重叠/越界检查；
+	// 与 e.Offset 单位必须一致——此前复用字节游标 pos 比较，前一个实体含
+	// 非 ASCII 字符（CJK/emoji，字节数 > UTF-16 单位数）时，其后所有实体被
+	// 误判为重叠而跳过，@bot 提及丢失、群聊 at 触发失效
 	for _, e := range entities {
-		if e.Offset < pos || e.Offset+e.Length > len(offs)-1 {
+		if e.Offset < posU16 || e.Offset+e.Length > len(offs)-1 {
 			continue // 越界/重叠实体（异常数据）跳过
 		}
 		start, end := offs[e.Offset], offs[e.Offset+e.Length]
@@ -171,6 +175,7 @@ func (a *telegramAdapter) splitEntities(text string, entities []MessageEntity) [
 			segs = appendTextSeg(segs, span)
 		}
 		pos = end
+		posU16 = e.Offset + e.Length
 	}
 	return appendTextSeg(segs, text[pos:])
 }

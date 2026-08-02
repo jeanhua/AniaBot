@@ -137,6 +137,11 @@ func (store *AniaRedisStorage) ScanKeys(ctx context.Context, pattern string, cou
 			scanned[i] = strings.TrimPrefix(scanned[i], store.prefix)
 		}
 		keys = append(keys, scanned...)
+		// count 语义与内存后端一致：作为返回结果的数量上限（>0 时生效），
+		// 而非仅作为 SCAN 每批的数量提示透传
+		if count > 0 && int64(len(keys)) >= count {
+			return keys[:int(count)], nil
+		}
 		if cursor == 0 {
 			break
 		}

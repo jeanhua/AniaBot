@@ -33,9 +33,22 @@ func (ania *AniaBot) eventDedup() storage.Storage {
 
 // tryClaimEvent 尝试占用去重键：首次占用成功返回 true，重复投递返回 false。
 // 内存后端在共享 mutex 内原子 check-and-set；redis 后端为 SET NX EX，多实例共享。
+//
+// SetString 返回 false 有两种情况：键已存在（真重复）或存储故障（如 redis 断连）。
+// 后者若直接丢弃会变成 fail-closed：redis 故障期间所有消息被静默吞掉。
+// 这里用 GetString 复核：键存在→真重复，丢弃；键不存在→存储故障，fail-open 放行。
+// at-least-once 语义下宁可重复处理一次，也不能静默丢消息。
 func (ania *AniaBot) tryClaimEvent(key string) bool {
-	return ania.eventDedup().SetString(context.Background(), key, "1",
-		storage.WithTTL(eventDedupTTL), storage.WithCheckExist())
+	dedup := ania.eventDedup()
+	ctx := context.Background()
+	if dedup.SetString(ctx, key, "1", storage.WithTTL(eventDedupTTL), storage.WithCheckExist()) {
+		return true
+	}
+	if _, exists := dedup.GetString(ctx, key); exists {
+		return false
+	}
+	ania.logger.Warn("事件去重存储故障，fail-open 放行（可能重复处理）", "key", key)
+	return true
 }
 
 // messageDedupKey 计算消息去重键：优先适配器 EventKeyer，兜底「平台 + MessageId」。

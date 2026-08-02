@@ -96,10 +96,12 @@ func (q *quotaManager) Add(sessionKey string, usage aichat.TokenUsage) {
 
 // Summary 当日配额汇总（全局 + 各会话明细），供面板「配额管理」页展示。
 func (q *quotaManager) Summary() (plugininfo.QuotaSummaryInfo, error) {
-	info := plugininfo.QuotaSummaryInfo{Date: q.now().Format("2006-01-02")}
+	// nil 检查必须在任何字段/方法访问之前：quota 未启用时接收者为 nil，
+	// 先取 q.now() 会直接 panic
 	if q == nil {
-		return info, errors.New("配额功能未启用")
+		return plugininfo.QuotaSummaryInfo{}, errors.New("配额功能未启用")
 	}
+	info := plugininfo.QuotaSummaryInfo{Date: q.now().Format("2006-01-02")}
 	q.mu.Lock()
 	defer q.mu.Unlock()
 

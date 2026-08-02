@@ -252,6 +252,68 @@ func TestMaybeCompressFailureDegradesToTruncation(t *testing.T) {
 	}
 }
 
+// TestTruncateOldestHalfAlignsToolCallBoundary 回归：降级截断不得把保留区的
+// 第一条留在孤立的 tool 结果消息上（其 assistant tool_calls 在被丢弃的一半里），
+// 否则 OpenAI 兼容 API 拒绝（400）且此后每轮请求都失败。
+func TestTruncateOldestHalfAlignsToolCallBoundary(t *testing.T) {
+	store := &fakeHistoryStore{}
+	failCompressor := func(ctx context.Context, client *LLMClient, oldMsgs []Message) ([]Message, error) {
+		return nil, fmt.Errorf("compress failed")
+	}
+	w := newMessageWindow(1000, &LLMClient{}, failCompressor, store)
+
+	// 历史：user, user, assistant(tool_calls), tool 结果, assistant, user
+	// 丢弃最旧一半（3 条）后切点恰落在 tool 结果消息上
+	w.append(TextMessage(RoleUser, "消息0"))
+	w.append(TextMessage(RoleUser, "消息1"))
+	w.append(Message{
+		Role:      RoleAssistant,
+		ToolCalls: []llmtool.ToolCall{{ID: "c1", Name: "time", Arguments: "{}"}},
+	})
+	w.append(Message{Role: RoleTool, ToolCallID: "c1", Parts: []ContentPart{TextPart("工具结果")}})
+	w.append(TextMessage(RoleAssistant, "好的"))
+	w.append(TextMessage(RoleUser, "消息5"))
+	w.RecordUsage(TokenUsage{LastPromptTokens: 900})
+
+	if err := w.MaybeCompress(context.Background()); err != nil {
+		t.Fatalf("压缩失败应降级截断而不是返回错误: %v", err)
+	}
+	hist := w.history()
+	if len(hist) == 0 {
+		t.Fatal("截断后不应为空（切点后有合法消息）")
+	}
+	if hist[0].Role == RoleTool {
+		t.Fatalf("保留区首条不得是孤立 tool 消息: %+v", hist[0])
+	}
+	// 孤立 tool 消息应被一并跳过：保留区 = [assistant(好的), user(消息5)]
+	if len(hist) != 2 || hist[0].Role != RoleAssistant || hist[1].Role != RoleUser {
+		t.Fatalf("切点未对齐 tool_call 边界: %+v", hist)
+	}
+}
+
+// TestTruncateOldestHalfAllToolMessages 极端场景：保留区全是孤立 tool 消息时
+// 全部跳过（清空历史），保证后续请求合法。
+func TestTruncateOldestHalfAllToolMessages(t *testing.T) {
+	store := &fakeHistoryStore{}
+	failCompressor := func(ctx context.Context, client *LLMClient, oldMsgs []Message) ([]Message, error) {
+		return nil, fmt.Errorf("compress failed")
+	}
+	w := newMessageWindow(1000, &LLMClient{}, failCompressor, store)
+
+	w.append(TextMessage(RoleUser, "消息0"))
+	w.append(TextMessage(RoleUser, "消息1"))
+	w.append(Message{Role: RoleTool, ToolCallID: "cA", Parts: []ContentPart{TextPart("工具结果A")}})
+	w.append(Message{Role: RoleTool, ToolCallID: "cB", Parts: []ContentPart{TextPart("工具结果B")}})
+	w.RecordUsage(TokenUsage{LastPromptTokens: 900})
+
+	if err := w.MaybeCompress(context.Background()); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(w.history()) != 0 {
+		t.Fatalf("保留区全是孤立 tool 消息时应清空历史, got %+v", w.history())
+	}
+}
+
 // TestMaybeCompressUsesCompressorClient 指定压缩器客户端时压缩走独立 client，
 // 未指定时复用主对话 client。
 func TestMaybeCompressUsesCompressorClient(t *testing.T) {

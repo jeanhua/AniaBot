@@ -61,7 +61,7 @@ func checkResponseStatus[T any](resp *message.Response[T]) bool {
 }
 
 func (n *napcatHttpAdapter) Serve(v *viper.Viper) {
-	n.httpClient = resty.New()
+	// httpClient 已在构造函数中就绪（见 NewNapcatHttpAdapter）
 	n.baseUrl = strings.TrimRight(v.GetString("bot.adapter.http.target_url"), "/")
 	http.HandleFunc("/", n.handler)
 	if v.IsSet("bot.adapter.token") {

@@ -4,6 +4,7 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/go-resty/resty/v2"
 	"github.com/jeanhua/AniaBot/common/adapter"
 	"github.com/spf13/viper"
 )
@@ -25,7 +26,12 @@ func NewAdapter(cfg *viper.Viper) adapter.Adapter {
 }
 
 func NewNapcatHttpAdapter() adapter.Adapter {
-	return &napcatHttpAdapter{}
+	return &napcatHttpAdapter{
+		// httpClient 必须在构造时就绪（与 ws 适配器预建 ackMng 同理）：
+		// 首次启动等待设置向导时 Serve 尚未运行，插件仍可能调用发送接口，
+		// 此时应优雅失败（请求出错）而非 nil 指针 panic。
+		httpClient: resty.New(),
+	}
 }
 
 func NewNapcatWebSocketAdapter() adapter.Adapter {

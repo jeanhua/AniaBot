@@ -82,9 +82,13 @@ type clockManager struct {
 
 	defaultTimeout time.Duration
 
-	mu          sync.Mutex
-	tasks       map[string]*ClockTask
-	entries     map[string]cron.EntryID
+	mu      sync.Mutex
+	tasks   map[string]*ClockTask
+	entries map[string]cron.EntryID
+	running map[string]bool // 执行中的任务 ID：cron 触发与手动触发共用，
+	// 防止短周期任务并发叠加（重复推送消息、重复消耗 API 额度）。
+	// cron 的 SkipIfStillRunning 无法承担此责：job 闭包只负责异步派发
+	// （bot.Go），微秒级返回，"仍在运行"判定永远为否
 	seq         uint64
 	cron        *cron.Cron
 	cronStarted bool
@@ -100,10 +104,8 @@ func newClockManager(p *AIChatPlugin, defaultTimeout time.Duration, maxLog int) 
 		defaultTimeout: defaultTimeout,
 		tasks:          map[string]*ClockTask{},
 		entries:        map[string]cron.EntryID{},
-		// SkipIfStillRunning：上一次执行未结束时跳过一次触发，
-		// 防止短周期任务（如 @every 30s）执行超时后并发叠加
-		// （重复推送消息、重复消耗 API 额度）
-		cron: cron.New(cron.WithChain(cron.SkipIfStillRunning(cron.DefaultLogger))),
+		running:        map[string]bool{},
+		cron:           cron.New(),
 	}
 	m.loadAll()
 	return m
@@ -475,6 +477,30 @@ func (m *clockManager) RunNow(id string) bool {
 
 // ---- 触发执行 ----
 
+// clockMaxTimeoutSec 单次执行超时上限（秒）：与子代理上限对齐。
+// TimeoutSec 可被 AI（clock_create/update）或面板传入任意 int，
+// 不限幅时 time.Duration 乘法溢出 int64 为负 duration——context 立即过期，
+// 任务每次触发即「超时」，重复任务会每个周期刷一条超时消息且永远无法成功
+const clockMaxTimeoutSec = 1800
+
+// tryStartTask 占用任务执行槽：上一次执行未结束时返回 false（跳过本次触发）。
+func (m *clockManager) tryStartTask(id string) bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.running[id] {
+		return false
+	}
+	m.running[id] = true
+	return true
+}
+
+// finishTask 释放任务执行槽。
+func (m *clockManager) finishTask(id string) {
+	m.mu.Lock()
+	delete(m.running, id)
+	m.mu.Unlock()
+}
+
 // taskRecorder 一次定时任务执行的工具调用收集器。工具观测回调与 Chat 同 goroutine
 // 串行执行，因此无需加锁。参考 querylog.queryRecorder。
 type taskRecorder struct {
@@ -501,12 +527,18 @@ func (r *taskRecorder) observe(info aichat.ToolCallInfo) {
 }
 
 // runTask 在独立的可恢复 goroutine 中执行一次任务。
+// 同一任务上一次执行未结束时跳过本次触发（cron 与 RunNow 手动触发共用此互斥）。
 func (m *clockManager) runTask(task *ClockTask) {
 	if m.bot == nil {
 		m.logger.Warn("定时任务触发但 bot 尚未就绪，跳过", "task", task.ID, "title", task.Title)
 		return
 	}
+	if !m.tryStartTask(task.ID) {
+		m.logger.Info("任务上一次执行尚未结束，跳过本次触发", "task", task.ID, "title", task.Title)
+		return
+	}
 	m.bot.Go("clock:"+task.ID, func() {
+		defer m.finishTask(task.ID)
 		start := time.Now()
 		// 任务目标会话（与对话 sessionKey 一致，配额按此归集）
 		isGroup := task.TargetType == clockTargetGroup
@@ -545,7 +577,9 @@ func (m *clockManager) runTask(task *ClockTask) {
 
 		timeout := m.defaultTimeout
 		if task.TimeoutSec > 0 {
-			timeout = time.Duration(task.TimeoutSec) * time.Second
+			// 先限幅 int 再乘 time.Second：超大 TimeoutSec 会让乘法溢出 int64
+			// 为负 duration（context 立即过期，任务每次触发即超时），见 clockMaxTimeoutSec
+			timeout = time.Duration(min(task.TimeoutSec, clockMaxTimeoutSec)) * time.Second
 		}
 		ctx, cancel := context.WithTimeout(context.Background(), timeout)
 		defer cancel()

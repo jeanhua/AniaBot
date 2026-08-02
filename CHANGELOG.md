@@ -55,6 +55,13 @@
 - **Telegram 错误码解析丢失**（此前「流式回复没发完」的真实根因）：resty 只把 2xx 响应的 body 解析进 `SetResult`，**4xx/5xx 的错误 JSON 不会填充**——官方 API 的 `error_code`/`description` 全部丢失，一切 400 错误（如 MarkdownV2 解析失败）都显示为 `telegram api error 0 (http 400)`，导致 400 降级纯文本重发从不触发，流式最终内容停留在节流窗口内未发出的旧版本；`unpack` 改为自行解析响应 body（429 识别与 MarkdownV2 纯文本降级恢复），错误日志附带 HTTP 状态码与响应体片段（截断 200 字符）便于诊断；响应体不可解析（错误页/空/截断）时 5xx/未知仍按瞬时故障保留 parse_mode 原样重试一次，4xx 按确定性拒绝直接纯文本降级；流式最终内容与已展示内容一致时跳过无意义的最终编辑（消除 `message is not modified` 400 噪音）
 - 飞书**图文（post 富文本）消息被静默丢弃**：接收事件的 post content 是顶层 `title`/`content` 结构（无 `zh_cn` 包装，与发送/API 侧不同），`parsePostContent` 强制要求 `zh_cn` 导致翻译为空段，`onReceive` 静默跳过——面板无日志、AI 不响应；现兼容两种结构（zh_cn 包装 + 顶层，顶层 content 为空时回退 content_v2），并修复 post 消息 at 元素占位符（`@_user_N`）未反查 open_id、直接输出 `fs:@_user_N` 的问题，新增回归测试
 - 飞书流式回复卡片 JSON 结构错误：schema 2.0 卡片中 `elements` 必须位于 `body` 下，此前放在根层级导致发消息/更新消息被 API 拒绝（code 230099 / 200621，`unknown property: elements`），已修正并更新测试
+- **Telegram `splitEntities` 字节偏移与 UTF-16 偏移混用**：字符串切片游标（字节）被拿去和 Telegram 实体的 UTF-16 code unit 偏移比较做重叠/越界检查，含 CJK/emoji 的实体后方实体被误判越界丢弃——CJK 加粗后跟 @提及 时 at 段丢失（用户收不到通知）；改为字节游标与 UTF-16 游标分离，并补充 CJK/text_mention 回归测试
+- **AI 工具执行器并发崩溃与同名工具重复定义**：同轮并行工具调用中若包含 `mcp_load_*`（写 session 工具表）与其它工具（读工具表），触发 `concurrent map read and map write` 致命错误（recover 无法捕获，进程直接退出）；`SessionToolExecutor` 增加互斥锁与快照拷贝。同时修复 `toolsWithSession` 简单拼接不去重：会话动态工具与全局工具同名时（如 MCP 工具与内置工具撞名）向 LLM 发送重复 function 定义导致提供方 400、且定义与执行解析不一致；现按名去重、会话层优先（与 `resolveTool` 一致），并补充并发回归测试
+- **上下文压缩失败降级截断切开 tool_call 配对**：`truncateOldestHalf` 切点落在 tool 结果消息上时，保留区首条成为孤立 tool 消息（其 assistant tool_calls 在被丢弃的一半里），OpenAI 兼容 API 拒绝（400）且截断已落盘、此后每轮请求都失败；现切点后移越过孤立 tool 消息，并补充边界对齐回归测试。同文件修复 `Chat` 落盘起点按 `1+len(history)` 反推：历史中含旧版遗留 system 消息被 `BuildChatMessages` 过滤时索引错位，本轮用户消息/回复被跳过、不写入持久化历史；现直接记录构建后的真实长度
+- **定时任务防叠加失效与超时可溢出**：cron 的 `SkipIfStillRunning` 包装的是任务闭包，而闭包仅经 `bot.Go` 异步派发后微秒级返回，锁立即释放——长任务（默认 120s+）到期再次触发时并发叠加执行；改为按任务 ID 的 running 标志（覆盖 cron 与立即执行两条路径），执行期间再次触发记日志跳过。同时 `TimeoutSec` 未设上限，面板/AI 可写入超大值致 `int→Duration` 溢出为负、context 立即过期任务秒败；现钳制到 1800s 上限（插件默认超时同），并补充回归测试
+- **去重存储故障时 fail-closed 静默丢消息**：`tryClaimEvent` 把 `SetString` 的 false 一律当重复投递丢弃，redis 断连期间所有消息被静默吞掉；现失败后用 `GetString` 复核——键存在→真重复丢弃，键不存在→存储故障 fail-open 放行并告警（at-least-once 语义下宁可重复处理也不丢消息），补充故障注入回归测试。同时修复 redis `ScanKeys` 的 `count` 语义：此前仅作为 SCAN 每批数量提示透传、返回全部匹配键，与内存后端（count 为结果数量上限）不一致；现达到上限即截断返回
+- **NapCat HTTP 适配器 `httpClient` 空指针**：仅在 `Serve` 中初始化，首次启动等待设置向导期间插件调用发送接口即 nil panic；改为构造时就绪（与 ws 适配器预建 `ackMng` 同理），并补充回归测试。同时修复 WS 适配器 token 直接拼接 URL query：token 含 `+` `/` `=` `&` 等字符时破坏 query 解析、NapCat 侧鉴权拿到错误 token（握手 401 且排查困难），现经 `url.QueryEscape` 编码
+- **配额汇总 nil 解引用顺序错误**：`Summary` 先执行 `q.now()` 再判 `q == nil`，配额未启用（管理器为 nil）时面板配额页直接 panic；nil 检查移至最前，并补充 nil 接收者回归测试
 
 ## [v3.7.0] - 2026-08-01
 

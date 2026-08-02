@@ -228,12 +228,21 @@ func (w *messageWindow) MaybeCompress(ctx context.Context) error {
 }
 
 // truncateOldestHalf 压缩失败时的降级策略：丢弃最旧一半历史（至少保留 1 条）。
+// 切点需对齐 tool_call 边界：保留区的第一条若是 tool 结果消息，说明其对应的
+// assistant tool_calls 在被丢弃的一半里——孤立的 tool 消息会被 OpenAI 兼容 API
+// 拒绝（400：tool 消息必须跟在带 tool_calls 的 assistant 之后），且截断已落盘，
+// 此后每轮请求都会失败（sticky 400）。这里把切点后移越过所有孤立 tool 消息；
+// 极端情况下全部跳过即清空历史（等效新对话，请求合法）。
 func (w *messageWindow) truncateOldestHalf() {
 	keep := len(w.messages) / 2
 	if keep < 1 {
 		keep = 1
 	}
-	w.messages = w.messages[len(w.messages)-keep:]
+	start := len(w.messages) - keep
+	for start < len(w.messages) && w.messages[start].Role == RoleTool {
+		start++
+	}
+	w.messages = w.messages[start:]
 	w.lastPromptTokens = 0
 	w.persist()
 }

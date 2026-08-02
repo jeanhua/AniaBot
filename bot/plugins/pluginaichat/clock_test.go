@@ -184,6 +184,41 @@ func TestBuildTriggerPrompt(t *testing.T) {
 	}
 }
 
+// TestTryStartTaskSkipWhileRunning 回归：同一任务执行期间再次触发应被跳过，
+// 执行结束（finishTask）后应能再次启动。
+func TestTryStartTaskSkipWhileRunning(t *testing.T) {
+	p := &AIChatPlugin{}
+	p.Logger = slog.Default()
+	p.PersistentStorage = newPFake()
+	m := newClockManager(p, 30*time.Second, 100)
+
+	if !m.tryStartTask("task-1") {
+		t.Fatal("first tryStartTask should succeed")
+	}
+	if m.tryStartTask("task-1") {
+		t.Fatal("second tryStartTask while running should be skipped")
+	}
+	// 不同任务互不影响
+	if !m.tryStartTask("task-2") {
+		t.Fatal("different task should not be blocked")
+	}
+	m.finishTask("task-1")
+	if !m.tryStartTask("task-1") {
+		t.Fatal("tryStartTask after finishTask should succeed again")
+	}
+}
+
+// TestClockTimeoutClamp 回归：任务超时时间应被钳制到 clockMaxTimeoutSec，
+// 防止配置溢出（int 转 Duration 溢出变负数/零导致 context 立即过期）。
+func TestClockTimeoutClamp(t *testing.T) {
+	if got := min(1<<62, clockMaxTimeoutSec); got != clockMaxTimeoutSec {
+		t.Fatalf("huge timeout should be clamped to %d, got %d", clockMaxTimeoutSec, got)
+	}
+	if got := min(30, clockMaxTimeoutSec); got != 30 {
+		t.Fatalf("normal timeout should pass through, got %d", got)
+	}
+}
+
 func TestRunOnceDestroyAfterTrigger(t *testing.T) {
 	p := &AIChatPlugin{}
 	p.Logger = slog.Default()

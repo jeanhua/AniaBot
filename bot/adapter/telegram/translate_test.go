@@ -180,6 +180,66 @@ func TestSplitEntitiesUTF16(t *testing.T) {
 	}
 }
 
+// TestSplitEntitiesAfterCJKEntity 回归：前一个实体含 CJK 字符时（字节数 > UTF-16
+// 单位数），其后实体不得被误判重叠而跳过——曾导致「加粗中文 + @bot」的 mention
+// 实体丢失，群聊 at 触发失效。
+func TestSplitEntitiesAfterCJKEntity(t *testing.T) {
+	a := testAdapter()
+	msg := textMsg(-100, "group", 222, "你好 @MyBot 在吗")
+	// 你好 = 2 单位（6 字节），空格 1，@MyBot 从第 3 单位起共 6 单位
+	msg.Entities = []MessageEntity{
+		{Type: "bold", Offset: 0, Length: 2},
+		{Type: "mention", Offset: 3, Length: 6},
+	}
+	segs := a.messageToSegments(msg)
+	var atSeg *message.OB11Segment
+	for i := range segs {
+		if segs[i].Type == message.SegmentMention {
+			atSeg = &segs[i]
+			break
+		}
+	}
+	if atSeg == nil {
+		t.Fatalf("CJK bold 实体后的 mention 被丢弃, got %+v", segs)
+	}
+	if qq, _ := atSeg.Data["qq"].(string); qq != "tg:100" {
+		t.Fatalf("at 段 qq = %q, want tg:100", qq)
+	}
+	// 全文内容应保持完整（text 段按序拼接还原）
+	var sb strings.Builder
+	for _, s := range segs {
+		if s.Type == message.SegmentText {
+			sb.WriteString(s.Data["text"].(string))
+		} else if s.Type == message.SegmentMention {
+			sb.WriteString("@MyBot")
+		}
+	}
+	if sb.String() != "你好 @MyBot 在吗" {
+		t.Fatalf("还原文本 = %q, want 你好 @MyBot 在吗", sb.String())
+	}
+}
+
+// TestSplitEntitiesTextMentionCJK 回归：CJK 昵称 text_mention 后的实体不丢失。
+func TestSplitEntitiesTextMentionCJK(t *testing.T) {
+	a := testAdapter()
+	msg := textMsg(-100, "group", 222, "张三说@MyBot好")
+	// 张三 = 2 单位（text_mention），说 1 单位，@MyBot 从第 3 单位起共 6 单位
+	msg.Entities = []MessageEntity{
+		{Type: "text_mention", Offset: 0, Length: 2, User: &User{ID: 999, FirstName: "张三"}},
+		{Type: "mention", Offset: 3, Length: 6},
+	}
+	segs := a.messageToSegments(msg)
+	mentions := 0
+	for _, s := range segs {
+		if s.Type == message.SegmentMention {
+			mentions++
+		}
+	}
+	if mentions != 2 {
+		t.Fatalf("期望 2 个 at 段（text_mention + mention），got %d: %+v", mentions, segs)
+	}
+}
+
 // TestMessageToSegmentsReply reply_to_message → 首段 reply。
 func TestMessageToSegmentsReply(t *testing.T) {
 	a := testAdapter()

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	neturl "net/url"
 	"runtime"
 	"sync"
 	"sync/atomic"
@@ -338,7 +339,9 @@ func (n *napcatWebSocketAdapter) Serve(v *viper.Viper) {
 		var err error
 		if v.IsSet("bot.adapter.token") {
 			token := v.GetString("bot.adapter.token")
-			conn, _, err = websocket.DefaultDialer.Dial(url+"?access_token="+token, nil)
+			// token 需 URL 编码：含 + / = & 等特殊字符时直接拼接会破坏 query 解析，
+			// 导致 NapCat 侧鉴权拿到的 token 与配置不一致（握手 401 且排查困难）
+			conn, _, err = websocket.DefaultDialer.Dial(url+"?access_token="+neturl.QueryEscape(token), nil)
 		} else {
 			conn, _, err = websocket.DefaultDialer.Dial(url, nil)
 		}

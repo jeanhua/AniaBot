@@ -7,6 +7,7 @@ import (
 	"log"
 	"reflect"
 	"sort"
+	"sync"
 )
 
 type ToolExecuter struct {
@@ -40,21 +41,30 @@ func (e *ToolExecuter) Tools() []ToolDef {
 // 输出按工具名排序：Go map 遍历顺序随机，若直接序列化会导致每次请求的
 // tools 字段排列不同，把上游 prompt 前缀缓存（如 DeepSeek context caching）
 // 全部打失，必须保证完全确定的输出顺序。
+// 同名工具共享层与会话层并存时只保留一份定义，与 resolveTool 一致由会话层
+// 优先——否则 tools 字段出现两份同名 function 定义（部分提供方直接 400 拒绝），
+// 且「下发的定义」与「实际执行的工具」不一致。
 func (e *ToolExecuter) toolsWithSession(sessionTools map[string]Tool) []ToolDef {
+	seen := make(map[string]struct{}, len(e.tools)+len(sessionTools))
 	names := make([]string, 0, len(e.tools)+len(sessionTools))
-	for name := range e.tools {
+	for name := range sessionTools {
+		seen[name] = struct{}{}
 		names = append(names, name)
 	}
-	for name := range sessionTools {
+	for name := range e.tools {
+		if _, dup := seen[name]; dup {
+			continue
+		}
+		seen[name] = struct{}{}
 		names = append(names, name)
 	}
 	sort.Strings(names)
 
 	tools := make([]ToolDef, 0, len(names))
 	for _, name := range names {
-		if tool, ok := e.tools[name]; ok {
+		if tool, ok := sessionTools[name]; ok {
 			tools = append(tools, structToOpenAITool(tool))
-		} else if tool, ok := sessionTools[name]; ok {
+		} else if tool, ok := e.tools[name]; ok {
 			tools = append(tools, structToOpenAITool(tool))
 		}
 	}
@@ -128,23 +138,42 @@ func (e *ToolExecuter) NewSessionExecutor() *SessionToolExecutor {
 }
 
 type SessionToolExecutor struct {
-	shared       *ToolExecuter
+	shared *ToolExecuter
+	mu     sync.RWMutex // 保护 sessionTools：同一轮的多个工具调用并行执行，
+	// mcp_load 等工具会并发 RegisterSession（写）而其他工具的 Execute/Tools 在读，
+	// 并发 map 读写是不可恢复的 fatal error（见 aichat.ToolOrchestrator 并行调度）
 	sessionTools map[string]Tool
 }
 
+// snapshotSessionTools 拷贝当前会话工具表：读写均在锁内完成快照，
+// 后续遍历/解析在锁外进行，避免与并发 RegisterSession 产生 map 竞争。
+func (s *SessionToolExecutor) snapshotSessionTools() map[string]Tool {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	snapshot := make(map[string]Tool, len(s.sessionTools))
+	for name, tool := range s.sessionTools {
+		snapshot[name] = tool
+	}
+	return snapshot
+}
+
 func (s *SessionToolExecutor) Tools() []ToolDef {
-	return s.shared.toolsWithSession(s.sessionTools)
+	return s.shared.toolsWithSession(s.snapshotSessionTools())
 }
 
 func (s *SessionToolExecutor) Execute(ctx context.Context, call ToolCall, callbacks CallBackFuncs) (string, error) {
-	return s.shared.executeWithSession(ctx, call, callbacks, s.sessionTools)
+	return s.shared.executeWithSession(ctx, call, callbacks, s.snapshotSessionTools())
 }
 
 func (s *SessionToolExecutor) RegisterSession(tool Tool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	s.sessionTools[tool.Name()] = tool
 }
 
 func (s *SessionToolExecutor) ClearDynamicMCPTools() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	cleared := 0
 	for name, tool := range s.sessionTools {
 		if _, ok := tool.(*MCPTool); ok {

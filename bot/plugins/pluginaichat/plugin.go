@@ -607,6 +607,10 @@ func (p *AIChatPlugin) Start(ctx context.Context, cfg *viper.Viper) error {
 		if defaultTimeoutSec <= 0 {
 			defaultTimeoutSec = 120
 		}
+		// 上限限幅：超大配置值会让 time.Duration 乘法溢出为负 duration
+		if defaultTimeoutSec > clockMaxTimeoutSec {
+			defaultTimeoutSec = clockMaxTimeoutSec
+		}
 		maxLog := p.cfg.Clock.MaxLogEntries
 		if maxLog <= 0 {
 			maxLog = 500

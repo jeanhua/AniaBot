@@ -2,7 +2,9 @@ package llmtool
 
 import (
 	"context"
+	"fmt"
 	"strings"
+	"sync"
 	"testing"
 )
 
@@ -92,5 +94,79 @@ func TestBuildAvailableSkillsPromptDeterministic(t *testing.T) {
 	idxWeather := strings.Index(first, "<name>weather</name>")
 	if !(idxCode >= 0 && idxCode < idxNews && idxNews < idxWeather) {
 		t.Fatalf("skills not sorted by name: code=%d news=%d weather=%d", idxCode, idxNews, idxWeather)
+	}
+}
+
+// TestToolsWithSessionDuplicateName 同名工具共享层与会话层并存时：
+// tools 字段只保留一份定义且与 resolveTool 一致由会话层优先——
+// 重复定义会被部分提供方以 400 拒绝（prompt 缓存也随之全失）。
+func TestToolsWithSessionDuplicateName(t *testing.T) {
+	e := NewToolExecuter()
+	e.Register(&fakeTool{name: "time"})
+	e.Register(&fakeTool{name: "bash"})
+
+	session := e.NewSessionExecutor()
+	// 会话层注册同名工具（如 MCP 服务器暴露的工具与内置工具重名）
+	session.RegisterSession(&fakeTool{name: "time"})
+
+	defs := session.Tools()
+	count := 0
+	for _, td := range defs {
+		if td.Function.Name == "time" {
+			count++
+		}
+	}
+	if count != 1 {
+		t.Fatalf("同名工具应只保留一份定义, got %d: %+v", count, defs)
+	}
+	if len(defs) != 2 {
+		t.Fatalf("去重后应有 2 个工具, got %d", len(defs))
+	}
+
+	// 执行路径同样命中会话层（与 resolveTool 优先级一致）
+	tool, ok := e.resolveTool("time", session.snapshotSessionTools())
+	if !ok {
+		t.Fatal("resolveTool 应找到 time")
+	}
+	if tool != session.sessionTools["time"] {
+		t.Fatal("resolveTool 应优先返回会话层工具")
+	}
+}
+
+// TestSessionExecutorConcurrentAccess 回归：并行工具执行时 mcp_load 等工具
+// 并发 RegisterSession（写）与其他工具 Execute/Tools（读）不再产生 map 竞争
+// （此前会触发不可恢复的 fatal error: concurrent map read and map write）。
+// 需配合 -race 运行验证。
+func TestSessionExecutorConcurrentAccess(t *testing.T) {
+	e := NewToolExecuter()
+	e.Register(&fakeTool{name: "time"})
+	session := e.NewSessionExecutor()
+
+	var wg sync.WaitGroup
+	// 写方：模拟 mcp_load 动态加载工具
+	for i := 0; i < 8; i++ {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			for j := 0; j < 50; j++ {
+				session.RegisterSession(&fakeTool{name: fmt.Sprintf("loaded_tool_%d_%d", i, j)})
+			}
+		}(i)
+	}
+	// 读方：模拟并行工具执行与定义列表刷新
+	for i := 0; i < 8; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for j := 0; j < 50; j++ {
+				_ = session.Tools()
+				_, _ = session.Execute(context.Background(), ToolCall{ID: "1", Name: "time", Arguments: "{}"}, CallBackFuncs{})
+			}
+		}()
+	}
+	wg.Wait()
+
+	if cleared := session.ClearDynamicMCPTools(); cleared != 0 {
+		t.Fatalf("fakeTool 非 MCPTool，不应被清理, got %d", cleared)
 	}
 }
