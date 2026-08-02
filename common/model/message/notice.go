@@ -5,6 +5,19 @@ type BasicNotice struct {
 	PostType   string `json:"post_type"`
 	SelfId     QID    `json:"self_id"`
 	NoticeType string `json:"notice_type"`
+	// Platform 平台标识（如 "qq"、"feishu"），由产生该事件的适配器填充，
+	// 不参与协议序列化；core 按它对插件做 Meta.Platforms 过滤。
+	Platform string `json:"-"`
+}
+
+// SetPlatform 设置事件来源平台标识（适配器解析事件后调用）。
+func (n *BasicNotice) SetPlatform(platform string) {
+	n.Platform = platform
+}
+
+// GetPlatform 返回事件来源平台标识。
+func (n *BasicNotice) GetPlatform() string {
+	return n.Platform
 }
 
 // GroupUploadNotice 群文件上传

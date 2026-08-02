@@ -86,13 +86,21 @@ bot.SendGroupForwardMsg(groupId, fb.Build())
 构造好链之后，通过 `bot.Bot` 发送：
 
 ```go
-bot.SendGroupMsg(groupId, groupChain)             // → (msgId, ok)
-bot.SendFriendMsg(userId, friendChain)            // → (msgId, ok)
-bot.SendGroupForwardMsg(groupId, forwardChain)    // → (msgId, ok)
-bot.SendFriendForwardMsg(userId, forwardChain)    // → (msgId, ok)
-bot.SendGroupAIVoiceMsg(groupId, character, text) // AI 语音（需 NapCat 支持）
-bot.SendPokeMsg(userId, &groupId)                 // 戳一戳（groupId 可传 nil 表示私聊）
+bot.SendGroupMsg(groupId, groupChain)  // → (msgId, ok) 公共能力，所有平台可用
+bot.SendFriendMsg(userId, friendChain) // → (msgId, ok) 公共能力，所有平台可用
+
+// 以下为 QQ 平台专属能力，需先断言 bot.QQ（事件来源为 QQ 适配器时成功）：
+qb := bot.(bot.QQ)
+qb.SendGroupForwardMsg(groupId, forwardChain)    // → (msgId, ok)
+qb.SendFriendForwardMsg(userId, forwardChain)    // → (msgId, ok)
+qb.SendGroupAIVoiceMsg(groupId, character, text) // AI 语音（需 NapCat 支持）
+qb.SendPokeMsg(userId, &groupId)                 // 戳一戳（groupId 可传 nil 表示私聊）
 ```
+
+::: tip 多平台
+公共能力 `SendGroupMsg` / `SendFriendMsg` 在所有平台可用（飞书等平台内部自动翻译）；
+QQ 专属方法在 `bot.QQ` 可选接口中，类型断言探测，断言失败即平台不支持。
+::: 
 
 所有发送方法返回 `(msgId, success)`，失败时记得处理：
 

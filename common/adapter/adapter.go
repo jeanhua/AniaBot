@@ -6,11 +6,51 @@ import (
 	"github.com/spf13/viper"
 )
 
+// Adapter 平台适配器公共契约：任何平台（QQ、飞书、Telegram……）都必须实现的能力。
+// 平台专属能力不进入本接口，而是以可选能力接口（如 QQExt）扩展，
+// core 与插件通过类型断言探测，断言失败即平台不支持（退化处理）。
 type Adapter interface {
+	// Name 适配器名（与 Definition.Name 一致，如 "napcat"、"feishu"）
+	Name() string
+	// Platform 平台标识（如 "qq"、"feishu"），写入其产生的 Message/Notice.Platform，
+	// core 按它对插件做 Meta.Platforms 过滤
+	Platform() string
 	SendMsg
 	GetMsg
 	SetTrigger(TriggerWrapper)
 	Serve(*viper.Viper)
+}
+
+// QQExt QQ（NapCat/OneBot v11）平台专属能力，可选接口。
+// 合并转发、戳一戳、群签到、rkey、AI 语音等只有 QQ 具备的能力；
+// 对应插件侧外观接口为 bot.QQ。
+type QQExt interface {
+	// SendGroupAIVoiceMsg 发送群AI语音消息
+	SendGroupAIVoiceMsg(groupId message.QID, character, msg string) (msgId message.QID, success bool)
+	// SendPokeMsg 发送戳一戳消息
+	SendPokeMsg(userId message.QID, groupId *message.QID) (success bool)
+	// SendGroupForwardMsg 发送群转发消息
+	SendGroupForwardMsg(groupId message.QID, chain msgchain.GroupForwardChain) (msgId message.QID, success bool)
+	// SendFriendForwardMsg 发送好友转发消息
+	SendFriendForwardMsg(userId message.QID, chain msgchain.FriendForwardChain) (msgId message.QID, success bool)
+	// SetMsgEmojiLike 设置消息表情点赞
+	SetMsgEmojiLike(msgId message.QID, emojiId int, like bool) (success bool)
+	// SendGroupSign 发送群签到消息
+	SendGroupSign(groupId message.QID) (success bool)
+	// GetNCrkey 获取NCRKEY
+	GetNCrkey() ([]message.NCrkey, bool)
+	// GetFriendList 获取好友列表
+	GetFriendList() (*[]message.Friend, bool)
+	// GetGroupList 获取群聊列表
+	GetGroupList() (*[]message.GroupInfo, bool)
+	// GetGroupUserInfo 获取群用户信息
+	GetGroupUserInfo(groupId, userId message.QID) (info *message.GroupUserInfo, success bool)
+	// GetForwardMsg 获取转发消息
+	GetForwardMsg(msgId message.QID) (msgs *[]message.Message, success bool)
+	// GetAIChatacter 获取AI聊天角色
+	GetAIChatacter() (*[]message.AIChatacter, bool)
+	// GetPrivateFileURL 获取私聊文件URL
+	GetPrivateFileURL(userId message.QID, fileId string) (string, bool)
 }
 
 type MessageHandler func(message.Message)
@@ -28,8 +68,11 @@ type HonorHandler func(message.HonorNotice)
 type GroupMsgEmojiLikeHandler func(message.GroupMsgEmojiLikeNotice)
 type EssenceHandler func(message.EssenceNotice)
 type GroupCardHandler func(message.GroupCardNotice)
+type PlatformEventHandler func(message.PlatformEvent)
 
-// TriggerWrapper 回调函数包装器
+// TriggerWrapper 回调函数包装器。
+// 消息与公共通知（成员变动/撤回/表情回应等可跨平台映射的事件）各平台按需触发；
+// 平台自有事件（无法映射的）统一走 OnPlatformEvent。
 type TriggerWrapper struct {
 	OnGroupMsg          MessageHandler
 	OnFriendMsg         MessageHandler
@@ -47,48 +90,24 @@ type TriggerWrapper struct {
 	OnGroupMsgEmojiLike GroupMsgEmojiLikeHandler
 	OnEssence           EssenceHandler
 	OnGroupCard         GroupCardHandler
+	// OnPlatformEvent 平台特定事件（如飞书卡片回调），可选触发
+	OnPlatformEvent PlatformEventHandler
 }
 
 type SendMsg interface {
 	// SendGroupMsg 发送群消息
 	SendGroupMsg(groupId message.QID, chain msgchain.GroupChain) (msgId message.QID, success bool)
-	// SendGroupAIVoiceMsg 发送群AI语音消息
-	SendGroupAIVoiceMsg(groupId message.QID, character, msg string) (msgId message.QID, success bool)
-	// SendFriendMsg 发送好友消息
+	// SendFriendMsg 发送私聊消息
 	SendFriendMsg(userId message.QID, chain msgchain.FriendChain) (msgId message.QID, success bool)
-	// SendPokeMsg 发送戳一戳消息
-	SendPokeMsg(userId message.QID, groupId *message.QID) (success bool)
-	// SendGroupForwardMsg 发送群转发消息
-	SendGroupForwardMsg(groupId message.QID, chain msgchain.GroupForwardChain) (msgId message.QID, success bool)
-	// SendFriendForwardMsg 发送好友转发消息
-	SendFriendForwardMsg(userId message.QID, chain msgchain.FriendForwardChain) (msgId message.QID, success bool)
-	// SetMsgEmojiLike 设置消息表情点赞
-	SetMsgEmojiLike(msgId message.QID, emojiId int, like bool) (success bool)
-	// SendGroupSign 发送群签到消息
-	SendGroupSign(groupId message.QID) (success bool)
 }
 
 type GetMsg interface {
 	// GetMsgDetail 获取消息详情
 	GetMsgDetail(msgId message.QID) (msg *message.Message, success bool)
-	// GetGroupUserInfo 获取群用户信息
-	GetGroupUserInfo(groupId, userId message.QID) (info *message.GroupUserInfo, success bool)
-	// GetForwardMsg 获取转发消息
-	GetForwardMsg(msgId message.QID) (msgs *[]message.Message, success bool)
-	// GetNCrkey 获取NCRKEY
-	GetNCrkey() ([]message.NCrkey, bool)
-	// GetFriendList 获取好友列表
-	GetFriendList() (*[]message.Friend, bool)
-	// GetGroupList 获取群聊列表
-	GetGroupList() (*[]message.GroupInfo, bool)
 	// GetGroupDetail 获取群详情
 	GetGroupDetail(groupId message.QID) (info *message.GroupInfo, success bool)
 	// GetGroupMsgHistory 获取群消息历史
 	GetGroupMsgHistory(groupId message.QID, count int, message_seq int) (*[]message.Message, bool)
-	// GetFriendMsgHistory 获取好友消息历史
+	// GetFriendMsgHistory 获取私聊消息历史
 	GetFriendMsgHistory(userId message.QID, count int, message_seq int) (*[]message.Message, bool)
-	// GetAIChatacter 获取AI聊天角色
-	GetAIChatacter() (*[]message.AIChatacter, bool)
-	// GetPrivateFileURL 获取私聊文件URL
-	GetPrivateFileURL(userId message.QID, fileId string) (string, bool)
 }

@@ -3,6 +3,7 @@ package pluginnews
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/jeanhua/AniaBot/common/aniaerror"
 	"github.com/jeanhua/AniaBot/common/bot"
@@ -19,7 +20,7 @@ type NewsPlugin struct {
 	cfg         newsConfig
 	cronExpress string
 	api         string
-	groups      []uint
+	groups      []message.QID
 }
 
 func NewNewsPlugin() *NewsPlugin {
@@ -50,8 +51,9 @@ func (p *NewsPlugin) Start(ctx context.Context, cfg *viper.Viper) error {
 		return fmt.Errorf("%w: 未配置 API 端点（plugin.dailynews.api）", aniaerror.ParameterInitializeError)
 	}
 	for _, g := range p.cfg.Groups {
-		p.Logger.Info("播报群聊注册", "groupId", g)
-		p.groups = append(p.groups, uint(g))
+		gid := message.FromString(strings.TrimSpace(g))
+		p.Logger.Info("播报群聊注册", "groupId", gid)
+		p.groups = append(p.groups, gid)
 	}
 	return nil
 }
@@ -102,7 +104,7 @@ func (p *NewsPlugin) sendNews(bot bot.Bot) {
 	for _, group := range p.groups {
 		builder := msgchain.Builder().Group()
 		builder.ImageUrl(p.api)
-		_, ok := bot.SendGroupMsg(message.FromUint64(uint64(group)), builder.Build())
+		_, ok := bot.SendGroupMsg(group, builder.Build())
 		if ok {
 			p.Logger.Info("发送消息", "groupId", group, "message", "[每日新闻]")
 		} else {

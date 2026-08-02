@@ -2,6 +2,7 @@ package plugininterceptor
 
 import (
 	"context"
+	"strings"
 
 	"github.com/jeanhua/AniaBot/common/bot"
 	"github.com/jeanhua/AniaBot/common/model/command"
@@ -51,11 +52,11 @@ func (p *InterceptorPlugin) Start(ctx context.Context, cfg *viper.Viper) error {
 
 	p.groups = make(map[message.QID]struct{}, len(p.cfg.Groups))
 	for _, id := range p.cfg.Groups {
-		p.groups[message.FromUint64(uint64(id))] = struct{}{}
+		p.groups[message.FromString(strings.TrimSpace(id))] = struct{}{}
 	}
 	p.friends = make(map[message.QID]struct{}, len(p.cfg.Friends))
 	for _, id := range p.cfg.Friends {
-		p.friends[message.FromUint64(uint64(id))] = struct{}{}
+		p.friends[message.FromString(strings.TrimSpace(id))] = struct{}{}
 	}
 
 	if p.cfg.Mode != modeBlacklist && p.cfg.Mode != modeWhitelist {

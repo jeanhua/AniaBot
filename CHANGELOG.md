@@ -12,8 +12,11 @@
 
 ### 新增
 
-- 面板登录防爆破：按来源 IP 统计登录失败次数，10 分钟窗口内连续失败 5 次即锁定 10 分钟（返回 HTTP 429 与 `Retry-After` 头），登录成功自动清零计数；失败响应附加固定 500ms 延迟拖慢在线爆破；记录数超阈值时惰性清理过期记录防止内存无界增长；纯内存计数，重启后清零。来源 IP 提取仅在直连对端为回环地址时（本机反代场景）才信任 `X-Forwarded-For` / `X-Real-IP`，防止外部伪造头部变换身份绕过锁定
-- 面板登录/锁定/登录成功均记录 slog 日志（含来源 IP），爆破尝试可在控制台日志页直接观测
+- **多平台适配器框架**：`common/adapter` 抽象为公共契约（`Adapter`）+ 平台专属能力（`QQExt` 可选接口）+ 适配器注册表（`Definition`/`Register`/`RegisterBotWrapper`）。新增平台只需实现 `Adapter`、提供 `Definition` 并在 `cmd/main.go` 空白导入触发注册即可，框架核心零改动；支持 QQ + 飞书等多平台并存，按配置 `bot.platform.<name>.enable` 启用
+- **飞书（Lark）适配器**（`bot/adapter/feishu`，基于 `larksuite/oapi-sdk-go/v3`）：WebSocket 长连接（默认，无需公网地址）/ Webhook 双模式事件订阅；消息收发翻译（文本/@提及/富文本/图片/文件/回复），图片与文件经 `im.messageResource.get` 下载为 data URI 供 AI 插件直接加载；撤回/表情回应/成员进出等通知映射到公共事件，机器人入群、卡片回调等平台特定事件走新增的 `OnPlatformEvent` 统一入口；`bot.QQ` 类型断言探测 QQ 专属能力
+- **平台 ID 前缀体系**：QQ 历史数字 ID 无前缀（存量数据零迁移），其他平台 ID 统一加前缀（如飞书 `fs:`），core 按前缀路由到对应适配器；`QID` 放松为任意字符串（数字仍规范化）
+- **插件平台声明**：`plugin.Meta.Platforms` 字段（空 = 支持全部平台，向后兼容），core 按事件来源平台过滤插件；防撤回插件声明 QQ-only（依赖合并转发与 rkey）
+- 面板状态接口返回各平台适配器状态数组（`GET /api/status` → `adapters`），概览页按平台展示连接状态
 
 ### 优化
 
@@ -27,6 +30,10 @@
 
 ### 变更
 
+- `common/adapter` 接口拆分：`Adapter` 仅保留公共能力（发群/私聊消息、查消息/群详情/历史），合并转发、戳一戳、群签到、rkey、AI 语音、表情回应、好友/群列表等 QQ 专属能力移入可选接口 `QQExt`；对应插件侧 `bot.Bot` 保留公共方法，QQ 专属能力移入 `bot.QQ` 可选接口，插件在事件回调中类型断言探测（`if qb, ok := b.(bot.QQ); ok`）
+- 插件事件回调不再收到裸 `*core.AniaBot`，而是平台能力包装后的 `bot.Bot`（`adapter.WrapBot`）：事件来源适配器实现 `QQExt` 时断言 `bot.QQ` 成功，否则失败（其他平台插件无感退化）
+- `bot.admin_id` 由 int 改为 string（支持带平台前缀的 ID）；请求拦截/每日新闻插件的群号/QQ号名单由 `[]int` 改为 `[]string`（支持 `fs:` 前缀 ID）
+- AI 对话插件定时任务与 Prompt 覆盖的目标 ID 解析支持多平台：纯数字（QQ）规范化为 QID，带前缀（如 `fs:oc_xxx`）原样保留
 - `common/aniaerror` 移除未被使用的 `UnknownError`、`NetworkError`、`JsonSeralizeError`（原名有拼写错误）与 `Timeout`（`context.DeadlineExceeded` 别名），仅保留实际使用的 `ParameterInitializeError`
 
 ## [v3.7.0] - 2026-08-01

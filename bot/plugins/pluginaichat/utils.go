@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -17,10 +18,30 @@ import (
 	"github.com/spf13/viper"
 )
 
-func (p *AIChatPlugin) extraMsg(bot bot.Bot, msg message.Message) string {
+// botQQ 返回 bot 的 QQ 平台专属能力（事件来源为 QQ 适配器时可用），否则返回 nil。
+func botQQ(b bot.Bot) bot.QQ {
+	if qb, ok := b.(bot.QQ); ok {
+		return qb
+	}
+	return nil
+}
+
+// parseQID 解析目标 ID：纯数字（QQ 群号/QQ号）规范化为 QID，其他
+// （多平台带前缀，如飞书 fs:oc_xxx）原样保留。
+func parseQID(s string) message.QID {
+	if n, err := strconv.ParseUint(s, 10, 64); err == nil {
+		return message.FromUint64(n)
+	}
+	return message.FromString(strings.TrimSpace(s))
+}
+
+func (p *AIChatPlugin) extraMsg(b bot.Bot, msg message.Message) string {
 	opts := []message.MsgOptFunc{
-		message.WithGetMsgFunc(bot.GetMsgDetail),
-		message.WithGetForwardMsgFunc(bot.GetForwardMsg),
+		message.WithGetMsgFunc(b.GetMsgDetail),
+	}
+	// 合并转发展开属 QQ 平台能力：仅事件来源为 QQ 时挂载，其余平台回退占位符
+	if qb := botQQ(b); qb != nil {
+		opts = append(opts, message.WithGetForwardMsgFunc(qb.GetForwardMsg))
 	}
 	// 合成消息（如子代理结果，UserId 为 0）不附加 [nickname:… id:…] 发送者前缀，
 	// 其正文已自带身份标识

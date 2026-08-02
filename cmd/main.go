@@ -5,7 +5,9 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/jeanhua/AniaBot/bot/adapter/napcat"
+	// 空白导入各平台适配器包以触发其 init() 注册（新增平台在此追加导入即可）
+	_ "github.com/jeanhua/AniaBot/bot/adapter/feishu"
+	_ "github.com/jeanhua/AniaBot/bot/adapter/napcat"
 	"github.com/jeanhua/AniaBot/bot/core"
 	"github.com/jeanhua/AniaBot/bot/plugins/pluginaichat"
 	"github.com/jeanhua/AniaBot/bot/plugins/pluginantiwithdrawal"
@@ -30,8 +32,8 @@ func main() {
 		fmt.Println("Web 控制面板密码已重置，请重新启动 Bot")
 		return
 	}
-	// 适配器按配置 bot.adapter.mode（ws/http）在配置加载后创建
-	bot := core.NewAniaBot(nil, core.WithAdapterFactory(napcat.NewAdapter))
+	// 平台适配器由注册表按配置 bot.platform.<name>.enable 在配置加载后创建
+	bot := core.NewAniaBot(nil)
 	// 插件注册
 	bot.AddPlugin(pluginsys.NewPluginSys())
 	bot.AddPlugin(pluginlog.NewPlugin())

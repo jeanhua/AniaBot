@@ -507,7 +507,7 @@ func (m *clockManager) runTask(task *ClockTask) {
 		start := time.Now()
 		// 任务目标会话（与对话 sessionKey 一致，配额按此归集）
 		isGroup := task.TargetType == clockTargetGroup
-		targetQID, _ := strconv.ParseUint(task.TargetID, 10, 64)
+		targetQID := parseQID(task.TargetID)
 		logEntry := m.log.Record(tasklog.Entry{
 			TaskID:         task.ID,
 			TaskTitle:      task.Title,
@@ -548,11 +548,11 @@ func (m *clockManager) runTask(task *ClockTask) {
 		defer cancel()
 
 		// 每日配额检查：任务所属会话超限时跳过执行并告知用户
-		// （目标会话 key 与对话一致：g:群号 / f:QQ号）
-		if reason, denied := m.plugin.quotaManager.Check(sessionKey(message.FromUint64(targetQID), isGroup)); denied {
+		// （目标会话 key 与对话一致：g:群ID / f:用户ID）
+		if reason, denied := m.plugin.quotaManager.Check(sessionKey(targetQID, isGroup)); denied {
 			m.logger.Warn("定时任务因配额限制跳过", "task", task.ID, "title", task.Title, "reason", reason)
-			if targetQID > 0 {
-				m.plugin.sendPlainText(m.bot, message.FromUint64(targetQID), isGroup, "定时任务「"+task.Title+"」未执行："+reason)
+			if targetQID != "" {
+				m.plugin.sendPlainText(m.bot, targetQID, isGroup, "定时任务「"+task.Title+"」未执行："+reason)
 			}
 			m.log.Update(logEntry.ID, func(e *tasklog.Entry) {
 				e.Status = tasklog.StatusError
@@ -567,7 +567,7 @@ func (m *clockManager) runTask(task *ClockTask) {
 		resp, usage, runErr := m.executeTask(ctx, task, rec)
 		duration := time.Since(start)
 		// 定时任务消耗计入目标会话与全局配额
-		m.plugin.quotaManager.Add(sessionKey(message.FromUint64(targetQID), isGroup), usage)
+		m.plugin.quotaManager.Add(sessionKey(targetQID, isGroup), usage)
 
 		// fillExecution 回填执行过程明细（LLM 轮数 / 工具调用 / 最终回复 / token 用量）
 		fillExecution := func(e *tasklog.Entry) {
@@ -619,9 +619,9 @@ func (m *clockManager) runTask(task *ClockTask) {
 func (m *clockManager) executeTask(ctx context.Context, task *ClockTask, rec *taskRecorder) (string, aichat.TokenUsage, error) {
 	p := m.plugin
 	isGroup := task.TargetType == clockTargetGroup
-	targetQID, _ := strconv.ParseUint(task.TargetID, 10, 64)
+	targetQID := parseQID(task.TargetID)
 	// 注入对话场景（群聊/私聊），触发时 AI 同样清楚自己面对的场景
-	prompt := p.getPromptForID(message.FromUint64(targetQID), isGroup) + p.buildScenePrompt(m.bot, message.FromUint64(targetQID), isGroup)
+	prompt := p.getPromptForID(targetQID, isGroup) + p.buildScenePrompt(m.bot, targetQID, isGroup)
 
 	// 每次触发独立的 SessionToolExecutor（动态 MCP 工具互不影响）；
 	// historyStore 传 nil → 全新一次性上下文，不持久化、执行后丢弃
@@ -696,12 +696,11 @@ func (m *clockManager) buildTriggerPrompt(task *ClockTask) string {
 func (m *clockManager) makeClockCallback(ctx context.Context, task *ClockTask) llmtool.CallBackFuncs {
 	b := m.bot
 	targetIDStr := task.TargetID
-	targetID, _ := strconv.ParseUint(targetIDStr, 10, 64)
 	isGroup := task.TargetType == clockTargetGroup
 	logger := m.logger
 	var loadedImages []string
 
-	qid := message.FromUint64(targetID)
+	qid := parseQID(targetIDStr)
 	cbs := llmtool.CallBackFuncs{
 		// SendText 是多轮工具循环中模型中间轮文本的自动回执通道。
 		// 定时任务不自动回显——数字人要主动发消息必须显式调用 send_message 工具；
@@ -744,7 +743,11 @@ func (m *clockManager) makeClockCallback(ctx context.Context, task *ClockTask) l
 			if isGroup {
 				return "", fmt.Errorf("当前为群聊定时任务，无法获取私聊文件")
 			}
-			url, ok := b.GetPrivateFileURL(qid, fileId)
+			qb := botQQ(b)
+			if qb == nil {
+				return "", fmt.Errorf("当前平台不支持获取私聊文件URL")
+			}
+			url, ok := qb.GetPrivateFileURL(qid, fileId)
 			if !ok {
 				return "", fmt.Errorf("获取私聊文件URL失败")
 			}
@@ -772,13 +775,14 @@ func (m *clockManager) makeClockCallback(ctx context.Context, task *ClockTask) l
 
 // formatHistoryText 将历史消息格式化为纯文本（与 msgcallback.go 的格式一致）。
 func formatHistoryText(msgs *[]message.Message, b bot.Bot) string {
+	opts := []message.MsgOptFunc{message.WithGetMsgFunc(b.GetMsgDetail)}
+	if qb := botQQ(b); qb != nil {
+		opts = append(opts, message.WithGetForwardMsgFunc(qb.GetForwardMsg))
+	}
 	var sb strings.Builder
 	for _, msg := range *msgs {
 		sb.WriteString(fmt.Sprintf("[message_seq:%d]\n", msg.MessageSeq))
-		sb.WriteString(msg.FriendlyText(true,
-			message.WithGetMsgFunc(b.GetMsgDetail),
-			message.WithGetForwardMsgFunc(b.GetForwardMsg),
-		))
+		sb.WriteString(msg.FriendlyText(true, opts...))
 		sb.WriteString("\n")
 	}
 	return sb.String()
@@ -790,7 +794,7 @@ func (m *clockManager) sendText(task *ClockTask, text string) bool {
 	if m.bot == nil {
 		return false
 	}
-	targetID, _ := strconv.ParseUint(task.TargetID, 10, 64)
+	targetQID := parseQID(task.TargetID)
 	if task.TargetType == clockTargetGroup {
 		builder := msgchain.Builder().Group()
 		if task.CreatedBy != "" {
@@ -799,18 +803,17 @@ func (m *clockManager) sendText(task *ClockTask, text string) bool {
 		} else {
 			builder.Text(text)
 		}
-		_, ok := m.bot.SendGroupMsg(message.FromUint64(targetID), builder.Build())
+		_, ok := m.bot.SendGroupMsg(targetQID, builder.Build())
 		return ok
 	}
 	builder := msgchain.Builder().Friend()
 	builder.Text(text)
-	_, ok := m.bot.SendFriendMsg(message.FromUint64(targetID), builder.Build())
+	_, ok := m.bot.SendFriendMsg(targetQID, builder.Build())
 	return ok
 }
 
 func (m *clockManager) parseTargetID(task *ClockTask) message.QID {
-	n, _ := strconv.ParseUint(task.TargetID, 10, 64)
-	return message.FromUint64(n)
+	return parseQID(task.TargetID)
 }
 
 func (m *clockManager) sendImage(task *ClockTask, bs64 string) bool {

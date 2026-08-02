@@ -24,6 +24,11 @@ type Meta struct {
 
 	Order int // 插件执行顺序，从小到大
 
+	// Platforms 插件支持的平台列表（如 ["qq"]、["qq", "feishu"]），
+	// 空 = 支持全部平台（向后兼容默认值）。core 按事件来源平台过滤插件；
+	// 平台标识由各适配器 Definition.Platform 定义。
+	Platforms []string
+
 	Storage           storage.Storage
 	PersistentStorage storage.PersistentStorage
 	RestyClient       *resty.Client
@@ -33,6 +38,19 @@ type Meta struct {
 
 func (p *Meta) GetMeta() *Meta {
 	return p
+}
+
+// SupportsPlatform 插件是否声明支持指定平台；Platforms 为空表示支持全部平台。
+func (p *Meta) SupportsPlatform(platform string) bool {
+	if len(p.Platforms) == 0 {
+		return true
+	}
+	for _, pl := range p.Platforms {
+		if pl == platform {
+			return true
+		}
+	}
+	return false
 }
 
 func (p *Meta) SetStorage(s storage.Storage) {

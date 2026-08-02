@@ -49,19 +49,24 @@ func MakeGroupCallback(bot bot.Bot, groupId, userId message.QID, logger *slog.Lo
 			if !ok || msgs == nil {
 				return "", fmt.Errorf("获取群聊历史消息失败")
 			}
+			opts := []message.MsgOptFunc{message.WithGetMsgFunc(bot.GetMsgDetail)}
+			if qb := botQQ(bot); qb != nil {
+				opts = append(opts, message.WithGetForwardMsgFunc(qb.GetForwardMsg))
+			}
 			var sb strings.Builder
 			for _, msg := range *msgs {
 				sb.WriteString(fmt.Sprintf("[message_seq:%d]\n", msg.MessageSeq))
-				sb.WriteString(msg.FriendlyText(true,
-					message.WithGetMsgFunc(bot.GetMsgDetail),
-					message.WithGetForwardMsgFunc(bot.GetForwardMsg),
-				))
+				sb.WriteString(msg.FriendlyText(true, opts...))
 				sb.WriteString("\n")
 			}
 			return sb.String(), nil
 		},
 		GetPrivateFileURL: func(fileId string) (string, error) {
-			url, ok := bot.GetPrivateFileURL(userId, fileId)
+			qb := botQQ(bot)
+			if qb == nil {
+				return "", fmt.Errorf("当前平台不支持获取私聊文件URL")
+			}
+			url, ok := qb.GetPrivateFileURL(userId, fileId)
 			if !ok {
 				return "", fmt.Errorf("获取私聊文件URL失败")
 			}
@@ -110,19 +115,24 @@ func MakeFriendCallback(bot bot.Bot, userId message.QID, logger *slog.Logger) ll
 			if !ok || msgs == nil {
 				return "", fmt.Errorf("获取好友历史消息失败")
 			}
+			opts := []message.MsgOptFunc{message.WithGetMsgFunc(bot.GetMsgDetail)}
+			if qb := botQQ(bot); qb != nil {
+				opts = append(opts, message.WithGetForwardMsgFunc(qb.GetForwardMsg))
+			}
 			var sb strings.Builder
 			for _, msg := range *msgs {
 				sb.WriteString(fmt.Sprintf("[message_seq:%d]\n", msg.MessageSeq))
-				sb.WriteString(msg.FriendlyText(true,
-					message.WithGetMsgFunc(bot.GetMsgDetail),
-					message.WithGetForwardMsgFunc(bot.GetForwardMsg),
-				))
+				sb.WriteString(msg.FriendlyText(true, opts...))
 				sb.WriteString("\n")
 			}
 			return sb.String(), nil
 		},
 		GetPrivateFileURL: func(fileId string) (string, error) {
-			url, ok := bot.GetPrivateFileURL(userId, fileId)
+			qb := botQQ(bot)
+			if qb == nil {
+				return "", fmt.Errorf("当前平台不支持获取私聊文件URL")
+			}
+			url, ok := qb.GetPrivateFileURL(userId, fileId)
 			if !ok {
 				return "", fmt.Errorf("获取私聊文件URL失败")
 			}

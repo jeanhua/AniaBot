@@ -73,7 +73,8 @@ func ParseMention(s OB11Segment, m *MentionMessage) bool {
 		return true
 	}
 
-	if _, err := strconv.Atoi(qq); err != nil {
+	// 不再限定数字：多平台下 at 目标可能是带平台前缀的 ID（如 fs:ou_xxx）
+	if qq == "" {
 		return false
 	}
 
@@ -87,11 +88,7 @@ func ParseReply(s OB11Segment, r *ReplyMessage) bool {
 	}
 
 	idStr, ok := s.Data["id"].(string)
-	if !ok {
-		return false
-	}
-
-	if _, err := strconv.Atoi(idStr); err != nil {
+	if !ok || idStr == "" {
 		return false
 	}
 

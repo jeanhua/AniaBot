@@ -3,7 +3,6 @@ package pluginaichat
 import (
 	"context"
 	"fmt"
-	"strconv"
 	"strings"
 
 	"github.com/jeanhua/AniaBot/bot/component/llmtool"
@@ -111,11 +110,10 @@ func (t *clockCreateTool) Execute(_ context.Context, params any, _ llmtool.CallB
 	}
 	var creator message.QID
 	if s := strings.TrimSpace(p.CreatedBy); s != "" {
-		n, err := strconv.ParseUint(s, 10, 64)
-		if err != nil {
-			return "", fmt.Errorf("created_by 必须是QQ号数字: %w", err)
+		if s == "0" {
+			return "", fmt.Errorf("created_by 必须是用户 ID")
 		}
-		creator = message.FromUint64(n)
+		creator = parseQID(s)
 	}
 	task := &ClockTask{
 		Cron:       p.Cron,

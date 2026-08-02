@@ -161,8 +161,16 @@ default:
 
 QQ 的图片/文件链接约 3 分钟过期。防撤回插件的两种应对：
 
-1. 通过 `bot.GetNCrkey()` 获取 rkey 改写 URL 续期（`utils.NewURLModifier`）
+1. 通过 QQ 平台专属能力 `bot.(bot.QQ).GetNCrkey()` 获取 rkey 改写 URL 续期（`utils.NewURLModifier`）——合并转发与 rkey 均属 QQ 能力，防撤回插件声明 `Meta.Platforms = []string{"qq"}` 并类型断言 `bot.QQ`
 2. 无法续期时降级为文字占位：`[图片消息，已经超过3分钟过期时间]`
+
+::: tip 多平台能力探测
+`bot.Bot` 仅含公共能力；QQ 专属方法（合并转发/戳一戳/群签到/rkey/AI 语音等）在 `bot.QQ` 可选接口中，事件来源为 QQ 适配器时断言成功：
+```go
+if qb, ok := b.(bot.QQ); ok { ncrkey, ok := qb.GetNCrkey() }
+```
+其他平台断言失败，插件据此优雅退化。插件可用 `Meta.Platforms` 声明支持的平台（空 = 全部平台）。
+:::
 
 ## 日志规范
 

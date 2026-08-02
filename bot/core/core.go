@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"os"
 	"sort"
+	"strings"
 	"sync/atomic"
 	"time"
 
@@ -20,6 +21,7 @@ import (
 	"github.com/jeanhua/AniaBot/bot/core/configstore"
 	"github.com/jeanhua/AniaBot/bot/utils"
 	"github.com/jeanhua/AniaBot/common/adapter"
+	"github.com/jeanhua/AniaBot/common/bot"
 	"github.com/jeanhua/AniaBot/common/model/message"
 	"github.com/jeanhua/AniaBot/common/msgchain"
 	"github.com/jeanhua/AniaBot/common/plugin"
@@ -30,13 +32,22 @@ import (
 	"github.com/spf13/viper"
 )
 
+// adapterEntry 一个已启用的平台适配器实例。
+// evBot 是该平台能力包装后的 bot 外观：事件分发时传给插件，
+// 插件可通过类型断言探测平台专属能力（如 bot.QQ）。
+type adapterEntry struct {
+	def     adapter.Definition
+	adapter adapter.Adapter
+	evBot   bot.Bot
+}
+
 type AniaBot struct {
 	ctx    context.Context
 	cancel context.CancelFunc
 
-	adapter adapter.Adapter
-	// adapterFactory 延迟创建适配器：在配置中心加载完成后按配置选择实现。
-	// 与直接传入 adapter 二选一；两者都未提供时 Run 报错退出。
+	// adapters 已启用的平台适配器（可多开：QQ + 飞书……）
+	adapters []*adapterEntry
+	// adapterFactory 延迟创建单个适配器（旧版单适配器用法，注册表启用后保留兼容）
 	adapterFactory func(cfg *viper.Viper) adapter.Adapter
 	plugins        []plugin.Plugin
 	cfg            *viper.Viper
@@ -107,23 +118,25 @@ func WithLogger(logger *slog.Logger) Option {
 	}
 }
 
-// WithAdapterFactory 延迟创建适配器：Run 时配置中心加载完成后调用工厂，
-// 由工厂按配置（如 bot.adapter.mode）选择具体适配器实现。
-// 与 NewAniaBot 直接传入 adapter 二选一。
+// WithAdapterFactory 延迟创建单个适配器（兼容旧用法）：Run 时配置中心加载完成后
+// 调用工厂，按配置选择具体适配器实现。多平台并存请改用适配器注册表
+// （各平台包 init() 中 adapter.Register，按 bot.platform.<name>.enable 启用）。
 func WithAdapterFactory(factory func(cfg *viper.Viper) adapter.Adapter) Option {
 	return func(ania *AniaBot) {
 		ania.adapterFactory = factory
 	}
 }
 
-func NewAniaBot(adapter adapter.Adapter, option ...Option) *AniaBot {
+func NewAniaBot(a adapter.Adapter, option ...Option) *AniaBot {
 	ctx, cancel := context.WithCancel(context.Background())
 	ania := &AniaBot{
 		ctx:       ctx,
 		cancel:    cancel,
-		adapter:   adapter,
 		pluginSet: map[string]struct{}{},
 		plugins:   make([]plugin.Plugin, 0),
+	}
+	if a != nil {
+		ania.addAdapter(adapter.Definition{Name: "legacy", Platform: "qq"}, a)
 	}
 	for _, op := range option {
 		op(ania)
@@ -134,29 +147,88 @@ func NewAniaBot(adapter adapter.Adapter, option ...Option) *AniaBot {
 	return ania
 }
 
+// addAdapter 注册一个已创建好的适配器：计算平台能力包装的 bot 外观，并注入事件回调。
+func (ania *AniaBot) addAdapter(def adapter.Definition, a adapter.Adapter) {
+	e := &adapterEntry{def: def, adapter: a}
+	e.evBot = adapter.WrapBot(ania, a)
+	a.SetTrigger(ania.makeTrigger(e))
+	ania.adapters = append(ania.adapters, e)
+}
+
+// makeTrigger 构造某个适配器的事件回调包装器：各回调携带来源适配器，
+// 以便分发时按平台过滤插件并向插件传入平台能力包装的 bot。
+func (ania *AniaBot) makeTrigger(e *adapterEntry) adapter.TriggerWrapper {
+	return adapter.TriggerWrapper{
+		OnGroupMsg:          func(msg message.Message) { ania.onGroupEvent(e, msg) },
+		OnFriendMsg:         func(msg message.Message) { ania.onFriendEvent(e, msg) },
+		OnGroupUpload:       func(n message.GroupUploadNotice) { ania.onGroupUploadEvent(e, n) },
+		OnGroupAdmin:        func(n message.GroupAdminNotice) { ania.onGroupAdminEvent(e, n) },
+		OnGroupDecrease:     func(n message.GroupDecreaseNotice) { ania.onGroupDecreaseEvent(e, n) },
+		OnGroupIncrease:     func(n message.GroupIncreaseNotice) { ania.onGroupIncreaseEvent(e, n) },
+		OnGroupBan:          func(n message.GroupBanNotice) { ania.onGroupBanEvent(e, n) },
+		OnFriendAdd:         func(n message.FriendAddNotice) { ania.onFriendAddEvent(e, n) },
+		OnGroupRecall:       func(n message.GroupRecallNotice) { ania.onGroupRecallEvent(e, n) },
+		OnFriendRecall:      func(n message.FriendRecallNotice) { ania.onFriendRecallEvent(e, n) },
+		OnPoke:              func(n message.PokeNotice) { ania.onPokeEvent(e, n) },
+		OnLuckyKing:         func(n message.LuckyKingNotice) { ania.onLuckyKingEvent(e, n) },
+		OnHonor:             func(n message.HonorNotice) { ania.onHonorEvent(e, n) },
+		OnGroupMsgEmojiLike: func(n message.GroupMsgEmojiLikeNotice) { ania.onGroupMsgEmojiLikeEvent(e, n) },
+		OnEssence:           func(n message.EssenceNotice) { ania.onEssenceEvent(e, n) },
+		OnGroupCard:         func(n message.GroupCardNotice) { ania.onGroupCardEvent(e, n) },
+		OnPlatformEvent:     func(ev message.PlatformEvent) { ania.onPlatformEvent(e, ev) },
+	}
+}
+
+// route 按统一 ID 前缀路由到对应平台适配器；未命中任何前缀时回退到
+// 无前缀的默认适配器（QQ 历史裸数字 ID 兼容）。
+func (ania *AniaBot) route(id message.QID) adapter.Adapter {
+	if len(ania.adapters) == 0 {
+		return nil
+	}
+	s := string(id)
+	for _, e := range ania.adapters {
+		if e.def.IDPrefix != "" && strings.HasPrefix(s, e.def.IDPrefix) {
+			return e.adapter
+		}
+	}
+	for _, e := range ania.adapters {
+		if e.def.IDPrefix == "" {
+			return e.adapter
+		}
+	}
+	return ania.adapters[0].adapter
+}
+
+// AdapterStatuses 汇总各已启用适配器的连接状态（供 Web 面板展示）。
+func (ania *AniaBot) AdapterStatuses() []adminpanel.AdapterStatus {
+	out := make([]adminpanel.AdapterStatus, 0, len(ania.adapters))
+	for _, e := range ania.adapters {
+		st := adminpanel.AdapterStatus{Name: e.def.Name, Platform: e.def.Platform}
+		type statuser interface{ AdapterStatus() (string, string) }
+		if s, ok := e.adapter.(statuser); ok {
+			st.State, st.Detail = s.AdapterStatus()
+		} else {
+			type connChecker interface{ Connected() bool }
+			if c, ok := e.adapter.(connChecker); ok {
+				if c.Connected() {
+					st.State = "connected"
+				} else {
+					st.State = "reconnecting"
+				}
+			} else {
+				st.State = "unknown"
+			}
+		}
+		out = append(out, st)
+	}
+	return out
+}
+
 func (ania *AniaBot) Run() {
 	ania.startTime = time.Now()
 	sort.SliceStable(ania.plugins, func(i, j int) bool {
 		return ania.plugins[i].GetMeta().Order < ania.plugins[j].GetMeta().Order
 	})
-	trigger := adapter.TriggerWrapper{
-		OnGroupMsg:          ania.onGroupEvent,
-		OnFriendMsg:         ania.onFriendEvent,
-		OnGroupUpload:       ania.onGroupUploadEvent,
-		OnGroupAdmin:        ania.onGroupAdminEvent,
-		OnGroupDecrease:     ania.onGroupDecreaseEvent,
-		OnGroupIncrease:     ania.onGroupIncreaseEvent,
-		OnGroupBan:          ania.onGroupBanEvent,
-		OnFriendAdd:         ania.onFriendAddEvent,
-		OnGroupRecall:       ania.onGroupRecallEvent,
-		OnFriendRecall:      ania.onFriendRecallEvent,
-		OnPoke:              ania.onPokeEvent,
-		OnLuckyKing:         ania.onLuckyKingEvent,
-		OnHonor:             ania.onHonorEvent,
-		OnGroupMsgEmojiLike: ania.onGroupMsgEmojiLikeEvent,
-		OnEssence:           ania.onEssenceEvent,
-		OnGroupCard:         ania.onGroupCardEvent,
-	}
 
 	// 持久化存储（重启不丢失；配置中心的载体，必须最先初始化。
 	// 驱动与位置由环境变量引导：ANIABOT_STORE_DRIVER / ANIABOT_SQLITE_PATH / ANIABOT_MYSQL_DSN）
@@ -169,11 +241,12 @@ func (ania *AniaBot) Run() {
 		ania.persistent = store
 	}
 
-	// 收集配置字段元信息（框架 + 各插件的 ConfigRegistrar / ConfigSchemaProvider
-	// 声明），面板表单基于该注册表动态渲染，新增插件无需改动面板代码。
-	// 实现 ConfigSchemaProvider 的插件：反射注册其结构体标签字段，并缓存
-	// 结构体指针，待配置中心构建完成后统一填充（自动初始化）。
+	// 收集配置字段元信息（框架 + 各平台适配器 + 各插件的 ConfigRegistrar /
+	// ConfigSchemaProvider 声明），面板表单基于该注册表动态渲染。
 	pluginconfig.Register(frameworkConfigFields...)
+	for _, d := range adapter.Definitions() {
+		pluginconfig.Register(d.ConfigFields...)
+	}
 	var schemas []struct {
 		name   string
 		schema any
@@ -197,7 +270,6 @@ func (ania *AniaBot) Run() {
 	}
 
 	// 配置中心：全部配置存于数据库（首启写入默认值并进入设置向导）。
-	// ToViper 构建内存 viper，插件与适配器的读取方式保持不变。
 	if ania.cfg == nil {
 		cs := configstore.New(ania.persistent, Logger().WithGroup("Config"))
 		if err := cs.Init(); err != nil {
@@ -211,26 +283,39 @@ func (ania *AniaBot) Run() {
 		ania.cfg = cs.ToViper()
 	}
 
-	// 适配器：直接传入则用之；否则由工厂按已加载的配置延迟创建（如按 bot.adapter.mode 选择 ws/http）。
-	// 创建早于插件 Start，保证 setup_pending 期间插件调用发送接口时适配器已就绪。
-	if ania.adapter == nil && ania.adapterFactory != nil {
-		ania.adapter = ania.adapterFactory(ania.cfg)
+	// 适配器：注册表 + 旧版单适配器工厂二选一。创建早于插件 Start，
+	// 保证 setup_pending 期间插件调用发送接口时适配器已就绪。
+	if len(ania.adapters) == 0 {
+		if ania.adapterFactory != nil {
+			a := ania.adapterFactory(ania.cfg)
+			ania.addAdapter(adapter.Definition{Name: "legacy", Platform: "qq"}, a)
+		}
+		for _, d := range adapter.Definitions() {
+			if !ania.cfg.GetBool("bot.platform." + d.Name + ".enable") {
+				continue
+			}
+			a, err := d.New(ania.cfg)
+			if err != nil {
+				Logger().Error("创建适配器失败，已跳过该平台", "platform", d.Name, "error", err)
+				continue
+			}
+			ania.addAdapter(d, a)
+			Logger().Info("已启用平台适配器", "platform", d.Name)
+		}
 	}
-	if ania.adapter == nil {
-		Logger().Error("未提供适配器：请通过 NewAniaBot 传入适配器或使用 WithAdapterFactory")
+	if len(ania.adapters) == 0 {
+		Logger().Error("未启用任何平台适配器：请在 Web 面板的「平台适配器」配置中启用至少一个平台")
 		os.Exit(1)
 	}
-	ania.adapter.SetTrigger(trigger)
 
 	// 自动初始化：把配置填充进各插件声明的配置结构体（Start 之前完成）。
-	// 失败按插件隔离记日志，该插件退化为结构体零值 + Start 内的既有校验兜底。
 	for _, e := range schemas {
 		if err := pluginconfig.Load(ania.cfg, e.schema); err != nil {
 			Logger().Error("加载插件配置失败", "plugin", e.name, "error", err)
 		}
 	}
 
-	// 缓存存储（易失，支持 TTL/列表；默认 redis，可配置 memory）
+	// 缓存存储（易失，支持 TTL/列表；默认 memory，可配置 redis）
 	if ania.storage == nil {
 		store, err := newCacheStorage(context.Background(), ania.cfg, Logger().WithGroup("Cache"))
 		if err != nil {
@@ -257,7 +342,7 @@ func (ania *AniaBot) Run() {
 			p.SetRestyClient(ania.restyClient)
 			p.SetLogger(Logger().WithGroup(p.GetMeta().Name))
 			p.SetConfig(plugin.SystemConfig{
-				AdminId: message.FromUint64(uint64(ania.cfg.GetInt64("bot.admin_id"))),
+				AdminId: message.FromString(ania.cfg.GetString("bot.admin_id")),
 			})
 
 			// start
@@ -287,7 +372,7 @@ func (ania *AniaBot) Run() {
 	Logger().Info("Bot启动完成...")
 
 	// 首次启动（设置向导未完成）时适配器不会连接，跳过 Awake：
-	// 插件的 Awake 多依赖 QQ 连接（启动通知、定时任务触发），此时触发只会发送失败；
+	// 插件的 Awake 多依赖连接，此时触发只会发送失败；
 	// 向导完成重启后会正常执行。
 	setupPending := ania.configStore != nil && ania.configStore.SetupPending()
 	if !setupPending {
@@ -319,13 +404,24 @@ func (ania *AniaBot) Run() {
 		if listen == "" {
 			listen = "127.0.0.1:7700"
 		}
-		Logger().Info("首次启动：暂不连接 NapCat，请在 Web 控制面板完成设置向导（完成后重启 Bot 生效）", "url", "http://"+listen)
+		Logger().Info("首次启动：暂不连接平台适配器，请在 Web 控制面板完成设置向导（完成后重启 Bot 生效）", "url", "http://"+listen)
 		<-ania.ctx.Done()
 		return
 	}
 
+	// 启动全部平台适配器（各自在 goroutine 中运行连接循环）
 	ania.adapterStarted.Store(true)
-	ania.adapter.Serve(ania.cfg)
+	for _, e := range ania.adapters {
+		go func(a adapter.Adapter) {
+			defer func() {
+				if err := recover(); err != nil {
+					Logger().Error("适配器运行异常", "platform", a.Name(), "error", err)
+				}
+			}()
+			a.Serve(ania.cfg)
+		}(e.adapter)
+	}
+	<-ania.ctx.Done()
 }
 
 // startAdminPanel 启动 Web 控制面板（goroutine 内运行 HTTP 服务）。
@@ -373,11 +469,21 @@ func (ania *AniaBot) startAdminPanel() {
 		}
 	}
 
+	// 面板的 QQ 专属能力来源（群/好友列表）：默认适配器若实现了 QQ 能力则提供
+	var qq bot.QQ
+	for _, e := range ania.adapters {
+		if qb, ok := e.evBot.(bot.QQ); ok {
+			qq = qb
+			break
+		}
+	}
+
 	srv := adminpanel.NewServer(adminpanel.Options{
 		Listen:     ania.cfg.GetString("bot.admin_panel.listen"),
 		Config:     ania.configStore,
 		Persistent: ania.persistent,
 		Bot:        ania,
+		QQ:         qq,
 		Adapter: func() string {
 			if ania.configStore != nil && ania.configStore.SetupPending() {
 				return "setup_pending"
@@ -385,39 +491,41 @@ func (ania *AniaBot) startAdminPanel() {
 			if !ania.adapterStarted.Load() {
 				return "not_started"
 			}
-			type statuser interface{ AdapterStatus() (string, string) }
-			if s, ok := ania.adapter.(statuser); ok {
-				state, _ := s.AdapterStatus()
-				return state
+			statuses := ania.AdapterStatuses()
+			if len(statuses) == 0 {
+				return "unknown"
 			}
-			type connChecker interface{ Connected() bool }
-			if c, ok := ania.adapter.(connChecker); ok {
-				if c.Connected() {
+			// 任一已连接即视为 connected
+			for _, st := range statuses {
+				if st.State == "connected" {
 					return "connected"
 				}
-				return "reconnecting"
 			}
-			return "unknown"
+			return "reconnecting"
 		},
 		AdapterDetail: func() string {
-			type statuser interface{ AdapterStatus() (string, string) }
-			if s, ok := ania.adapter.(statuser); ok {
-				_, detail := s.AdapterStatus()
-				return detail
+			statuses := ania.AdapterStatuses()
+			if len(statuses) == 0 {
+				return ""
 			}
-			return ""
+			parts := make([]string, 0, len(statuses))
+			for _, st := range statuses {
+				parts = append(parts, fmt.Sprintf("%s:%s", st.Platform, st.State))
+			}
+			return strings.Join(parts, " ")
 		},
-		TaskLogs:    taskLogFn,
-		Clocks:      clockSrc,
-		MsgLogs:     msgLogFn,
-		Skills:      skillSrc,
-		Memories:    memorySrc,
-		Knowledge:   kbSrc,
-		Teams:       teamSrc,
-		Quota:       quotaSrc,
-		QueryLogs:   queryLogFn,
-		ConsoleLogs: consollog.Page,
-		Logger:      Logger().WithGroup("AdminPanel"),
+		AdapterStatuses: ania.AdapterStatuses,
+		TaskLogs:        taskLogFn,
+		Clocks:          clockSrc,
+		MsgLogs:         msgLogFn,
+		Skills:          skillSrc,
+		Memories:        memorySrc,
+		Knowledge:       kbSrc,
+		Teams:           teamSrc,
+		Quota:           quotaSrc,
+		QueryLogs:       queryLogFn,
+		ConsoleLogs:     consollog.Page,
+		Logger:          Logger().WithGroup("AdminPanel"),
 	})
 	go srv.Run()
 }
@@ -447,7 +555,12 @@ func (ania *AniaBot) GetPluginList() []plugininfo.PluginInfo {
 	return pluginList
 }
 
-func (ania *AniaBot) onGroupEvent(msg message.Message) {
+// supportsPlatform 插件是否声明支持指定平台。
+func (ania *AniaBot) supportsPlatform(p plugin.Plugin, platform string) bool {
+	return p.GetMeta().SupportsPlatform(platform)
+}
+
+func (ania *AniaBot) onGroupEvent(e *adapterEntry, msg message.Message) {
 	defer func() {
 		if err := recover(); err != nil {
 			Logger().Error("群聊消息事件触发错误: ", err)
@@ -460,9 +573,12 @@ func (ania *AniaBot) onGroupEvent(msg message.Message) {
 	cmd := utils.ParseCommand(msg)
 
 	for _, p := range ania.plugins {
+		if !ania.supportsPlatform(p, e.def.Platform) {
+			continue
+		}
 		next, panicked := safeExecuteWithReturn("群聊消息事件", p, func(p plugin.Plugin) bool {
 			msgCtx, cancel := context.WithTimeout(ania.ctx, MsgEventTimeout)
-			next, err := p.OnGroupMsg(msgCtx, ania, cmd, msg)
+			next, err := p.OnGroupMsg(msgCtx, e.evBot, cmd, msg)
 			logError(err, p, "群聊消息事件")
 			cancel()
 			return next
@@ -476,7 +592,7 @@ func (ania *AniaBot) onGroupEvent(msg message.Message) {
 	}
 }
 
-func (ania *AniaBot) onFriendEvent(msg message.Message) {
+func (ania *AniaBot) onFriendEvent(e *adapterEntry, msg message.Message) {
 	defer func() {
 		if err := recover(); err != nil {
 			Logger().Error("私聊消息事件触发错误: ", err)
@@ -489,9 +605,12 @@ func (ania *AniaBot) onFriendEvent(msg message.Message) {
 	cmd := utils.ParseCommand(msg)
 
 	for _, p := range ania.plugins {
+		if !ania.supportsPlatform(p, e.def.Platform) {
+			continue
+		}
 		next, panicked := safeExecuteWithReturn("私聊消息事件", p, func(p plugin.Plugin) bool {
 			msgCtx, cancel := context.WithTimeout(ania.ctx, MsgEventTimeout)
-			next, err := p.OnFriendMsg(msgCtx, ania, cmd, msg)
+			next, err := p.OnFriendMsg(msgCtx, e.evBot, cmd, msg)
 			logError(err, p, "私聊消息事件")
 			cancel()
 			return next
@@ -524,78 +643,56 @@ func (ania *AniaBot) Stop() {
 	ania.cancel()
 }
 
+// SendGroupMsg 发送群聊消息（按群 ID 前缀路由到对应平台适配器）。
 func (ania *AniaBot) SendGroupMsg(groupId message.QID, chain msgchain.GroupChain) (msgId message.QID, success bool) {
-	return ania.adapter.SendGroupMsg(groupId, chain)
+	a := ania.route(groupId)
+	if a == nil {
+		return "", false
+	}
+	return a.SendGroupMsg(groupId, chain)
 }
 
+// SendFriendMsg 发送私聊消息（按用户 ID 前缀路由到对应平台适配器）。
 func (ania *AniaBot) SendFriendMsg(userID message.QID, chain msgchain.FriendChain) (msgId message.QID, success bool) {
-	return ania.adapter.SendFriendMsg(userID, chain)
+	a := ania.route(userID)
+	if a == nil {
+		return "", false
+	}
+	return a.SendFriendMsg(userID, chain)
 }
 
-func (ania *AniaBot) SendGroupAIVoiceMsg(groupId message.QID, character, msg string) (msgId message.QID, success bool) {
-	return ania.adapter.SendGroupAIVoiceMsg(groupId, character, msg)
-}
-
-func (ania *AniaBot) SendPokeMsg(userId message.QID, groupId *message.QID) (success bool) {
-	return ania.adapter.SendPokeMsg(userId, groupId)
-}
-
+// GetMsgDetail 获取消息详情（按消息 ID 前缀路由到对应平台适配器）。
 func (ania *AniaBot) GetMsgDetail(msgId message.QID) (*message.Message, bool) {
-	return ania.adapter.GetMsgDetail(msgId)
+	a := ania.route(msgId)
+	if a == nil {
+		return nil, false
+	}
+	return a.GetMsgDetail(msgId)
 }
 
-func (ania *AniaBot) SendGroupForwardMsg(groupId message.QID, chain msgchain.GroupForwardChain) (msgId message.QID, success bool) {
-	return ania.adapter.SendGroupForwardMsg(groupId, chain)
-}
-
-func (ania *AniaBot) SendFriendForwardMsg(userId message.QID, chain msgchain.FriendForwardChain) (msgId message.QID, success bool) {
-	return ania.adapter.SendFriendForwardMsg(userId, chain)
-}
-
-func (ania *AniaBot) GetForwardMsg(msgId message.QID) (msgs *[]message.Message, success bool) {
-	return ania.adapter.GetForwardMsg(msgId)
-}
-
-func (ania *AniaBot) GetGroupUserInfo(groupId, userId message.QID) (*message.GroupUserInfo, bool) {
-	return ania.adapter.GetGroupUserInfo(groupId, userId)
-}
-
-func (ania *AniaBot) GetNCrkey() ([]message.NCrkey, bool) {
-	return ania.adapter.GetNCrkey()
-}
-
-func (ania *AniaBot) GetFriendList() (*[]message.Friend, bool) {
-	return ania.adapter.GetFriendList()
-}
-
+// GetGroupDetail 获取群聊详情（按群 ID 前缀路由到对应平台适配器）。
 func (ania *AniaBot) GetGroupDetail(groupId message.QID) (*message.GroupInfo, bool) {
-	return ania.adapter.GetGroupDetail(groupId)
+	a := ania.route(groupId)
+	if a == nil {
+		return nil, false
+	}
+	return a.GetGroupDetail(groupId)
 }
 
-func (ania *AniaBot) SetMsgEmojiLike(msgId message.QID, emojiId int, like bool) (success bool) {
-	return ania.adapter.SetMsgEmojiLike(msgId, emojiId, like)
-}
-
-func (ania *AniaBot) SendGroupSign(groupId message.QID) (success bool) {
-	return ania.adapter.SendGroupSign(groupId)
-}
-
+// GetGroupMsgHistory 获取群聊消息历史（按群 ID 前缀路由到对应平台适配器）。
 func (ania *AniaBot) GetGroupMsgHistory(groupId message.QID, count int, message_seq int) (*[]message.Message, bool) {
-	return ania.adapter.GetGroupMsgHistory(groupId, count, message_seq)
+	a := ania.route(groupId)
+	if a == nil {
+		return nil, false
+	}
+	return a.GetGroupMsgHistory(groupId, count, message_seq)
 }
 
+// GetFriendMsgHistory 获取私聊消息历史（按用户 ID 前缀路由到对应平台适配器）。
 func (ania *AniaBot) GetFriendMsgHistory(userId message.QID, count int, message_seq int) (*[]message.Message, bool) {
-	return ania.adapter.GetFriendMsgHistory(userId, count, message_seq)
-}
-
-func (ania *AniaBot) GetAIChatacter() (*[]message.AIChatacter, bool) {
-	return ania.adapter.GetAIChatacter()
-}
-
-func (ania *AniaBot) GetPrivateFileURL(userId message.QID, fileId string) (string, bool) {
-	return ania.adapter.GetPrivateFileURL(userId, fileId)
-}
-
-func (ania *AniaBot) GetGroupList() (*[]message.GroupInfo, bool) {
-	return ania.adapter.GetGroupList()
+	a := ania.route(userId)
+	if a == nil {
+		return nil, false
+	}
+	return a.GetFriendMsgHistory(userId, count, message_seq)
 }

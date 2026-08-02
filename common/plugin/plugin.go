@@ -94,6 +94,15 @@ type PanicEvent interface {
 	OnPanic(ctx context.Context, bot bot.Bot, name string, err any)
 }
 
+// PlatformEventHandler 可选接口：插件实现后可接收平台特定事件——
+// 无法映射为公共事件（消息/通知）的平台自有事件，如飞书卡片回调、
+// 机器人被拉进群等。事件经 core 按 Meta.Platforms 过滤后广播（不中断），
+// Data 的类型由产生事件的平台适配器包定义，插件按需类型断言。
+type PlatformEventHandler interface {
+	// OnPlatformEvent 处理平台特定事件
+	OnPlatformEvent(ctx context.Context, bot bot.Bot, event message.PlatformEvent) error
+}
+
 type SystemConfig struct {
 	AdminId message.QID
 }

@@ -29,7 +29,7 @@ import (
 	"github.com/jeanhua/AniaBot/bot/component/querylog"
 	"github.com/jeanhua/AniaBot/bot/component/tasklog"
 	"github.com/jeanhua/AniaBot/bot/core/configstore"
-	"github.com/jeanhua/AniaBot/common/model/message"
+	"github.com/jeanhua/AniaBot/common/bot"
 	"github.com/jeanhua/AniaBot/common/pluginconfig"
 	"github.com/jeanhua/AniaBot/common/plugininfo"
 	"github.com/jeanhua/AniaBot/common/storage"
@@ -39,12 +39,19 @@ import (
 var distFS embed.FS
 
 // BotInfo 面板需要的 Bot 运行信息（由 *core.AniaBot 实现，避免 import 环）。
+// 群/好友列表属 QQ 平台专属能力，不在此接口，经 Options.QQ 提供。
 type BotInfo interface {
 	GetPluginList() []plugininfo.PluginInfo
-	GetGroupList() (*[]message.GroupInfo, bool)
-	GetFriendList() (*[]message.Friend, bool)
 	GoroutineNum() int32
 	StartTime() time.Time
+}
+
+// AdapterStatus 单个平台适配器的连接状态（面板状态总览展示）。
+type AdapterStatus struct {
+	Name     string `json:"name"`
+	Platform string `json:"platform"`
+	State    string `json:"state"`
+	Detail   string `json:"detail"`
 }
 
 // TaskLogSource 可选接口：插件实现后，面板「任务日志」页可按条件查询其定时任务
@@ -146,23 +153,25 @@ type KnowledgeBaseSource interface {
 
 // Options 面板依赖。
 type Options struct {
-	Listen        string                                             // 监听地址，如 127.0.0.1:7700
-	Config        *configstore.Store                                 // 配置中心
-	Persistent    storage.PersistentStorage                          // 根持久化存储（__admin 命名空间存密码哈希）
-	Bot           BotInfo                                            // 运行信息来源
-	Adapter       func() string                                      // 适配器连接状态描述
-	AdapterDetail func() string                                      // 适配器状态详情（最近错误/重试次数，可为 nil）
-	TaskLogs      func(f tasklog.Filter) []tasklog.Entry             // AI 定时任务执行日志（可为 nil）
-	Clocks        ClockTaskSource                                    // AI 定时任务列表与启停（可为 nil）
-	MsgLogs       func(limit int, beforeID uint64) []msglog.Entry    // 消息日志（群/好友/通知，可为 nil）
-	Skills        SkillSource                                        // AI skill 管理（可为 nil）
-	Memories      MemorySource                                       // AI 长期记忆管理（可为 nil）
-	Knowledge     KnowledgeBaseSource                                // AI 知识库管理（可为 nil）
-	Teams         TeamSource                                         // Agent 团队管理（可为 nil）
-	Quota         QuotaSource                                        // 每日 Token 配额管理（可为 nil）
-	QueryLogs     func(f querylog.Filter) []querylog.Entry           // AI Query 日志（可为 nil）
-	ConsoleLogs   func(limit int, beforeID uint64) []consollog.Entry // 控制台日志（slog + log 输出，可为 nil）
-	Logger        *slog.Logger
+	Listen          string                                             // 监听地址，如 127.0.0.1:7700
+	Config          *configstore.Store                                 // 配置中心
+	Persistent      storage.PersistentStorage                          // 根持久化存储（__admin 命名空间存密码哈希）
+	Bot             BotInfo                                            // 运行信息来源
+	QQ              bot.QQ                                             // QQ 平台专属能力来源（群/好友列表等），可为 nil
+	Adapter         func() string                                      // 适配器连接状态描述
+	AdapterDetail   func() string                                      // 适配器状态详情（最近错误/重试次数，可为 nil）
+	AdapterStatuses func() []AdapterStatus                             // 各平台适配器状态列表（可为 nil）
+	TaskLogs        func(f tasklog.Filter) []tasklog.Entry             // AI 定时任务执行日志（可为 nil）
+	Clocks          ClockTaskSource                                    // AI 定时任务列表与启停（可为 nil）
+	MsgLogs         func(limit int, beforeID uint64) []msglog.Entry    // 消息日志（群/好友/通知，可为 nil）
+	Skills          SkillSource                                        // AI skill 管理（可为 nil）
+	Memories        MemorySource                                       // AI 长期记忆管理（可为 nil）
+	Knowledge       KnowledgeBaseSource                                // AI 知识库管理（可为 nil）
+	Teams           TeamSource                                         // Agent 团队管理（可为 nil）
+	Quota           QuotaSource                                        // 每日 Token 配额管理（可为 nil）
+	QueryLogs       func(f querylog.Filter) []querylog.Entry           // AI Query 日志（可为 nil）
+	ConsoleLogs     func(limit int, beforeID uint64) []consollog.Entry // 控制台日志（slog + log 输出，可为 nil）
+	Logger          *slog.Logger
 }
 
 // Server 面板 HTTP 服务。
@@ -529,6 +538,10 @@ func (s *Server) handleStatus(w http.ResponseWriter, _ *http.Request) {
 	if s.opt.AdapterDetail != nil {
 		adapterDetail = s.opt.AdapterDetail()
 	}
+	adapters := []AdapterStatus{}
+	if s.opt.AdapterStatuses != nil {
+		adapters = s.opt.AdapterStatuses()
+	}
 	uptime := time.Since(s.opt.Bot.StartTime())
 	writeJSON(w, http.StatusOK, map[string]any{
 		"uptime_sec":     int64(uptime.Seconds()),
@@ -536,6 +549,7 @@ func (s *Server) handleStatus(w http.ResponseWriter, _ *http.Request) {
 		"goroutines":     s.opt.Bot.GoroutineNum(),
 		"adapter_status": adapterStatus,
 		"adapter_detail": adapterDetail,
+		"adapters":       adapters,
 		"plugin_count":   len(s.opt.Bot.GetPluginList()),
 	})
 }
@@ -558,7 +572,11 @@ func (s *Server) handlePlugins(w http.ResponseWriter, _ *http.Request) {
 }
 
 func (s *Server) handleGroups(w http.ResponseWriter, _ *http.Request) {
-	groups, ok := s.opt.Bot.GetGroupList()
+	if s.opt.QQ == nil {
+		writeError(w, http.StatusBadGateway, "当前未启用 QQ 平台适配器，无法获取群列表")
+		return
+	}
+	groups, ok := s.opt.QQ.GetGroupList()
 	if !ok || groups == nil {
 		writeError(w, http.StatusBadGateway, "获取群列表失败（适配器未连接？）")
 		return
@@ -567,7 +585,11 @@ func (s *Server) handleGroups(w http.ResponseWriter, _ *http.Request) {
 }
 
 func (s *Server) handleFriends(w http.ResponseWriter, _ *http.Request) {
-	friends, ok := s.opt.Bot.GetFriendList()
+	if s.opt.QQ == nil {
+		writeError(w, http.StatusBadGateway, "当前未启用 QQ 平台适配器，无法获取好友列表")
+		return
+	}
+	friends, ok := s.opt.QQ.GetFriendList()
 	if !ok || friends == nil {
 		writeError(w, http.StatusBadGateway, "获取好友列表失败（适配器未连接？）")
 		return

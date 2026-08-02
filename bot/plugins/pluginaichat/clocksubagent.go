@@ -12,7 +12,6 @@ import (
 	"github.com/jeanhua/AniaBot/bot/component/aichat"
 	"github.com/jeanhua/AniaBot/bot/component/llmtool"
 	"github.com/jeanhua/AniaBot/common/bot"
-	"github.com/jeanhua/AniaBot/common/model/message"
 )
 
 const (
@@ -238,8 +237,7 @@ func (t *clockSubagentToolBase) launch(ctx context.Context, taskText string, tim
 	})
 
 	isGroup := t.task.TargetType == clockTargetGroup
-	targetID, _ := strconv.ParseUint(t.task.TargetID, 10, 64)
-	qid := message.FromUint64(targetID)
+	qid := parseQID(t.task.TargetID)
 
 	t.bot.Go("clock-subagent:"+t.task.ID+":"+id, func() {
 		result, err := p.runSubagent(subCtx, t.bot, qid, isGroup, taskText, timeoutSec, parentCbs)

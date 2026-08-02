@@ -9,6 +9,24 @@ bot:
     enable: true # 是否启用 Web 控制面板
     listen: "127.0.0.1:7700" # 监听地址（如需局域网访问改为 0.0.0.0:7700，注意面板有密码保护）
 
+  # 平台适配器启用开关（可多平台并存：QQ + 飞书……）。默认仅启用 QQ(NapCat)。
+  platform:
+    napcat:
+      enable: true # 是否启用 QQ 平台
+    feishu:
+      enable: false # 是否启用飞书平台（需同时配置下方 bot.feishu.*）
+
+  # 飞书适配器
+  feishu:
+    app_id: # 飞书开放平台「凭证与基础信息」中的应用 App ID
+    app_secret: # 飞书开放平台「凭证与基础信息」中的应用 App Secret
+    mode: ws # 事件订阅方式：ws（WebSocket 长连接，推荐，无需公网地址）| webhook（需公网 HTTPS 回调）
+    webhook:
+      listen: "127.0.0.1:7777" # webhook 模式本地监听地址
+      path: /webhook/event # webhook 模式回调路径
+      verification_token: # webhook 模式在飞书「事件订阅」页配置
+      encrypt_key: # webhook 模式可选的事件加密密钥
+
   # napcat网络交换适配器，websocket/http二选一
   adapter:
     mode: ws # 连接模式：ws（WebSocket，推荐）| http（Webhook 上报）

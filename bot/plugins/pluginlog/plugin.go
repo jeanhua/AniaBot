@@ -70,12 +70,16 @@ func senderName(msg message.Message) string {
 	return msg.Sender.Nickname
 }
 
-func (p *LogPlugin) OnGroupMsg(ctx context.Context, bot bot.Bot, cmd command.Command, msg message.Message) (bool, error) {
-	text := msg.FriendlyText(false,
-		message.WithGetMsgFunc(bot.GetMsgDetail),
-		message.WithGetForwardMsgFunc(bot.GetForwardMsg),
+func (p *LogPlugin) OnGroupMsg(ctx context.Context, b bot.Bot, cmd command.Command, msg message.Message) (bool, error) {
+	// 合并转发展开属 QQ 平台能力：仅事件来源为 QQ 时挂载，其余平台回退占位符
+	opts := []message.MsgOptFunc{
+		message.WithGetMsgFunc(b.GetMsgDetail),
 		message.WithNoSenderPrefix(),
-	)
+	}
+	if qb, ok := b.(bot.QQ); ok {
+		opts = append(opts, message.WithGetForwardMsgFunc(qb.GetForwardMsg))
+	}
+	text := msg.FriendlyText(false, opts...)
 	p.Logger.Info("[收<-群]", "groupId", msg.GroupId, "userId", msg.Sender.UserId, "message", text)
 	p.add(msglog.Entry{
 		Type:     msglog.TypeGroup,
@@ -87,12 +91,15 @@ func (p *LogPlugin) OnGroupMsg(ctx context.Context, bot bot.Bot, cmd command.Com
 	return true, nil
 }
 
-func (p *LogPlugin) OnFriendMsg(ctx context.Context, bot bot.Bot, cmd command.Command, msg message.Message) (bool, error) {
-	text := msg.FriendlyText(false,
-		message.WithGetMsgFunc(bot.GetMsgDetail),
-		message.WithGetForwardMsgFunc(bot.GetForwardMsg),
+func (p *LogPlugin) OnFriendMsg(ctx context.Context, b bot.Bot, cmd command.Command, msg message.Message) (bool, error) {
+	opts := []message.MsgOptFunc{
+		message.WithGetMsgFunc(b.GetMsgDetail),
 		message.WithNoSenderPrefix(),
-	)
+	}
+	if qb, ok := b.(bot.QQ); ok {
+		opts = append(opts, message.WithGetForwardMsgFunc(qb.GetForwardMsg))
+	}
+	text := msg.FriendlyText(false, opts...)
 	p.Logger.Info("[收<-好友]", "userId", msg.Sender.UserId, "message", text)
 	p.add(msglog.Entry{
 		Type:     msglog.TypeFriend,

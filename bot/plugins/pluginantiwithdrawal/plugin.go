@@ -30,6 +30,8 @@ func NewPlugin() *AntiWithdrawalPlugin {
 	p.AdminOnly = false
 	p.ShowFor = plugininfo.ShowForGroup
 	p.Order = plugin.LevelNormal
+	// 防撤回依赖合并转发（send_forward_msg）与 rkey 签名 URL，均为 QQ 平台能力
+	p.Platforms = []string{"qq"}
 	return p
 }
 
@@ -37,7 +39,9 @@ const (
 	ResourceTimeout = 60 * 3 // 时间戳，3分钟
 )
 
-func (p *AntiWithdrawalPlugin) OnGroupMsg(ctx context.Context, bot bot.Bot, cmd command.Command, msg message.Message) (bool, error) {
+func (p *AntiWithdrawalPlugin) OnGroupMsg(ctx context.Context, b bot.Bot, cmd command.Command, msg message.Message) (bool, error) {
+	// 本插件声明仅支持 QQ 平台，事件回调收到的 bot 必为 QQ 能力包装
+	qb, _ := b.(bot.QQ)
 	queueI, _ := p.msg.LoadOrStore(msg.GroupId, NewMessageQueue[*message.Message](100))
 	queue := queueI.(*MessageQueue[*message.Message])
 	if cmd.Mention && cmd.Name == "explore" {
@@ -53,11 +57,11 @@ func (p *AntiWithdrawalPlugin) OnGroupMsg(ctx context.Context, bot bot.Bot, cmd 
 			builder := msgchain.Builder().Group()
 			builder.Text("暂时没有保存到什么消息哦，请稍后再试")
 			builder.Face(14)
-			bot.SendGroupMsg(msg.GroupId, builder.Build())
+			b.SendGroupMsg(msg.GroupId, builder.Build())
 			return false, nil
 		}
 		fbuilder := msgchain.Builder().GroupForward()
-		ncrkey, existRkey := bot.GetNCrkey()
+		ncrkey, existRkey := qb.GetNCrkey()
 		for _, m := range cachemsg {
 			_builder := msgchain.Builder().Group()
 			for i, seg := range m.Message {
@@ -125,11 +129,11 @@ func (p *AntiWithdrawalPlugin) OnGroupMsg(ctx context.Context, bot bot.Bot, cmd 
 			}
 			fbuilder.Message(m.Sender.UserId, m.Sender.Nickname, _builder.Build())
 		}
-		_, success := bot.SendGroupForwardMsg(msg.GroupId, fbuilder.Build())
+		_, success := qb.SendGroupForwardMsg(msg.GroupId, fbuilder.Build())
 		if !success {
 			builder := msgchain.Builder().Group()
 			builder.Text("无法获取消息列表")
-			bot.SendGroupMsg(msg.GroupId, builder.Build())
+			b.SendGroupMsg(msg.GroupId, builder.Build())
 			p.Logger.Error("无法转发消息")
 		}
 		return false, nil
@@ -149,12 +153,13 @@ func isTimeout(timestamp uint) bool {
 	return now-ts > int64(ResourceTimeout)
 }
 
-func (p *AntiWithdrawalPlugin) OnFriendMsg(ctx context.Context, bot bot.Bot, cmd command.Command, msg message.Message) (bool, error) {
+func (p *AntiWithdrawalPlugin) OnFriendMsg(ctx context.Context, b bot.Bot, cmd command.Command, msg message.Message) (bool, error) {
+	qb, _ := b.(bot.QQ)
 	if cmd.Name == "explore" && msg.Sender.UserId == p.SystemConfig.AdminId {
 		if len(cmd.Args) == 0 {
 			builder := msgchain.Builder().Friend()
 			builder.Text("请输入完整参数 /explore [Group ID] [count]")
-			bot.SendFriendMsg(msg.Sender.UserId, builder.Build())
+			b.SendFriendMsg(msg.Sender.UserId, builder.Build())
 			return false, nil
 		} else if len(cmd.Args) >= 1 {
 			n := 50
@@ -162,7 +167,7 @@ func (p *AntiWithdrawalPlugin) OnFriendMsg(ctx context.Context, bot bot.Bot, cmd
 			if err != nil {
 				builder := msgchain.Builder().Friend()
 				builder.Text("请输入正确参数:Group ID, 语法: /explore [Group ID] [count](option)")
-				bot.SendFriendMsg(msg.Sender.UserId, builder.Build())
+				b.SendFriendMsg(msg.Sender.UserId, builder.Build())
 				return false, nil
 			}
 			if len(cmd.Args) == 2 {
@@ -175,7 +180,7 @@ func (p *AntiWithdrawalPlugin) OnFriendMsg(ctx context.Context, bot bot.Bot, cmd
 			if !ok {
 				builder := msgchain.Builder().Friend()
 				builder.Text("请输入正确参数:Group ID Error, 语法: /explore [Group ID] [count](option)")
-				bot.SendFriendMsg(msg.Sender.UserId, builder.Build())
+				b.SendFriendMsg(msg.Sender.UserId, builder.Build())
 				return false, nil
 			}
 			queue := queueI.(*MessageQueue[*message.Message])
@@ -184,11 +189,11 @@ func (p *AntiWithdrawalPlugin) OnFriendMsg(ctx context.Context, bot bot.Bot, cmd
 				builder := msgchain.Builder().Friend()
 				builder.Text("暂时没有保存到什么消息哦，请稍后再试")
 				builder.Face(14)
-				bot.SendFriendMsg(msg.Sender.UserId, builder.Build())
+				b.SendFriendMsg(msg.Sender.UserId, builder.Build())
 				return false, nil
 			}
 			fbuilder := msgchain.Builder().FriendForward()
-			ncrkey, existRkey := bot.GetNCrkey()
+			ncrkey, existRkey := qb.GetNCrkey()
 			for _, m := range cachemsg {
 				_builder := msgchain.Builder().Friend()
 				for i, seg := range m.Message {
@@ -256,11 +261,11 @@ func (p *AntiWithdrawalPlugin) OnFriendMsg(ctx context.Context, bot bot.Bot, cmd
 				}
 				fbuilder.Message(m.Sender.UserId, m.Sender.Nickname, _builder.Build())
 			}
-			_, success := bot.SendFriendForwardMsg(msg.Sender.UserId, fbuilder.Build())
+			_, success := qb.SendFriendForwardMsg(msg.Sender.UserId, fbuilder.Build())
 			if !success {
 				builder := msgchain.Builder().Friend()
 				builder.Text("无法获取消息列表")
-				bot.SendFriendMsg(msg.Sender.UserId, builder.Build())
+				b.SendFriendMsg(msg.Sender.UserId, builder.Build())
 				p.Logger.Error("无法转发消息")
 			}
 			return false, nil

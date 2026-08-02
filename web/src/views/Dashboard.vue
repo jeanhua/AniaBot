@@ -10,7 +10,7 @@
         <span class="tracking-wide">
           <span class="uppercase tracking-[0.15em] font-semibold">Link Down</span>
           <span class="mx-2 text-amber-300">//</span>
-          NapCat 未连接<template v-if="status.adapter_detail">：{{ status.adapter_detail }}</template>，Bot 会持续重试
+          平台适配器未连接<template v-if="status.adapter_detail">：{{ status.adapter_detail }}</template>，Bot 会持续重试
         </span>
       </span>
       <RouterLink to="/config" class="text-[10px] tracking-[0.15em] uppercase text-zinc-700 hover:underline shrink-0 font-medium">修改配置并重启 →</RouterLink>
@@ -71,7 +71,7 @@
 
         <div class="flex-1 py-5">
           <div class="text-4xl font-semibold tracking-tight" :class="linked ? 'text-zinc-900' : 'text-amber-600'">{{ adapterText }}</div>
-          <div class="tlabel mt-2">NapCat · OneBot v11</div>
+          <div class="tlabel mt-2">{{ adapterPlatforms }}</div>
         </div>
 
         <div class="flex gap-0.75">
@@ -393,6 +393,14 @@ const adapterText = computed(() => ({
   not_started: '未连接',
   unknown: '未知',
 }[status.value.adapter_status] || status.value.adapter_status || '—'))
+
+// 各平台适配器状态摘要（如 "qq · 已连接 / feishu · 重连中"）
+const adapterPlatforms = computed(() => {
+  const list = status.value.adapters
+  if (!Array.isArray(list) || list.length === 0) return '—'
+  const stateText = { connected: '已连接', connecting: '连接中', reconnecting: '重连中', unknown: '未知' }
+  return list.map(a => `${a.platform} · ${stateText[a.state] || a.state || '未知'}`).join(' / ')
+})
 
 const armedCount = computed(() => clocks.value.filter(t => t.enabled).length)
 

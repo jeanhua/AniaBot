@@ -15,6 +15,9 @@ type Message struct {
 	RawMessage  string        `json:"raw_message"`
 	Sender      MessageSender `json:"sender"`
 	SelfId      QID           `json:"self_id"`
+	// Platform 平台标识（如 "qq"、"feishu"），由产生该消息的适配器填充，
+	// 不参与协议序列化；core 按它对插件做 Meta.Platforms 过滤。
+	Platform string `json:"-"`
 }
 
 type ForwardMessageSegment struct {

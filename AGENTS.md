@@ -4,7 +4,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-AniaBot is a plugin-driven QQ bot framework built with Go. It connects to QQ via NapCat (WebSocket or HTTP adapter using the OneBot v11 protocol) and features an AI chat engine powered by OpenAI-compatible LLM APIs with tool calling, MCP (Model Context Protocol) integration, and a skill system.
+AniaBot is a plugin-driven multi-platform bot framework built with Go. It connects to platforms via pluggable adapters — QQ through NapCat (WebSocket or HTTP adapter using the OneBot v11 protocol), Feishu/Lark through the official oapi-sdk-go (WebSocket long-connection or webhook) — and features an AI chat engine powered by OpenAI-compatible LLM APIs with tool calling, MCP (Model Context Protocol) integration, and a skill system.
+
+**Multi-platform model**: the framework normalizes every platform to the OneBot v11 segment format (`OB11Segment{Type, Data}`) as its canonical message shape — adapters translate at the boundary (inbound: platform event → segments; outbound: segments → platform API). IDs are platform-prefixed (`fs:oc_xxx` for Feishu); QQ legacy numeric IDs carry no prefix and route to the default adapter. Platform-specific capabilities are exposed via optional interfaces (`adapter.QQExt` / plugin-facing `bot.QQ`) — plugins type-assert to probe them, so a plugin written for QQ degrades gracefully on other platforms. Adding a platform = a new adapter package + one blank import in `cmd/main.go`; the core is untouched.
 
 ## Commands
 
@@ -56,19 +58,22 @@ All configuration lives in the **database** (the persistent storage's `ania_kv` 
 - MCP servers and per-group/friend prompt overrides are config keys `files.mcp_json` / `files.prompt_json` (raw JSON text), edited graphically in the panel's 扩展配置 (Files) page with an optional raw-JSON source mode.
 - Panel auth: random initial password printed to console on first run, SHA-256+salt hash in the `__admin` namespace; config changes take effect after restart.
 
-Config is assembled in `bot/core/core.go` `Run()`: persistent storage (env) → configstore init → collect field registrations + `RegisterStruct` plugin schemas → `EnsureDefaults` → `ToViper()` → create adapter via `WithAdapterFactory` (NapCat adapter picked by `bot.adapter.mode`: ws|http) → `Load` each plugin schema struct → cache storage → plugins. Plugins declaring `ConfigSchema()` read typed struct fields in `Start()`; framework-level shared keys (e.g. `files.mcp_json`) are still read from the whole viper passed to `Start()`.
+Config is assembled in `bot/core/core.go` `Run()`: persistent storage (env) → configstore init → collect field registrations (framework + each registered adapter `Definition.ConfigFields` + `RegisterStruct` plugin schemas) → `EnsureDefaults` → `ToViper()` → instantiate every enabled adapter from the registry (each `Definition.New` gated by `bot.platform.<name>.enable`; NapCat sub-mode still picked by `bot.adapter.mode`: ws|http), wiring each with its own `TriggerWrapper` → `Load` each plugin schema struct → cache storage → plugins. Plugins declaring `ConfigSchema()` read typed struct fields in `Start()`; framework-level shared keys (e.g. `files.mcp_json`) are still read from the whole viper passed to `Start()`.
 
 ## Architecture
 
 ### Layered Structure
 
 ```
-cmd/main.go              Entry point: registers plugins, runs bot (adapter chosen at runtime via bot.adapter.mode)
+cmd/main.go              Entry point: blank-imports platform adapter packages (init registers them), registers plugins, runs bot
 common/                  Shared interfaces and models (adapter, plugin, storage, bot, msgchain)
-bot/core/                AniaBot orchestrator: plugin lifecycle, event dispatch, DI, storage impls
+  adapter/                 Platform adapter abstraction: Adapter (public contract) + QQExt (optional capability) + Definition/Register registry + BotWrapper
+  bot/                     bot.Bot (public capability facade) + bot.QQ (optional QQ-only capability interface)
+bot/core/                AniaBot orchestrator: plugin lifecycle, event dispatch, multi-adapter container + ID-prefix routing, DI, storage impls
   configstore/             DB-backed config center (seed/migrate/ToViper)
 bot/adminpanel/          Web admin panel: config/status APIs + embedded SPA (dist/)
-bot/adapter/napcat/      NapCat protocol adapters (WebSocket and HTTP)
+bot/adapter/napcat/      NapCat protocol adapters (WebSocket and HTTP), QQ platform
+bot/adapter/feishu/      Feishu/Lark adapter (larksuite/oapi-sdk-go/v3), WebSocket long-connection + webhook
 bot/component/           AI chat engine
   aichat/                  ChatBot, LLMClient, MessageBuilder, ToolOrchestrator, messageWindow
   llmtool/                 Tool interface, ToolExecuter, MCP client, SkillManager, schema parser
@@ -83,9 +88,10 @@ docs/                    VitePress documentation site
 ### Dependency Flow (strictly top-down)
 
 ```
-cmd/main.go → bot/core, bot/adapter/napcat, bot/plugins/*
+cmd/main.go → bot/core, bot/adapter/napcat, bot/adapter/feishu, bot/plugins/*
 bot/core → common/*, bot/utils
-bot/adapter/napcat → common/adapter, common/model/message, common/msgchain
+bot/adapter/napcat → common/adapter, common/bot, common/model/message, common/msgchain
+bot/adapter/feishu → common/adapter, common/bot, common/model/message, common/msgchain, external (lark SDK)
 bot/plugins/* → common/plugin, common/bot, common/storage, bot/component/*
 bot/component/aichat → bot/component/llmtool
 bot/component/functool → bot/component/llmtool, bot/utils
@@ -99,8 +105,11 @@ Plugins implement `common/plugin.Plugin` by embedding `plugin.Meta` and overridi
 
 - **Ordered execution**: `LevelLog = -1000`, `LevelNormal = 0`, `LevelPostHandle = 1000`. Plugins sorted by `Order` at startup.
 - **Middleware chain**: `OnGroupMsg`/`OnFriendMsg` return `(bool, error)`. Return `false` to stop propagation to subsequent plugins.
-- **Broadcast notices**: All 14 notice event types (recall, poke, ban, etc.) are delivered to every plugin — no short-circuit.
-- **DI injection**: Core injects `Storage` (cache) and `PersistentStorage` alongside `RestyClient`, `Logger`, and `SystemConfig` before calling `Start()`.
+- **Broadcast notices**: All 14 notice event types (recall, poke, ban, etc.) are delivered to every plugin — no short-circuit. QQ-only notices (poke/lucky_king/honor/essence/card/ban/upload) simply never fire on non-QQ platforms.
+- **Platform scoping**: `plugin.Meta.Platforms []string` declares which platforms a plugin supports (`[]string{"qq"}` or `[]string{"qq","feishu"}`); empty = all platforms (backward compatible). Core filters plugins per-event by the source adapter's platform.
+- **Platform-specific events**: optional `plugin.PlatformEventHandler` — `OnPlatformEvent(ctx, bot, message.PlatformEvent) error` receives events that can't map to public notices (e.g. Feishu card actions, bot-added). Broadcast (non-interrupting), filtered by `Meta.Platforms`.
+- **Platform capabilities via type assertion**: in message/notice handlers the `bot.Bot` argument is the event source's capability-wrapped facade (`adapter.WrapBot`). Plugins probe optional capability interfaces: `if qb, ok := b.(bot.QQ); ok { qb.GetNCrkey() ... }`. QQ-only plugins (e.g. anti-withdrawal, which needs merge-forward + rkey) declare `Platforms: []string{"qq"}` and assert `bot.QQ`.
+- **DI injection**: Core injects `Storage` (cache) and `PersistentStorage` alongside `RestyClient`, `Logger`, and `SystemConfig` before calling `Start()`. `SystemConfig.AdminId` is a `message.QID` from `bot.admin_id` (string, may carry a platform prefix).
 - **Lifecycle**: `Start()` → `StartCron()` → `Awake()` → message/notice events → `OnPanic()`
 - **Panic recovery**: Every plugin call is wrapped in `safeExecute`; goroutines spawned via `bot.Go()` have crash recovery that notifies all plugins.
 

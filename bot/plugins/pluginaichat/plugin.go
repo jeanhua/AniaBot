@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -649,20 +648,10 @@ func (p *AIChatPlugin) loadPromptOverrides(cfg *viper.Viper) {
 	}
 
 	for k, v := range overrideCfg.Groups {
-		id, err := strconv.ParseUint(k, 10, 64)
-		if err != nil {
-			p.Logger.Warn("Prompt 覆盖配置: 无效的群聊ID", "id", k, "error", err.Error())
-			continue
-		}
-		p.promptOverrides.groups[message.FromUint64(id)] = v
+		p.promptOverrides.groups[message.FromString(k)] = v
 	}
 	for k, v := range overrideCfg.Friends {
-		id, err := strconv.ParseUint(k, 10, 64)
-		if err != nil {
-			p.Logger.Warn("Prompt 覆盖配置: 无效的好友ID", "id", k, "error", err.Error())
-			continue
-		}
-		p.promptOverrides.friends[message.FromUint64(id)] = v
+		p.promptOverrides.friends[message.FromString(k)] = v
 	}
 
 	count := len(p.promptOverrides.groups) + len(p.promptOverrides.friends)

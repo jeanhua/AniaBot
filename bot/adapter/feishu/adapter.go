@@ -1,0 +1,1228 @@
+package feishu
+
+import (
+	"bytes"
+	"context"
+	"encoding/base64"
+	"encoding/json"
+	"fmt"
+	"io"
+	"log/slog"
+	"net/http"
+	"os"
+	"path/filepath"
+	"regexp"
+	"strconv"
+	"strings"
+	"sync"
+	"sync/atomic"
+	"time"
+
+	"github.com/go-resty/resty/v2"
+	"github.com/jeanhua/AniaBot/common/adapter"
+	"github.com/jeanhua/AniaBot/common/model/message"
+	"github.com/jeanhua/AniaBot/common/msgchain"
+	lark "github.com/larksuite/oapi-sdk-go/v3"
+	larkcore "github.com/larksuite/oapi-sdk-go/v3/core"
+	"github.com/larksuite/oapi-sdk-go/v3/core/httpserverext"
+	larkevent "github.com/larksuite/oapi-sdk-go/v3/event"
+	"github.com/larksuite/oapi-sdk-go/v3/event/dispatcher"
+	"github.com/larksuite/oapi-sdk-go/v3/event/dispatcher/callback"
+	larkim "github.com/larksuite/oapi-sdk-go/v3/service/im/v1"
+	larkws "github.com/larksuite/oapi-sdk-go/v3/ws"
+	"github.com/spf13/viper"
+)
+
+type feishuConfig struct {
+	appID     string
+	appSecret string
+	mode      string
+	// webhook 模式
+	webhookListen     string
+	webhookPath       string
+	verificationToken string
+	encryptKey        string
+}
+
+type feishuAdapter struct {
+	mu      sync.Mutex
+	trigger adapter.TriggerWrapper
+
+	client *lark.Client // API 客户端（发消息、查消息等）
+	http   *resty.Client
+
+	// 机器人自身 open_id（懒加载：从收到的 @机器人 mentions 中捕获）
+	selfOpenID string
+	// chatID -> chat_type(group/p2p) 缓存，由收到的消息事件填充
+	chatTypes sync.Map
+	// openID -> 单聊 chat_id 缓存（p2p 历史消息用）
+	p2pChats sync.Map
+	// messageID -> chatID 缓存：表情回应等事件不含 chat_id，需由消息反查
+	msgChats sync.Map
+
+	connState string
+	lastErr   string
+	started   atomic.Bool
+
+	logger *slog.Logger
+}
+
+func NewAdapter(cfg *viper.Viper) *feishuAdapter {
+	a := &feishuAdapter{
+		http:   resty.New(),
+		logger: slog.Default().With("adapter", "feishu"),
+	}
+	return a
+}
+
+func (a *feishuAdapter) Name() string     { return "feishu" }
+func (a *feishuAdapter) Platform() string { return Platform }
+
+func (a *feishuAdapter) SetTrigger(trigger adapter.TriggerWrapper) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.trigger = trigger
+}
+
+func (a *feishuAdapter) triggerOf() adapter.TriggerWrapper {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.trigger
+}
+
+func (a *feishuAdapter) setStatus(state, detail string) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.connState = state
+	a.lastErr = detail
+}
+
+// AdapterStatus 返回连接状态（connecting/connected/reconnecting）与详情。
+func (a *feishuAdapter) AdapterStatus() (string, string) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if a.connState == "" {
+		return "connecting", ""
+	}
+	return a.connState, a.lastErr
+}
+
+// Connected 长连接是否已就绪（供面板状态探针使用）。
+func (a *feishuAdapter) Connected() bool {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.connState == "connected"
+}
+
+// selfID 返回框架内表示机器人自身的统一 ID（fs:open_id），未捕获到则为空。
+func (a *feishuAdapter) selfID() message.QID {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if a.selfOpenID == "" {
+		return ""
+	}
+	return message.QID(idPrefix + a.selfOpenID)
+}
+
+func (a *feishuAdapter) setSelfOpenID(openID string) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if a.selfOpenID == "" && openID != "" {
+		a.selfOpenID = openID
+	}
+}
+
+func (a *feishuAdapter) loadConfig(v *viper.Viper) feishuConfig {
+	return feishuConfig{
+		appID:             v.GetString("bot.feishu.app_id"),
+		appSecret:         v.GetString("bot.feishu.app_secret"),
+		mode:              v.GetString("bot.feishu.mode"),
+		webhookListen:     v.GetString("bot.feishu.webhook.listen"),
+		webhookPath:       v.GetString("bot.feishu.webhook.path"),
+		verificationToken: v.GetString("bot.feishu.webhook.verification_token"),
+		encryptKey:        v.GetString("bot.feishu.webhook.encrypt_key"),
+	}
+}
+
+// Serve 启动飞书适配器（阻塞）：ws 长连接或 webhook 二选一。
+func (a *feishuAdapter) Serve(v *viper.Viper) {
+	cfg := a.loadConfig(v)
+	if cfg.appID == "" || cfg.appSecret == "" {
+		a.setStatus("reconnecting", "未配置 bot.feishu.app_id / app_secret，请在 Web 面板配置后重启")
+		a.logger.Warn("飞书适配器未配置 App ID/Secret，无法启动")
+		return
+	}
+	a.client = lark.NewClient(cfg.appID, cfg.appSecret)
+
+	if cfg.mode == "webhook" {
+		a.serveWebhook(cfg)
+		return
+	}
+	a.serveWS(cfg)
+}
+
+func (a *feishuAdapter) serveWS(cfg feishuConfig) {
+	handler := a.buildDispatcher("", "")
+	a.setStatus("connecting", "启动飞书 WebSocket 长连接")
+	wsCli := larkws.NewClient(cfg.appID, cfg.appSecret,
+		larkws.WithEventHandler(handler),
+		larkws.WithLogLevel(larkcore.LogLevelInfo),
+	)
+	wsCli.SetOnReady(func() { a.setStatus("connected", "") })
+	wsCli.SetOnReconnecting(func() { a.setStatus("reconnecting", "重连中") })
+	wsCli.SetOnReconnected(func() { a.setStatus("connected", "") })
+	wsCli.SetOnDisconnected(func() { a.setStatus("reconnecting", "连接断开") })
+	wsCli.SetOnError(func(err error) { a.setStatus("reconnecting", err.Error()) })
+	a.logger.Info("已启用飞书 websocket adapter")
+	// Start 在成功连接后内部 select{} 阻塞，仅在致命错误时返回
+	if err := wsCli.Start(context.Background()); err != nil {
+		a.setStatus("reconnecting", err.Error())
+		a.logger.Error("飞书长连接退出", "error", err)
+	}
+}
+
+func (a *feishuAdapter) serveWebhook(cfg feishuConfig) {
+	handler := a.buildDispatcher(cfg.verificationToken, cfg.encryptKey)
+	mux := http.NewServeMux()
+	// 使用独立 mux：NapCat HTTP 适配器占用了 http.DefaultServeMux 的 / 路由
+	mux.HandleFunc(cfg.webhookPath, httpserverext.NewEventHandlerFunc(handler, larkevent.WithLogLevel(larkcore.LogLevelInfo)))
+	addr := cfg.webhookListen
+	if addr == "" {
+		addr = "127.0.0.1:7777"
+	}
+	a.setStatus("connected", "webhook 监听 "+addr+cfg.webhookPath)
+	a.logger.Info("已启用飞书 webhook adapter", "listen", addr+cfg.webhookPath)
+	if err := http.ListenAndServe(addr, mux); err != nil {
+		a.setStatus("reconnecting", err.Error())
+		a.logger.Error("飞书 webhook 服务退出", "error", err)
+	}
+}
+
+// buildDispatcher 组装事件分发器：注册消息/通知/平台特定事件处理器。
+func (a *feishuAdapter) buildDispatcher(verificationToken, encryptKey string) *dispatcher.EventDispatcher {
+	d := dispatcher.NewEventDispatcher(verificationToken, encryptKey).
+		OnP2MessageReceiveV1(a.onReceive).
+		OnP2MessageRecalledV1(a.onRecall).
+		OnP2MessageReactionCreatedV1(a.onReaction).
+		OnP2ChatMemberUserAddedV1(a.onUserAdded).
+		OnP2ChatMemberUserDeletedV1(a.onUserDeleted).
+		OnP2ChatMemberUserWithdrawnV1(a.onUserWithdrawn).
+		OnP2ChatMemberBotAddedV1(a.onBotAdded).
+		OnP2ChatMemberBotDeletedV1(a.onBotDeleted).
+		OnP2CardActionTrigger(a.onCardAction)
+	return d
+}
+
+func (a *feishuAdapter) chatTypeOf(chatID string) string {
+	if v, ok := a.chatTypes.Load(chatID); ok {
+		if s, ok := v.(string); ok {
+			return s
+		}
+	}
+	return ""
+}
+
+func (a *feishuAdapter) chatTypeOfOrGroup(chatID string) string {
+	t := a.chatTypeOf(chatID)
+	if t == "" {
+		return "group"
+	}
+	return t
+}
+
+// ---------- 事件入站 ----------
+
+// onReceive 处理 im.message.receive_v1：翻译为通用消息段并分发。
+func (a *feishuAdapter) onReceive(ctx context.Context, event *larkim.P2MessageReceiveV1) error {
+	ev := event.Event
+	if ev == nil || ev.Message == nil || ev.Sender == nil {
+		return nil
+	}
+	// 过滤机器人自身与其他机器人的消息，防止循环
+	if ev.Sender.SenderType != nil && *ev.Sender.SenderType == "bot" {
+		return nil
+	}
+	em := ev.Message
+
+	chatType := ""
+	if em.ChatType != nil {
+		chatType = *em.ChatType
+	}
+	if em.ChatId != nil {
+		a.chatTypes.Store(*em.ChatId, chatType)
+	}
+	if em.MessageId != nil && em.ChatId != nil {
+		a.msgChats.Store(*em.MessageId, *em.ChatId)
+	}
+
+	openID := ""
+	if ev.Sender.SenderId != nil && ev.Sender.SenderId.OpenId != nil {
+		openID = *ev.Sender.SenderId.OpenId
+		if em.ChatId != nil && chatType == "p2p" {
+			a.p2pChats.Store(openID, *em.ChatId)
+		}
+	}
+
+	// 捕获机器人自身 open_id（@机器人 mentions 中 mentioned_type == bot）
+	if em.Mentions != nil {
+		for _, m := range em.Mentions {
+			if m.MentionedType != nil && *m.MentionedType == "bot" && m.Id != nil && m.Id.OpenId != nil {
+				a.setSelfOpenID(*m.Id.OpenId)
+			}
+		}
+	}
+
+	ob := a.eventMessageToOB11(em)
+	if len(ob) == 0 {
+		return nil
+	}
+	msg := message.Message{
+		Time:        msTimeToUint(em.CreateTime),
+		PostType:    "message",
+		MessageType: chatType, // group / p2p
+		MessageId:   message.QID(idPrefix + deref(em.MessageId)),
+		GroupId:     message.QID(idPrefix + deref(em.ChatId)),
+		UserId:      message.QID(idPrefix + openID),
+		Message:     ob,
+		RawMessage:  segmentsPlainText(ob),
+		Sender:      message.MessageSender{UserId: message.QID(idPrefix + openID)},
+		SelfId:      a.selfID(),
+		Platform:    Platform,
+	}
+
+	trig := a.triggerOf()
+	switch chatType {
+	case "group":
+		if trig.OnGroupMsg != nil {
+			trig.OnGroupMsg(msg)
+		}
+	case "p2p":
+		if trig.OnFriendMsg != nil {
+			trig.OnFriendMsg(msg)
+		}
+	}
+	return nil
+}
+
+// onRecall 处理消息撤回：按聊天类型映射为群/私聊撤回通知。
+func (a *feishuAdapter) onRecall(ctx context.Context, event *larkim.P2MessageRecalledV1) error {
+	ev := event.Event
+	if ev == nil || ev.ChatId == nil {
+		return nil
+	}
+	trig := a.triggerOf()
+	chatID := *ev.ChatId
+	if a.chatTypeOf(chatID) == "p2p" {
+		if trig.OnFriendRecall != nil {
+			n := message.FriendRecallNotice{UserId: "", MessageId: 0}
+			n.Time = uint(time.Now().Unix())
+			n.PostType = "notice"
+			n.NoticeType = "friend_recall"
+			n.SelfId = a.selfID()
+			n.SetPlatform(Platform)
+			trig.OnFriendRecall(n)
+		}
+		return nil
+	}
+	if trig.OnGroupRecall != nil {
+		n := message.GroupRecallNotice{GroupId: message.QID(idPrefix + chatID)}
+		n.Time = uint(time.Now().Unix())
+		n.PostType = "notice"
+		n.NoticeType = "group_recall"
+		n.SelfId = a.selfID()
+		n.SetPlatform(Platform)
+		// 飞书 message_id 为字符串，OneBot 模型的 uint 字段无法承载，仅记日志
+		a.logger.Debug("群消息撤回", "chatId", chatID, "messageId", deref(ev.MessageId))
+		trig.OnGroupRecall(n)
+	}
+	return nil
+}
+
+// onReaction 处理表情回应：映射为群消息表情回应通知（仅群聊）。
+// 事件本身不含 chat_id，需通过消息 ID 反查缓存。
+func (a *feishuAdapter) onReaction(ctx context.Context, event *larkim.P2MessageReactionCreatedV1) error {
+	ev := event.Event
+	if ev == nil || ev.MessageId == nil || ev.ReactionType == nil || ev.ReactionType.EmojiType == nil {
+		return nil
+	}
+	chatID, _ := a.msgChats.Load(*ev.MessageId)
+	if chatID == nil || a.chatTypeOfOrGroup(chatID.(string)) != "group" {
+		return nil
+	}
+	trig := a.triggerOf()
+	if trig.OnGroupMsgEmojiLike == nil {
+		return nil
+	}
+	openID := ""
+	if ev.UserId != nil && ev.UserId.OpenId != nil {
+		openID = *ev.UserId.OpenId
+	}
+	n := message.GroupMsgEmojiLikeNotice{
+		GroupId:   message.QID(idPrefix + chatID.(string)),
+		UserId:    message.QID(idPrefix + openID),
+		MessageId: message.QID(idPrefix + deref(ev.MessageId)),
+		Likes: []struct {
+			EmojiId string `json:"emoji_id"`
+			Count   int    `json:"count"`
+		}{{EmojiId: *ev.ReactionType.EmojiType, Count: 1}},
+	}
+	n.Time = uint(time.Now().Unix())
+	n.PostType = "notice"
+	n.NoticeType = "group_msg_emoji_like"
+	n.SelfId = a.selfID()
+	n.SetPlatform(Platform)
+	trig.OnGroupMsgEmojiLike(n)
+	return nil
+}
+
+func (a *feishuAdapter) onUserAdded(ctx context.Context, event *larkim.P2ChatMemberUserAddedV1) error {
+	ev := event.Event
+	if ev == nil || ev.ChatId == nil {
+		return nil
+	}
+	return a.emitMemberChange(ev.ChatId, ev.OperatorId, ev.Users, "group_increase", "invite")
+}
+
+func (a *feishuAdapter) onUserDeleted(ctx context.Context, event *larkim.P2ChatMemberUserDeletedV1) error {
+	ev := event.Event
+	if ev == nil || ev.ChatId == nil {
+		return nil
+	}
+	return a.emitMemberChange(ev.ChatId, ev.OperatorId, ev.Users, "group_decrease", "kick")
+}
+
+func (a *feishuAdapter) onUserWithdrawn(ctx context.Context, event *larkim.P2ChatMemberUserWithdrawnV1) error {
+	ev := event.Event
+	if ev == nil || ev.ChatId == nil {
+		return nil
+	}
+	return a.emitMemberChange(ev.ChatId, ev.OperatorId, ev.Users, "group_decrease", "leave")
+}
+
+// emitMemberChange 群成员变动广播：按 noticeType 构造通知并逐成员触发。
+func (a *feishuAdapter) emitMemberChange(chatID *string, operatorID *larkim.UserId, users []*larkim.ChatMemberUser, noticeType, subType string) error {
+	trig := a.triggerOf()
+	if trig.OnGroupIncrease == nil && trig.OnGroupDecrease == nil {
+		return nil
+	}
+	switch noticeType {
+	case "group_increase":
+		if trig.OnGroupIncrease == nil {
+			return nil
+		}
+		n := message.GroupIncreaseNotice{
+			GroupId:    message.QID(idPrefix + deref(chatID)),
+			OperatorId: message.QID(idPrefix + userIDOf(operatorID)),
+			SubType:    subType,
+		}
+		n.Time = uint(time.Now().Unix())
+		n.PostType = "notice"
+		n.NoticeType = noticeType
+		n.SelfId = a.selfID()
+		n.SetPlatform(Platform)
+		for _, u := range users {
+			nn := n
+			nn.UserId = message.QID(idPrefix + userIDOf(u.UserId))
+			trig.OnGroupIncrease(nn)
+		}
+	case "group_decrease":
+		if trig.OnGroupDecrease == nil {
+			return nil
+		}
+		n := message.GroupDecreaseNotice{
+			GroupId:    message.QID(idPrefix + deref(chatID)),
+			OperatorId: message.QID(idPrefix + userIDOf(operatorID)),
+			SubType:    subType,
+		}
+		n.Time = uint(time.Now().Unix())
+		n.PostType = "notice"
+		n.NoticeType = noticeType
+		n.SelfId = a.selfID()
+		n.SetPlatform(Platform)
+		for _, u := range users {
+			nn := n
+			nn.UserId = message.QID(idPrefix + userIDOf(u.UserId))
+			trig.OnGroupDecrease(nn)
+		}
+	}
+	return nil
+}
+
+func (a *feishuAdapter) onBotAdded(ctx context.Context, event *larkim.P2ChatMemberBotAddedV1) error {
+	a.emitPlatformEvent("feishu.bot_added", event)
+	return nil
+}
+
+func (a *feishuAdapter) onBotDeleted(ctx context.Context, event *larkim.P2ChatMemberBotDeletedV1) error {
+	a.emitPlatformEvent("feishu.bot_deleted", event)
+	return nil
+}
+
+func (a *feishuAdapter) onCardAction(ctx context.Context, event *callback.CardActionTriggerEvent) (*callback.CardActionTriggerResponse, error) {
+	a.emitPlatformEvent("feishu.card_action", event)
+	return nil, nil
+}
+
+func (a *feishuAdapter) emitPlatformEvent(eventType string, data any) {
+	trig := a.triggerOf()
+	if trig.OnPlatformEvent == nil {
+		return
+	}
+	trig.OnPlatformEvent(message.PlatformEvent{
+		Platform: Platform,
+		Type:     eventType,
+		Data:     data,
+	})
+}
+
+// ---------- 消息翻译（入站） ----------
+
+type feishuMention struct {
+	key    string
+	openID string
+	isBot  bool
+}
+
+// eventMessageToOB11 将接收事件的消息翻译为通用消息段。
+// 图片/文件下载为 data URI（不依赖临时链接），供 AI 插件直接加载。
+func (a *feishuAdapter) eventMessageToOB11(em *larkim.EventMessage) []message.OB11Segment {
+	if em == nil || em.MessageType == nil || em.Content == nil {
+		return nil
+	}
+	msgID := deref(em.MessageId)
+	var mentions []feishuMention
+	for _, m := range em.Mentions {
+		if m == nil || m.Key == nil || m.Id == nil || m.Id.OpenId == nil {
+			continue
+		}
+		mentions = append(mentions, feishuMention{key: *m.Key, openID: *m.Id.OpenId, isBot: m.MentionedType != nil && *m.MentionedType == "bot"})
+	}
+	content := *em.Content
+	var segs []message.OB11Segment
+	switch *em.MessageType {
+	case "text":
+		segs = a.parseTextContent(content, mentions)
+	case "post":
+		segs = a.parsePostContent(content, mentions)
+	case "image":
+		segs = a.parseImageContent(content, msgID)
+	case "file":
+		segs = a.parseFileContent(content, msgID)
+	case "audio":
+		segs = a.parseAudioContent(content, msgID)
+	case "merge_forward":
+		segs = []message.OB11Segment{{Type: message.SegmentText, Data: map[string]any{"text": "[合并转发消息]"}}}
+	default:
+		segs = []message.OB11Segment{{Type: message.SegmentText, Data: map[string]any{"text": "[" + *em.MessageType + "]"}}}
+	}
+	// 图片段补齐 URL（下载为 data URI）
+	for i := range segs {
+		if segs[i].Type == message.SegmentImage {
+			if key, _ := segs[i].Data["file"].(string); key != "" && !strings.HasPrefix(key, "fs:") {
+				uri := a.downloadResource(msgID, key, "image")
+				if uri != "" {
+					segs[i].Data["url"] = uri
+				}
+			}
+		}
+	}
+	return segs
+}
+
+// apiMessageToOB11 将消息 API（get/list）返回的消息翻译为通用消息段。
+func (a *feishuAdapter) apiMessageToOB11(m *larkim.Message) []message.OB11Segment {
+	if m == nil || m.MsgType == nil || m.Body == nil || m.Body.Content == nil {
+		return nil
+	}
+	msgID := deref(m.MessageId)
+	var mentions []feishuMention
+	for _, mt := range m.Mentions {
+		if mt == nil || mt.Id == nil {
+			continue
+		}
+		openID := *mt.Id
+		if mt.IdType != nil && *mt.IdType == "open_id" {
+			openID = *mt.Id
+		}
+		mentions = append(mentions, feishuMention{key: deref(mt.Key), openID: openID})
+	}
+	content := *m.Body.Content
+	var segs []message.OB11Segment
+	switch *m.MsgType {
+	case "text":
+		segs = a.parseTextContent(content, mentions)
+	case "post":
+		segs = a.parsePostContent(content, mentions)
+	case "image":
+		segs = a.parseImageContent(content, msgID)
+	case "file":
+		segs = a.parseFileContent(content, msgID)
+	case "audio":
+		segs = a.parseAudioContent(content, msgID)
+	default:
+		segs = []message.OB11Segment{{Type: message.SegmentText, Data: map[string]any{"text": "[" + *m.MsgType + "]"}}}
+	}
+	for i := range segs {
+		if segs[i].Type == message.SegmentImage {
+			if key, _ := segs[i].Data["file"].(string); key != "" {
+				uri := a.downloadResource(msgID, key, "image")
+				if uri != "" {
+					segs[i].Data["url"] = uri
+				}
+			}
+		}
+	}
+	return segs
+}
+
+var atMarkupRe = regexp.MustCompile(`<at user_id="([^"]+)">[^<]*</at>`)
+
+func (a *feishuAdapter) parseTextContent(content string, mentions []feishuMention) []message.OB11Segment {
+	var raw struct {
+		Text string `json:"text"`
+	}
+	if err := json.Unmarshal([]byte(content), &raw); err != nil {
+		return nil
+	}
+	text := raw.Text
+	segs := make([]message.OB11Segment, 0)
+	// @全体成员占位符
+	if strings.Contains(text, "@_all") {
+		parts := strings.Split(text, "@_all")
+		segs = appendTextSeg(segs, parts[0])
+		segs = append(segs, message.OB11Segment{Type: message.SegmentMention, Data: map[string]any{"qq": "all"}})
+		text = strings.Join(parts[1:], "")
+	}
+	// 按 mentions 的占位符拆分文本
+	for _, m := range mentions {
+		if m.key == "" || m.openID == "" {
+			continue
+		}
+		idx := strings.Index(text, m.key)
+		if idx < 0 {
+			continue
+		}
+		segs = appendTextSeg(segs, text[:idx])
+		segs = append(segs, message.OB11Segment{Type: message.SegmentMention, Data: map[string]any{"qq": idPrefix + m.openID}})
+		text = text[idx+len(m.key):]
+	}
+	// 兜底：消息 API 的文本可能使用 <at> 标记而非占位符
+	// 按匹配位置顺序拆分，保证文本与 at 段顺序正确
+	if strings.Contains(text, "<at ") {
+		idxs := atMarkupRe.FindAllStringSubmatchIndex(text, -1)
+		pos := 0
+		for _, loc := range idxs {
+			segs = appendTextSeg(segs, text[pos:loc[0]])
+			segs = append(segs, message.OB11Segment{Type: message.SegmentMention, Data: map[string]any{"qq": idPrefix + text[loc[2]:loc[3]]}})
+			pos = loc[1]
+		}
+		text = text[pos:]
+	}
+	segs = appendTextSeg(segs, text)
+	return segs
+}
+
+type feishuPostElement struct {
+	Tag      string `json:"tag"`
+	Text     string `json:"text"`
+	Href     string `json:"href"`
+	ImageKey string `json:"image_key"`
+	FileKey  string `json:"file_key"`
+	UserID   string `json:"user_id"`
+	UserName string `json:"user_name"`
+}
+
+func (a *feishuAdapter) parsePostContent(content string, mentions []feishuMention) []message.OB11Segment {
+	var raw struct {
+		ZhCN *struct {
+			Title   string                `json:"title"`
+			Content [][]feishuPostElement `json:"content"`
+		} `json:"zh_cn"`
+	}
+	if err := json.Unmarshal([]byte(content), &raw); err != nil || raw.ZhCN == nil {
+		return nil
+	}
+	segs := make([]message.OB11Segment, 0)
+	if raw.ZhCN.Title != "" {
+		segs = appendTextSeg(segs, raw.ZhCN.Title+"\n")
+	}
+	mentionByID := map[string]string{}
+	for _, m := range mentions {
+		mentionByID[m.openID] = m.key
+	}
+	for _, line := range raw.ZhCN.Content {
+		for _, el := range line {
+			switch el.Tag {
+			case "text":
+				segs = appendTextSeg(segs, el.Text)
+			case "a":
+				if el.Text != "" {
+					segs = appendTextSeg(segs, fmt.Sprintf("%s(%s)", el.Text, el.Href))
+				}
+			case "at":
+				if el.UserID != "" {
+					segs = append(segs, message.OB11Segment{Type: message.SegmentMention, Data: map[string]any{"qq": idPrefix + el.UserID}})
+				} else if placeholder, ok := mentionByID[el.UserID]; ok {
+					segs = append(segs, message.OB11Segment{Type: message.SegmentMention, Data: map[string]any{"qq": idPrefix + el.UserID}})
+					_ = placeholder
+				}
+			case "img":
+				if el.ImageKey != "" {
+					segs = append(segs, message.OB11Segment{Type: message.SegmentImage, Data: map[string]any{"file": el.ImageKey}})
+				}
+			case "media":
+				if el.ImageKey != "" {
+					segs = append(segs, message.OB11Segment{Type: message.SegmentImage, Data: map[string]any{"file": el.ImageKey}})
+				} else if el.FileKey != "" {
+					segs = append(segs, message.OB11Segment{Type: message.SegmentFile, Data: map[string]any{"file": el.FileKey, "file_id": el.FileKey}})
+				}
+			case "emotion":
+				segs = appendTextSeg(segs, "["+el.Text+"]")
+			case "code_block":
+				segs = appendTextSeg(segs, el.Text)
+			case "hr":
+				segs = appendTextSeg(segs, "\n")
+			default:
+				segs = appendTextSeg(segs, el.Text)
+			}
+		}
+		segs = appendTextSeg(segs, "\n")
+	}
+	return segs
+}
+
+func (a *feishuAdapter) parseImageContent(content, msgID string) []message.OB11Segment {
+	var raw struct {
+		ImageKey string `json:"image_key"`
+	}
+	if err := json.Unmarshal([]byte(content), &raw); err != nil || raw.ImageKey == "" {
+		return nil
+	}
+	return []message.OB11Segment{{Type: message.SegmentImage, Data: map[string]any{"file": raw.ImageKey}}}
+}
+
+func (a *feishuAdapter) parseFileContent(content, msgID string) []message.OB11Segment {
+	var raw struct {
+		FileKey  string `json:"file_key"`
+		FileName string `json:"file_name"`
+	}
+	if err := json.Unmarshal([]byte(content), &raw); err != nil || raw.FileKey == "" {
+		return nil
+	}
+	return []message.OB11Segment{{Type: message.SegmentFile, Data: map[string]any{"file": raw.FileKey, "file_id": raw.FileKey, "name": raw.FileName}}}
+}
+
+func (a *feishuAdapter) parseAudioContent(content, msgID string) []message.OB11Segment {
+	var raw struct {
+		FileKey string `json:"file_key"`
+	}
+	if err := json.Unmarshal([]byte(content), &raw); err != nil || raw.FileKey == "" {
+		return nil
+	}
+	return []message.OB11Segment{{Type: message.SegmentRecord, Data: map[string]any{"file": raw.FileKey}}}
+}
+
+// downloadResource 通过 im.messageResource.get 下载消息资源并转为 data URI。
+func (a *feishuAdapter) downloadResource(messageID, fileKey, resourceType string) string {
+	if a.client == nil || messageID == "" || fileKey == "" {
+		return ""
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	resp, err := a.client.Im.V1.MessageResource.Get(ctx, larkim.NewGetMessageResourceReqBuilder().
+		MessageId(messageID).
+		FileKey(fileKey).
+		Type(resourceType).
+		Build())
+	if err != nil || resp == nil || !resp.Success() {
+		return ""
+	}
+	if resp.File == nil {
+		return ""
+	}
+	data, err := io.ReadAll(resp.File)
+	if err != nil {
+		return ""
+	}
+	mime := "application/octet-stream"
+	if resourceType == "image" {
+		mime = "image/png"
+	}
+	return "data:" + mime + ";base64," + base64.StdEncoding.EncodeToString(data)
+}
+
+func appendTextSeg(segs []message.OB11Segment, text string) []message.OB11Segment {
+	if text == "" {
+		return segs
+	}
+	if len(segs) > 0 && segs[len(segs)-1].Type == message.SegmentText {
+		prev := segs[len(segs)-1].Data["text"].(string)
+		segs[len(segs)-1].Data["text"] = prev + text
+		return segs
+	}
+	return append(segs, message.OB11Segment{Type: message.SegmentText, Data: map[string]any{"text": text}})
+}
+
+// segmentsPlainText 消息段的纯文本（供 RawMessage 复读判等）。
+func segmentsPlainText(segs []message.OB11Segment) string {
+	var sb strings.Builder
+	for _, s := range segs {
+		if s.Type == message.SegmentText {
+			if t, ok := s.Data["text"].(string); ok {
+				sb.WriteString(t)
+			}
+		}
+	}
+	return sb.String()
+}
+
+func msTimeToUint(ms *string) uint {
+	if ms == nil {
+		return 0
+	}
+	val, err := strconv.ParseInt(*ms, 10, 64)
+	if err != nil {
+		return 0
+	}
+	return uint(val / 1000)
+}
+
+func deref(s *string) string {
+	if s == nil {
+		return ""
+	}
+	return *s
+}
+
+func userIDOf(u *larkim.UserId) string {
+	if u == nil {
+		return ""
+	}
+	if u.OpenId != nil {
+		return *u.OpenId
+	}
+	if u.UnionId != nil {
+		return *u.UnionId
+	}
+	if u.UserId != nil {
+		return *u.UserId
+	}
+	return ""
+}
+
+// ---------- 发送 ----------
+
+func (a *feishuAdapter) SendGroupMsg(groupId message.QID, chain msgchain.GroupChain) (message.QID, bool) {
+	return a.sendChain(context.Background(), groupId.TrimPrefix(idPrefix), "chat_id", chain.GetGroupMsg())
+}
+
+func (a *feishuAdapter) SendFriendMsg(userId message.QID, chain msgchain.FriendChain) (message.QID, bool) {
+	return a.sendChain(context.Background(), userId.TrimPrefix(idPrefix), "open_id", chain.GetFriendMsg())
+}
+
+// sendChain 把通用消息段翻译为飞书消息并发送。
+// 返回最后一条成功消息的框架内 ID（fs:om_xxx）。
+func (a *feishuAdapter) sendChain(ctx context.Context, receiveID, receiveType string, segs []message.OB11Segment) (message.QID, bool) {
+	if a.client == nil {
+		return "", false
+	}
+	ctx, cancel := context.WithTimeout(ctx, 60*time.Second)
+	defer cancel()
+
+	// 提取回复目标（首条 reply 段），其余段作为正文
+	replyTo := ""
+	body := make([]message.OB11Segment, 0, len(segs))
+	for _, s := range segs {
+		if s.Type == message.SegmentReply {
+			if id, ok := s.Data["id"].(string); ok && replyTo == "" {
+				replyTo = message.QID(id).TrimPrefix(idPrefix)
+			}
+			continue
+		}
+		body = append(body, s)
+	}
+	if len(body) == 0 {
+		return "", false
+	}
+
+	// 正文转飞书内容：文本/at 或富文本 post（含图片）
+	msgType, content, imageKeys := a.segmentsToContent(ctx, body)
+	if content == "" {
+		return "", false
+	}
+
+	var msgID string
+	var ok bool
+	if replyTo != "" {
+		msgID, ok = a.sendReply(ctx, replyTo, msgType, content)
+	} else {
+		msgID, ok = a.sendCreate(ctx, receiveID, receiveType, msgType, content)
+	}
+	if !ok {
+		return "", false
+	}
+
+	// 图片已合入 post 的，无需单独发送；文件/语音等单独发送
+	for _, s := range body {
+		switch s.Type {
+		case message.SegmentFile:
+			a.sendFileSegment(ctx, receiveID, receiveType, s)
+		case message.SegmentRecord:
+			a.sendFileSegment(ctx, receiveID, receiveType, s)
+		}
+	}
+	_ = imageKeys
+	return message.QID(idPrefix + msgID), true
+}
+
+// segmentsToContent 将正文段翻译为（msgType, content, 已上传图片 key 列表）。
+func (a *feishuAdapter) segmentsToContent(ctx context.Context, segs []message.OB11Segment) (string, string, []string) {
+	hasImage := false
+	var imageKeys []string
+	for _, s := range segs {
+		if s.Type == message.SegmentImage {
+			hasImage = true
+			if key, ok := a.uploadImage(ctx, s); ok {
+				imageKeys = append(imageKeys, key)
+			}
+		}
+	}
+
+	if hasImage {
+		// 富文本 post 承载文本/at/图片
+		content := larkim.NewMessagePost()
+		pc := larkim.NewMessagePostContent()
+		var elements []larkim.MessagePostElement
+		imgIdx := 0
+		for _, s := range segs {
+			switch s.Type {
+			case message.SegmentText:
+				if t, ok := s.Data["text"].(string); ok && t != "" {
+					elements = append(elements, &larkim.MessagePostText{Text: t})
+				}
+			case message.SegmentMention:
+				if qq, ok := s.Data["qq"].(string); ok {
+					if qq == "all" {
+						elements = append(elements, &larkim.MessagePostText{Text: " @所有人 "})
+					} else {
+						elements = append(elements, &larkim.MessagePostAt{UserId: message.QID(qq).TrimPrefix(idPrefix)})
+					}
+				}
+			case message.SegmentImage:
+				if imgIdx < len(imageKeys) {
+					elements = append(elements, &larkim.MessagePostImage{ImageKey: imageKeys[imgIdx]})
+					imgIdx++
+				}
+			}
+		}
+		pc.AppendContent(elements)
+		content.ZhCn(pc)
+		contentStr, err := content.Build()
+		if err != nil {
+			return "", "", imageKeys
+		}
+		return larkim.MsgTypePost, contentStr, imageKeys
+	}
+
+	// 纯文本/at：text 消息（用 json.Marshal 正确转义，SDK 的 MessageTextBuilder 不做转义，
+	// AI 回复中的引号/换行会破坏 content JSON）
+	var sb strings.Builder
+	for _, s := range segs {
+		switch s.Type {
+		case message.SegmentText:
+			if t, ok := s.Data["text"].(string); ok {
+				sb.WriteString(t)
+			}
+		case message.SegmentMention:
+			if qq, ok := s.Data["qq"].(string); ok {
+				if qq == "all" {
+					sb.WriteString(`<at user_id="all"></at>`)
+				} else {
+					sb.WriteString(`<at user_id="` + message.QID(qq).TrimPrefix(idPrefix) + `"> </at>`)
+				}
+			}
+		case message.SegmentFile, message.SegmentRecord:
+			// 文件单独发送，不进正文
+		default:
+			if t, ok := s.Data["text"].(string); ok {
+				sb.WriteString(t)
+			}
+		}
+	}
+	if sb.Len() == 0 {
+		return "", "", nil
+	}
+	contentBytes, err := json.Marshal(map[string]string{"text": sb.String()})
+	if err != nil {
+		return "", "", nil
+	}
+	return larkim.MsgTypeText, string(contentBytes), nil
+}
+
+func (a *feishuAdapter) sendCreate(ctx context.Context, receiveID, receiveType, msgType, content string) (string, bool) {
+	resp, err := a.client.Im.V1.Message.Create(ctx, larkim.NewCreateMessageReqBuilder().
+		ReceiveIdType(receiveType).
+		Body(larkim.NewCreateMessageReqBodyBuilder().
+			ReceiveId(receiveID).
+			MsgType(msgType).
+			Content(content).
+			Build()).
+		Build())
+	if err != nil || resp == nil || !resp.Success() || resp.Data == nil || resp.Data.MessageId == nil {
+		a.logger.Warn("飞书发送消息失败", "error", err, "receiveType", receiveType)
+		return "", false
+	}
+	return *resp.Data.MessageId, true
+}
+
+func (a *feishuAdapter) sendReply(ctx context.Context, replyTo, msgType, content string) (string, bool) {
+	resp, err := a.client.Im.V1.Message.Reply(ctx, larkim.NewReplyMessageReqBuilder().
+		MessageId(replyTo).
+		Body(larkim.NewReplyMessageReqBodyBuilder().
+			MsgType(msgType).
+			Content(content).
+			Build()).
+		Build())
+	if err != nil || resp == nil || !resp.Success() || resp.Data == nil || resp.Data.MessageId == nil {
+		a.logger.Warn("飞书回复消息失败", "error", err)
+		return "", false
+	}
+	return *resp.Data.MessageId, true
+}
+
+// uploadImage 将通用 image 段上传为飞书 image_key。
+func (a *feishuAdapter) uploadImage(ctx context.Context, seg message.OB11Segment) (string, bool) {
+	if a.client == nil {
+		return "", false
+	}
+	data, ok := a.resolveSegmentBytes(ctx, seg)
+	if !ok {
+		return "", false
+	}
+	resp, err := a.client.Im.V1.Image.Create(ctx, larkim.NewCreateImageReqBuilder().
+		Body(larkim.NewCreateImageReqBodyBuilder().
+			ImageType(larkim.CreateImageImageTypeMessage).
+			Image(bytes.NewReader(data)).
+			Build()).
+		Build())
+	if err != nil || resp == nil || !resp.Success() || resp.Data == nil || resp.Data.ImageKey == nil {
+		a.logger.Warn("飞书图片上传失败", "error", err)
+		return "", false
+	}
+	return *resp.Data.ImageKey, true
+}
+
+func (a *feishuAdapter) sendFileSegment(ctx context.Context, receiveID, receiveType string, seg message.OB11Segment) {
+	if a.client == nil {
+		return
+	}
+	data, ok := a.resolveSegmentBytes(ctx, seg)
+	if !ok {
+		return
+	}
+	name, _ := seg.Data["name"].(string)
+	if name == "" {
+		name = "file"
+	}
+	fileType := a.fileTypeFor(name)
+	resp, err := a.client.Im.V1.File.Create(ctx, larkim.NewCreateFileReqBuilder().
+		Body(larkim.NewCreateFileReqBodyBuilder().
+			FileType(fileType).
+			FileName(name).
+			File(bytes.NewReader(data)).
+			Build()).
+		Build())
+	if err != nil || resp == nil || !resp.Success() || resp.Data == nil || resp.Data.FileKey == nil {
+		a.logger.Warn("飞书文件上传失败", "error", err)
+		return
+	}
+	content := `{"file_key":"` + *resp.Data.FileKey + `"}`
+	a.sendCreate(ctx, receiveID, receiveType, larkim.MsgTypeFile, content)
+}
+
+func (a *feishuAdapter) fileTypeFor(name string) string {
+	switch strings.ToLower(filepath.Ext(name)) {
+	case ".opus":
+		return larkim.CreateFileFileTypeOpus
+	case ".mp4":
+		return larkim.CreateFileFileTypeMp4
+	case ".pdf":
+		return larkim.CreateFileFileTypePdf
+	case ".doc", ".docx":
+		return larkim.CreateFileFileTypeDoc
+	case ".xls", ".xlsx":
+		return larkim.CreateFileFileTypeXls
+	case ".ppt", ".pptx":
+		return larkim.CreateFileFileTypePpt
+	default:
+		return larkim.CreateFileFileTypeStream
+	}
+}
+
+// resolveSegmentBytes 从 image/file 段的 data.file 解析出字节内容：
+// 支持 base64://、file://、data: URI 与 http(s) URL。
+func (a *feishuAdapter) resolveSegmentBytes(ctx context.Context, seg message.OB11Segment) ([]byte, bool) {
+	fileStr, _ := seg.Data["file"].(string)
+	if fileStr == "" {
+		return nil, false
+	}
+	switch {
+	case strings.HasPrefix(fileStr, "base64://"):
+		b, err := base64.StdEncoding.DecodeString(strings.TrimPrefix(fileStr, "base64://"))
+		return b, err == nil && len(b) > 0
+	case strings.HasPrefix(fileStr, "file://"):
+		b, err := os.ReadFile(strings.TrimPrefix(fileStr, "file://"))
+		return b, err == nil && len(b) > 0
+	case strings.HasPrefix(fileStr, "data:"):
+		if i := strings.Index(fileStr, ","); i >= 0 {
+			b, err := base64.StdEncoding.DecodeString(fileStr[i+1:])
+			return b, err == nil && len(b) > 0
+		}
+	case strings.HasPrefix(fileStr, "http://") || strings.HasPrefix(fileStr, "https://"):
+		if a.http != nil {
+			resp, err := a.http.R().SetContext(ctx).Get(fileStr)
+			if err == nil && resp.StatusCode() == http.StatusOK {
+				return resp.Body(), len(resp.Body()) > 0
+			}
+		}
+	}
+	return nil, false
+}
+
+// ---------- 查询 ----------
+
+func (a *feishuAdapter) GetMsgDetail(msgId message.QID) (*message.Message, bool) {
+	if a.client == nil {
+		return nil, false
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	resp, err := a.client.Im.V1.Message.Get(ctx, larkim.NewGetMessageReqBuilder().
+		MessageId(msgId.TrimPrefix(idPrefix)).
+		UserIdType("open_id").
+		Build())
+	if err != nil || resp == nil || !resp.Success() || resp.Data == nil || len(resp.Data.Items) == 0 {
+		return nil, false
+	}
+	return a.apiMessageToMessage(resp.Data.Items[0]), true
+}
+
+func (a *feishuAdapter) apiMessageToMessage(m *larkim.Message) *message.Message {
+	if m == nil {
+		return nil
+	}
+	segs := a.apiMessageToOB11(m)
+	msg := &message.Message{
+		MessageId:  message.QID(idPrefix + deref(m.MessageId)),
+		GroupId:    message.QID(idPrefix + deref(m.ChatId)),
+		Message:    segs,
+		RawMessage: segmentsPlainText(segs),
+		SelfId:     a.selfID(),
+		Platform:   Platform,
+	}
+	if m.Sender != nil {
+		msg.Sender = message.MessageSender{
+			UserId:   message.QID(idPrefix + deref(m.Sender.Id)),
+			Nickname: deref(m.Sender.SenderName),
+		}
+		msg.UserId = msg.Sender.UserId
+	}
+	return msg
+}
+
+func (a *feishuAdapter) GetGroupDetail(groupId message.QID) (*message.GroupInfo, bool) {
+	if a.client == nil {
+		return nil, false
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	resp, err := a.client.Im.V1.Chat.Get(ctx, larkim.NewGetChatReqBuilder().
+		ChatId(groupId.TrimPrefix(idPrefix)).
+		UserIdType("open_id").
+		Build())
+	if err != nil || resp == nil || !resp.Success() || resp.Data == nil {
+		return nil, false
+	}
+	d := resp.Data
+	info := &message.GroupInfo{
+		GroupID: groupId,
+	}
+	if d.Name != nil {
+		info.GroupName = *d.Name
+	}
+	if d.UserCount != nil {
+		info.MemberCount, _ = strconv.Atoi(*d.UserCount)
+	}
+	if d.UserCount != nil && d.BotCount != nil {
+		uc, _ := strconv.Atoi(*d.UserCount)
+		bc, _ := strconv.Atoi(*d.BotCount)
+		info.MaxMemberCount = uc + bc
+	}
+	return info, true
+}
+
+func (a *feishuAdapter) GetGroupMsgHistory(groupId message.QID, count int, message_seq int) (*[]message.Message, bool) {
+	if a.client == nil {
+		return nil, false
+	}
+	if count <= 0 {
+		count = 20
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	// message_seq 在飞书无对应语义（飞书无翻页游标号），忽略
+	resp, err := a.client.Im.V1.Message.List(ctx, larkim.NewListMessageReqBuilder().
+		ContainerIdType("chat").
+		ContainerId(groupId.TrimPrefix(idPrefix)).
+		PageSize(count).
+		SortType("ByCreateTimeDesc").
+		Build())
+	if err != nil || resp == nil || !resp.Success() || resp.Data == nil {
+		return nil, false
+	}
+	out := make([]message.Message, 0, len(resp.Data.Items))
+	for _, m := range resp.Data.Items {
+		mm := a.apiMessageToMessage(m)
+		if mm == nil {
+			continue
+		}
+		mm.GroupId = groupId
+		out = append(out, *mm)
+	}
+	return &out, true
+}
+
+func (a *feishuAdapter) GetFriendMsgHistory(userId message.QID, count int, message_seq int) (*[]message.Message, bool) {
+	if a.client == nil {
+		return nil, false
+	}
+	openID := userId.TrimPrefix(idPrefix)
+	chatID, ok := a.p2pChats.Load(openID)
+	if !ok {
+		return nil, false
+	}
+	if count <= 0 {
+		count = 20
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	resp, err := a.client.Im.V1.Message.List(ctx, larkim.NewListMessageReqBuilder().
+		ContainerIdType("chat").
+		ContainerId(chatID.(string)).
+		PageSize(count).
+		SortType("ByCreateTimeDesc").
+		Build())
+	if err != nil || resp == nil || !resp.Success() || resp.Data == nil {
+		return nil, false
+	}
+	out := make([]message.Message, 0, len(resp.Data.Items))
+	for _, m := range resp.Data.Items {
+		mm := a.apiMessageToMessage(m)
+		if mm == nil {
+			continue
+		}
+		mm.UserId = userId
+		out = append(out, *mm)
+	}
+	return &out, true
+}

@@ -1,18 +1,18 @@
 <div align="center">
   <img src="./README/logo.png" width="200" alt="AniaBot Logo"/>
   <h1>AniaBot</h1>
-  <p>一个插件驱动型 QQ 机器人框架</p>
+  <p>一个插件驱动型多平台机器人框架</p>
   <a href="https://jeanhua.github.io/AniaBot/">📖 文档</a> |
   <a href="https://github.com/jeanhua/AniaBot">GitHub</a>
 </div>
 
 ## 项目介绍
 
-**AniaBot** 是一个基于 Go 语言开发的高性能、插件驱动型 QQ 机器人框架，采用模块化设计，让开发者能够快速构建功能强大的 QQ 机器人应用。
+**AniaBot** 是一个基于 Go 语言开发的高性能、插件驱动型**多平台**机器人框架，采用模块化设计，让开发者能够快速构建功能强大的机器人应用。
 
 - **高性能**：基于 Go 语言，充分利用并发特性
 - **插件驱动**：功能模块化，易于扩展和维护
-- **协议兼容**：支持 napcat WebSocket/HTTP 等协议适配器
+- **多平台**：QQ（NapCat WebSocket/HTTP，OneBot v11）+ 飞书（官方 SDK 长连接/Webhook）等；新增平台只需实现一个适配器并注册，框架核心零改动
 - **开箱即用**：内置 AI 对话（含 MCP/Skills/Tool Use）、防撤回、复读机等插件
 
 ![framework](./README/framework.png)
@@ -41,7 +41,7 @@ make linux
 make windows
 ```
 
-登录 `http://127.0.0.1:7700`，按设置向导填写 NapCat 连接地址、管理员 QQ 与 AI 模型配置即可。
+登录 `http://127.0.0.1:7700`，按设置向导填写 NapCat 连接地址、管理员 QQ 与 AI 模型配置即可。默认启用 QQ 平台；在「配置 → 平台适配器」中勾选「启用飞书平台」并填写 App ID/Secret 后重启，即可 QQ + 飞书同时在线。
 
 二进制部署时，可在面板「自动更新」页一键从 git 拉取最新代码、重新编译并自动重启（需配置源码目录，详见[文档](https://jeanhua.github.io/AniaBot/guide/web-panel#自动更新)）。
 
