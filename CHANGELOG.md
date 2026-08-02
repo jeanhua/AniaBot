@@ -10,6 +10,10 @@
 
 ## [Unreleased]
 
+## [v4.0.0] - 2026-08-02
+
+🎉 v4.0.0版本正式发布，新增飞书、telegram平台接入
+
 ### 新增
 
 - **多平台适配器框架**：`common/adapter` 抽象为公共契约（`Adapter`）+ 平台专属能力（`QQExt` 可选接口）+ 适配器注册表（`Definition`/`Register`/`RegisterBotWrapper`）。新增平台只需实现 `Adapter`、提供 `Definition` 并在 `cmd/main.go` 空白导入触发注册即可，框架核心零改动；支持 QQ + 飞书等多平台并存，按配置 `bot.platform.<name>.enable` 启用
