@@ -6,15 +6,17 @@ import (
 	"testing"
 )
 
-// TestBuildCardJSON 卡片结构：schema 2.0 + markdown 元素。
+// TestBuildCardJSON 卡片结构：schema 2.0 + body.elements 下的 markdown 元素。
 func TestBuildCardJSON(t *testing.T) {
 	raw := buildCardJSON("你好 **世界**")
 	var card struct {
-		Schema   string `json:"schema"`
-		Elements []struct {
-			Tag     string `json:"tag"`
-			Content string `json:"content"`
-		} `json:"elements"`
+		Schema string `json:"schema"`
+		Body   struct {
+			Elements []struct {
+				Tag     string `json:"tag"`
+				Content string `json:"content"`
+			} `json:"elements"`
+		} `json:"body"`
 	}
 	if err := json.Unmarshal([]byte(raw), &card); err != nil {
 		t.Fatalf("卡片 JSON 解析失败: %v (%s)", err, raw)
@@ -22,8 +24,8 @@ func TestBuildCardJSON(t *testing.T) {
 	if card.Schema != "2.0" {
 		t.Fatalf("schema = %q, want 2.0", card.Schema)
 	}
-	if len(card.Elements) != 1 || card.Elements[0].Tag != "markdown" || card.Elements[0].Content != "你好 **世界**" {
-		t.Fatalf("卡片元素不符: %+v", card.Elements)
+	if len(card.Body.Elements) != 1 || card.Body.Elements[0].Tag != "markdown" || card.Body.Elements[0].Content != "你好 **世界**" {
+		t.Fatalf("卡片元素不符: %+v", card.Body.Elements)
 	}
 }
 

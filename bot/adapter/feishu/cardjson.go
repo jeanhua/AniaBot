@@ -11,17 +11,21 @@ const cardContentLimit = 28 * 1024
 
 // buildCardJSON 构造 schema 2.0 交互式卡片 JSON（markdown 元素）。
 // 飞书 im.message.patch 仅支持更新 interactive 卡片，流式回复以此承载内容。
+// 注意：schema 2.0 中 elements 必须放在 body 下，放根层级会被 API 拒绝
+// （code 200621，unknown property: elements）。
 func buildCardJSON(markdown string) string {
 	card := map[string]any{
 		"schema": "2.0",
-		"elements": []map[string]any{
-			{"tag": "markdown", "content": truncateMarkdown(markdown, cardContentLimit)},
+		"body": map[string]any{
+			"elements": []map[string]any{
+				{"tag": "markdown", "content": truncateMarkdown(markdown, cardContentLimit)},
+			},
 		},
 	}
 	b, err := json.Marshal(card)
 	if err != nil {
 		// 纯 map 序列化理论不可达
-		return `{"schema":"2.0","elements":[{"tag":"markdown","content":""}]}`
+		return `{"schema":"2.0","body":{"elements":[{"tag":"markdown","content":""}]}}`
 	}
 	return string(b)
 }

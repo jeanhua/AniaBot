@@ -44,6 +44,10 @@
   - AI 场景提示词与工具描述去除「QQ 群聊 / 群号 / QQ号」措辞，改为平台中性的「会话 ID / 用户 ID」（多平台下 AI 不再误以为自己在 QQ 上）
   - Prompt 覆盖编辑器移除 `inputmode="numeric"`，联系人页表头、日志筛选标签、Quota reset 错误文案等同步改为平台中性表述；文档示例（cron 插件教程）同步更新为 `[]string` 群 ID
 
+### 修复
+
+- 飞书流式回复卡片 JSON 结构错误：schema 2.0 卡片中 `elements` 必须位于 `body` 下，此前放在根层级导致发消息/更新消息被 API 拒绝（code 230099 / 200621，`unknown property: elements`），已修正并更新测试
+
 ## [v3.7.0] - 2026-08-01
 
 ### 新增
