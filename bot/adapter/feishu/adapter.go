@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"reflect"
 	"regexp"
 	"strconv"
 	"strings"
@@ -817,13 +818,36 @@ func (a *feishuAdapter) SendGroupMsg(groupId message.QID, chain msgchain.GroupCh
 }
 
 func (a *feishuAdapter) SendFriendMsg(userId message.QID, chain msgchain.FriendChain) (message.QID, bool) {
-	return a.sendChain(context.Background(), userId.TrimPrefix(idPrefix), "open_id", chain.GetFriendMsg())
+	openID := userId.TrimPrefix(idPrefix)
+	if openID == "" {
+		a.logger.Warn("飞书发送私聊消息失败：用户 ID 为空", "userId", userId)
+		return "", false
+	}
+	// 优先用缓存的单聊 chat_id 发送（p2p 消息推荐走 chat_id，比 open_id 更可靠）；
+	// open_id 失败时再回退到 chat_id（若有缓存）
+	if chatID, ok := a.p2pChats.Load(openID); ok {
+		if id, ok2 := a.sendChain(context.Background(), chatID.(string), "chat_id", chain.GetFriendMsg()); ok2 {
+			return id, true
+		}
+	}
+	if id, ok := a.sendChain(context.Background(), openID, "open_id", chain.GetFriendMsg()); ok {
+		return id, true
+	}
+	// open_id 发送失败：用缓存的单聊 chat_id 再试一次（open_id 权限不足等场景）
+	if chatID, ok := a.p2pChats.Load(openID); ok {
+		return a.sendChain(context.Background(), chatID.(string), "chat_id", chain.GetFriendMsg())
+	}
+	return "", false
 }
 
 // sendChain 把通用消息段翻译为飞书消息并发送。
 // 返回最后一条成功消息的框架内 ID（fs:om_xxx）。
 func (a *feishuAdapter) sendChain(ctx context.Context, receiveID, receiveType string, segs []message.OB11Segment) (message.QID, bool) {
 	if a.client == nil {
+		return "", false
+	}
+	if receiveID == "" {
+		a.logger.Warn("飞书发送消息失败：receive_id 为空", "receiveType", receiveType)
 		return "", false
 	}
 	ctx, cancel := context.WithTimeout(ctx, 60*time.Second)
@@ -969,7 +993,7 @@ func (a *feishuAdapter) sendCreate(ctx context.Context, receiveID, receiveType, 
 			Build()).
 		Build())
 	if err != nil || resp == nil || !resp.Success() || resp.Data == nil || resp.Data.MessageId == nil {
-		a.logger.Warn("飞书发送消息失败", "error", err, "receiveType", receiveType)
+		a.logSendFail("发送消息", err, resp, "receiveType", receiveType, "receiveId", receiveID)
 		return "", false
 	}
 	return *resp.Data.MessageId, true
@@ -984,10 +1008,51 @@ func (a *feishuAdapter) sendReply(ctx context.Context, replyTo, msgType, content
 			Build()).
 		Build())
 	if err != nil || resp == nil || !resp.Success() || resp.Data == nil || resp.Data.MessageId == nil {
-		a.logger.Warn("飞书回复消息失败", "error", err)
+		a.logSendFail("回复消息", err, resp, "replyTo", replyTo)
 		return "", false
 	}
 	return *resp.Data.MessageId, true
+}
+
+// logSendFail 记录飞书 API 调用失败详情。resp 非 nil 时提取业务错误码/信息/原始响应体，
+// 便于定位权限不足、receive_id 无效、content 非法等具体原因。
+func (a *feishuAdapter) logSendFail(op string, err error, resp any, kv ...any) {
+	args := append([]any{"op", op}, kv...)
+	if err != nil {
+		args = append(args, "error", err)
+		a.logger.Warn("飞书"+op+"失败", args...)
+		return
+	}
+	if resp == nil {
+		a.logger.Warn("飞书"+op+"失败（无响应）", args...)
+		return
+	}
+	rv := reflect.ValueOf(resp)
+	if rv.Kind() == reflect.Ptr {
+		if rv.IsNil() {
+			a.logger.Warn("飞书"+op+"失败（nil 响应）", args...)
+			return
+		}
+		rv = rv.Elem()
+	}
+	code, msg, body := "", "", ""
+	ce := rv.FieldByName("CodeError")
+	if ce.IsValid() {
+		if f := ce.FieldByName("Code"); f.IsValid() && f.Kind() == reflect.Int {
+			code = strconv.Itoa(int(f.Int()))
+		}
+		if f := ce.FieldByName("Msg"); f.IsValid() && f.Kind() == reflect.String {
+			msg = f.String()
+		}
+	}
+	api := rv.FieldByName("ApiResp")
+	if api.IsValid() && api.Kind() == reflect.Ptr && !api.IsNil() {
+		if f := api.Elem().FieldByName("RawBody"); f.IsValid() && f.Kind() == reflect.Slice {
+			body = string(f.Bytes())
+		}
+	}
+	args = append(args, "code", code, "msg", msg, "body", body)
+	a.logger.Warn("飞书"+op+"失败", args...)
 }
 
 // uploadImage 将通用 image 段上传为飞书 image_key。

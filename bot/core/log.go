@@ -24,6 +24,9 @@ func createLogger() *slog.Logger {
 	// 标准库 log（适配器 / 工具类代码）同样捕获：仍输出到 stderr，
 	// 同时按行写入环形缓冲。
 	log.SetOutput(io.MultiWriter(os.Stderr, consollog.Writer()))
+	// slog 兜底 logger 同样指向捕获 handler：tasklog/querylog/configstore/
+	// 平台适配器等使用 slog.Default() 作兜底 logger 的组件，日志同样进面板。
+	slog.SetDefault(inlogger)
 	return inlogger
 }
 

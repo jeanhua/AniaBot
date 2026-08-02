@@ -115,6 +115,9 @@ func WithLogger(logger *slog.Logger) Option {
 	return func(ania *AniaBot) {
 		ania.logger = logger
 		inlogger = logger
+		// 注入的自定义 logger 同样设为 slog 默认，保证依赖 slog.Default()
+		// 的组件（tasklog/querylog/平台适配器等）与框架共用同一输出。
+		slog.SetDefault(logger)
 	}
 }
 
