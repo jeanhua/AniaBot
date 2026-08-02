@@ -158,6 +158,133 @@ func TestStreamHandlePrefixPreserved(t *testing.T) {
 	}
 }
 
+// TestSendTextPlainDefault 默认（off）不带 parse_mode，纯文本发送。
+func TestSendTextPlainDefault(t *testing.T) {
+	f := newFakeAPI()
+	a, srv := testAdapterWithServer(f)
+	defer srv.Close()
+
+	if _, ok := a.sendText(t.Context(), -100, "hello **world**", nil); !ok {
+		t.Fatal("发送失败")
+	}
+	if n := f.count("sendMessage"); n != 1 {
+		t.Fatalf("sendMessage 调用 = %d, want 1", n)
+	}
+	if _, has := f.req(0).json["parse_mode"]; has {
+		t.Fatalf("默认不应携带 parse_mode, got %+v", f.req(0).json)
+	}
+}
+
+// TestSendTextMarkdownEnabled markdownv2 开启：一次发送即带 parse_mode。
+func TestSendTextMarkdownEnabled(t *testing.T) {
+	f := newFakeAPI()
+	a, srv := testAdapterWithServer(f)
+	defer srv.Close()
+	a.cfg.parseMode = "markdownv2"
+
+	if _, ok := a.sendText(t.Context(), -100, "**加粗**\n\n- 列表项", nil); !ok {
+		t.Fatal("发送失败")
+	}
+	if n := f.count("sendMessage"); n != 1 {
+		t.Fatalf("sendMessage 调用 = %d, want 1（无降级重发）", n)
+	}
+	if f.req(0).json["parse_mode"] != "MarkdownV2" {
+		t.Fatalf("parse_mode = %v, want MarkdownV2", f.req(0).json["parse_mode"])
+	}
+}
+
+// TestSendTextMarkdownFallback markdownv2 开启且解析失败（400）：降级纯文本重发，
+// 内容与 reply_parameters 保持一致。
+func TestSendTextMarkdownFallback(t *testing.T) {
+	f := newFakeAPI()
+	f.parseModeFail = 1
+	a, srv := testAdapterWithServer(f)
+	defer srv.Close()
+	a.cfg.parseMode = "markdownv2"
+
+	replyTo := 5
+	text := "**加粗** 含未转义 (括号)"
+	id, ok := a.sendText(t.Context(), -100, text, &replyTo)
+	if !ok {
+		t.Fatal("解析失败后降级纯文本应发送成功")
+	}
+	if id != 42 {
+		t.Fatalf("id = %d, want 42", id)
+	}
+	if n := f.count("sendMessage"); n != 2 {
+		t.Fatalf("sendMessage 调用 = %d, want 2（带 parse_mode + 降级重发）", n)
+	}
+	r0, r1 := f.req(0), f.req(1)
+	if r0.json["parse_mode"] != "MarkdownV2" {
+		t.Fatalf("首次请求应带 parse_mode, got %+v", r0.json)
+	}
+	if _, has := r1.json["parse_mode"]; has {
+		t.Fatalf("降级重发不应带 parse_mode, got %+v", r1.json)
+	}
+	if r1.json["text"] != text {
+		t.Fatalf("降级重发内容 = %v, want 原内容", r1.json["text"])
+	}
+	if rp, _ := r1.json["reply_parameters"].(map[string]any); rp["message_id"] != float64(5) {
+		t.Fatalf("降级重发应保留 reply_parameters, got %+v", r1.json["reply_parameters"])
+	}
+}
+
+// TestStreamEndMarkdown 流式中间编辑始终纯文本；End 最终编辑带 parse_mode，
+// 解析失败（400）降级纯文本重发保证最终内容落地。
+func TestStreamEndMarkdown(t *testing.T) {
+	f := newFakeAPI()
+	f.parseModeFail = 1
+	a, srv := testAdapterWithServer(f)
+	defer srv.Close()
+	a.cfg.parseMode = "markdownv2"
+
+	h := &telegramStreamHandle{a: a, chatID: -100, msgID: 7}
+	// 首次 Patch 无节流（lastPatch 为零值）→ 立即编辑，纯文本
+	if err := h.Patch("中间内容"); err != nil {
+		t.Fatalf("Patch 失败: %v", err)
+	}
+	// 节流窗口内 Patch 仅记录内容，End 时一并发送
+	h.content = "**最终内容** (未转义)"
+	h.End()
+
+	if n := f.count("editMessageText"); n != 3 {
+		t.Fatalf("editMessageText 调用 = %d, want 3（中间 + 最终带 parse_mode + 降级重发）", n)
+	}
+	r0, r1, r2 := f.req(0), f.req(1), f.req(2)
+	if _, has := r0.json["parse_mode"]; has {
+		t.Fatalf("流式中间编辑不应带 parse_mode, got %+v", r0.json)
+	}
+	if r0.json["text"] != "中间内容" {
+		t.Fatalf("中间编辑内容 = %v", r0.json["text"])
+	}
+	if r1.json["parse_mode"] != "MarkdownV2" {
+		t.Fatalf("最终编辑应带 parse_mode, got %+v", r1.json)
+	}
+	if r2.json["text"] != "**最终内容** (未转义)" || r2.json["message_id"] != float64(7) {
+		t.Fatalf("降级重发应带最终内容, got %+v", r2.json)
+	}
+	if _, has := r2.json["parse_mode"]; has {
+		t.Fatalf("降级重发不应带 parse_mode, got %+v", r2.json)
+	}
+}
+
+// TestStreamEndPlainWhenDisabled 未开启 markdownv2 时 End 最终编辑不带 parse_mode。
+func TestStreamEndPlainWhenDisabled(t *testing.T) {
+	f := newFakeAPI()
+	a, srv := testAdapterWithServer(f)
+	defer srv.Close()
+
+	h := &telegramStreamHandle{a: a, chatID: -100, msgID: 7}
+	h.content = "hi"
+	h.End()
+	if n := f.count("editMessageText"); n != 1 {
+		t.Fatalf("editMessageText 调用 = %d, want 1", n)
+	}
+	if _, has := f.req(0).json["parse_mode"]; has {
+		t.Fatalf("未开启时不应带 parse_mode, got %+v", f.req(0).json)
+	}
+}
+
 // TestSendStreamNilClient client 为 nil 时流式创建失败（不 panic）。
 func TestSendStreamNilClient(t *testing.T) {
 	a := testAdapter()

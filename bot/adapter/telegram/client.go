@@ -129,6 +129,13 @@ func (c *telegramClient) unpack(method string, resp *resty.Response, result any)
 	return nil
 }
 
+// isBadRequest 判断是否为 Telegram 业务 400 错误（参数非法，如 MarkdownV2
+// 解析失败），调用方可降级重试。网络错误/429 不在此列。
+func isBadRequest(err error) bool {
+	var ae *telegramAPIError
+	return errors.As(err, &ae) && ae.code == 400
+}
+
 // retryOnce 429 时按 retry-after 等待后重试一次（等待受 ctx 约束）。
 func retryOnce[T any](ctx context.Context, fn func() (T, error)) (T, error) {
 	v, err := fn()

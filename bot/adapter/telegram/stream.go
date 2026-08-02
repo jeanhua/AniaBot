@@ -77,7 +77,8 @@ func (a *telegramAdapter) sendStream(target message.QID, segs []message.OB11Segm
 }
 
 // telegramStreamHandle Telegram 流式消息句柄：Patch 经 editMessageText 更新内容
-// （节流）；End 强制最终内容（幂等）。
+// （节流）；End 强制最终内容（幂等），配置 markdownv2 时最终编辑尝试按
+// MarkdownV2 渲染，失败（未转义特殊字符等 400）降级纯文本重发保证最终内容落地。
 type telegramStreamHandle struct {
 	a      *telegramAdapter
 	chatID int64
@@ -92,7 +93,8 @@ type telegramStreamHandle struct {
 }
 
 // Patch 更新消息内容：距上次成功编辑超过节流间隔时立即发送，否则仅记录最新内容
-// （后续 Patch 或 End 时一并发送）。
+// （后续 Patch 或 End 时一并发送）。流式中间编辑始终纯文本（流式过程标记不完整，
+// 带 parse_mode 会因未闭合标记被拒）。
 func (h *telegramStreamHandle) Patch(text string) error {
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -101,7 +103,7 @@ func (h *telegramStreamHandle) Patch(text string) error {
 	}
 	h.content = text
 	if time.Since(h.lastPatch) >= streamPatchInterval {
-		return h.patchLocked()
+		return h.patchLocked(false)
 	}
 	return nil
 }
@@ -113,23 +115,35 @@ func (h *telegramStreamHandle) End() {
 	if h.closed {
 		return
 	}
-	_ = h.patchLocked()
+	_ = h.patchLocked(true)
 	h.closed = true
 }
 
-// patchLocked 以当前内容编辑消息；调用方需持有 h.mu。
-func (h *telegramStreamHandle) patchLocked() error {
+// patchLocked 以当前内容编辑消息；final 为 true 时尝试 MarkdownV2 渲染
+// （仅最终内容完整时才可能渲染成功），400 解析失败降级纯文本重发。
+// 调用方需持有 h.mu。
+func (h *telegramStreamHandle) patchLocked(final bool) error {
 	if h.a == nil || h.a.client == nil || h.msgID == 0 {
 		return nil
 	}
 	content := truncateRunes(h.prefix+h.content, maxEditTextLen)
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	err := h.a.client.call(ctx, "editMessageText", map[string]any{
+	params := map[string]any{
 		"chat_id":    h.chatID,
 		"message_id": h.msgID,
 		"text":       content,
-	}, nil)
+	}
+	if final && h.a.mdEnabled() {
+		params["parse_mode"] = "MarkdownV2"
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	err := h.a.client.call(ctx, "editMessageText", params, nil)
+	// 最终 MarkdownV2 编辑失败（未转义字符/截断切断闭合标记等 400）→ 纯文本重发，
+	// 避免消息停留在节流窗口内未发出的旧内容
+	if err != nil && isBadRequest(err) {
+		delete(params, "parse_mode")
+		err = h.a.client.call(ctx, "editMessageText", params, nil)
+	}
 	if err != nil {
 		h.a.logger.Warn("Telegram 流式回复更新失败", "messageId", h.msgID, "error", err)
 		return err

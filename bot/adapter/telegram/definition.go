@@ -22,6 +22,7 @@ var telegramConfigFields = []pluginconfig.Field{
 	{Key: "bot.telegram.api_base", Label: "API Base URL", Type: "string", Group: "Telegram 适配器", Help: "官方为 https://api.telegram.org；国内部署可填自建 Bot API 网关/反代地址", Default: "https://api.telegram.org"},
 	{Key: "bot.telegram.proxy", Label: "HTTP/SOCKS5 代理", Type: "string", Group: "Telegram 适配器", Help: "格式 http://host:port 或 socks5://host:port；留空直连"},
 	{Key: "bot.telegram.polling.timeout", Label: "长轮询超时（秒）", Type: "int", Group: "Telegram 适配器", Help: "getUpdates 长轮询等待秒数，默认 30（建议 10-50）", Default: 30},
+	{Key: "bot.telegram.parse_mode", Label: "消息渲染模式", Type: "select", Options: []string{"off", "markdownv2"}, Group: "Telegram 适配器", Help: "off=纯文本（默认，最稳定）；markdownv2=流式结束后/发送时按 MarkdownV2 渲染，AI 输出含未转义特殊字符时自动降级纯文本", Default: "off"},
 }
 
 // init 注册 Telegram 适配器定义。

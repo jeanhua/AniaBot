@@ -18,6 +18,7 @@ type telegramConfig struct {
 	apiBase     string
 	proxy       string
 	pollTimeout int
+	parseMode   string // "" 或 "off"=纯文本；"markdownv2"=MarkdownV2 渲染（失败降级纯文本）
 }
 
 // telegramAdapter Telegram 平台适配器：Bot API 长轮询。
@@ -163,7 +164,13 @@ func (a *telegramAdapter) loadConfig(v *viper.Viper) telegramConfig {
 		apiBase:     v.GetString("bot.telegram.api_base"),
 		proxy:       v.GetString("bot.telegram.proxy"),
 		pollTimeout: timeout,
+		parseMode:   v.GetString("bot.telegram.parse_mode"),
 	}
+}
+
+// mdEnabled 是否启用 MarkdownV2 渲染（面板配置 bot.telegram.parse_mode=markdownv2）。
+func (a *telegramAdapter) mdEnabled() bool {
+	return a.cfg.parseMode == "markdownv2"
 }
 
 // Serve 启动 Telegram 适配器（阻塞）：getMe 校验 → 长轮询循环。

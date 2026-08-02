@@ -23,6 +23,8 @@ type fakeAPI struct {
 	requests []recordedRequest
 	updates  []Update       // getUpdates 返回（取走后清空，模拟一次一消费）
 	flaky429 map[string]int // method -> 后续调用返回 429 的剩余次数
+	// parseModeFail 携带 parse_mode 的请求后续返回 400 的剩余次数（模拟 MarkdownV2 解析失败）
+	parseModeFail int
 }
 
 type recordedRequest struct {
@@ -88,6 +90,20 @@ func (f *fakeAPI) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	f.mu.Unlock()
+
+	// MarkdownV2 解析失败模拟：请求携带 parse_mode 时按剩余次数返回 400
+	f.mu.Lock()
+	pmf := 0
+	if _, has := rec.json["parse_mode"]; has && f.parseModeFail > 0 {
+		f.parseModeFail--
+		pmf = 1
+	}
+	f.mu.Unlock()
+	if pmf > 0 {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"ok":false,"error_code":400,"description":"can't parse entities"}`))
+		return
+	}
 
 	switch method {
 	case "getMe":

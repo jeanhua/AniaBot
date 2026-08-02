@@ -143,8 +143,10 @@ func (a *telegramAdapter) sendChain(ctx context.Context, chatID int64, segs []me
 	return msgID(chatID, lastMsgID), true
 }
 
-// sendText 发送文本消息（plain text，不设 parse_mode——AI 输出为 markdown 源码，
-// HTML/MarkdownV2 解析会在不完整标记时失败，纯文本最稳）。超过单条上限分包发送。
+// sendText 发送文本消息。默认 plain text（不设 parse_mode——AI 输出为 markdown
+// 源码，HTML/MarkdownV2 解析会在不完整标记时失败，纯文本最稳）；
+// 配置 bot.telegram.parse_mode=markdownv2 时先带 parse_mode 发送，解析失败
+// （400，未转义特殊字符/截断切断标记等）自动降级纯文本重发。超过单条上限分包发送。
 func (a *telegramAdapter) sendText(ctx context.Context, chatID int64, text string, replyTo *int) (int, bool) {
 	if a.client == nil {
 		return 0, false
@@ -159,13 +161,22 @@ func (a *telegramAdapter) sendText(ctx context.Context, chatID int64, text strin
 		if replyTo != nil && i == 0 {
 			params["reply_parameters"] = map[string]any{"message_id": *replyTo}
 		}
+		if a.mdEnabled() {
+			params["parse_mode"] = "MarkdownV2"
+		}
 		var res messageSendResult
-		id, err := retryOnce(ctx, func() (int, error) {
+		send := func() (int, error) {
 			if err := a.client.call(ctx, "sendMessage", params, &res); err != nil {
 				return 0, err
 			}
 			return res.MessageID, nil
-		})
+		}
+		id, err := retryOnce(ctx, send)
+		// MarkdownV2 渲染失败（400 业务错误）→ 去掉 parse_mode 纯文本重发
+		if err != nil && isBadRequest(err) {
+			delete(params, "parse_mode")
+			id, err = retryOnce(ctx, send)
+		}
 		if err != nil {
 			a.logSendFail("sendMessage", err, "chatId", chatID)
 			return last, last > 0 // 部分成功也上报最后成功消息

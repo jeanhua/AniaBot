@@ -20,6 +20,7 @@
 - 面板状态接口返回各平台适配器状态数组（`GET /api/status` → `adapters`），概览页按平台展示连接状态
 - 飞书发消息改用 **post + markdown 渲染**：文本走 `msg_type=post` 的 `md` 元素，飞书客户端原生渲染标题/加粗/代码块/列表等；@提及拆为独立 at 元素（保证通知送达），图片元素追加到正文末尾
 - 首次设置向导支持**多平台接入**：平台步骤可勾选 QQ(NapCat) 与/或飞书与/或 Telegram 并分别填写连接配置（飞书含 App ID/Secret 与 webhook 参数，Telegram 含 Bot Token/代理），管理员 ID 支持带平台前缀的字符串，至少启用一个平台
+- **Telegram MarkdownV2 渲染**（`bot.telegram.parse_mode`，默认 `off`）：配置为 `markdownv2` 后，一次性文本发送与流式回复的最终编辑按 MarkdownV2 渲染 AI 的 markdown 输出（标题/加粗/代码块/列表等）；流式中间编辑保持纯文本（流式过程标记不完整），AI 输出含未转义特殊字符或 4096 截断切断闭合标记时 Telegram 返回 400，自动降级纯文本发送/编辑，不影响现有纯文本行为
 
 
 ### 变更
