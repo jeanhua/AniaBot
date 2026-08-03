@@ -70,9 +70,11 @@ func (q *quotaManager) Check(sessionKey string) (string, bool) {
 }
 
 // Add 累加一次 AI 调用的 token 消耗到所属会话与全局计数。
-// TotalTokens 缺失（上游未上报）时用 Prompt+Completion 兜底；均为 0 不记录。
+// 只要配额功能启用（manager 非 nil）就记录用量，供面板「配额管理」展示，
+// 与是否设置上限无关；TotalTokens 缺失（上游未上报）时用 Prompt+Completion
+// 兜底；均为 0 不记录。
 func (q *quotaManager) Add(sessionKey string, usage aichat.TokenUsage) {
-	if q == nil || (q.dailyLimit <= 0 && q.globalLimit <= 0) {
+	if q == nil {
 		return
 	}
 	tokens := int64(usage.TotalTokens)
@@ -86,12 +88,8 @@ func (q *quotaManager) Add(sessionKey string, usage aichat.TokenUsage) {
 	q.mu.Lock()
 	defer q.mu.Unlock()
 	date := q.now().Format("2006-01-02")
-	if q.dailyLimit > 0 {
-		q.incrLocked(quotaKeyDate+date+":"+sessionKey, tokens)
-	}
-	if q.globalLimit > 0 {
-		q.incrLocked(quotaKeyDate+date+":global", tokens)
-	}
+	q.incrLocked(quotaKeyDate+date+":"+sessionKey, tokens)
+	q.incrLocked(quotaKeyDate+date+":global", tokens)
 }
 
 // Summary 当日配额汇总（全局 + 各会话明细），供面板「配额管理」页展示。

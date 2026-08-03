@@ -153,7 +153,7 @@ func TestQuotaPruneOld(t *testing.T) {
 	}
 }
 
-// TestQuotaDisabled 双维度均不限制时 Check 恒不拒绝，Add 不产生计数。
+// TestQuotaDisabled 双维度均不限制时 Check 恒不拒绝；Add 仍记录用量供面板展示。
 func TestQuotaDisabled(t *testing.T) {
 	q := newTestQuotaManager(newPFake(), 0, 0)
 
@@ -161,9 +161,15 @@ func TestQuotaDisabled(t *testing.T) {
 	if _, denied := q.Check("g:1"); denied {
 		t.Fatal("未配置限制不应拒绝")
 	}
-	keys, _ := q.store.Keys(context.Background(), "daily:")
-	if len(keys) != 0 {
-		t.Fatalf("未配置限制不应产生计数, got %v", keys)
+	info, err := q.Summary()
+	if err != nil {
+		t.Fatalf("Summary 失败: %v", err)
+	}
+	if info.GlobalUsed != 100 {
+		t.Fatalf("未配置限制也应记录全局用量: %+v", info)
+	}
+	if len(info.Sessions) != 1 || info.Sessions[0].Used != 100 {
+		t.Fatalf("未配置限制也应记录会话用量: %+v", info.Sessions)
 	}
 }
 

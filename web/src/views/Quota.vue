@@ -71,9 +71,9 @@
         </div>
         <ul v-else class="divide-y divide-zinc-100">
           <li v-for="s in sessions" :key="s.key" class="px-6 py-4 flex items-center gap-x-8 gap-y-2 flex-wrap">
-            <div class="w-36 shrink-0">
-              <div class="text-sm font-medium text-zinc-800">{{ s.kind === 'group' ? '群聊' : '私聊' }} {{ s.target }}</div>
-              <div class="text-[11px] font-mono text-zinc-400 mt-0.5">{{ s.key }}</div>
+            <div class="w-52 shrink-0 min-w-0">
+              <div class="text-sm font-medium text-zinc-800 break-all">{{ s.kind === 'group' ? '群聊' : '私聊' }} {{ s.target }}</div>
+              <div class="text-[11px] font-mono text-zinc-400 mt-0.5 break-all">{{ s.key }}</div>
             </div>
             <div class="flex-1 min-w-44">
               <div class="flex justify-between text-[10px] tracking-[0.12em] uppercase text-zinc-400 mb-1">
@@ -88,12 +88,12 @@
                 />
               </div>
             </div>
-            <span class="tpill">
+            <span class="tpill shrink-0">
               <span class="tdot" :class="s.reached ? 'bg-red-500' : 'bg-emerald-500'" />
               {{ s.reached ? '已用尽' : '正常' }}
             </span>
             <button
-              class="text-[11px] text-zinc-500 hover:text-red-600 font-medium transition-colors"
+              class="text-[11px] text-zinc-500 hover:text-red-600 font-medium transition-colors shrink-0"
               @click="resetOne(s.key)"
             >
               清零
@@ -114,7 +114,13 @@ const notEnabled = ref(false)
 const msg = ref('')
 const msgOk = ref(true)
 
-const global = computed(() => data.value || {})
+// 后端返回扁平的 global_used / global_limit / ... 字段，这里映射成模板用的结构
+const global = computed(() => ({
+  used: data.value.global_used || 0,
+  limit: data.value.global_limit || 0,
+  remaining: data.value.global_remaining || 0,
+  reached: data.value.global_reached || false,
+}))
 const sessions = computed(() => data.value.sessions || [])
 
 function fmt(n) {
