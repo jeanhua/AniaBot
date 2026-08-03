@@ -12,7 +12,7 @@
 
 - **高性能**：基于 Go 语言，充分利用并发特性
 - **插件驱动**：功能模块化，易于扩展和维护
-- **多平台**：QQ（NapCat WebSocket/HTTP，OneBot v11）+ 飞书（官方 SDK 长连接/Webhook）+ Telegram（Bot API 长轮询，无需公网地址）等；新增平台只需实现一个适配器并注册，框架核心零改动
+- **多平台**：QQ（NapCat WebSocket/HTTP，OneBot v11）+ 飞书（官方 SDK 长连接/Webhook）+ Telegram（Bot API 长轮询，无需公网地址）+ Discord（discordgo，Gateway WebSocket，无需公网地址）等；新增平台只需实现一个适配器并注册，框架核心零改动
 - **开箱即用**：内置 AI 对话（含 MCP/Skills/Tool Use）、防撤回、复读机等插件
 
 ![framework](./README/framework.png)
@@ -41,7 +41,7 @@ make linux
 make windows
 ```
 
-登录 `http://127.0.0.1:7700`，按设置向导填写平台连接（NapCat 地址 / 飞书 App ID、Secret / Telegram Bot Token）、管理员 ID 与 AI 模型配置即可。默认启用 QQ 平台；在「配置 → 平台适配器」中勾选要启用的平台并填写对应连接信息后重启，即可多平台同时在线（如 QQ + 飞书 + Telegram）。
+登录 `http://127.0.0.1:7700`，按设置向导填写平台连接（NapCat 地址 / 飞书 App ID、Secret / Telegram Bot Token / Discord Bot Token）、管理员 ID 与 AI 模型配置即可。默认启用 QQ 平台；在「配置 → 平台适配器」中勾选要启用的平台并填写对应连接信息后重启，即可多平台同时在线（如 QQ + 飞书 + Telegram + Discord）。
 
 二进制部署时，可在面板「自动更新」页一键从 git 拉取最新代码、重新编译并自动重启（需配置源码目录，详见[文档](https://jeanhua.github.io/AniaBot/guide/web-panel#自动更新)）。
 

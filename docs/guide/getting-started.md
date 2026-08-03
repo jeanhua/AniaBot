@@ -11,6 +11,7 @@
 | QQ 官方机器人 | 任意 | **QQ 官方平台**：QQ 开放平台创建机器人获取 AppID/AppSecret，WebSocket 收事件无需公网地址（不玩可跳过） |
 | 飞书自建应用 | 任意 | **飞书平台**：开放平台创建应用 + 开通权限（不玩飞书可跳过） |
 | Telegram Bot Token | 任意 | **Telegram 平台**：向 [@BotFather](https://t.me/BotFather) 创建机器人获取 Token，长轮询无需公网地址（不玩 Telegram 可跳过） |
+| Discord Bot Token | 任意 | **Discord 平台**：[Developer Portal](https://discord.com/developers/applications) 创建应用获取 Token 并开启 Message Content Intent，Gateway WebSocket 无需公网地址（不玩 Discord 可跳过） |
 | Redis | 可选 | 缓存后端之一；默认使用内存缓存，无需安装 |
 | LLM API Key | 可选 | 启用 AI 对话时需要（DeepSeek / OpenAI 等） |
 

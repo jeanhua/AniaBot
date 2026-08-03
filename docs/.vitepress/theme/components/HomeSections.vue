@@ -80,7 +80,7 @@ const steps = [
   },
   {
     title: '部署平台端',
-    desc: 'QQ：部署 NapCat 开放 WebSocket / HTTP 接口；飞书：创建应用并开通权限；Telegram：@BotFather 建机器人填 Token（长轮询无需额外协议端）',
+    desc: 'QQ：部署 NapCat 开放 WebSocket / HTTP 接口；飞书：创建应用并开通权限；Telegram：@BotFather 建机器人填 Token；Discord：Developer Portal 建应用填 Token（均无需额外协议端）',
   },
   {
     title: '面板中配置',

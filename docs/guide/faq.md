@@ -31,9 +31,13 @@
 
 向 [@BotFather](https://t.me/BotFather) 创建机器人拿到 Bot Token，然后在面板「配置 → 平台适配器」勾选「启用 Telegram 平台」、填写 `bot.telegram.token` 后重启。默认走 **Bot API 长轮询**，无需公网地址、无需部署协议端；国内部署如无法直连官方 API，可配置 `bot.telegram.proxy`（HTTP/SOCKS5 代理）或 `bot.telegram.api_base`（自建 Bot API 网关/反代）。详见 [配置详解](/guide/configuration#telegram-telegram-适配器)。
 
+### 怎么接入 Discord？
+
+在 [Discord Developer Portal](https://discord.com/developers/applications) 创建应用，「Bot」页面获取 Token 并**开启 Message Content Intent**（特权意图，不开则网关拒绝连接），然后在面板「配置 → 平台适配器」勾选「启用 Discord 平台」、填写 `bot.discord.token` 后重启。走 **Gateway WebSocket**，无需公网地址、无需部署协议端；无法直连时可配置 `bot.discord.proxy`（HTTP/SOCKS5 代理，REST 与网关都生效）。详见 [配置详解](/guide/configuration#discord-discord-适配器)。
+
 ### QQ 和飞书能同时在线吗？
 
-能（加 Telegram 也一样）。平台适配器各自独立开关（`bot.platform.napcat.enable` / `bot.platform.feishu.enable` / `bot.platform.telegram.enable`），都开启后即可并存。各平台收到的消息会带上自己的 `Platform` 标识，插件按 `Meta.Platforms` 声明决定处理哪些平台。
+能（加 Telegram、Discord 也一样）。平台适配器各自独立开关（`bot.platform.napcat.enable` / `bot.platform.feishu.enable` / `bot.platform.telegram.enable` / `bot.platform.discord.enable`），都开启后即可并存。各平台收到的消息会带上自己的 `Platform` 标识，插件按 `Meta.Platforms` 声明决定处理哪些平台。
 
 ### 飞书机器人 @ 了不回复？
 
@@ -46,6 +50,8 @@
 防撤回依赖 QQ 的合并转发与 rkey；戳一戳、群签到、运气王、群荣誉等事件源飞书不存在。这类插件声明 `Meta.Platforms = ["qq"]` 只在 QQ 运行，飞书消息会跳过它们。AI 对话、复读机、拦截器、每日新闻等基于文本/图片的插件在飞书开箱即用。
 
 Telegram 同理：防撤回（依赖 QQ 合并转发/rkey）不生效；成员进出与表情回应仅在机器人是管理员或关闭隐私模式时可见（平台限制）。
+
+Discord 同理：防撤回不生效；成员进出走平台事件（不触发公共进出通知），斜杠命令（Interactions）不在支持范围。
 
 ## AI 对话
 
