@@ -10,6 +10,8 @@
 
 ## [Unreleased]
 
+## [v4.2.0] - 2026-08-03
+
 ### 新增
 
 - **Discord 适配器**（`bot/adapter/discord`，平台标识 `discord`，基于 `bwmarrin/discordgo` v0.29，Gateway WebSocket 收事件，**无需公网地址、无需部署协议端**）：
