@@ -3,6 +3,7 @@ module github.com/jeanhua/AniaBot
 go 1.25.0
 
 require (
+	github.com/bwmarrin/discordgo v0.29.0
 	github.com/go-resty/resty/v2 v2.17.1
 	github.com/go-sql-driver/mysql v1.10.0
 	github.com/gorilla/websocket v1.5.3
@@ -21,7 +22,6 @@ require (
 
 require (
 	filippo.io/edwards25519 v1.2.0 // indirect
-	github.com/bwmarrin/discordgo v0.29.0 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/dgryski/go-rendezvous v0.0.0-20200823014737-9f7001d12a5f // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
