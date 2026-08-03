@@ -401,13 +401,18 @@ func (p *AIChatPlugin) runTeamMember(ctx context.Context, b bot.Bot, id message.
 	logger := p.Logger.WithGroup("team")
 	result := teamMemberResult{label: spec.label, degraded: spec.degraded}
 
-	resp, err := p.runSubagentWithOptions(ctx, b, id, isGroup, spec.task, subagentRunOptions{
+	resp, usage, err := p.runSubagentWithOptions(ctx, b, id, isGroup, spec.task, subagentRunOptions{
 		prompt:        spec.prompt,
 		timeout:       p.teamTimeout(),
 		timeoutSec:    timeoutSec,
 		maxIterations: p.teamMaxIterations(),
 		maxResultLen:  p.teamMaxResultLen(),
 	}, parentCbs)
+	// 成员消耗计入会话与全局配额（发起方已做前置检查，这里只累加不重复拒绝）
+	p.quotaManager.Add(sessionKey(id, isGroup), usage)
+	// 成员消耗并入会话统计：team_run 在主请求内同步等待完成，
+	// 当次请求的 finishQuery 会取走该累计值
+	p.addExtraUsage(sessionKey(id, isGroup), usage)
 	if err != nil {
 		logger.Warn("团队成员执行失败", "member", spec.label, "error", err.Error())
 		result.err = err

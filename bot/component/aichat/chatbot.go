@@ -74,6 +74,10 @@ func (b *ChatBot) Chat(ctx context.Context, userInput string, callbacks llmtool.
 	if err := b.window.MaybeCompress(ctx); err != nil {
 		return "", TokenUsage{}, err
 	}
+	// 本轮若触发了上下文压缩，其 token 消耗并入当次请求统计（只算 token 字段，
+	// 不计 Iterations 与 LastPromptTokens——压缩不是工具循环轮次，其 prompt
+	// 大小也不代表当前上下文长度）
+	compressUsage := b.window.takeCompressUsage()
 
 	messages := b.msgBuilder.BuildChatMessages(userInput, b.window.history())
 	// 记录构建完成时的真实长度作为新消息起点：BuildChatMessages 会过滤历史中的
@@ -82,6 +86,10 @@ func (b *ChatBot) Chat(ctx context.Context, userInput string, callbacks llmtool.
 	builtLen := len(messages)
 
 	response, updatedMessages, usage, err := b.toolOrchestrator.ExecuteWithTools(ctx, b.llmClient, messages, callbacks, opts)
+	usage.PromptTokens += compressUsage.PromptTokens
+	usage.CompletionTokens += compressUsage.CompletionTokens
+	usage.TotalTokens += compressUsage.TotalTokens
+	usage.CachedTokens += compressUsage.CachedTokens
 	if err != nil {
 		return "", usage, fmt.Errorf("chat execution failed: %w", err)
 	}
@@ -97,9 +105,11 @@ func (b *ChatBot) Chat(ctx context.Context, userInput string, callbacks llmtool.
 	return response, usage, nil
 }
 
-func (b *ChatBot) GetSingleImageDesc(ctx context.Context, userInput string, imageURL string, opts ChatOptions) (string, error) {
+// GetSingleImageDesc 生成单张图片的描述文本，返回描述与本次调用的 token 用量
+// （用量由调用方并入所属请求/会话的统计与配额）。
+func (b *ChatBot) GetSingleImageDesc(ctx context.Context, userInput string, imageURL string, opts ChatOptions) (string, TokenUsage, error) {
 	messages := b.msgBuilder.BuildVisionMessages(userInput, imageURL)
-	return b.llmClient.GenerateSingle(ctx, messages, opts)
+	return b.llmClient.GenerateSingleWithUsage(ctx, messages, opts)
 }
 
 func (b *ChatBot) ClearHistory(ctx context.Context) error {

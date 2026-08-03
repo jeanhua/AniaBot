@@ -138,7 +138,12 @@ func (p *AIChatPlugin) launchAsyncSubagent(
 
 	b.Go("subagent:"+sessionKey(id, isGroup)+":"+launchID, func() {
 		defer p.getAsyncGroup(id, isGroup).remove(launchID)
-		result, runErr := p.runSubagent(asyncCtx, b, id, isGroup, task, timeoutSec, parentCbs)
+		result, usage, runErr := p.runSubagent(asyncCtx, b, id, isGroup, task, timeoutSec, parentCbs)
+		// 消耗计入会话与全局配额（发起方已做前置检查，这里只累加不重复拒绝）
+		p.quotaManager.Add(sessionKey(id, isGroup), usage)
+		// 异步子代理完成时主请求通常已结束，其消耗暂存到会话级累计器，
+		// 由该会话下一次 finishQuery 并入 Query 日志（/stop 取消的也照常计入）
+		p.addExtraUsage(sessionKey(id, isGroup), usage)
 		p.onSubagentComplete(b, id, isGroup, launchID, task, result, runErr)
 	})
 

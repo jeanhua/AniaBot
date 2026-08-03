@@ -98,7 +98,10 @@ func resolveSubagentTimeout(defaultTimeout time.Duration, timeoutSec int, parent
 // 独立（不与主会话互踩，见 makeSubagentCallbacks）。
 //
 // ctx 为主会话的请求上下文：/stop 取消主请求时子代理一并取消；timeoutSec<=0 用默认超时。
-func (p *AIChatPlugin) runSubagent(ctx context.Context, b bot.Bot, id message.QID, isGroup bool, task string, timeoutSec int, parentCbs llmtool.CallBackFuncs) (string, error) {
+// 返回的 TokenUsage 含子代理工具循环与其派生调用（备用图片识别）的全部消耗
+// （失败/取消时返回已产生的部分用量）；统计与配额的归集由调用方负责：
+// 会话路径计入会话级暂存与配额，定时任务路径并入任务总用量。
+func (p *AIChatPlugin) runSubagent(ctx context.Context, b bot.Bot, id message.QID, isGroup bool, task string, timeoutSec int, parentCbs llmtool.CallBackFuncs) (string, aichat.TokenUsage, error) {
 	return p.runSubagentWithOptions(ctx, b, id, isGroup, task, subagentRunOptions{timeoutSec: timeoutSec}, parentCbs)
 }
 
@@ -116,14 +119,14 @@ type subagentRunOptions struct {
 // 与团队配置的默认值）。超时预算解析完全在内部完成（按父 ctx deadline 压缩并
 // 预留 subagentParentReserve 收尾时间），调用方不应预建带超时的 context，
 // 否则会被二次压缩损失预算。
-func (p *AIChatPlugin) runSubagentWithOptions(ctx context.Context, b bot.Bot, id message.QID, isGroup bool, task string, o subagentRunOptions, parentCbs llmtool.CallBackFuncs) (string, error) {
+func (p *AIChatPlugin) runSubagentWithOptions(ctx context.Context, b bot.Bot, id message.QID, isGroup bool, task string, o subagentRunOptions, parentCbs llmtool.CallBackFuncs) (string, aichat.TokenUsage, error) {
 	defaultTimeout := o.timeout
 	if defaultTimeout <= 0 {
 		defaultTimeout = p.subagentTimeout()
 	}
 	timeout, err := resolveSubagentTimeout(defaultTimeout, o.timeoutSec, ctx)
 	if err != nil {
-		return "", err
+		return "", aichat.TokenUsage{}, err
 	}
 	runCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
@@ -145,7 +148,7 @@ func (p *AIChatPlugin) runSubagentWithOptions(ctx context.Context, b bot.Bot, id
 		aichat.WithClientOptions(p.llmClientOptions()...),
 	)
 	if err != nil {
-		return "", fmt.Errorf("创建子代理失败: %w", err)
+		return "", aichat.TokenUsage{}, fmt.Errorf("创建子代理失败: %w", err)
 	}
 	if p.skillManager != nil {
 		chat.SetSkillManager(p.skillManager)
@@ -157,26 +160,26 @@ func (p *AIChatPlugin) runSubagentWithOptions(ctx context.Context, b bot.Bot, id
 	chat.SetMaxIterations(maxIterations)
 
 	logger := p.Logger.WithGroup("subagent")
-	cbs := p.makeSubagentCallbacks(runCtx, parentCbs, logger)
+	// 工具回调派生的 LLM 消耗（备用图片识别）累加到 extra，收尾时并入本次用量
+	extra := &usageAcc{}
+	cbs := p.makeSubagentCallbacks(runCtx, parentCbs, logger, extra.add)
 
 	logger.Info("子代理开始执行", "id", id, "is_group", isGroup, "timeout", timeout, "task", task)
 	start := time.Now()
 	resp, usage, err := chat.Chat(runCtx, "【子代理任务】\n"+task, cbs, p.buildChatOptions())
 	duration := time.Since(start)
-	// 子代理（含团队成员）消耗计入所属会话与全局配额——发起方已做前置检查，
-	// 这里只累加计数，不重复拒绝
-	p.quotaManager.Add(sessionKey(id, isGroup), usage)
+	usage = mergeTokenUsage(usage, extra.take())
 	if err != nil {
 		switch {
 		case errors.Is(err, context.DeadlineExceeded) && ctx.Err() == nil:
 			logger.Warn("子代理执行超时", "id", id, "is_group", isGroup, "timeout", timeout)
-			return "", fmt.Errorf("子代理执行超时（%s），已中止", timeout)
+			return "", usage, fmt.Errorf("子代理执行超时（%s），已中止", timeout)
 		case ctx.Err() != nil:
 			// 主请求被 /stop 取消或父上下文结束，原样返回让上层按取消处理
-			return "", ctx.Err()
+			return "", usage, ctx.Err()
 		default:
 			logger.Warn("子代理执行失败", "id", id, "is_group", isGroup, "error", err.Error())
-			return "", err
+			return "", usage, err
 		}
 	}
 
@@ -194,9 +197,9 @@ func (p *AIChatPlugin) runSubagentWithOptions(ctx context.Context, b bot.Bot, id
 		meta += " · 结果过长已截断"
 	}
 	if result == "" {
-		return meta + "\n（子代理没有返回内容）", nil
+		return meta + "\n（子代理没有返回内容）", usage, nil
 	}
-	return meta + "\n" + result, nil
+	return meta + "\n" + result, usage, nil
 }
 
 // truncateSubagentResult 按字符数（rune）截断子代理结果，防止超长结果污染主对话上下文。
@@ -224,7 +227,9 @@ func truncateSubagentResult(s string, maxRunes int) (string, bool) {
 // 会让主/子两个工具循环排干同一图片队列（主 AI 加载的图片被偷进子代理上下文，或
 // 子代理毒化 loaded 标志导致主 AI 无法再加载用户图片）。参照 clock 的
 // makeClockCallback 模式，为子代理建立独立的图片状态。
-func (p *AIChatPlugin) makeSubagentCallbacks(ctx context.Context, parent llmtool.CallBackFuncs, logger *slog.Logger) llmtool.CallBackFuncs {
+//
+// usageSink 接收工具回调派生的 LLM 用量（备用图片识别），由调用方并入子代理总用量。
+func (p *AIChatPlugin) makeSubagentCallbacks(ctx context.Context, parent llmtool.CallBackFuncs, logger *slog.Logger, usageSink func(aichat.TokenUsage)) llmtool.CallBackFuncs {
 	var loadedImages []string
 	cbs := llmtool.CallBackFuncs{
 		SendText: func(s string) (string, error) {
@@ -248,7 +253,7 @@ func (p *AIChatPlugin) makeSubagentCallbacks(ctx context.Context, parent llmtool
 	// 本地图片读取使用子代理独立的图片队列（主模型多模态或配置了备用识别模型时可用）
 	if p.cfg.Multimodal || p.ocrModel != nil {
 		cbs.LoadLocalImage = func(path string) (string, error) {
-			return p.loadLocalImageInto(ctx, path, &loadedImages), nil
+			return p.loadLocalImageInto(ctx, path, &loadedImages, usageSink), nil
 		}
 	}
 	return cbs

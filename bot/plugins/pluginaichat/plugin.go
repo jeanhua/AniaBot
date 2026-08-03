@@ -77,6 +77,11 @@ type AIChatPlugin struct {
 	// queryLogger Query 日志记录器（面板「Query 日志」页数据源）；为 nil 表示功能未启用
 	queryLogger *querylog.Logger
 
+	// extraUsage 会话级派生 LLM 用量暂存（异步子代理 / team_run 成员 / 备用图片
+	// 识别等主请求循环之外的消耗），finishQuery 时并入该会话的 Query 日志；
+	// 键为 sessionKey（见 usageacc.go）
+	extraUsage sync.Map
+
 	// quotaManager 每日 Token 配额管理器；为 nil 表示功能未启用
 	quotaManager *quotaManager
 }
@@ -308,7 +313,11 @@ func (p *AIChatPlugin) processChatBatch(ctx context.Context, b bot.Bot, id messa
 	} else {
 		msgFuncs = MakeFriendCallback(b, id, p.Logger)
 	}
-	p.configureImageCallbacks(ctx, b, &msgFuncs, batch...)
+	p.configureImageCallbacks(ctx, b, &msgFuncs, func(u aichat.TokenUsage) {
+		// 备用图片识别（OCR）消耗：并入会话统计（finishQuery 取走）与配额
+		p.addExtraUsage(sessionKey(id, isGroup), u)
+		p.quotaManager.Add(sessionKey(id, isGroup), u)
+	}, batch...)
 
 	// 每日配额检查：超限直接拒绝并丢弃排队消息（含子代理/定时任务的消耗，
 	// 见各调用点 Add）。检查放在 beginQuery 之前，避免被拒请求留下无效的

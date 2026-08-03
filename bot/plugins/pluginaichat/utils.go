@@ -91,7 +91,9 @@ func collectImageURLs(bot bot.Bot, msgs ...message.Message) []string {
 	return urls
 }
 
-func (p *AIChatPlugin) configureImageCallbacks(ctx context.Context, bot bot.Bot, callbacks *llmtool.CallBackFuncs, msgs ...message.Message) {
+// configureImageCallbacks 挂载消息图片的加载回调。usageSink 接收备用图片识别
+// （OCR）产生的 LLM 用量，由调用方并入所属请求/会话的统计与配额。
+func (p *AIChatPlugin) configureImageCallbacks(ctx context.Context, bot bot.Bot, callbacks *llmtool.CallBackFuncs, usageSink func(aichat.TokenUsage), msgs ...message.Message) {
 	imageURLs := collectImageURLs(bot, msgs...)
 	var loadedImages []string
 	loaded := false
@@ -123,11 +125,14 @@ func (p *AIChatPlugin) configureImageCallbacks(ctx context.Context, bot bot.Bot,
 		result.WriteString("主模型不支持多模态，以下是备用图片识别模型返回的图片描述：")
 		for _, imageURL := range imageURLs {
 			hash := message.ImageHash(imageURL)
-			description, err := p.ocrModel.GetSingleImageDesc(ctx, "描述图片内容", imageURL, p.buildOCRChatOptions())
+			description, usage, err := p.ocrModel.GetSingleImageDesc(ctx, "描述图片内容", imageURL, p.buildOCRChatOptions())
 			if err != nil {
 				p.Logger.Error("备用图片识别请求失败", "hash", hash, "error", err.Error())
 				result.WriteString(fmt.Sprintf("\n<图片 %s>识别失败：%s</图片 %s>", hash, err.Error(), hash))
 				continue
+			}
+			if usageSink != nil {
+				usageSink(usage)
 			}
 			result.WriteString(fmt.Sprintf("\n<图片 %s>\n%s\n</图片 %s>", hash, description, hash))
 		}
@@ -139,14 +144,15 @@ func (p *AIChatPlugin) configureImageCallbacks(ctx context.Context, bot bot.Bot,
 		return images
 	}
 	callbacks.LoadLocalImage = func(path string) (string, error) {
-		return p.loadLocalImageInto(ctx, path, &loadedImages), nil
+		return p.loadLocalImageInto(ctx, path, &loadedImages, usageSink), nil
 	}
 }
 
 // loadLocalImageInto 读取本地图片供 LLM 查看：主模型支持多模态时把 data URI 推入
 // 待加载队列（loadedImages 由调用方持有，下一轮上下文提供），否则交由备用识别模型描述。
+// usageSink 接收备用识别产生的 LLM 用量（多模态路径不产生产量，不会调用）。
 // 与 file 工具一致，禁止读取配置文件以避免凭据等敏感信息经图片通道泄露。
-func (p *AIChatPlugin) loadLocalImageInto(ctx context.Context, path string, loadedImages *[]string) string {
+func (p *AIChatPlugin) loadLocalImageInto(ctx context.Context, path string, loadedImages *[]string, usageSink func(aichat.TokenUsage)) string {
 	if strings.Contains(path, "aniabot.db") {
 		return "禁止读取aniabot数据库文件"
 	}
@@ -167,10 +173,13 @@ func (p *AIChatPlugin) loadLocalImageInto(ctx context.Context, path string, load
 	if p.ocrModel == nil {
 		return "当前主模型不支持加载图片，且未配置备用图片识别模型，无法查看图片内容"
 	}
-	description, err := p.ocrModel.GetSingleImageDesc(ctx, "描述图片内容", dataURI, p.buildOCRChatOptions())
+	description, usage, err := p.ocrModel.GetSingleImageDesc(ctx, "描述图片内容", dataURI, p.buildOCRChatOptions())
 	if err != nil {
 		p.Logger.Error("备用图片识别请求失败", "path", path, "error", err.Error())
 		return fmt.Sprintf("本地图片识别失败: %v", err)
+	}
+	if usageSink != nil {
+		usageSink(usage)
 	}
 	return fmt.Sprintf("主模型不支持多模态，以下是备用图片识别模型返回的图片描述：\n<图片 %s>\n%s\n</图片 %s>", hash, description, hash)
 }

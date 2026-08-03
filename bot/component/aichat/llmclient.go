@@ -372,12 +372,19 @@ func retryDelay(base time.Duration, attempt int) time.Duration {
 	return delay
 }
 
-func (c *LLMClient) GenerateSingle(ctx context.Context, messages []Message, opts ChatOptions) (string, error) {
-	resp, _, err := c.Generate(ctx, messages, opts)
+// GenerateSingleWithUsage 单次生成（不带工具），返回内容与 token 用量。
+// 供调用方把压缩器、图片描述等辅助 LLM 调用的消耗计入统计。
+func (c *LLMClient) GenerateSingleWithUsage(ctx context.Context, messages []Message, opts ChatOptions) (string, TokenUsage, error) {
+	resp, usage, err := c.Generate(ctx, messages, opts)
 	if err != nil {
-		return "", err
+		return "", usage, err
 	}
-	return resp.Content, nil
+	return resp.Content, usage, nil
+}
+
+func (c *LLMClient) GenerateSingle(ctx context.Context, messages []Message, opts ChatOptions) (string, error) {
+	content, _, err := c.GenerateSingleWithUsage(ctx, messages, opts)
+	return content, err
 }
 
 func (c *LLMClient) applyOptions(params *openai.ChatCompletionNewParams, opts ChatOptions) {

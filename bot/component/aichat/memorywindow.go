@@ -9,7 +9,9 @@ import (
 	"github.com/jeanhua/AniaBot/common/model/message"
 )
 
-type CompressorFunc func(ctx context.Context, client *LLMClient, oldMsgs []Message) ([]Message, error)
+// CompressorFunc 上下文压缩函数；返回压缩后的消息与本次压缩的 token 用量
+// （用量由 ChatBot.Chat 并入当次请求统计，失败路径返回零值）。
+type CompressorFunc func(ctx context.Context, client *LLMClient, oldMsgs []Message) ([]Message, TokenUsage, error)
 
 type messageWindow struct {
 	messages         []Message
@@ -20,7 +22,9 @@ type messageWindow struct {
 	// nil 时复用主对话 llmClient。
 	compressorClient *LLMClient
 	lastPromptTokens int
-	store            HistoryStore
+	// compressUsage 最近一次成功压缩的 token 用量，由 ChatBot.Chat 取走并入统计
+	compressUsage TokenUsage
+	store         HistoryStore
 }
 
 func newMessageWindow(maxContextTokens int, llmClient *LLMClient, compressor CompressorFunc, store HistoryStore, compressorClient ...*LLMClient) *messageWindow {
@@ -211,7 +215,7 @@ func (w *messageWindow) MaybeCompress(ctx context.Context) error {
 		client = w.compressorClient
 	}
 
-	compressed, err := w.compressor(ctx, client, w.messages)
+	compressed, compressUsage, err := w.compressor(ctx, client, w.messages)
 	if err != nil {
 		// 压缩失败（网络抖动/限流恰好在上下文最满时最易发生）不能阻断对话：
 		// 直接丢弃最旧一半历史降级，保证本轮用户消息能正常处理与落盘。
@@ -222,9 +226,18 @@ func (w *messageWindow) MaybeCompress(ctx context.Context) error {
 
 	w.messages = compressed
 	w.lastPromptTokens = 0
+	w.compressUsage = compressUsage
 	// 压缩后历史发生改变，需落盘覆盖旧记录
 	w.persist()
 	return nil
+}
+
+// takeCompressUsage 取走最近一次压缩的 token 用量（取后清零），
+// 由 ChatBot.Chat 并入当次请求的 usage 返回，供 token 统计与配额计量。
+func (w *messageWindow) takeCompressUsage() TokenUsage {
+	u := w.compressUsage
+	w.compressUsage = TokenUsage{}
+	return u
 }
 
 // truncateOldestHalf 压缩失败时的降级策略：丢弃最旧一半历史（至少保留 1 条）。
@@ -293,10 +306,10 @@ func FormatMessagesForSummary(msgs []Message) string {
 // 既浪费 token 又稀释指令；且压缩后再次压缩时 basePrompt 会被反复带进摘要。
 // 压缩器也不再拼接 basePrompt，摘要只含对话本身。
 func NewContextCompressor(basePrompt string) CompressorFunc {
-	return func(ctx context.Context, client *LLMClient, oldMsgs []Message) ([]Message, error) {
+	return func(ctx context.Context, client *LLMClient, oldMsgs []Message) ([]Message, TokenUsage, error) {
 		text := FormatMessagesForSummary(oldMsgs)
 		if text == "" {
-			return []Message{TextMessage(RoleUser, "[对话摘要]（无内容）")}, nil
+			return []Message{TextMessage(RoleUser, "[对话摘要]（无内容）")}, TokenUsage{}, nil
 		}
 
 		compressPrompt := "你是一个对话摘要助手。请对以下历史对话进行简洁的摘要，保留关键信息、用户意图、讨论结论和重要上下文。工具调用细节和中间推理过程可以省略。"
@@ -304,13 +317,13 @@ func NewContextCompressor(basePrompt string) CompressorFunc {
 		tempBuilder := NewMessageBuilder(compressPrompt)
 		summaryMessages := tempBuilder.BuildChatMessages(text, nil)
 
-		summary, err := client.GenerateSingle(ctx, summaryMessages, ChatOptions{})
+		summary, usage, err := client.GenerateSingleWithUsage(ctx, summaryMessages, ChatOptions{})
 		if err != nil {
-			return nil, err
+			return nil, usage, err
 		}
 
 		summary = RemoveThinkContent(summary)
 
-		return []Message{TextMessage(RoleUser, "以下是之前的对话摘要：\n"+summary)}, nil
+		return []Message{TextMessage(RoleUser, "以下是之前的对话摘要：\n"+summary)}, usage, nil
 	}
 }

@@ -41,6 +41,7 @@ type queryRecorder struct {
 	toolCalls      []querylog.ToolCallRecord
 	toolCallsTotal int // 工具调用总数（含超出上限被丢弃的）
 	start          time.Time
+	key            string // 会话 key（takeExtraUsage 用）
 }
 
 // beginQuery 开始记录一次 Query：写入 running 状态的日志并挂载工具调用观察者。
@@ -63,7 +64,7 @@ func (p *AIChatPlugin) beginQuery(chat *aichat.ChatBot, id message.QID, isGroup 
 		seen[uid] = struct{}{}
 		senders = append(senders, uid.String())
 	}
-	r := &queryRecorder{start: time.Now()}
+	r := &queryRecorder{start: time.Now(), key: sessionKey(id, isGroup)}
 	r.entry = p.queryLogger.Record(querylog.Entry{
 		ChatType: chatType,
 		TargetID: id.String(),
@@ -110,14 +111,17 @@ func (p *AIChatPlugin) finishQuery(r *queryRecorder, chat *aichat.ChatBot, usage
 		}
 	}
 	toolCalls := r.toolCalls
+	// 并入主请求循环之外派生的消耗（异步子代理 / team_run 成员 / 备用图片识别，
+	// 见 usageacc.go），使统计反映会话的完整成本（配额在各派生调用点单独累加）
+	extra := p.takeExtraUsage(r.key)
 	p.queryLogger.Update(r.entry.ID, func(e *querylog.Entry) {
 		e.Status = status
 		e.DurationMs = time.Since(r.start).Milliseconds()
-		e.Iterations = usage.Iterations
-		e.PromptTokens = usage.PromptTokens
-		e.CompletionTokens = usage.CompletionTokens
-		e.TotalTokens = usage.TotalTokens
-		e.CachedTokens = usage.CachedTokens
+		e.Iterations = usage.Iterations + extra.Iterations
+		e.PromptTokens = usage.PromptTokens + extra.PromptTokens
+		e.CompletionTokens = usage.CompletionTokens + extra.CompletionTokens
+		e.TotalTokens = usage.TotalTokens + extra.TotalTokens
+		e.CachedTokens = usage.CachedTokens + extra.CachedTokens
 		e.ToolCalls = toolCalls
 		e.ToolCallsTotal = r.toolCallsTotal
 		e.Reply = querylog.Truncate(reply, querylog.MaxReplyRunes)

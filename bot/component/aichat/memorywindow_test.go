@@ -222,12 +222,37 @@ func TestPersistDegradesDataURI(t *testing.T) {
 	}
 }
 
+// TestMaybeCompressRecordsUsage 压缩成功后其 token 用量被记录并可被取走
+// （ChatBot.Chat 据此并入当次请求统计）；取走后清零，压缩失败不记录。
+func TestMaybeCompressRecordsUsage(t *testing.T) {
+	compressor := func(ctx context.Context, client *LLMClient, oldMsgs []Message) ([]Message, TokenUsage, error) {
+		return []Message{TextMessage(RoleUser, "[对话摘要]")},
+			TokenUsage{PromptTokens: 500, CompletionTokens: 100, TotalTokens: 600}, nil
+	}
+	w := newMessageWindow(1000, &LLMClient{}, compressor, &fakeHistoryStore{})
+	for i := 0; i < 4; i++ {
+		w.append(TextMessage(RoleUser, fmt.Sprintf("消息%d", i)))
+	}
+	w.RecordUsage(TokenUsage{LastPromptTokens: 900}) // 超阈值触发压缩
+
+	if err := w.MaybeCompress(context.Background()); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	u := w.takeCompressUsage()
+	if u.PromptTokens != 500 || u.CompletionTokens != 100 || u.TotalTokens != 600 {
+		t.Fatalf("压缩用量不符: %+v", u)
+	}
+	if u2 := w.takeCompressUsage(); u2.TotalTokens != 0 {
+		t.Fatalf("取走后应清零, got %+v", u2)
+	}
+}
+
 func TestMaybeCompressFailureDegradesToTruncation(t *testing.T) {
 	// 压缩失败（网络抖动/限流）时不得阻断对话：降级丢弃最旧一半历史并返回 nil，
 	// 保证本轮用户消息能正常处理与落盘
 	store := &fakeHistoryStore{}
-	failCompressor := func(ctx context.Context, client *LLMClient, oldMsgs []Message) ([]Message, error) {
-		return nil, fmt.Errorf("compress failed")
+	failCompressor := func(ctx context.Context, client *LLMClient, oldMsgs []Message) ([]Message, TokenUsage, error) {
+		return nil, TokenUsage{}, fmt.Errorf("compress failed")
 	}
 	w := newMessageWindow(1000, &LLMClient{}, failCompressor, store)
 	for i := 0; i < 8; i++ {
@@ -257,8 +282,8 @@ func TestMaybeCompressFailureDegradesToTruncation(t *testing.T) {
 // 否则 OpenAI 兼容 API 拒绝（400）且此后每轮请求都失败。
 func TestTruncateOldestHalfAlignsToolCallBoundary(t *testing.T) {
 	store := &fakeHistoryStore{}
-	failCompressor := func(ctx context.Context, client *LLMClient, oldMsgs []Message) ([]Message, error) {
-		return nil, fmt.Errorf("compress failed")
+	failCompressor := func(ctx context.Context, client *LLMClient, oldMsgs []Message) ([]Message, TokenUsage, error) {
+		return nil, TokenUsage{}, fmt.Errorf("compress failed")
 	}
 	w := newMessageWindow(1000, &LLMClient{}, failCompressor, store)
 
@@ -295,8 +320,8 @@ func TestTruncateOldestHalfAlignsToolCallBoundary(t *testing.T) {
 // 全部跳过（清空历史），保证后续请求合法。
 func TestTruncateOldestHalfAllToolMessages(t *testing.T) {
 	store := &fakeHistoryStore{}
-	failCompressor := func(ctx context.Context, client *LLMClient, oldMsgs []Message) ([]Message, error) {
-		return nil, fmt.Errorf("compress failed")
+	failCompressor := func(ctx context.Context, client *LLMClient, oldMsgs []Message) ([]Message, TokenUsage, error) {
+		return nil, TokenUsage{}, fmt.Errorf("compress failed")
 	}
 	w := newMessageWindow(1000, &LLMClient{}, failCompressor, store)
 
@@ -321,9 +346,9 @@ func TestMaybeCompressUsesCompressorClient(t *testing.T) {
 	compressorClient := &LLMClient{model: "compressor"}
 
 	var got *LLMClient
-	recordCompressor := func(ctx context.Context, client *LLMClient, oldMsgs []Message) ([]Message, error) {
+	recordCompressor := func(ctx context.Context, client *LLMClient, oldMsgs []Message) ([]Message, TokenUsage, error) {
 		got = client
-		return []Message{TextMessage(RoleUser, "[对话摘要]")}, nil
+		return []Message{TextMessage(RoleUser, "[对话摘要]")}, TokenUsage{}, nil
 	}
 	makeWindow := func(w *messageWindow) {
 		for i := 0; i < 4; i++ {

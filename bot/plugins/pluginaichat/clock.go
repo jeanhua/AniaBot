@@ -663,13 +663,16 @@ func (m *clockManager) executeTask(ctx context.Context, task *ClockTask, rec *ta
 	// 每次触发独立的 SessionToolExecutor（动态 MCP 工具互不影响）；
 	// historyStore 传 nil → 全新一次性上下文，不持久化、执行后丢弃
 	sessionExecutor := p.toolExecutor.NewSessionExecutor()
+	// extra 本次执行在主 ChatBot 循环之外派生的用量（异步子代理、备用图片识别），
+	// 收尾时并入任务总用量，使任务日志与配额反映完整成本
+	extra := &usageAcc{}
 	// 注册定时任务专用子代理工具（受 subagent.enable 门控）：子代理在后台异步
 	// 执行，任务收尾时统一等待全部完成并把结果回喂给任务 AI——只有汇总后的
 	// 最终回复才会推送给目标
 	var subagents *clockSubagentSet
 	if p.cfg.Subagent.Enable {
 		subagents = newClockSubagentSet()
-		for _, tool := range newClockSubagentTools(p, m.bot, task, subagents) {
+		for _, tool := range newClockSubagentTools(p, m.bot, task, subagents, extra) {
 			sessionExecutor.RegisterSession(tool)
 		}
 		// 兜底：任意路径返回前取消仍运行中的子代理（正常路径 drainClockSubagents 已处理）
@@ -693,16 +696,21 @@ func (m *clockManager) executeTask(ctx context.Context, task *ClockTask, rec *ta
 		chat.SetToolObserver(rec.observe)
 	}
 
-	cbs := m.makeClockCallback(ctx, task)
+	cbs := m.makeClockCallback(ctx, task, extra.add)
 	resp, usage, err := chat.Chat(ctx, m.buildTriggerPrompt(task), cbs, p.buildChatOptions())
 	if err != nil {
-		return "", usage, err
+		// 失败路径同样并入已产生的派生用量（子代理可能已部分执行）
+		return "", mergeTokenUsage(usage, extra.take()), err
 	}
 	// 若任务 AI 委派了异步子代理：等待全部子代理返回，把结果回喂给 AI 合成
 	// 最终回复——只有这最后一轮输出才会推送，子代理返回前的中间回复不推送
 	if subagents != nil && subagents.hasPending() {
 		resp, usage = m.drainClockSubagents(ctx, task, chat, cbs, subagents, resp, usage)
 	}
+	// 子代理在 drain 期间完成并把用量计入 extra；此处统一并入。
+	// 注意：预算耗尽被 cancelPending 强制取消的子代理可能在此之后才结束，
+	// 其尾量会从统计与配额中一并丢失，属可接受的边界情况
+	usage = mergeTokenUsage(usage, extra.take())
 	// 只发送最终文本回复到触发对象；多轮工具过程中的中间轮文本由
 	// makeClockCallback 的 SendText 丢弃（仅记日志），避免触发对象收到
 	// 中途碎片的非预期消息。工具主动调用的图片/文件仍正常发送。
@@ -730,7 +738,8 @@ func (m *clockManager) buildTriggerPrompt(task *ClockTask) string {
 }
 
 // makeClockCallback 构造触发时面向目标对象（群 / 好友）的工具回调。
-func (m *clockManager) makeClockCallback(ctx context.Context, task *ClockTask) llmtool.CallBackFuncs {
+// usageSink 接收工具回调派生的 LLM 用量（备用图片识别），并入任务总用量。
+func (m *clockManager) makeClockCallback(ctx context.Context, task *ClockTask, usageSink func(aichat.TokenUsage)) llmtool.CallBackFuncs {
 	b := m.bot
 	targetIDStr := task.TargetID
 	isGroup := task.TargetType == clockTargetGroup
@@ -804,7 +813,7 @@ func (m *clockManager) makeClockCallback(ctx context.Context, task *ClockTask) l
 	if m.plugin.cfg.Multimodal || m.plugin.ocrModel != nil {
 		p := m.plugin
 		cbs.LoadLocalImage = func(path string) (string, error) {
-			return p.loadLocalImageInto(ctx, path, &loadedImages), nil
+			return p.loadLocalImageInto(ctx, path, &loadedImages, usageSink), nil
 		}
 	}
 	return cbs

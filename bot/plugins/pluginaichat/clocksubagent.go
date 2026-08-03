@@ -188,13 +188,16 @@ type clockSubagentToolBase struct {
 	bot    bot.Bot
 	task   *ClockTask
 	set    *clockSubagentSet
+	// extra 本次任务执行的派生用量累计器（子代理 LLM 消耗），executeTask 收尾时
+	// 并入任务总用量（tasklog 与配额同源）
+	extra *usageAcc
 }
 
 // newClockSubagentTools 创建定时任务专用的子代理工具（注册到任务的一次性执行器）。
 // 与会话版 subagent 工具的差异：子代理结果不入会话 pending 队列，而是在任务收尾时
 // 统一等待并回喂给任务 AI 合成最终回复。
-func newClockSubagentTools(p *AIChatPlugin, b bot.Bot, task *ClockTask, set *clockSubagentSet) []llmtool.Tool {
-	base := clockSubagentToolBase{plugin: p, bot: b, task: task, set: set}
+func newClockSubagentTools(p *AIChatPlugin, b bot.Bot, task *ClockTask, set *clockSubagentSet, extra *usageAcc) []llmtool.Tool {
+	base := clockSubagentToolBase{plugin: p, bot: b, task: task, set: set, extra: extra}
 	runDesc := "将一个复杂/耗时的子任务委派给一次性子代理在后台异步执行。子代理以全新上下文运行（看不到本次任务的对话过程），" +
 		"拥有与你一致的工具能力（以其实际可用的工具列表为准），无法再委派子代理。" +
 		"你可以连续启动多个子代理并行执行不同子任务，启动后立即返回、不会阻塞你当前的工作；" +
@@ -240,7 +243,9 @@ func (t *clockSubagentToolBase) launch(ctx context.Context, taskText string, tim
 	qid := parseQID(t.task.TargetID)
 
 	t.bot.Go("clock-subagent:"+t.task.ID+":"+id, func() {
-		result, err := p.runSubagent(subCtx, t.bot, qid, isGroup, taskText, timeoutSec, parentCbs)
+		result, usage, err := p.runSubagent(subCtx, t.bot, qid, isGroup, taskText, timeoutSec, parentCbs)
+		// 子代理消耗计入本次任务的派生用量（executeTask 收尾时并入任务日志与配额）
+		t.extra.add(usage)
 		t.set.markFinished(id, result, err)
 	})
 

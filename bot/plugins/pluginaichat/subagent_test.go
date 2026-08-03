@@ -172,7 +172,7 @@ func TestMakeSubagentCallbacks(t *testing.T) {
 			return []string{"parent-image"}
 		},
 	}
-	cbs := p.makeSubagentCallbacks(context.Background(), parent, testLogger())
+	cbs := p.makeSubagentCallbacks(context.Background(), parent, testLogger(), nil)
 
 	// 中间轮文本被丢弃，不透传给主会话（避免打扰用户）
 	res, err := cbs.SendText("中间过程文本")
@@ -231,7 +231,7 @@ func TestSubagentCallbacksLocalImageIsolation(t *testing.T) {
 			return nil
 		},
 	}
-	cbs := p.makeSubagentCallbacks(context.Background(), parent, testLogger())
+	cbs := p.makeSubagentCallbacks(context.Background(), parent, testLogger(), nil)
 	if cbs.LoadLocalImage == nil {
 		t.Fatal("多模态开启时子代理应支持 LoadLocalImage")
 	}
@@ -260,7 +260,7 @@ func TestSubagentCallbacksLocalImageIsolation(t *testing.T) {
 // 子代理不支持读取本地图片（LoadLocalImage 为 nil，与 clock 回调语义一致）。
 func TestSubagentCallbacksLocalImageDisabled(t *testing.T) {
 	p := &AIChatPlugin{}
-	cbs := p.makeSubagentCallbacks(context.Background(), llmtool.CallBackFuncs{}, testLogger())
+	cbs := p.makeSubagentCallbacks(context.Background(), llmtool.CallBackFuncs{}, testLogger(), nil)
 	if cbs.LoadLocalImage != nil {
 		t.Fatal("未启用多模态且无 OCR 模型时 LoadLocalImage 应为 nil")
 	}

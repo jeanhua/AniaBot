@@ -17,8 +17,8 @@ component/
 
 | 文件 | 职责 |
 |------|------|
-| `chatbot.go` | 入口，组装各子组件，暴露 `Chat()` / `GetSingleImageDesc()` 等方法 |
-| `llmclient.go` | 封装 openai-go SDK，提供 `Generate()` / `GenerateSingle()` |
+| `chatbot.go` | 入口，组装各子组件，暴露 `Chat()` / `GetSingleImageDesc()` 等方法（均返回 `TokenUsage`，含当次上下文压缩的消耗） |
+| `llmclient.go` | 封装 openai-go SDK，提供 `Generate()` / `GenerateSingle()` / `GenerateSingleWithUsage()` |
 | `messagebuilder.go` | 构建每轮请求的消息列表（system prompt + 历史 + 用户输入），支持 Skill 注入 |
 | `memorywindow.go` | 对话历史窗口：按 token 预算管理，prompt token 超过 `max_context_tokens` 的 80% 时用 LLM 将旧历史摘要压缩（工具调用细节不进入摘要），并负责历史持久化与回放 |
 | `toolexecutor.go` | Agent 循环：LLM → 工具调用 → 结果 → LLM，追踪 `TokenUsage` |

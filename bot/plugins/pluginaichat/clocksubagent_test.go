@@ -143,7 +143,7 @@ func TestBuildClockSubagentReport(t *testing.T) {
 func TestNewClockSubagentTools(t *testing.T) {
 	p := &AIChatPlugin{}
 	task := &ClockTask{ID: "t1", TargetType: clockTargetGroup, TargetID: "12345"}
-	tools := newClockSubagentTools(p, nil, task, newClockSubagentSet())
+	tools := newClockSubagentTools(p, nil, task, newClockSubagentSet(), &usageAcc{})
 	if len(tools) != 3 {
 		t.Fatalf("应创建 3 个子代理工具, got %d", len(tools))
 	}
