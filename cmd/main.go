@@ -6,6 +6,7 @@ import (
 	"os"
 
 	// 空白导入各平台适配器包以触发其 init() 注册（新增平台在此追加导入即可）
+	_ "github.com/jeanhua/AniaBot/bot/adapter/discord"
 	_ "github.com/jeanhua/AniaBot/bot/adapter/feishu"
 	_ "github.com/jeanhua/AniaBot/bot/adapter/napcat"
 	_ "github.com/jeanhua/AniaBot/bot/adapter/qqofficial"

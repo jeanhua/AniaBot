@@ -26,7 +26,7 @@
           <h1 class="text-xl font-bold text-slate-800">欢迎使用 AniaBot 🎉</h1>
           <p class="text-sm text-slate-500 leading-relaxed">
             这是首次启动，接下来用两步完成最基本的配置：<br />
-            <b>接入平台</b>（QQ / QQ 官方 / 飞书 / Telegram，可多选）和 <b>AI 对话模型</b>。<br />
+            <b>接入平台</b>（QQ / QQ 官方 / 飞书 / Telegram / Discord，可多选）和 <b>AI 对话模型</b>。<br />
             其余配置（插件、MCP、Prompt 覆盖等）可稍后在控制面板中完善。
           </p>
           <p class="text-xs text-slate-400">所有配置保存在数据库中，也可随时跳过，之后在「配置管理」中修改。</p>
@@ -180,6 +180,28 @@
             </template>
           </div>
 
+          <!-- Discord -->
+          <div :class="['border rounded-xl p-4 space-y-3 transition-colors', form.enableDiscord ? 'border-slate-300 bg-slate-50' : 'border-slate-200']">
+            <label class="flex items-center gap-2.5 cursor-pointer select-none">
+              <input type="checkbox" v-model="form.enableDiscord" class="w-4 h-4 accent-zinc-900" />
+              <span class="text-sm font-medium text-slate-700">
+                Discord
+                <span class="text-xs text-slate-400 font-normal">· Gateway WebSocket 收事件，无需公网地址</span>
+              </span>
+            </label>
+            <template v-if="form.enableDiscord">
+              <div>
+                <label class="block text-xs font-medium text-slate-600 mb-1.5">Bot Token</label>
+                <input v-model="form.discordToken" type="password" placeholder="MTIz..." :class="inputClass" />
+                <p class="text-xs text-slate-400 mt-1.5">Discord Developer Portal → Applications → Bot 页面获取；必须在同页面开启 <b>Message Content Intent</b>，否则无法连接</p>
+              </div>
+              <div>
+                <label class="block text-xs font-medium text-slate-600 mb-1.5">HTTP/SOCKS5 代理（可选）</label>
+                <input v-model="form.discordProxy" type="text" placeholder="http://127.0.0.1:7890 或 socks5://..." :class="inputClass" />
+              </div>
+            </template>
+          </div>
+
           <div>
             <label class="block text-xs font-medium text-slate-600 mb-1.5">管理员 ID</label>
             <input v-model="form.adminId" type="text" placeholder="QQ 号或带前缀的 ID（如 fs:ou_xxx），接收启动/异常通知" :class="inputClass" />
@@ -271,6 +293,9 @@ const form = reactive({
   telegramToken: '',
   telegramApiBase: '',
   telegramProxy: '',
+  enableDiscord: false,
+  discordToken: '',
+  discordProxy: '',
   adminId: '',
   baseUrl: '',
   apiKey: '',
@@ -297,6 +322,8 @@ onMounted(async () => {
     form.enableTelegram = cfg['bot.platform.telegram.enable'] === true
     form.telegramApiBase = cfg['bot.telegram.api_base'] || ''
     form.telegramProxy = cfg['bot.telegram.proxy'] || ''
+    form.enableDiscord = cfg['bot.platform.discord.enable'] === true
+    form.discordProxy = cfg['bot.discord.proxy'] || ''
     form.baseUrl = cfg['plugin.ai_chat_bot.base_url'] || ''
     form.model = cfg['plugin.ai_chat_bot.model'] || ''
     const adminId = cfg['bot.admin_id']
@@ -307,8 +334,8 @@ onMounted(async () => {
 // 平台步骤校验：至少启用一个平台
 function onNext() {
   error.value = ''
-  if (!form.enableNapcat && !form.enableQQOfficial && !form.enableFeishu && !form.enableTelegram) {
-    error.value = '请至少启用一个平台（QQ、飞书或 Telegram），也可「跳过引导」稍后在配置管理中设置'
+  if (!form.enableNapcat && !form.enableQQOfficial && !form.enableFeishu && !form.enableTelegram && !form.enableDiscord) {
+    error.value = '请至少启用一个平台（QQ、飞书、Telegram 或 Discord），也可「跳过引导」稍后在配置管理中设置'
     return
   }
   step.value++
@@ -316,8 +343,8 @@ function onNext() {
 
 async function onSave() {
   error.value = ''
-  if (!form.enableNapcat && !form.enableQQOfficial && !form.enableFeishu && !form.enableTelegram) {
-    error.value = '请至少启用一个平台（QQ、飞书或 Telegram），也可「跳过引导」稍后在配置管理中设置'
+  if (!form.enableNapcat && !form.enableQQOfficial && !form.enableFeishu && !form.enableTelegram && !form.enableDiscord) {
+    error.value = '请至少启用一个平台（QQ、飞书、Telegram 或 Discord），也可「跳过引导」稍后在配置管理中设置'
     return
   }
   const updates = {}
@@ -327,6 +354,7 @@ async function onSave() {
   updates['bot.platform.qqofficial.enable'] = form.enableQQOfficial
   updates['bot.platform.feishu.enable'] = form.enableFeishu
   updates['bot.platform.telegram.enable'] = form.enableTelegram
+  updates['bot.platform.discord.enable'] = form.enableDiscord
 
   // QQ(NapCat)
   if (form.enableNapcat) {
@@ -366,6 +394,12 @@ async function onSave() {
     if (form.telegramToken.trim()) updates['bot.telegram.token'] = form.telegramToken.trim()
     if (form.telegramApiBase.trim()) updates['bot.telegram.api_base'] = form.telegramApiBase.trim()
     if (form.telegramProxy.trim()) updates['bot.telegram.proxy'] = form.telegramProxy.trim()
+  }
+
+  // Discord（Token 敏感字段：留空不修改）
+  if (form.enableDiscord) {
+    if (form.discordToken.trim()) updates['bot.discord.token'] = form.discordToken.trim()
+    if (form.discordProxy.trim()) updates['bot.discord.proxy'] = form.discordProxy.trim()
   }
 
   // 管理员 ID（字符串，可带平台前缀）

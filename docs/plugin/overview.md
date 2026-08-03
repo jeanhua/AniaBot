@@ -145,6 +145,7 @@ import (
     _ "github.com/jeanhua/AniaBot/bot/adapter/napcat"    // QQ 平台
     _ "github.com/jeanhua/AniaBot/bot/adapter/feishu"    // 飞书平台（可选）
     _ "github.com/jeanhua/AniaBot/bot/adapter/telegram"  // Telegram 平台（可选）
+    _ "github.com/jeanhua/AniaBot/bot/adapter/discord"   // Discord 平台（可选）
     "github.com/jeanhua/AniaBot/bot/core"
     "github.com/jeanhua/AniaBot/bot/plugins/pluginsys"
     "github.com/jeanhua/AniaBot/custom/plugins/myplugin"

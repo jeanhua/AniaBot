@@ -59,7 +59,7 @@ AniaBot 的全部配置存储在**数据库**中（持久化存储的 `ania_kv` 
 
 ### platform —— 平台适配器开关
 
-多平台并存，各自独立开关（`bot.platform.<name>.enable`）。默认仅启用 QQ，QQ 官方 / 飞书 / Telegram 默认关闭：
+多平台并存，各自独立开关（`bot.platform.<name>.enable`）。默认仅启用 QQ，QQ 官方 / 飞书 / Telegram / Discord 默认关闭：
 
 | 配置键 | 默认值 | 说明 |
 | --- | --- | --- |
@@ -67,6 +67,7 @@ AniaBot 的全部配置存储在**数据库**中（持久化存储的 `ania_kv` 
 | `bot.platform.qqofficial.enable` | `false` | 是否启用 QQ 官方机器人平台（需同时配置下方 `bot.qqofficial.*`） |
 | `bot.platform.feishu.enable` | `false` | 是否启用飞书平台（需同时配置下方 `bot.feishu.*`） |
 | `bot.platform.telegram.enable` | `false` | 是否启用 Telegram 平台（需同时配置下方 `bot.telegram.*`） |
+| `bot.platform.discord.enable` | `false` | 是否启用 Discord 平台（需同时配置下方 `bot.discord.*`） |
 
 勾选后**重启生效**。未来新增平台同样在此出现对应开关。
 
@@ -125,6 +126,24 @@ QQ 官方适配器覆盖**群聊 @机器人** 与 **单聊（C2C）** 两大场�
 
 ::: tip Telegram 能做什么 / 不能做什么
 Telegram 适配器支持文本 / @提及 / 图片 / 文件 / 语音 / 视频 / 回复，成员进出、表情回应、机器人被拉群/移出会映射到对应公共通知与平台事件；群聊中 @机器人 触发 AI 对话。**平台限制**：@ 只能以 `@username` 形式（无按 ID @ 的 API）；仅当机器人是管理员或关闭隐私模式时才能收到其他成员的加入/离开消息与表情回应；Bot API 无消息历史端点，历史消息仅覆盖适配器运行期间的缓存（AI 会话历史不受影响，由持久化存储承载）；消息撤回、合并转发等 QQ 专属能力 Telegram **没有**。
+:::
+
+### discord —— Discord 适配器
+
+在 [Discord Developer Portal](https://discord.com/developers/applications) 创建应用，在「Bot」页面获取 **Bot Token**，并**务必开启「Message Content Intent」**（特权意图，否则网关拒绝连接）；邀请机器人进服务器时使用 `bot` scope 并勾选 Send Messages / Read Message History / Add Reactions / Attach Files 等权限。然后在面板勾选启用 Discord 并填写。事件经 Gateway WebSocket 推送，**无需公网地址、无需部署协议端**：
+
+| 配置键 | 默认值 | 说明 |
+| --- | --- | --- |
+| `bot.discord.token` | 空 | Bot Token（敏感字段），重置后旧 Token 立即失效 |
+| `bot.discord.proxy` | 空 | HTTP/SOCKS5 代理（`http://host:port` 或 `socks5://host:port`），留空直连；REST 与 WebSocket 网关都走代理 |
+| `bot.discord.member_events` | `false` | 接收服务器成员进出事件；需在 Developer Portal 同步开启 Server Members Intent，成员进出以平台事件投递 |
+
+::: tip Discord 能做什么 / 不能做什么
+Discord 适配器支持文本 / @提及 / @everyone / 图片 / 文件 / 语音 / 视频 / 引用回复（原生渲染 Markdown），消息删除映射撤回公共通知、表情回应映射群消息表情回应通知；机器人进/出服务器与成员进出走平台事件（`discord.bot_added` / `discord.bot_removed` / `discord.guild_member_add` / `discord.guild_member_remove`）；群聊中 @机器人 触发 AI 对话；历史消息经官方 API 拉取（单次最多 100 条，内存缓存兜底）。**平台限制**：
+- Message Content 为特权意图，必须在 Developer Portal 开启，否则网关拒绝连接（close 4014）
+- 附件超过约 25 MiB 无法上传（超限附件跳过不发送）；外部 URL 附件由 Bot 下载后重传（Discord 不抓取外链）
+- 消息删除事件不携带删除者与原消息作者（作者仅从运行期缓存反查）；成员进出事件携带服务器 ID 而非频道 ID，因此映射为平台事件而非公共进出通知
+- 斜杠命令（Interactions）、合并转发、戳一戳等不在支持范围；QQ 专属能力（防撤回依赖的合并转发等）在本平台不生效
 :::
 
 ### adapter —— QQ(NapCat) 协议适配器

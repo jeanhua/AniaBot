@@ -9,7 +9,7 @@ bot:
     enable: true # 是否启用 Web 控制面板
     listen: "127.0.0.1:7700" # 监听地址（如需局域网访问改为 0.0.0.0:7700，注意面板有密码保护）
 
-  # 平台适配器启用开关（可多平台并存：QQ + QQ 官方 + 飞书 + Telegram……）。默认仅启用 QQ(NapCat)。
+  # 平台适配器启用开关（可多平台并存：QQ + QQ 官方 + 飞书 + Telegram + Discord……）。默认仅启用 QQ(NapCat)。
   platform:
     napcat:
       enable: true # 是否启用 QQ 平台
@@ -19,6 +19,8 @@ bot:
       enable: false # 是否启用飞书平台（需同时配置下方 bot.feishu.*）
     telegram:
       enable: false # 是否启用 Telegram 平台（需同时配置下方 bot.telegram.*）
+    discord:
+      enable: false # 是否启用 Discord 平台（需同时配置下方 bot.discord.*）
 
   # QQ 官方适配器（QQ 开放平台 API v2，WebSocket 网关收事件，无需公网地址）
   qqofficial:
@@ -46,6 +48,12 @@ bot:
     proxy: # HTTP/SOCKS5 代理（http://host:port 或 socks5://host:port），留空直连
     polling:
       timeout: 30 # getUpdates 长轮询等待秒数（建议 10-50）
+
+  # Discord 适配器（discordgo，Gateway WebSocket 收事件，无需公网地址）
+  discord:
+    token: # Discord Developer Portal → Bot 页面的 Token（必须同时开启 Message Content Intent）
+    proxy: # HTTP/SOCKS5 代理（http://host:port 或 socks5://host:port），留空直连
+    member_events: false # 接收服务器成员进出事件（需在 Developer Portal 开启 Server Members Intent）
 
   # napcat网络交换适配器，websocket/http二选一
   adapter:

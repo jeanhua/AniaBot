@@ -10,6 +10,16 @@
 
 ## [Unreleased]
 
+### 新增
+
+- **Discord 适配器**（`bot/adapter/discord`，平台标识 `discord`，基于 `bwmarrin/discordgo` v0.29，Gateway WebSocket 收事件，**无需公网地址、无需部署协议端**）：
+  - **接入方式**：Bot Token 鉴权 + Gateway WebSocket 接收事件（心跳/断线重连/会话 resume 由 discordgo 内部维护，连接失败指数退避无限重试）；intents 订阅 Guilds/GuildMessages/DirectMessages/**MessageContent（特权意图，需在 Developer Portal 开启，否则 close 4014 拒绝连接）**/消息反应，`bot.discord.member_events` 可选追加 Server Members 特权意图（成员进出）；`bot.discord.proxy` 同时作用于 REST（含附件下载）与 WebSocket 网关拨号
+  - **消息收发翻译**：`<@id>`/`<@!id>` 提及原位映射 at 段（@bot 提及产出 `qq=SelfId` 的 at 段，群聊 @ 触发 AI 对话开箱即用），@everyone、角色/频道/自定义表情标记降级字面文本，引用回复映射 reply 段；图片附件下载转 data URI 供 AI 插件加载（失败保留 CDN 链接，注意 Discord CDN 签名链接约 24h 过期），视频/语音/文件附件映射通用段，贴纸降级 `[贴纸]` 文本；出站文本（超 1990 字符分包）/@提及（`<@id>`）/@everyone/引用回复（MessageReference）/图片/文件/语音/视频（附件本地下载重传——Discord 不抓取外链；连续媒体合批 ≤10 文件/条；超约 25 MiB 附件跳过不拖累整条链），`AllowedMentions` 收敛 @ 权限防止 AI 文本字面 `@everyone` 误触全服通知；DM 经 `UserChannelCreate` 打开私聊频道后发送
+  - **通知与平台事件**：消息删除映射公共撤回通知（删除者 Discord 不告知、作者从运行期缓存反查）、表情回应映射群消息表情回应通知；机器人进/出服务器（`discord.bot_added`/`discord.bot_removed`）与成员进出（`discord.guild_member_add`/`discord.guild_member_remove`）走平台事件——成员事件携带服务器 ID 而非频道 ID，不映射公共进出通知以保护 GroupId 频道可寻址不变量
+  - **查询与流式**：历史消息经 `ChannelMessages` API 拉取（单次最多 100 条，内存缓存兜底），`GetMsgDetail` 缓存未命中走 `ChannelMessage` API 并回写缓存，群详情经 `Channel`+`GuildWithCounts`（无需特权意图）；流式回复经 `ChannelMessageEdit` 打字机（600ms 节流，Discord 原生渲染 Markdown 无降级路径）
+  - ID 前缀 `dc:`（用户 `dc:<user_id>`、频道 `dc:<channel_id>`、消息 `dc:<channel_id>:<message_id>` 复合编码）；core 按 `EventKeyer`（消息 MessageKey + 撤回 NoticeKey）对网关 resume 重放去重；拦截插件 `群ID:用户ID` 规则解析支持 `dc:` 前缀
+- **首次设置向导支持 Discord 接入**：Bot Token（敏感字段留空不修改）与代理配置
+
 ### 修复
 
 - **Token 统计补齐派生 LLM 调用消耗**：此前面板 Token 统计（数据源为 Query 日志与定时任务日志）只统计主对话/任务主循环自身的 LLM 调用，`team_run` 团队成员、各类 `subagent` 子代理（会话异步/定时任务）、上下文压缩器与备用图片识别（OCR）的 token 消耗完全未计入（前两者仅进了每日配额，后两者配额也未计），启用这些功能后面板数字明显低估实际消耗且与配额口径不一致。现统一改为「并入父请求」口径：

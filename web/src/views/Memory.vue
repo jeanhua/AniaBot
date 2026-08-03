@@ -114,7 +114,7 @@
         </div>
         <div>
           <label class="block text-xs text-slate-500 mb-1.5">关联用户 ID（可空，表示属于整个会话）</label>
-          <input v-model="form.user_id" placeholder="用户 ID（QQ 数字 / 飞书 fs:ou_xxx / Telegram tg:123456）" :class="inputClass" />
+          <input v-model="form.user_id" placeholder="用户 ID（QQ 数字 / 飞书 fs:ou_xxx / Telegram tg:123456 / Discord dc:123456）" :class="inputClass" />
         </div>
         <div>
           <label class="block text-xs text-slate-500 mb-1.5">标签（逗号分隔，可空）</label>

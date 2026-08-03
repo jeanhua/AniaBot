@@ -25,7 +25,7 @@ const features = [
   {
     icon: 'link',
     title: '多平台接入',
-    desc: 'QQ（OneBot v11，NapCat WebSocket / HTTP）+ 飞书（官方 SDK 长连接 / Webhook）+ Telegram（Bot API 长轮询），可同时在线、按需扩展新平台。',
+    desc: 'QQ（OneBot v11，NapCat WebSocket / HTTP）+ 飞书（官方 SDK 长连接 / Webhook）+ Telegram（Bot API 长轮询）+ Discord（Gateway WebSocket），可同时在线、按需扩展新平台。',
   },
   {
     icon: 'database',

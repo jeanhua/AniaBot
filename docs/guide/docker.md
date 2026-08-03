@@ -81,10 +81,10 @@ docker compose up -d
 docker logs aniabot
 ```
 
-浏览器访问 `http://<服务器IP>:7700`，用初始密码登录，首次登录会进入**设置向导**：依次填写平台连接（NapCat 地址 / 飞书 App ID、Secret / Telegram Bot Token）、管理员 ID 与 AI 模型配置，保存后自动重启生效。
+浏览器访问 `http://<服务器IP>:7700`，用初始密码登录，首次登录会进入**设置向导**：依次填写平台连接（NapCat 地址 / 飞书 App ID、Secret / Telegram Bot Token / Discord Bot Token）、管理员 ID 与 AI 模型配置，保存后自动重启生效。
 
 ::: warning QQ 需要单独部署 NapCat
-容器内只运行 AniaBot 本体，QQ 协议端 NapCat 请参照 [快速开始](/guide/getting-started#第一步：部署-napcat) 另行部署（宿主机或另一个容器均可，host 网络模式下直接填 `127.0.0.1` 的地址）。**飞书与 Telegram 平台则无需任何额外协议端**——飞书配置 App ID/Secret 走 WebSocket 长连接，Telegram 配置 Bot Token 走 Bot API 长轮询即可。
+容器内只运行 AniaBot 本体，QQ 协议端 NapCat 请参照 [快速开始](/guide/getting-started#第一步：部署-napcat) 另行部署（宿主机或另一个容器均可，host 网络模式下直接填 `127.0.0.1` 的地址）。**飞书、Telegram 与 Discord 平台则无需任何额外协议端**——飞书配置 App ID/Secret 走 WebSocket 长连接，Telegram 配置 Bot Token 走 Bot API 长轮询，Discord 配置 Bot Token 走 Gateway WebSocket 即可。
 :::
 
 ## 第四步：配置自动更新（关键一步）

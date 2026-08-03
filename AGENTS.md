@@ -4,9 +4,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-AniaBot is a plugin-driven multi-platform bot framework built with Go. It connects to platforms via pluggable adapters — QQ through NapCat (WebSocket or HTTP adapter using the OneBot v11 protocol), QQ Official through the QQ Open Platform API v2 (WebSocket gateway + REST OpenAPI, hand-rolled resty/gorilla client), Feishu/Lark through the official oapi-sdk-go (WebSocket long-connection or webhook), Telegram through the Bot API (long polling, hand-rolled resty client) — and features an AI chat engine powered by OpenAI-compatible LLM APIs with tool calling, MCP (Model Context Protocol) integration, and a skill system.
+AniaBot is a plugin-driven multi-platform bot framework built with Go. It connects to platforms via pluggable adapters — QQ through NapCat (WebSocket or HTTP adapter using the OneBot v11 protocol), QQ Official through the QQ Open Platform API v2 (WebSocket gateway + REST OpenAPI, hand-rolled resty/gorilla client), Feishu/Lark through the official oapi-sdk-go (WebSocket long-connection or webhook), Telegram through the Bot API (long polling, hand-rolled resty client), Discord through bwmarrin/discordgo (Gateway WebSocket + REST) — and features an AI chat engine powered by OpenAI-compatible LLM APIs with tool calling, MCP (Model Context Protocol) integration, and a skill system.
 
-**Multi-platform model**: the framework normalizes every platform to the OneBot v11 segment format (`OB11Segment{Type, Data}`) as its canonical message shape — adapters translate at the boundary (inbound: platform event → segments; outbound: segments → platform API). IDs are platform-prefixed (`qo:<openid>` for QQ Official, `fs:oc_xxx` for Feishu, `tg:<chat_id>:<message_id>` for Telegram messages); QQ legacy numeric IDs carry no prefix and route to the default adapter. Platform-specific capabilities are exposed via optional interfaces (`adapter.QQExt` / plugin-facing `bot.QQ`) — plugins type-assert to probe them, so a plugin written for QQ degrades gracefully on other platforms. Adding a platform = a new adapter package + one blank import in `cmd/main.go`; the core is untouched.
+**Multi-platform model**: the framework normalizes every platform to the OneBot v11 segment format (`OB11Segment{Type, Data}`) as its canonical message shape — adapters translate at the boundary (inbound: platform event → segments; outbound: segments → platform API). IDs are platform-prefixed (`qo:<openid>` for QQ Official, `fs:oc_xxx` for Feishu, `tg:<chat_id>:<message_id>` for Telegram messages, `dc:<channel_id>:<message_id>` for Discord messages); QQ legacy numeric IDs carry no prefix and route to the default adapter. Platform-specific capabilities are exposed via optional interfaces (`adapter.QQExt` / plugin-facing `bot.QQ`) — plugins type-assert to probe them, so a plugin written for QQ degrades gracefully on other platforms. Adding a platform = a new adapter package + one blank import in `cmd/main.go`; the core is untouched.
 
 ## Commands
 
@@ -76,6 +76,7 @@ bot/adapter/napcat/      NapCat protocol adapters (WebSocket and HTTP), QQ platf
 bot/adapter/qqofficial/  QQ Official adapter (QQ Open Platform API v2: WebSocket gateway + REST, hand-rolled)
 bot/adapter/feishu/      Feishu/Lark adapter (larksuite/oapi-sdk-go/v3), WebSocket long-connection + webhook
 bot/adapter/telegram/    Telegram adapter (hand-rolled Bot API client, long polling; proxy/api_base config)
+bot/adapter/discord/     Discord adapter (bwmarrin/discordgo, Gateway WebSocket; proxy config)
 bot/component/           AI chat engine
   aichat/                  ChatBot, LLMClient, MessageBuilder, ToolOrchestrator, messageWindow
   llmtool/                 Tool interface, ToolExecuter, MCP client, SkillManager, schema parser
@@ -90,12 +91,13 @@ docs/                    VitePress documentation site
 ### Dependency Flow (strictly top-down)
 
 ```
-cmd/main.go → bot/core, bot/adapter/napcat, bot/adapter/qqofficial, bot/adapter/feishu, bot/adapter/telegram, bot/plugins/*
+cmd/main.go → bot/core, bot/adapter/napcat, bot/adapter/qqofficial, bot/adapter/feishu, bot/adapter/telegram, bot/adapter/discord, bot/plugins/*
 bot/core → common/*, bot/utils
 bot/adapter/napcat → common/adapter, common/bot, common/model/message, common/msgchain
 bot/adapter/qqofficial → common/adapter, common/bot, common/model/message, common/msgchain, external (resty, gorilla/websocket)
 bot/adapter/feishu → common/adapter, common/bot, common/model/message, common/msgchain, external (lark SDK)
 bot/adapter/telegram → common/adapter, common/bot, common/model/message, common/msgchain, external (resty, x/net/proxy)
+bot/adapter/discord → common/adapter, common/bot, common/model/message, common/msgchain, external (discordgo, gorilla/websocket, x/net/proxy)
 bot/plugins/* → common/plugin, common/bot, common/storage, bot/component/*
 bot/component/aichat → bot/component/llmtool
 bot/component/functool → bot/component/llmtool, bot/utils
@@ -187,7 +189,8 @@ Four GitHub Actions workflows in `.github/workflows/`:
 | -------------------------------- | ------------------------------------------ |
 | `openai-go/v3`                   | OpenAI-compatible LLM API client           |
 | `modelcontextprotocol/go-sdk`    | MCP protocol client                        |
-| `gorilla/websocket`              | WebSocket for NapCat / QQ Official adapters |
+| `gorilla/websocket`              | WebSocket for NapCat / QQ Official / Discord adapters |
+| `bwmarrin/discordgo`             | Discord adapter (Gateway WebSocket + REST)            |
 | `go-resty/resty/v2`              | HTTP client                                |
 | `redis/go-redis/v9`              | Redis cache storage backend                |
 | `modernc.org/sqlite`             | Pure-Go SQLite, persistent storage default |

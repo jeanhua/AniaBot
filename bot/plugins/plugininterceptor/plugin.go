@@ -135,7 +135,7 @@ func (p *InterceptorPlugin) blockedInGroup(group, user message.QID) bool {
 // idPrefixes 已知的平台 ID 前缀（QQ 为纯数字无前缀）。
 // 用于解析"群ID:用户ID"规则时确定群段边界：群段带前缀时第一个冒号属于前缀，
 // 边界在第二个冒号处；否则边界在第一个冒号处。
-var idPrefixes = []string{"tg:", "fs:"}
+var idPrefixes = []string{"tg:", "fs:", "dc:"}
 
 // splitGroupUser 解析一行"群ID:用户ID"规则，返回群 ID 与用户 ID。
 func splitGroupUser(line string) (group, user message.QID, ok bool) {

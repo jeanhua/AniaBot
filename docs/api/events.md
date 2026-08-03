@@ -4,7 +4,7 @@
 
 ## 平台作用域
 
-框架支持多平台并存（QQ、飞书、Telegram……），插件收到的事件来自哪个平台，由 `message.Message.Platform` / `BasicNotice.Platform` 标识。
+框架支持多平台并存（QQ、飞书、Telegram、Discord……），插件收到的事件来自哪个平台，由 `message.Message.Platform` / `BasicNotice.Platform` 标识。
 
 - **`Meta.Platforms []string`**：插件声明支持的平台（如 `[]string{"qq"}`、`[]string{"qq","feishu"}`、`[]string{"qq","feishu","telegram"}`），空 = 支持全部平台（默认）。core 按事件来源平台过滤插件，不匹配的插件收不到该平台事件。
 - **`bot.QQ` 断言**：事件回调里的 `bot.Bot` 是来源平台能力包装后的外观，QQ 平台可断言为 `bot.QQ`（见 [Bot 接口](/api/bot#qq-专属能力-bot-qq可选接口)）。
@@ -19,7 +19,7 @@ type PlatformEvent struct {
 ```
 
 ::: tip QQ 专属通知
-戳一戳 / 运气王 / 群荣誉 / 精华 / 群名片 / 禁言 / 群文件上传等 QQ 专属通知在非 QQ 平台**永远不会触发**（飞书 / Telegram 无对应事件源），依赖它们的插件（如日志插件）在这些平台上保持静默。公共通知（群成员进出、表情回应）飞书与 Telegram 会映射触发；消息撤回仅飞书可映射（Telegram 无撤回事件）。
+戳一戳 / 运气王 / 群荣誉 / 精华 / 群名片 / 禁言 / 群文件上传等 QQ 专属通知在非 QQ 平台**永远不会触发**（飞书 / Telegram / Discord 无对应事件源），依赖它们的插件（如日志插件）在这些平台上保持静默。公共通知（群成员进出、表情回应）飞书与 Telegram 会映射触发（Discord 仅映射表情回应，成员进出走平台事件）；消息撤回飞书与 Discord 可映射（Telegram 无撤回事件）。
 :::
 
 ## 消息事件（中间件链）
