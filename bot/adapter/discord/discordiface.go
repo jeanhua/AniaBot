@@ -13,4 +13,5 @@ type discordAPI interface {
 	ChannelMessages(channelID string, limit int, beforeID, afterID, aroundID string, options ...discordgo.RequestOption) ([]*discordgo.Message, error)
 	Channel(channelID string, options ...discordgo.RequestOption) (*discordgo.Channel, error)
 	GuildWithCounts(guildID string, options ...discordgo.RequestOption) (*discordgo.Guild, error)
+	GuildAuditLog(guildID, userID, beforeID string, actionType, limit int, options ...discordgo.RequestOption) (*discordgo.GuildAuditLog, error)
 }

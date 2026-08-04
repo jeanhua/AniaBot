@@ -179,6 +179,12 @@ func (p *LogPlugin) OnFriendAdd(ctx context.Context, bot bot.Bot, n message.Frie
 }
 
 func (p *LogPlugin) OnGroupRecall(ctx context.Context, bot bot.Bot, n message.GroupRecallNotice) error {
+	if n.OperatorId == "" {
+		// 部分平台（如飞书）撤回事件不携带操作者，避免渲染出「被  撤回」
+		p.notice(n.GroupId, n.UserId, "群消息撤回",
+			fmt.Sprintf("%s 的消息（%s）被撤回", n.UserId.String(), n.MessageId.String()))
+		return nil
+	}
 	p.notice(n.GroupId, n.UserId, "群消息撤回",
 		fmt.Sprintf("%s 的消息（%s）被 %s 撤回", n.UserId.String(), n.MessageId.String(), n.OperatorId.String()))
 	return nil

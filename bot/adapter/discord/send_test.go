@@ -26,6 +26,8 @@ type fakeDiscordAPI struct {
 	channelMessages []*discordgo.Message // ChannelMessages 返回
 	channel         *discordgo.Channel
 	guild           *discordgo.Guild
+	auditLog        *discordgo.GuildAuditLog // GuildAuditLog 返回
+	auditLogCalls   int
 }
 
 func (f *fakeDiscordAPI) send(channelID string, data *discordgo.MessageSend) (*discordgo.Message, error) {
@@ -101,6 +103,17 @@ func (f *fakeDiscordAPI) GuildWithCounts(guildID string, options ...discordgo.Re
 		return f.guild, nil
 	}
 	return &discordgo.Guild{ID: guildID, Name: "guild", ApproximateMemberCount: 42}, nil
+}
+
+func (f *fakeDiscordAPI) GuildAuditLog(guildID, userID, beforeID string, actionType, limit int, options ...discordgo.RequestOption) (*discordgo.GuildAuditLog, error) {
+	f.auditLogCalls++
+	if f.err != nil {
+		return nil, f.err
+	}
+	if f.auditLog != nil {
+		return f.auditLog, nil
+	}
+	return &discordgo.GuildAuditLog{}, nil
 }
 
 func itoa(i int) string {
