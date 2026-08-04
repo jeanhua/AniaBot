@@ -332,11 +332,13 @@ func (p *AIChatPlugin) processChatBatch(ctx context.Context, b bot.Bot, id messa
 
 	// 流式回复：平台支持「先发后改」（如飞书卡片/Telegram/Discord 消息 Patch）时逐字展示；
 	// 平台不支持或流式创建失败时自动退化为一次性回复（下方原发送路径）。
-	// 群聊首个增量携带本批全部发言者的 @ 提及（与一次性路径的提及集一致）。
+	// 群聊首条流式消息携带本批全部发言者的 @ 提及（与一次性路径的提及集一致）；
+	// 工具轮边界后续轮次的新消息不再重复 @，避免一次回复多次提醒用户。
 	var streamHandle bot.StreamHandle
 	var streamBuf strings.Builder
 	streaming := false
 	streamUnsupported := false
+	mentionPending := isGroup
 	if p.cfg.Stream.Enable {
 		if ss, ok := b.(bot.StreamSender); ok {
 			chatOpts.OnStreamDelta = func(delta string) {
@@ -351,19 +353,24 @@ func (p *AIChatPlugin) processChatBatch(ctx context.Context, b bot.Bot, id messa
 				// 首个增量：创建流式消息（初始内容即当前已积累文本）
 				if isGroup {
 					builder := msgchain.Builder().Group()
-					seen := make(map[message.QID]struct{}, len(batch))
-					for i := range batch {
-						uid := batch[i].Sender.UserId
-						if uid == message.FromUint64(0) {
-							continue // 跳过子代理结果等合成消息，避免 @ 到无效用户
+					text := aichat.RemoveThinkContent(streamBuf.String())
+					if mentionPending {
+						mentionPending = false
+						seen := make(map[message.QID]struct{}, len(batch))
+						for i := range batch {
+							uid := batch[i].Sender.UserId
+							if uid == message.FromUint64(0) {
+								continue // 跳过子代理结果等合成消息，避免 @ 到无效用户
+							}
+							if _, ok := seen[uid]; ok {
+								continue
+							}
+							seen[uid] = struct{}{}
+							builder.Mention(uid)
 						}
-						if _, ok := seen[uid]; ok {
-							continue
-						}
-						seen[uid] = struct{}{}
-						builder.Mention(uid)
+						text = " " + text
 					}
-					builder.Text(" " + aichat.RemoveThinkContent(streamBuf.String()))
+					builder.Text(text)
 					streamHandle, streaming = ss.SendGroupStream(id, builder.Build())
 				} else {
 					builder := msgchain.Builder().Friend()
@@ -382,6 +389,9 @@ func (p *AIChatPlugin) processChatBatch(ctx context.Context, b bot.Bot, id messa
 					streamHandle.End()
 					streamHandle = nil
 				}
+				// 清空已发出的累积缓冲：新消息只携带新一轮文本，
+				// 否则会以「历史各轮全文 + 新文本」开头，重复发送中间内容
+				streamBuf.Reset()
 			}
 		}
 	}
