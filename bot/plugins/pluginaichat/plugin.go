@@ -551,6 +551,13 @@ func (p *AIChatPlugin) Start(ctx context.Context, cfg *viper.Viper) error {
 	if p.cfg.APIKey == "" {
 		return fmt.Errorf("%w: 未配置 API KEY（plugin.ai_chat_bot.api_key）", aniaerror.ParameterInitializeError)
 	}
+	switch p.cfg.APIFormat {
+	case "", aichat.APIFormatChatCompletions, aichat.APIFormatResponses, aichat.APIFormatAnthropic:
+	default:
+		return fmt.Errorf("%w: 未知 API 格式 %q（plugin.ai_chat_bot.api_format，可选 %s/%s/%s）",
+			aniaerror.ParameterInitializeError, p.cfg.APIFormat,
+			aichat.APIFormatChatCompletions, aichat.APIFormatResponses, aichat.APIFormatAnthropic)
+	}
 	if p.cfg.Prompt == "" {
 		p.Logger.Warn("未配置 Prompt，将使用预设的默认提示词")
 		p.cfg.Prompt = defaultPrompt

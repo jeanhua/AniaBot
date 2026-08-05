@@ -1,6 +1,10 @@
 package aichat
 
-import "github.com/jeanhua/AniaBot/bot/component/llmtool"
+import (
+	"encoding/json"
+
+	"github.com/jeanhua/AniaBot/bot/component/llmtool"
+)
 
 // MessageRole 消息角色
 type MessageRole string
@@ -37,6 +41,10 @@ type Message struct {
 	// ReasoningContent 保存 API 返回的推理过程内容（如 DeepSeek 的 reasoning_content），
 	// 在多轮对话（特别是 tool calling）中需要原样传回，否则 API 会报错。
 	ReasoningContent string `json:"reasoning_content,omitempty"`
+	// ThinkingBlocks 保存 Anthropic 格式的思考块（含 signature / redacted data，
+	// JSON 数组，元素见 thinkingBlock），tool calling 多轮中 Anthropic 要求原样回传；
+	// 仅 anthropic 格式写入，其他格式恒为空。
+	ThinkingBlocks json.RawMessage `json:"thinking_blocks,omitempty"`
 }
 
 // MarshalJSON / UnmarshalJSON 让 ContentPartType 以字符串编码，

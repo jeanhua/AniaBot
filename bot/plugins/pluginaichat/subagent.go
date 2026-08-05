@@ -141,11 +141,11 @@ func (p *AIChatPlugin) runSubagentWithOptions(ctx context.Context, b bot.Bot, id
 	}
 	prompt += p.buildScenePrompt(b, id, isGroup)
 	// 子代理可配置独立模型（留空回退主模型）；团队成员同样经此路径（team.go 复用本函数）
-	saBaseURL, saAPIKey, saModel := p.subagentLLMConfig()
+	saBaseURL, saAPIKey, saModel, saFormat := p.subagentLLMConfig()
 	chat, err := aichat.NewChatBot(
 		saBaseURL, saAPIKey, saModel,
 		prompt, p.cfg.MaxContextTokens, sessionExecutor, nil,
-		aichat.WithClientOptions(p.llmClientOptions()...),
+		aichat.WithClientOptions(append(p.llmClientOptions(), aichat.WithAPIFormat(saFormat))...),
 	)
 	if err != nil {
 		return "", aichat.TokenUsage{}, fmt.Errorf("创建子代理失败: %w", err)

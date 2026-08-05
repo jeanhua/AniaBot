@@ -312,25 +312,38 @@ func TestSubagentLLMConfigFallback(t *testing.T) {
 	p.cfg.Model = "main-model"
 
 	// 全部留空：回退主模型
-	base, key, model := p.subagentLLMConfig()
+	base, key, model, format := p.subagentLLMConfig()
 	if base != "https://main.example.com" || key != "main-key" || model != "main-model" {
 		t.Fatalf("全空应回退主模型, got %q/%q/%q", base, key, model)
+	}
+	if format != "" {
+		t.Fatalf("主格式为空时 format 应为空, got %q", format)
 	}
 
 	// 部分填充：只覆盖模型
 	p.cfg.Subagent.Model = "cheap-model"
-	_, _, model = p.subagentLLMConfig()
+	_, _, model, _ = p.subagentLLMConfig()
 	if model != "cheap-model" {
 		t.Fatalf("model = %q, want cheap-model", model)
 	}
-	if base, _, _ := p.subagentLLMConfig(); base != "https://main.example.com" {
+	if base, _, _, _ := p.subagentLLMConfig(); base != "https://main.example.com" {
 		t.Fatalf("base_url 未填应回退主模型, got %q", base)
+	}
+
+	// 格式回退：主格式 anthropic，子代理留空应继承；显式覆盖后生效
+	p.cfg.APIFormat = "anthropic"
+	if _, _, _, format = p.subagentLLMConfig(); format != "anthropic" {
+		t.Fatalf("format 未填应回退主格式, got %q", format)
+	}
+	p.cfg.Subagent.APIFormat = "responses"
+	if _, _, _, format = p.subagentLLMConfig(); format != "responses" {
+		t.Fatalf("独立 format 未生效, got %q", format)
 	}
 
 	// 全部填充
 	p.cfg.Subagent.BaseURL = "https://sub.example.com"
 	p.cfg.Subagent.APIKey = "sub-key"
-	base, key, model = p.subagentLLMConfig()
+	base, key, model, _ = p.subagentLLMConfig()
 	if base != "https://sub.example.com" || key != "sub-key" || model != "cheap-model" {
 		t.Fatalf("独立配置未生效, got %q/%q/%q", base, key, model)
 	}
@@ -342,14 +355,24 @@ func TestCompressorLLMConfigFallback(t *testing.T) {
 	p.cfg.APIKey = "main-key"
 	p.cfg.Model = "main-model"
 
-	base, key, model := p.compressorLLMConfig()
+	base, key, model, _ := p.compressorLLMConfig()
 	if base != "https://main.example.com" || key != "main-key" || model != "main-model" {
 		t.Fatalf("全空应回退主模型, got %q/%q/%q", base, key, model)
 	}
 
 	p.cfg.Compressor.Model = "summary-model"
-	if _, _, model := p.compressorLLMConfig(); model != "summary-model" {
+	if _, _, model, _ := p.compressorLLMConfig(); model != "summary-model" {
 		t.Fatalf("model = %q, want summary-model", model)
+	}
+
+	// 格式回退与独立覆盖
+	p.cfg.APIFormat = "anthropic"
+	if _, _, _, format := p.compressorLLMConfig(); format != "anthropic" {
+		t.Fatalf("format 未填应回退主格式, got %q", format)
+	}
+	p.cfg.Compressor.APIFormat = "chat_completions"
+	if _, _, _, format := p.compressorLLMConfig(); format != "chat_completions" {
+		t.Fatalf("独立 format 未生效, got %q", format)
 	}
 }
 

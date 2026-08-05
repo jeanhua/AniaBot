@@ -10,6 +10,10 @@
 
 ## [Unreleased]
 
+### 新增
+
+- **AI 对话支持三种 LLM API 格式**：`aichat` 的 `LLMClient` 重构为「重试/备用外壳 + 按格式后端（`llmBackend`）」结构，在原有 OpenAI Chat Completions 之外新增 **OpenAI Responses API** 与 **Anthropic Messages API（Claude）** 两种格式。主模型经 `plugin.ai_chat_bot.api_format`（`chat_completions` 默认 / `responses` / `anthropic`）选择，子代理、压缩器、备用模型各有独立 `api_format`（留空跟随主模型格式）；应用层重试、备用模型切换、流式增量回复、token 用量统计（含缓存命中）三种格式行为一致。Anthropic 格式完整支持深度思考（`thinking.mode` 映射 `budget_tokens`，思考块含签名随历史持久化并在 tool calling 多轮中原样回传），非流式调用内部走流式聚合以绕开 API 的大 max_tokens 流式强制
+
 ## [v4.3.0] - 2026-08-05
 
 ⚠️注意：本次更新带来破坏性数据变更

@@ -31,14 +31,17 @@ func newTestClient(baseURL string, opts ...LLMClientOption) *LLMClient {
 	for _, opt := range opts {
 		opt(&cfg)
 	}
-	sdkClient := func(u, k string) openai.Client {
-		return openai.NewClient(
-			option.WithAPIKey(k),
-			option.WithBaseURL(u),
-			option.WithMaxRetries(0),
-		)
+	sdkBackend := func(u, k, m string) *chatCompletionsBackend {
+		return &chatCompletionsBackend{
+			client: openai.NewClient(
+				option.WithAPIKey(k),
+				option.WithBaseURL(u),
+				option.WithMaxRetries(0),
+			),
+			model: m,
+		}
 	}
-	c := &LLMClient{client: sdkClient(baseURL, "test-key"), model: "main-model"}
+	c := &LLMClient{backend: sdkBackend(baseURL, "test-key", "main-model"), model: "main-model"}
 	if cfg.maxAttempts > 1 {
 		c.retry = &retryConfig{maxAttempts: cfg.maxAttempts, baseDelay: cfg.baseDelay}
 	}
@@ -50,7 +53,7 @@ func newTestClient(baseURL string, opts ...LLMClientOption) *LLMClient {
 		if fbKey == "" {
 			fbKey = "test-key"
 		}
-		c.fallback = &LLMClient{client: sdkClient(fbBase, fbKey), model: cfg.fallbackModel}
+		c.fallback = &LLMClient{backend: sdkBackend(fbBase, fbKey, cfg.fallbackModel), model: cfg.fallbackModel}
 	}
 	return c
 }
@@ -140,7 +143,7 @@ func TestGenerateRetryNetworkError(t *testing.T) {
 	}
 	client := openaiClientWithTransport(srv.URL, tr)
 
-	c := &LLMClient{client: client, model: "main-model",
+	c := &LLMClient{backend: &chatCompletionsBackend{client: client, model: "main-model"}, model: "main-model",
 		retry: &retryConfig{maxAttempts: 3, baseDelay: time.Millisecond}}
 	if _, _, err := genReq(c); err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -226,7 +229,7 @@ func TestGenerateFallbackSuccess(t *testing.T) {
 
 	c := newTestClient(mainSrv.URL,
 		WithRetry(2, time.Millisecond),
-		WithFallback(fbSrv.URL, "fb-key", "fb-model"))
+		WithFallback(fbSrv.URL, "fb-key", "fb-model", ""))
 
 	resp, _, err := genReq(c)
 	if err != nil {
@@ -257,7 +260,7 @@ func TestGenerateFallbackAlsoFails(t *testing.T) {
 
 	c := newTestClient(mainSrv.URL,
 		WithRetry(2, time.Millisecond),
-		WithFallback(fbSrv.URL, "fb-key", "fb-model"))
+		WithFallback(fbSrv.URL, "fb-key", "fb-model", ""))
 
 	_, _, err := genReq(c)
 	if err == nil {

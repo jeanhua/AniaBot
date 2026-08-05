@@ -193,11 +193,20 @@ HTTP 模式下 NapCat 向 `localhost` 上报会失败，请将 NapCat 的 HTTP C
 
 | 配置键 | 默认值 | 说明 |
 | --- | --- | --- |
-| `plugin.ai_chat_bot.base_url` | `https://api.deepseek.com` | 任意 OpenAI 兼容 API 地址 |
+| `plugin.ai_chat_bot.api_format` | `chat_completions` | LLM API 格式：`chat_completions`（OpenAI 兼容，DeepSeek 等）/ `responses`（OpenAI Responses API）/ `anthropic`（Anthropic Messages API，Claude） |
+| `plugin.ai_chat_bot.base_url` | `https://api.deepseek.com` | API 地址；`anthropic` 格式填 `https://api.anthropic.com` |
 | `plugin.ai_chat_bot.api_key` | 空（必填） | API 密钥 |
 | `plugin.ai_chat_bot.model` | `deepseek-chat` | 主模型名称 |
 | `plugin.ai_chat_bot.multimodal` | `false` | 主模型是否支持图片输入 |
 | `plugin.ai_chat_bot.rate_limit` | `2` | 同时处理的 AI 请求并发上限，超出后直接拒绝 |
+
+::: tip 关于 API 格式
+三种格式的对话能力（工具调用、流式回复、token 统计、备用模型切换）行为一致。差异说明：
+
+- `anthropic`：深度思考（`thinking.mode`）映射为 `budget_tokens`，思考块会随历史持久化并在多轮中原样回传；`top_k` 原生支持，但开启思考时 temperature/top_p/top_k 按 API 要求不下发
+- `responses`：`top_k` 不支持会被忽略
+- 子代理（`plugin.ai_chat_bot.subagent.api_format`）、上下文压缩器（`plugin.ai_chat_bot.compressor.api_format`）、备用模型（`plugin.ai_chat_bot.fallback.api_format`）可独立选择格式，留空跟随主模型
+:::
 
 ### 会话管理
 

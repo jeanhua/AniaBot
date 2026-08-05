@@ -3,6 +3,7 @@ module github.com/jeanhua/AniaBot
 go 1.25.0
 
 require (
+	github.com/anthropics/anthropic-sdk-go v1.33.0
 	github.com/bwmarrin/discordgo v0.29.0
 	github.com/go-resty/resty/v2 v2.17.1
 	github.com/go-sql-driver/mysql v1.10.0
@@ -51,6 +52,7 @@ require (
 	go.yaml.in/yaml/v3 v3.0.4 // indirect
 	golang.org/x/crypto v0.49.0 // indirect
 	golang.org/x/oauth2 v0.34.0 // indirect
+	golang.org/x/sync v0.20.0 // indirect
 	golang.org/x/sys v0.44.0 // indirect
 	golang.org/x/text v0.35.0 // indirect
 	gopkg.in/check.v1 v1.0.0-20201130134442-10cb98267c6c // indirect

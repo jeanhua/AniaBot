@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-AniaBot is a plugin-driven multi-platform bot framework built with Go. It connects to platforms via pluggable adapters — QQ through NapCat (WebSocket or HTTP adapter using the OneBot v11 protocol), QQ Official through the QQ Open Platform API v2 (WebSocket gateway + REST OpenAPI, hand-rolled resty/gorilla client), Feishu/Lark through the official oapi-sdk-go (WebSocket long-connection or webhook), Telegram through the Bot API (long polling, hand-rolled resty client), Discord through bwmarrin/discordgo (Gateway WebSocket + REST) — and features an AI chat engine powered by OpenAI-compatible LLM APIs with tool calling, MCP (Model Context Protocol) integration, and a skill system.
+AniaBot is a plugin-driven multi-platform bot framework built with Go. It connects to platforms via pluggable adapters — QQ through NapCat (WebSocket or HTTP adapter using the OneBot v11 protocol), QQ Official through the QQ Open Platform API v2 (WebSocket gateway + REST OpenAPI, hand-rolled resty/gorilla client), Feishu/Lark through the official oapi-sdk-go (WebSocket long-connection or webhook), Telegram through the Bot API (long polling, hand-rolled resty client), Discord through bwmarrin/discordgo (Gateway WebSocket + REST) — and features an AI chat engine supporting three LLM API formats (OpenAI Chat Completions / OpenAI Responses / Anthropic Messages) with tool calling, MCP (Model Context Protocol) integration, and a skill system.
 
 **Multi-platform model**: the framework normalizes every platform to the OneBot v11 segment format (`OB11Segment{Type, Data}`) as its canonical message shape — adapters translate at the boundary (inbound: platform event → segments; outbound: segments → platform API). IDs are platform-prefixed (`qo:<openid>` for QQ Official, `fs:oc_xxx` for Feishu, `tg:<chat_id>:<message_id>` for Telegram messages, `dc:<channel_id>:<message_id>` for Discord messages); QQ legacy numeric IDs carry no prefix and route to the default adapter. Platform-specific capabilities are exposed via optional interfaces (`adapter.QQExt` / plugin-facing `bot.QQ`) — plugins type-assert to probe them, so a plugin written for QQ degrades gracefully on other platforms. Adding a platform = a new adapter package + one blank import in `cmd/main.go`; the core is untouched.
 
@@ -99,7 +99,7 @@ bot/adapter/feishu → common/adapter, common/bot, common/model/message, common/
 bot/adapter/telegram → common/adapter, common/bot, common/model/message, common/msgchain, external (resty, x/net/proxy)
 bot/adapter/discord → common/adapter, common/bot, common/model/message, common/msgchain, external (discordgo, gorilla/websocket, x/net/proxy)
 bot/plugins/* → common/plugin, common/bot, common/storage, bot/component/*
-bot/component/aichat → bot/component/llmtool
+bot/component/aichat → bot/component/llmtool, external (openai-go, anthropic-sdk-go)
 bot/component/functool → bot/component/llmtool, bot/utils
 bot/component/llmtool → external (openai-go, MCP SDK)
 common/* → leaf packages (no upward dependencies)
@@ -135,7 +135,7 @@ Each user session gets a `SessionToolExecutor` with isolated dynamic tools. MCP 
 
 `ChatBot` orchestrates per-session conversations:
 
-- `LLMClient` wraps the OpenAI Go SDK (`openai-go/v3`), supporting reasoning content (DeepSeek-style `reasoning_content`)
+- `LLMClient` is a thin shell around pluggable per-format backends (`llmBackend` interface in `llmbackend.go`): `chat_completions` (OpenAI-compatible, via `openai-go/v3`), `responses` (OpenAI Responses API, same SDK's `responses` package), and `anthropic` (Anthropic Messages API via `anthropics/anthropic-sdk-go`). The shell owns app-level retry and fallback-model switching; each backend owns message conversion, tool defs, streaming accumulation, and usage mapping. Format is selected per client via `WithAPIFormat` (plugin config `api_format` on the main/subagent/compressor/fallback model configs, empty sub-config values inherit the main format). Anthropic extended thinking is supported end-to-end: `thinking.mode` maps to `budget_tokens`, and thinking blocks (with signature / redacted data) are persisted on `Message.ThinkingBlocks` and replayed verbatim across tool-calling turns, as the API requires. DeepSeek-style `reasoning_content` is still extracted on the chat-completions format
 - `MessageBuilder` constructs message arrays with system prompt, skill registry, chat history, tool results
 - `messageWindow` (in `memorywindow.go`) is a token-budget context window, not a fixed-turn slider: it records prompt-token usage and, once that exceeds 80% of `max_context_tokens`, compresses prior history via an LLM summarizer (`MaybeCompress` / `NewContextCompressor`). History is persisted across restarts via an injected `HistoryStore` (namespaced per group/friend) with `Load`/`Append`/`Replace`/`Clear` semantics: plain appends sync **incrementally** (only new messages), compression/truncation rewrites the whole window (`Replace`), `clear` wipes it — all with a background context; `ChatBot.LoadHistory` replays on session creation. On SQL backends (probed via `storage.SQLBackend`, see Storage below) the store is row-level: `ania_chat_session` (one row per session, `msg_count` doubles as the seq allocator) + `ania_chat_message` (one row per message, `(session_id, seq)` PK, no FK), so appends only INSERT new rows; non-SQL backends fall back to a whole-array JSON blob in KV. On replay, remote http(s) image URLs (QQ temp links that expire) are degraded to a text marker, while `data:` URIs (local images) are preserved.
 - **Session cache reclamation** — `pluginaichat` keeps per-session `ChatBot` instances in a `sync.Map` of `chatEntry` (chat + last-active timestamp). A janitor (`chatcache.go`, 1-minute tick) evicts entries idle longer than `plugin.ai_chat_bot.session.max_idle_minutes` (default 120, 0 disables) and enforces an LRU cap of `session.max_sessions` (default 128, 0 disables), so memory no longer grows linearly with lifetime session count. Eviction probes the session lock (sessions mid-response are skipped) and re-checks the pending queue under the lock before `CompareAndDelete`; only the in-memory object is dropped — persisted history reloads on the next message (side effect: tools dynamically loaded via `mcp_load` die with the entry, same as a restart). Only AI-directed messages refresh activity (un-@'d group chatter does not).
@@ -190,7 +190,8 @@ Four GitHub Actions workflows in `.github/workflows/`:
 
 | Dependency                       | Purpose                                    |
 | -------------------------------- | ------------------------------------------ |
-| `openai-go/v3`                   | OpenAI-compatible LLM API client           |
+| `openai-go/v3`                   | OpenAI-compatible LLM API client (Chat Completions + Responses) |
+| `anthropics/anthropic-sdk-go`    | Anthropic Messages API client (Claude)                          |
 | `modelcontextprotocol/go-sdk`    | MCP protocol client                        |
 | `gorilla/websocket`              | WebSocket for NapCat / QQ Official / Discord adapters |
 | `bwmarrin/discordgo`             | Discord adapter (Gateway WebSocket + REST)            |

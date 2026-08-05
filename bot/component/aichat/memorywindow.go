@@ -166,6 +166,8 @@ func (w *messageWindow) estimateTokens() int {
 			total += utf8.RuneCountInString(p.Text)
 		}
 		total += utf8.RuneCountInString(m.ReasoningContent)
+		// Anthropic thinking 块原始 JSON（含签名，回放前也占历史体积）同样计入
+		total += len(m.ThinkingBlocks)
 		for _, tc := range m.ToolCalls {
 			total += utf8.RuneCountInString(tc.Name) + utf8.RuneCountInString(tc.Arguments)
 		}

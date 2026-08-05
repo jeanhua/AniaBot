@@ -47,7 +47,7 @@ bot.AddPlugin(pluginnews.NewNewsPlugin())        // 每日新闻
 
 `pluginaichat` · Order = 1000（最后执行，兜底响应）· 群聊 + 私聊
 
-AniaBot 的核心插件，接入任意 OpenAI 兼容大模型。
+AniaBot 的核心插件，支持三种 LLM API 格式：OpenAI 兼容（Chat Completions，如 DeepSeek）、OpenAI Responses API 与 Anthropic Messages API（Claude），经 `plugin.ai_chat_bot.api_format` 切换。
 
 ### 对话方式
 

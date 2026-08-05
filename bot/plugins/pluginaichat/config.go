@@ -84,6 +84,7 @@ type subagentConfig struct {
 	BaseURL       string `cfg:"base_url" label:"子代理 Base URL" group:"AI 对话 · 子代理" help:"留空使用主模型配置；可填更便宜的模型以降低子任务成本"`
 	APIKey        string `cfg:"api_key" label:"子代理 API Key" type:"password" sensitive:"true" group:"AI 对话 · 子代理" help:"留空使用主模型配置"`
 	Model         string `cfg:"model" label:"子代理模型" group:"AI 对话 · 子代理" help:"留空使用主模型；子代理与 AI 定时任务共用该模型"`
+	APIFormat     string `cfg:"api_format" label:"子代理 API 格式" type:"select" options:"chat_completions,responses,anthropic" group:"AI 对话 · 子代理" help:"留空跟随主模型格式"`
 }
 
 type teamConfig struct {
@@ -101,9 +102,10 @@ type queryLogConfig struct {
 
 // compressorConfig 上下文压缩专用模型配置：留空回退主模型配置。
 type compressorConfig struct {
-	BaseURL string `cfg:"base_url" label:"压缩器 Base URL" group:"AI 对话 · 模型" help:"留空使用主模型配置"`
-	APIKey  string `cfg:"api_key" label:"压缩器 API Key" type:"password" sensitive:"true" group:"AI 对话 · 模型" help:"留空使用主模型配置"`
-	Model   string `cfg:"model" label:"压缩器模型" group:"AI 对话 · 模型" help:"留空使用主模型；建议填更便宜的模型降低历史压缩成本"`
+	BaseURL   string `cfg:"base_url" label:"压缩器 Base URL" group:"AI 对话 · 模型" help:"留空使用主模型配置"`
+	APIKey    string `cfg:"api_key" label:"压缩器 API Key" type:"password" sensitive:"true" group:"AI 对话 · 模型" help:"留空使用主模型配置"`
+	Model     string `cfg:"model" label:"压缩器模型" group:"AI 对话 · 模型" help:"留空使用主模型；建议填更便宜的模型降低历史压缩成本"`
+	APIFormat string `cfg:"api_format" label:"压缩器 API 格式" type:"select" options:"chat_completions,responses,anthropic" group:"AI 对话 · 模型" help:"留空跟随主模型格式"`
 }
 
 // retryConfig 应用层重试配置：429/5xx/网络错误时指数退避重试。
@@ -114,9 +116,10 @@ type retryConfig struct {
 
 // fallbackConfig 备用模型配置：主模型重试耗尽或遇到不可重试错误时自动切换重试一次。
 type fallbackConfig struct {
-	BaseURL string `cfg:"base_url" label:"备用模型 Base URL" group:"AI 对话 · 模型" help:"留空使用主模型配置"`
-	APIKey  string `cfg:"api_key" label:"备用模型 API Key" type:"password" sensitive:"true" group:"AI 对话 · 模型" help:"留空使用主模型配置"`
-	Model   string `cfg:"model" label:"备用模型" group:"AI 对话 · 模型" help:"留空表示不启用备用模型；主模型重试耗尽后自动切换重试一次（仅主对话与上下文压缩）"`
+	BaseURL   string `cfg:"base_url" label:"备用模型 Base URL" group:"AI 对话 · 模型" help:"留空使用主模型配置"`
+	APIKey    string `cfg:"api_key" label:"备用模型 API Key" type:"password" sensitive:"true" group:"AI 对话 · 模型" help:"留空使用主模型配置"`
+	Model     string `cfg:"model" label:"备用模型" group:"AI 对话 · 模型" help:"留空表示不启用备用模型；主模型重试耗尽后自动切换重试一次（仅主对话与上下文压缩）"`
+	APIFormat string `cfg:"api_format" label:"备用模型 API 格式" type:"select" options:"chat_completions,responses,anthropic" group:"AI 对话 · 模型" help:"留空跟随主模型格式"`
 }
 
 // streamConfig 流式回复配置：平台支持「先发后改」时逐字展示回复
@@ -141,9 +144,10 @@ type sessionConfig struct {
 }
 
 type aiChatConfig struct {
-	BaseURL          string `cfg:"plugin.ai_chat_bot.base_url" label:"Base URL" group:"AI 对话 · 模型" help:"兼容 OpenAI 规范的 API 地址" default:"https://api.deepseek.com"`
+	BaseURL          string `cfg:"plugin.ai_chat_bot.base_url" label:"Base URL" group:"AI 对话 · 模型" help:"API 地址；anthropic 格式填 https://api.anthropic.com，其余填 OpenAI 兼容地址" default:"https://api.deepseek.com"`
 	APIKey           string `cfg:"plugin.ai_chat_bot.api_key" label:"API Key" type:"password" sensitive:"true" group:"AI 对话 · 模型"`
 	Model            string `cfg:"plugin.ai_chat_bot.model" label:"模型" group:"AI 对话 · 模型" default:"deepseek-chat"`
+	APIFormat        string `cfg:"plugin.ai_chat_bot.api_format" label:"API 格式" type:"select" options:"chat_completions,responses,anthropic" group:"AI 对话 · 模型" help:"chat_completions：OpenAI 兼容（DeepSeek 等，默认）；responses：OpenAI Responses API；anthropic：Anthropic Messages API（Claude）" default:"chat_completions"`
 	Multimodal       bool   `cfg:"plugin.ai_chat_bot.multimodal" label:"多模态" group:"AI 对话 · 模型" help:"主模型是否支持图片输入" default:"false"`
 	RateLimit        int    `cfg:"plugin.ai_chat_bot.rate_limit" label:"并发限制" group:"AI 对话 · 模型" help:"同时处理的 AI 请求数上限，超出后直接拒绝" default:"2"`
 	MaxContextTokens int    `cfg:"plugin.ai_chat_bot.max_context_tokens" label:"上下文 Token 上限" group:"AI 对话 · 模型" default:"128000"`

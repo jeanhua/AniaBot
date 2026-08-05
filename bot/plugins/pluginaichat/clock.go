@@ -674,11 +674,11 @@ func (m *clockManager) executeTask(ctx context.Context, task *ClockTask, rec *ta
 		defer subagents.cancelPending()
 	}
 	// 定时任务与子代理共用独立模型配置（留空回退主模型）
-	saBaseURL, saAPIKey, saModel := p.subagentLLMConfig()
+	saBaseURL, saAPIKey, saModel, saFormat := p.subagentLLMConfig()
 	chat, err := aichat.NewChatBot(
 		saBaseURL, saAPIKey, saModel,
 		prompt, p.cfg.MaxContextTokens, sessionExecutor, nil,
-		aichat.WithClientOptions(p.llmClientOptions()...),
+		aichat.WithClientOptions(append(p.llmClientOptions(), aichat.WithAPIFormat(saFormat))...),
 	)
 	if err != nil {
 		return "", aichat.TokenUsage{}, fmt.Errorf("创建对话失败: %w", err)

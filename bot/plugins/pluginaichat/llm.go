@@ -122,14 +122,14 @@ func (p *AIChatPlugin) llmClientOptions() []aichat.LLMClientOption {
 		opts = append(opts, aichat.WithRetry(p.cfg.Retry.MaxAttempts, baseDelay))
 	}
 	if p.cfg.Fallback.Model != "" {
-		opts = append(opts, aichat.WithFallback(p.cfg.Fallback.BaseURL, p.cfg.Fallback.APIKey, p.cfg.Fallback.Model))
+		opts = append(opts, aichat.WithFallback(p.cfg.Fallback.BaseURL, p.cfg.Fallback.APIKey, p.cfg.Fallback.Model, p.cfg.Fallback.APIFormat))
 	}
 	return opts
 }
 
 // subagentLLMConfig 子代理模型配置：留空字段回退主模型配置。
-func (p *AIChatPlugin) subagentLLMConfig() (baseURL, apiKey, model string) {
-	baseURL, apiKey, model = p.cfg.BaseURL, p.cfg.APIKey, p.cfg.Model
+func (p *AIChatPlugin) subagentLLMConfig() (baseURL, apiKey, model, format string) {
+	baseURL, apiKey, model, format = p.cfg.BaseURL, p.cfg.APIKey, p.cfg.Model, p.cfg.APIFormat
 	if p.cfg.Subagent.BaseURL != "" {
 		baseURL = p.cfg.Subagent.BaseURL
 	}
@@ -139,12 +139,15 @@ func (p *AIChatPlugin) subagentLLMConfig() (baseURL, apiKey, model string) {
 	if p.cfg.Subagent.Model != "" {
 		model = p.cfg.Subagent.Model
 	}
-	return baseURL, apiKey, model
+	if p.cfg.Subagent.APIFormat != "" {
+		format = p.cfg.Subagent.APIFormat
+	}
+	return baseURL, apiKey, model, format
 }
 
 // compressorLLMConfig 压缩器模型配置：留空字段回退主模型配置。
-func (p *AIChatPlugin) compressorLLMConfig() (baseURL, apiKey, model string) {
-	baseURL, apiKey, model = p.cfg.BaseURL, p.cfg.APIKey, p.cfg.Model
+func (p *AIChatPlugin) compressorLLMConfig() (baseURL, apiKey, model, format string) {
+	baseURL, apiKey, model, format = p.cfg.BaseURL, p.cfg.APIKey, p.cfg.Model, p.cfg.APIFormat
 	if p.cfg.Compressor.BaseURL != "" {
 		baseURL = p.cfg.Compressor.BaseURL
 	}
@@ -154,7 +157,10 @@ func (p *AIChatPlugin) compressorLLMConfig() (baseURL, apiKey, model string) {
 	if p.cfg.Compressor.Model != "" {
 		model = p.cfg.Compressor.Model
 	}
-	return baseURL, apiKey, model
+	if p.cfg.Compressor.APIFormat != "" {
+		format = p.cfg.Compressor.APIFormat
+	}
+	return baseURL, apiKey, model, format
 }
 
 // buildCompressorClient 构造上下文压缩专用 LLM 客户端；配置三字段全空时
@@ -163,8 +169,9 @@ func (p *AIChatPlugin) buildCompressorClient() *aichat.LLMClient {
 	if p.cfg.Compressor.BaseURL == "" && p.cfg.Compressor.APIKey == "" && p.cfg.Compressor.Model == "" {
 		return nil
 	}
-	baseURL, apiKey, model := p.compressorLLMConfig()
-	client, err := aichat.NewLLMClient(baseURL, apiKey, model, p.llmClientOptions()...)
+	baseURL, apiKey, model, format := p.compressorLLMConfig()
+	client, err := aichat.NewLLMClient(baseURL, apiKey, model,
+		append(p.llmClientOptions(), aichat.WithAPIFormat(format))...)
 	if err != nil {
 		p.Logger.Error("创建压缩器 LLM 客户端失败，压缩将复用主对话模型", "error", err.Error())
 		return nil
@@ -216,7 +223,7 @@ func (p *AIChatPlugin) getChat(b bot.Bot, id message.QID, isGroup bool, prompt s
 			p.cfg.MaxContextTokens,
 			sessionExecutor,
 			historyStore,
-			aichat.WithClientOptions(p.llmClientOptions()...),
+			aichat.WithClientOptions(append(p.llmClientOptions(), aichat.WithAPIFormat(p.cfg.APIFormat))...),
 			aichat.WithCompressorClient(p.buildCompressorClient()),
 		)
 		if err != nil {
