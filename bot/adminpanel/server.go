@@ -219,6 +219,7 @@ func (s *Server) routes() {
 	s.mux.Handle("PUT /api/password", s.requireAuth(http.HandlerFunc(s.handleChangePassword)))
 	s.mux.Handle("GET /api/config/schema", s.requireAuth(http.HandlerFunc(s.handleConfigSchema)))
 	s.mux.Handle("GET /api/config", s.requireAuth(http.HandlerFunc(s.handleConfigGet)))
+	s.mux.Handle("GET /api/config/export", s.requireAuth(http.HandlerFunc(s.handleConfigExport)))
 	s.mux.Handle("PUT /api/config", s.requireAuth(http.HandlerFunc(s.handleConfigPut)))
 	s.mux.Handle("GET /api/config/presets", s.requireAuth(http.HandlerFunc(s.handlePresetList)))
 	s.mux.Handle("POST /api/config/presets", s.requireAuth(http.HandlerFunc(s.handlePresetSave)))
@@ -443,6 +444,22 @@ func (s *Server) handleConfigGet(w http.ResponseWriter, _ *http.Request) {
 		}
 	}
 	writeJSON(w, http.StatusOK, all)
+}
+
+// handleConfigExport 导出完整配置为 JSON 文件下载。
+// 与 GET /api/config 不同，敏感字段（密钥/Token 等）不掩码、保留真实值，
+// 便于备份与迁移；接口需要登录，响应标记 no-store 并携带下载文件名。
+func (s *Server) handleConfigExport(w http.ResponseWriter, _ *http.Request) {
+	data, err := json.MarshalIndent(s.opt.Config.All(), "", "  ")
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "导出配置失败")
+		return
+	}
+	filename := fmt.Sprintf("aniabot-config-%s.json", time.Now().Format("20060102-150405"))
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q", filename))
+	w.Header().Set("Cache-Control", "no-store")
+	_, _ = w.Write(data)
 }
 
 func (s *Server) handleConfigPut(w http.ResponseWriter, r *http.Request) {

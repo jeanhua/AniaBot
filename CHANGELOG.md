@@ -10,10 +10,13 @@
 
 ## [Unreleased]
 
+⚠️注意：本次更新带来破坏性数据变更
+
 ### 新增
 
 - **持久层关系表能力（可选探测）**：`common/storage` 新增 `SQLPersistentStorage` 可选接口（`SQLDB()`/`SQLDialect()`）、`SQLBackend()` 探测函数与 `TableDDL`/`EnsureTables()` 幂等建表（SQLite/MySQL 双方言 DDL）。框架内置 sqlite/mysql 持久后端已实现该接口（Clone 出的插件命名空间子存储共享同一连接，探测同样成功）；插件/组件按 `bot.QQ` 同款类型断言探测，探测或建表失败只记日志并自动回退纯 KV 方案，功能不缺失。插件自建关系表统一 `ania_` 前缀
 - **AI 会话闲置回收**：`pluginaichat` 的会话缓存此前只增不减，ChatBot 实例永久驻留内存，占用随活跃会话数线性增长。现会话条目携带最近活跃时间，后台每分钟按 `plugin.ai_chat_bot.session.max_idle_minutes`（默认 120 分钟，0 禁用）闲置淘汰 + `plugin.ai_chat_bot.session.max_sessions`（默认 128 个，0 不限）LRU 容量淘汰；正在响应（持有会话锁）或有排队消息的会话跳过。淘汰只释放内存对象，历史已持久化，下次发言自动重建并回放；已知副作用：会话内 `mcp_load` 动态加载的工具随淘汰失效（等同重启，配置项说明已注明）
+- **面板配置导出 JSON**：配置管理页新增「导出 JSON」按钮，将完整配置（含密钥等敏感字段的真实值、MCP / Prompt 覆盖）导出为 JSON 文件下载，便于备份与迁移；接口 `GET /api/config/export` 需要登录，响应标记 `no-store` 并携带带时间戳的文件名
 
 ### 变更
 

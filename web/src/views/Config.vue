@@ -43,9 +43,18 @@
 
       <div class="flex items-center justify-between">
         <p class="text-sm text-slate-500">配置存储在数据库中，修改保存后重启生效。</p>
-        <button class="px-3 py-1.5 text-sm rounded-lg border border-slate-300 text-slate-600 hover:bg-slate-50 transition-colors" @click="rawMode = !rawMode">
-          {{ rawMode ? '表单模式' : '高级模式 (JSON)' }}
-        </button>
+        <div class="flex items-center gap-2">
+          <button
+            class="px-3 py-1.5 text-sm rounded-lg border border-slate-300 text-slate-600 hover:bg-slate-50 transition-colors"
+            title="导出完整配置为 JSON 文件（含密钥等敏感字段，请妥善保管）"
+            @click="onExportConfig"
+          >
+            导出 JSON
+          </button>
+          <button class="px-3 py-1.5 text-sm rounded-lg border border-slate-300 text-slate-600 hover:bg-slate-50 transition-colors" @click="rawMode = !rawMode">
+            {{ rawMode ? '表单模式' : '高级模式 (JSON)' }}
+          </button>
+        </div>
       </div>
 
       <!-- 配置预设 -->
@@ -404,6 +413,17 @@ async function onSaveRaw() {
     rawError.value = e.message
   } finally {
     saving.value = false
+  }
+}
+
+// ---- 导出 ----
+
+async function onExportConfig() {
+  if (!confirm('导出的 JSON 包含密钥等敏感信息，请妥善保管。继续导出？')) return
+  try {
+    await api.exportConfig()
+  } catch (e) {
+    alert(e.message)
   }
 }
 
