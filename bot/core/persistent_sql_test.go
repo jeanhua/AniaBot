@@ -211,6 +211,42 @@ func TestSqlitePersistent_Conformance(t *testing.T) {
 	testPersistentConformance(t, makeSqliteStore(t))
 }
 
+// SQLite 后端及其 Clone 子存储均可被 storage.SQLBackend 探测，
+// 探测到的连接可直接建表并读写（关系表能力的基础）。
+func TestSqlitePersistent_SQLBackendProbe(t *testing.T) {
+	ctx := context.Background()
+	root := makeSqliteStore(t)
+
+	id := 0
+	for name, store := range map[string]storage.PersistentStorage{
+		"root":  root,
+		"clone": root.Clone("sub"),
+	} {
+		id++
+		db, dialect, ok := storage.SQLBackend(store)
+		if !ok {
+			t.Fatalf("%s: SQLBackend 探测失败", name)
+		}
+		if dialect != storage.SQLDialectSQLite {
+			t.Fatalf("%s: dialect = %q want sqlite", name, dialect)
+		}
+		ddl := storage.TableDDL{
+			Name:   "ania_probe_test",
+			SQLite: []string{`CREATE TABLE IF NOT EXISTS ania_probe_test (id INTEGER PRIMARY KEY, val TEXT NOT NULL)`},
+		}
+		if err := storage.EnsureTables(ctx, db, dialect, ddl); err != nil {
+			t.Fatalf("%s: EnsureTables: %v", name, err)
+		}
+		if _, err := db.ExecContext(ctx, `INSERT INTO ania_probe_test (id, val) VALUES (?, 'x')`, id); err != nil {
+			t.Fatalf("%s: insert: %v", name, err)
+		}
+		var val string
+		if err := db.QueryRowContext(ctx, `SELECT val FROM ania_probe_test WHERE id = ?`, id).Scan(&val); err != nil || val != "x" {
+			t.Fatalf("%s: select = %q,%v", name, val, err)
+		}
+	}
+}
+
 func TestMysqlPersistent_Conformance(t *testing.T) {
 	testPersistentConformance(t, makeMysqlStore(t))
 }

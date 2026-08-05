@@ -92,6 +92,18 @@ func (s *aniaSqlPersistentStorage) Clone(prefix string) storage.PersistentStorag
 	}
 }
 
+// SQLDB 实现 storage.SQLPersistentStorage：暴露共享连接，供插件/组件
+// 经 storage.SQLBackend 探测后使用关系表能力（Clone 的子存储同样生效）。
+func (s *aniaSqlPersistentStorage) SQLDB() *sql.DB {
+	return s.db
+}
+
+// SQLDialect 实现 storage.SQLPersistentStorage。dialect.name 取值与
+// storage.SQLDialect 常量一致（sqlite / mysql）。
+func (s *aniaSqlPersistentStorage) SQLDialect() storage.SQLDialect {
+	return storage.SQLDialect(s.dialect.name)
+}
+
 func (s *aniaSqlPersistentStorage) GetString(ctx context.Context, key string) (string, bool) {
 	var val string
 	err := s.db.QueryRowContext(ctx,

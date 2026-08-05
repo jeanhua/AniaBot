@@ -52,7 +52,7 @@ func (w *messageWindow) load(ctx context.Context) {
 	}
 	// 回放的历史中的图片 URL（多为 QQ 临时签名链接）重启后大概率失效，
 	// 若原样发给 LLM 会因拉取失败导致整轮对话报错。这里把图片片段降级为
-	// 文本标记。新落盘的数据在 persist 时已剔除图片（见 degradeImagesForPersist），
+	// 文本标记。新落盘的数据在写入时已剔除图片（见 degradeImagesForPersist），
 	// 此处理主要兼容旧版落盘数据中仍保留的图片片段。
 	w.messages = degradeImagesToText(msgs)
 }
@@ -95,19 +95,29 @@ func isRemoteImageURL(s string) bool {
 	return strings.HasPrefix(lower, "http://") || strings.HasPrefix(lower, "https://")
 }
 
-// persist 将当前历史落盘；store 未注入时为空操作。
+// persistAppend 将新追加的消息增量落盘；store 未注入或增量为空时为空操作。
 // 落盘副本中的图片片段一律降级为文本标记（degradeImagesForPersist）：
 // 远程 http(s) 链接重启后失效无保留价值；data URI（base64 内联图片）体积
-// 可达 MB 级，若随历史整体反复全量重写会撑大单 key 并造成严重写放大
-// （MySQL MEDIUMTEXT 超限还会导致落盘静默失败、历史丢失）。
-// 仅影响落盘数据，内存中当前会话的消息仍保留图片供本轮对话使用。
+// 可达 MB 级，原样落盘会撑大单行体积。仅影响落盘数据，内存中当前会话的
+// 消息仍保留图片供本轮对话使用。
 // 使用独立的后台 context，避免请求被 /stop 取消时丢失刚写入的历史。
-func (w *messageWindow) persist() {
+func (w *messageWindow) persistAppend(msgs []Message) {
+	if w.store == nil || len(msgs) == 0 {
+		return
+	}
+	if err := w.store.Append(context.Background(), degradeImagesForPersist(msgs)); err != nil {
+		// 落盘失败仅记录，不影响内存中的对话
+		_ = err
+	}
+}
+
+// persistReplace 将当前历史全量覆盖落盘（上下文压缩/截断重排后调用）；
+// store 未注入时为空操作。图片降级语义同 persistAppend。
+func (w *messageWindow) persistReplace() {
 	if w.store == nil {
 		return
 	}
-	ctx := context.Background()
-	if err := w.store.Save(ctx, degradeImagesForPersist(w.messages)); err != nil {
+	if err := w.store.Replace(context.Background(), degradeImagesForPersist(w.messages)); err != nil {
 		// 落盘失败仅记录，不影响内存中的对话
 		_ = err
 	}
@@ -144,7 +154,7 @@ func degradeImagesForPersist(msgs []Message) []Message {
 
 func (w *messageWindow) append(msgs ...Message) {
 	w.messages = append(w.messages, msgs...)
-	w.persist()
+	w.persistAppend(msgs)
 }
 
 func (w *messageWindow) history() []Message {
@@ -228,7 +238,7 @@ func (w *messageWindow) MaybeCompress(ctx context.Context) error {
 	w.lastPromptTokens = 0
 	w.compressUsage = compressUsage
 	// 压缩后历史发生改变，需落盘覆盖旧记录
-	w.persist()
+	w.persistReplace()
 	return nil
 }
 
@@ -257,7 +267,7 @@ func (w *messageWindow) truncateOldestHalf() {
 	}
 	w.messages = w.messages[start:]
 	w.lastPromptTokens = 0
-	w.persist()
+	w.persistReplace()
 }
 
 // ExtractMessageText 提取消息中的纯文本内容

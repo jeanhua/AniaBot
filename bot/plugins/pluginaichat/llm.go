@@ -174,8 +174,13 @@ func (p *AIChatPlugin) buildCompressorClient() *aichat.LLMClient {
 
 func (p *AIChatPlugin) getChat(b bot.Bot, id message.QID, isGroup bool, prompt string) *aichat.ChatBot {
 	key := sessionKey(id, isGroup)
-	chat, ok := p.chats.Load(key)
-	if !ok {
+	if v, ok := p.chats.Load(key); ok {
+		e := v.(*chatEntry)
+		e.lastActive.Store(time.Now().Unix())
+		return e.chat
+	}
+	// 会话未驻留（首次发言或被淘汰后）：重新创建并从持久层回放历史
+	{
 		// 每个会话创建独立的 SessionToolExecutor，动态加载的工具互不影响
 		sessionExecutor := p.toolExecutor.NewSessionExecutor()
 		p.registerScopedTools(sessionExecutor, id, isGroup)
@@ -194,13 +199,14 @@ func (p *AIChatPlugin) getChat(b bot.Bot, id message.QID, isGroup bool, prompt s
 		}
 		// 在 system prompt 末尾注入当前对话场景（群聊/私聊、群信息、消息 id 前缀含义）
 		prompt += p.buildScenePrompt(b, id, isGroup)
-		// 每个会话独立的历史持久化存储；g:/f: 前缀避免群聊与好友 id 相同导致历史串扰
+		// 每个会话独立的历史持久化存储；g:/f: 前缀避免群聊与好友 id 相同导致历史串扰。
+		// SQL 后端走行级存储（ania_chat_session/ania_chat_message），否则回退 KV 整段 JSON
 		var historyStore aichat.HistoryStore
-		if p.PersistentStorage != nil {
-			histKey := "chat:" + key
-			// 旧版历史键不带 g:/f: 前缀，首次访问时迁移到新键
-			migrateLegacyHistory(p.PersistentStorage, "chat:"+id.String(), histKey)
-			historyStore = newPersistentHistoryStore(p.PersistentStorage, histKey, p.Logger)
+		switch {
+		case p.historyDB != nil:
+			historyStore = newSQLHistoryStore(p.historyDB, key, p.Logger)
+		case p.PersistentStorage != nil:
+			historyStore = newPersistentHistoryStore(p.PersistentStorage, "chat:"+key, p.Logger)
 		}
 		c, err := aichat.NewChatBot(
 			p.cfg.BaseURL,
@@ -224,8 +230,7 @@ func (p *AIChatPlugin) getChat(b bot.Bot, id message.QID, isGroup bool, prompt s
 		}
 		// 回放持久化的历史，使对话跨重启延续
 		c.LoadHistory(context.Background())
-		p.chats.Store(key, c)
+		p.chats.Store(key, newChatEntry(c, id, isGroup))
 		return c
 	}
-	return chat.(*aichat.ChatBot)
 }

@@ -106,41 +106,6 @@ func TestUpdate(t *testing.T) {
 	t.Fatalf("entry %s not found after update", e.ID)
 }
 
-func TestMigrateLegacyEntries(t *testing.T) {
-	store := newFakeStore()
-	// 模拟旧版数据：entries 键存整体数组，ID 为序号 base36
-	legacy := []Entry{
-		{ID: "2", TaskID: "b", Status: StatusSuccess},
-		{ID: "1", TaskID: "a", Status: StatusError},
-	}
-	store.Set(context.Background(), "entries", legacy)
-	store.SetString(context.Background(), "seq", "2")
-
-	l := New(store, 10, nil)
-
-	if store.Has(context.Background(), "entries") {
-		t.Fatal("迁移后旧 entries 键应被删除")
-	}
-	recent := l.Recent(0)
-	if len(recent) != 2 || recent[0].TaskID != "b" || recent[1].TaskID != "a" {
-		t.Fatalf("迁移后数据异常: %+v", recent)
-	}
-
-	// 序号应延续，新记录不与旧记录冲突
-	e := l.Record(Entry{TaskID: "c", Status: StatusSuccess})
-	if e.ID == "1" || e.ID == "2" {
-		t.Fatalf("迁移后 ID 冲突: %q", e.ID)
-	}
-
-	// Update 应能命中迁移过来的记录
-	l.Update("1", func(en *Entry) { en.Status = StatusSuccess })
-	for _, en := range l.Recent(0) {
-		if en.ID == "1" && en.Status != StatusSuccess {
-			t.Fatalf("迁移记录的 Update 未生效: %+v", en)
-		}
-	}
-}
-
 func TestQueryBeforeCursor(t *testing.T) {
 	l := New(newFakeStore(), 10, nil)
 	for _, title := range []string{"a", "b", "c", "d", "e"} {

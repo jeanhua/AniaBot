@@ -13,8 +13,9 @@ import (
 
 // fakeHistoryStore 用于测试的内存历史存储，模拟持久化的读写语义。
 type fakeHistoryStore struct {
-	saved   []Message
-	cleared bool
+	saved    []Message
+	cleared  bool
+	replaced int // Replace 调用次数（压缩/截断断言用）
 }
 
 func (f *fakeHistoryStore) Load(_ context.Context) ([]Message, error) {
@@ -27,9 +28,15 @@ func (f *fakeHistoryStore) Load(_ context.Context) ([]Message, error) {
 	return out, nil
 }
 
-func (f *fakeHistoryStore) Save(_ context.Context, messages []Message) error {
+func (f *fakeHistoryStore) Append(_ context.Context, messages []Message) error {
+	f.saved = append(f.saved, messages...)
+	return nil
+}
+
+func (f *fakeHistoryStore) Replace(_ context.Context, messages []Message) error {
 	f.saved = make([]Message, len(messages))
 	copy(f.saved, messages)
+	f.replaced++
 	return nil
 }
 
@@ -91,6 +98,27 @@ func TestMessageWindowPersistAndLoad(t *testing.T) {
 	// 回放后图片片段应为落盘时的带哈希文本标记
 	if len(got.Parts) != 2 || got.Parts[1].Type != ContentPartText || got.Parts[1].Text != wantMark {
 		t.Fatalf("回放后图片应为文本标记: %+v", got.Parts)
+	}
+}
+
+// TestMessageWindowAppendIsIncremental 常规对话的落盘应为增量追加：
+// 两次 append 后存储内容为两次之和，且第二次 append 不影响已存的首条消息
+// （行级存储下 Append 只插入新行，不重写历史）。
+func TestMessageWindowAppendIsIncremental(t *testing.T) {
+	store := &fakeHistoryStore{}
+	w := newMessageWindow(1000, nil, nil, store)
+
+	w.append(TextMessage(RoleUser, "第一条"))
+	w.append(TextMessage(RoleAssistant, "第二条"))
+
+	if store.replaced != 0 {
+		t.Fatalf("常规 append 不应触发 Replace, got %d", store.replaced)
+	}
+	if len(store.saved) != 2 {
+		t.Fatalf("存储消息数 = %d, want 2", len(store.saved))
+	}
+	if store.saved[0].Parts[0].Text != "第一条" || store.saved[1].Parts[0].Text != "第二条" {
+		t.Fatalf("增量追加内容不符: %+v", store.saved)
 	}
 }
 
@@ -271,9 +299,12 @@ func TestMaybeCompressFailureDegradesToTruncation(t *testing.T) {
 	if last.Parts[0].Text != "消息7" {
 		t.Fatalf("应保留最新消息，got %q", last.Parts[0].Text)
 	}
-	// 截断后应同步落盘
+	// 截断后应同步落盘（Replace 全量覆盖）
 	if len(store.saved) != 4 {
 		t.Fatalf("降级截断后落盘长度 = %d, want 4", len(store.saved))
+	}
+	if store.replaced != 1 {
+		t.Fatalf("降级截断应走一次 Replace, got %d", store.replaced)
 	}
 }
 

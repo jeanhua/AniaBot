@@ -133,6 +133,26 @@ pf.Score += 10
 profiles.Set(ctx, msg.Sender.UserId.String(), pf)
 ```
 
+### 模式四：关系表行级存储（SQL 后端，带回退）
+
+数据量大、需要按条件过滤或增量追加时（如日志、逐条消息），可探测可选的 SQL 能力，自建关系表；探测失败回退纯 KV，功能不缺失：
+
+```go
+db, dialect, ok := storage.SQLBackend(p.PersistentStorage)
+if ok {
+    err := storage.EnsureTables(ctx, db, dialect, storage.TableDDL{
+        Name:   "ania_myplugin_log",
+        SQLite: []string{`CREATE TABLE IF NOT EXISTS ania_myplugin_log (seq INTEGER NOT NULL PRIMARY KEY, content TEXT NOT NULL)`},
+        MySQL:  []string{`CREATE TABLE IF NOT EXISTS ania_myplugin_log (seq BIGINT NOT NULL PRIMARY KEY, content MEDIUMTEXT NOT NULL) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`},
+    })
+    if err != nil {
+        ok = false // 建表失败同样回退，只记日志不阻断启动
+    }
+}
+```
+
+约定：表名统一 `ania_` 前缀；MySQL 字符串键用 `VARCHAR(255) COLLATE utf8mb4_bin`、大载荷用 `MEDIUMTEXT`。框架内的对话历史（`ania_chat_session` + `ania_chat_message`）、长期记忆（`ania_memory`）、Query/任务日志（`ania_query_log` / `ania_task_log`）都是这一模式的参考实现。详见 [API · 存储接口 · 关系表能力](/api/storage#关系表能力-可选)。
+
 ## 错误处理约定
 
 所有方法返回 `(value, bool)` 或 `bool` —— 内部错误已记录日志，**不返回 error**。调用方只需检查布尔值：

@@ -1,18 +1,15 @@
 // Package querylog 提供 AI 查询（Query）执行日志的持久化记录能力。
 //
 // 一次 Query 指从用户触发 AI 回复（群里 @ 机器人或私聊）到 AI 最终响应的完整过程。
-// 与 tasklog（定时任务执行日志）结构类似：每条日志独立占用一个 KV 记录
-// （key 为 e:<序号>），写入与单条更新均为 O(1)，避免整体数组读写的放大；
-// 按容量上限滚动淘汰最旧记录。命名空间由调用方在注入时隔离，本组件不再 Clone。
-//
-// 早期版本曾将全部日志打包为单个 JSON 数组存于 entries 键，New 时会自动迁移
-// 为逐条记录并删除旧键。
+// 存储为双后端结构：SQL 后端下每条日志一行（ania_query_log 表，过滤条件下推
+// WHERE、容量淘汰走范围删除）；非 SQL 后端回退为逐条 KV 记录（key 为 e:<序号>，
+// 写入与单条更新均为 O(1)）。日志 ID 为自增序号的 base36，两种后端一致，
+// 面板游标分页语义不变。命名空间由调用方在注入时隔离（KV 后端），本组件不再 Clone。
 package querylog
 
 import (
 	"context"
 	"log/slog"
-	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -75,12 +72,7 @@ type Entry struct {
 	Error            string           `json:"error,omitempty"`
 }
 
-const (
-	entryKeyPrefix   = "e:"      // 逐条日志的键前缀：e:<序号>
-	seqKey           = "seq"     // 自增序号（十进制）
-	legacyEntriesKey = "entries" // 旧版整体 JSON 数组键，仅用于迁移
-	defaultMax       = 200
-)
+const defaultMax = 200
 
 // Truncate 按符文数截断字符串，超出时追加省略标记。max<=0 时不截断。
 func Truncate(s string, max int) string {
@@ -91,17 +83,33 @@ func Truncate(s string, max int) string {
 	return string(runes[:max]) + "…"
 }
 
-// entryKey 由序号生成日志记录键。
-func entryKey(seq uint64) string {
-	return entryKeyPrefix + strconv.FormatUint(seq, 10)
+// backend 日志存储后端。调用方（Logger）持有 mu 并保证写路径串行，
+// 后端实现无需额外加锁。错误内部记录日志（后端持有 logger）。
+type backend interface {
+	// maxSeq 返回已分配的最大序号（启动初始化计数器用）；无记录时返回 0。
+	maxSeq() uint64
+	// insert 追加一条日志。
+	insert(seq uint64, e Entry)
+	// load 按序号读取一条日志（Update 定位用）。
+	load(seq uint64) (Entry, bool)
+	// overwrite 按序号覆盖一条日志（Update 落盘用）。
+	overwrite(seq uint64, e Entry)
+	// evict 淘汰旧记录，仅保留序号最大的 maxEntries 条；maxSeq 为当前最大序号。
+	evict(maxSeq uint64, maxEntries int)
+	// recent 返回最近 limit 条日志（新在前）；limit<=0 时返回全部。
+	recent(limit int) []Entry
+	// query 按条件过滤日志（新在前），beforeSeq>0 时仅返回序号更小的记录，
+	// 最多 limit 条（limit<=0 不限）。f.match 为最终判定。
+	query(f Filter, beforeSeq uint64, limit int) []Entry
 }
 
 // Logger 持久化 Query 日志记录器。
 //
-// 内部用互斥串行化 Record/Update，避免并发写入互相覆盖；读取（Recent/Query）
-// 每次直接从存储加载最新快照，不持有内存缓存，保证与落盘状态一致。
+// 内部用互斥串行化 Record/Update；读取（Recent/Query）每次直接从存储加载
+// 最新快照，不持有内存缓存，保证与落盘状态一致。SQL 后端与非 SQL 后端
+// （KV）行为一致，ID 均为自增序号的 base36。
 type Logger struct {
-	store      storage.PersistentStorage
+	backend    backend
 	maxEntries int
 	logger     *slog.Logger
 	mu         sync.Mutex
@@ -109,58 +117,27 @@ type Logger struct {
 }
 
 // New 创建日志记录器。store 应为已隔离好命名空间的子存储；maxEntries<=0 时取默认值。
+// SQL 后端（storage.SQLBackend 探测成功且建表成功）走 ania_query_log 行级存储，
+// 否则回退逐条 KV 记录。
 func New(store storage.PersistentStorage, maxEntries int, logger *slog.Logger) *Logger {
 	if maxEntries <= 0 {
 		maxEntries = defaultMax
 	}
-	l := &Logger{store: store, maxEntries: maxEntries, logger: logger}
+	l := &Logger{maxEntries: maxEntries, logger: logger}
 	if l.logger == nil {
 		l.logger = slog.Default()
 	}
-	l.seq = l.loadSeq()
-	l.migrateLegacy()
+	var b backend = newKVBackend(store, l.logger)
+	if db, dialect, ok := storage.SQLBackend(store); ok {
+		if err := storage.EnsureTables(context.Background(), db, dialect, queryLogTables...); err != nil {
+			l.logger.Error("创建 Query 日志表失败，回退 KV 存储", "error", err.Error())
+		} else {
+			b = newSQLBackend(db, l.logger)
+		}
+	}
+	l.backend = b
+	l.seq = b.maxSeq()
 	return l
-}
-
-func (l *Logger) loadSeq() uint64 {
-	s, ok := l.store.GetString(context.Background(), seqKey)
-	if !ok {
-		return 0
-	}
-	n, err := strconv.ParseUint(s, 10, 64)
-	if err != nil {
-		return 0
-	}
-	return n
-}
-
-// migrateLegacy 将旧版 entries 键中的整体 JSON 数组拆分为逐条记录。
-// 旧 ID 是序号的 base36，可解析回序号复用为记录键；解析失败的分配新序号。
-func (l *Logger) migrateLegacy() {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-
-	ctx := context.Background()
-	var entries []Entry
-	if !l.store.Get(ctx, legacyEntriesKey, &entries) {
-		return
-	}
-	for _, e := range entries {
-		n, err := strconv.ParseUint(e.ID, 36, 64)
-		if err != nil || n == 0 {
-			l.seq++
-			n = l.seq
-			e.ID = strconv.FormatUint(n, 36)
-		}
-		l.store.Set(ctx, entryKey(n), e)
-		if n > l.seq {
-			l.seq = n
-		}
-	}
-	l.store.SetString(ctx, seqKey, strconv.FormatUint(l.seq, 10))
-	l.store.Del(ctx, legacyEntriesKey)
-	l.evictLocked()
-	l.logger.Info("querylog 旧格式已迁移为逐条存储", "count", len(entries))
 }
 
 // Record 追加一条日志并落盘，返回写入的 Entry（含分配的 ID）。
@@ -177,25 +154,9 @@ func (l *Logger) Record(e Entry) Entry {
 		e.Status = StatusRunning
 	}
 
-	ctx := context.Background()
-	if !l.store.Set(ctx, entryKey(l.seq), e) {
-		l.logger.Error("querylog 落盘失败", "id", e.ID)
-	}
-	l.store.SetString(ctx, seqKey, strconv.FormatUint(l.seq, 10))
-	l.evictLocked()
+	l.backend.insert(l.seq, e)
+	l.backend.evict(l.seq, l.maxEntries)
 	return e
-}
-
-// evictLocked 淘汰超出容量上限的最旧记录。
-func (l *Logger) evictLocked() {
-	seqs := l.listLocked()
-	if len(seqs) <= l.maxEntries {
-		return
-	}
-	ctx := context.Background()
-	for _, n := range seqs[:len(seqs)-l.maxEntries] {
-		l.store.Del(ctx, entryKey(n))
-	}
 }
 
 // Update 按日志 ID 更新一条已存在的记录（如 running → success）。未找到时忽略。
@@ -203,7 +164,7 @@ func (l *Logger) Update(id string, mutate func(*Entry)) {
 	if id == "" {
 		return
 	}
-	// ID 即序号的 base36，直接定位记录键，无需全量扫描
+	// ID 即序号的 base36，直接定位记录，无需全量扫描
 	n, err := strconv.ParseUint(id, 36, 64)
 	if err != nil || n == 0 {
 		return
@@ -211,36 +172,19 @@ func (l *Logger) Update(id string, mutate func(*Entry)) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
-	ctx := context.Background()
-	key := entryKey(n)
-	var e Entry
-	if !l.store.Get(ctx, key, &e) {
+	e, ok := l.backend.load(n)
+	if !ok {
 		return
 	}
 	mutate(&e)
-	if !l.store.Set(ctx, key, e) {
-		l.logger.Error("querylog 落盘失败", "id", id)
-	}
+	l.backend.overwrite(n, e)
 }
 
 // Recent 返回最近 limit 条日志（新在前）。limit<=0 时返回全部。
 func (l *Logger) Recent(limit int) []Entry {
 	l.mu.Lock()
 	defer l.mu.Unlock()
-
-	seqs := l.listLocked() // 升序，新在后
-	if limit <= 0 || limit > len(seqs) {
-		limit = len(seqs)
-	}
-	ctx := context.Background()
-	out := make([]Entry, 0, limit)
-	for i := len(seqs) - 1; i >= len(seqs)-limit; i-- {
-		var e Entry
-		if l.store.Get(ctx, entryKey(seqs[i]), &e) {
-			out = append(out, e)
-		}
-	}
-	return out
+	return l.backend.recent(limit)
 }
 
 // Filter Query 日志的查询条件，零值字段不参与过滤。
@@ -296,7 +240,7 @@ func (l *Logger) Query(f Filter) []Entry {
 	}
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	return l.loadMatchLocked(f.match, limit, parseBeforeSeq(f.Before))
+	return l.backend.query(f, parseBeforeSeq(f.Before), limit)
 }
 
 // parseBeforeSeq 把分页游标（日志 ID，序号的 base36）解析为序号；非法时为 0（不生效）。
@@ -309,53 +253,4 @@ func parseBeforeSeq(before string) uint64 {
 		return 0
 	}
 	return n
-}
-
-// loadMatchLocked 逆序（新在前）逐条加载日志，仅保留满足 match 的记录，
-// 凑够 limit 条即停止，避免面板查询时把全部记录逐键读出。limit<=0 表示不限条数。
-// beforeSeq>0 时跳过序号 >= beforeSeq 的记录（游标分页）。
-func (l *Logger) loadMatchLocked(match func(Entry) bool, limit int, beforeSeq uint64) []Entry {
-	seqs := l.listLocked() // 升序，新在后
-	ctx := context.Background()
-	capacity := limit
-	if capacity <= 0 || capacity > len(seqs) {
-		capacity = len(seqs)
-	}
-	out := make([]Entry, 0, capacity)
-	for i := len(seqs) - 1; i >= 0; i-- {
-		if beforeSeq > 0 && seqs[i] >= beforeSeq {
-			continue
-		}
-		var e Entry
-		if !l.store.Get(ctx, entryKey(seqs[i]), &e) {
-			continue
-		}
-		if match != nil && !match(e) {
-			continue
-		}
-		out = append(out, e)
-		if limit > 0 && len(out) >= limit {
-			break
-		}
-	}
-	return out
-}
-
-// listLocked 返回全部日志记录的序号，按升序排列（旧在前）。
-func (l *Logger) listLocked() []uint64 {
-	keys, err := l.store.Keys(context.Background(), entryKeyPrefix)
-	if err != nil {
-		l.logger.Error("querylog 列举键失败", "err", err)
-		return nil
-	}
-	seqs := make([]uint64, 0, len(keys))
-	for _, k := range keys {
-		n, err := strconv.ParseUint(strings.TrimPrefix(k, entryKeyPrefix), 10, 64)
-		if err != nil {
-			continue
-		}
-		seqs = append(seqs, n)
-	}
-	sort.Slice(seqs, func(i, j int) bool { return seqs[i] < seqs[j] })
-	return seqs
 }

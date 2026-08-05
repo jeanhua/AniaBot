@@ -2,6 +2,7 @@ package pluginaichat
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -29,6 +30,10 @@ type AIChatPlugin struct {
 	// cfg 插件配置，由框架在 Start 前自动填充（见 ConfigSchema）
 	cfg   aiChatConfig
 	chats sync.Map
+
+	// historyDB 对话历史的 SQL 后端连接（Start 时探测建表成功才赋值）；
+	// nil 表示回退 KV 历史存储（history: 命名空间整段 JSON）
+	historyDB *sql.DB
 
 	lockStorage storage.Storage
 	rateCh      chan struct{}
@@ -129,8 +134,8 @@ func (p *AIChatPlugin) OnGroupMsg(ctx context.Context, bot bot.Bot, cmd command.
 		p.noMentionMu.Unlock()
 
 		if needCheck {
-			if c, ok := p.chats.Load(sessionKey(msg.GroupId, true)); ok && c != nil {
-				chat := c.(*aichat.ChatBot)
+			if v, ok := p.chats.Load(sessionKey(msg.GroupId, true)); ok && v != nil {
+				chat := v.(*chatEntry).chat
 				// 与 mention 路径的 chat.Chat 共用 per-group 锁，避免自动清理与进行中的对话
 				// 并发访问 messageWindow.messages 及 SessionToolExecutor.sessionTools
 				// （并发 map 读写会触发不可恢复的 fatal error 导致整个进程崩溃）
@@ -183,8 +188,10 @@ func (p *AIChatPlugin) OnGroupMsg(ctx context.Context, bot bot.Bot, cmd command.
 			builder.Text("正在回复上一条消息，你的消息已排队，稍后回复你~")
 			bot.SendGroupMsg(msg.GroupId, builder.Build())
 		}
+		p.touchChat(sessionKey(msg.GroupId, true))
 		return true, nil
 	}
+	p.touchChat(sessionKey(msg.GroupId, true))
 	defer p.unLock(msg.GroupId, true)
 	defer p.clearActiveContext(msg.GroupId, true)
 	p.noMentionCount.Store(msg.GroupId, 0)
@@ -246,8 +253,10 @@ func (p *AIChatPlugin) OnFriendMsg(ctx context.Context, bot bot.Bot, cmd command
 			builder.Text("正在回复上一条消息，你的消息已排队，稍后回复你~")
 			bot.SendFriendMsg(msg.Sender.UserId, builder.Build())
 		}
+		p.touchChat(sessionKey(msg.Sender.UserId, false))
 		return true, nil
 	}
+	p.touchChat(sessionKey(msg.Sender.UserId, false))
 	defer p.unLock(msg.Sender.UserId, false)
 	defer p.clearActiveContext(msg.Sender.UserId, false)
 
@@ -709,6 +718,28 @@ func (p *AIChatPlugin) Start(ctx context.Context, cfg *viper.Viper) error {
 
 	// Query 日志：记录每次 AI 回复的完整执行过程（面板「Query 日志」页数据源）
 	p.initQueryLogger()
+
+	// 对话历史行级化：SQL 后端建表成功则按行存于 ania_chat_session/ania_chat_message
+	// （增量追加只插入新行，避免整段 JSON 反复全量重写）；探测或建表失败回退
+	// KV 历史存储（history: 命名空间整段 JSON），功能不缺失
+	if db, dialect, ok := storage.SQLBackend(p.PersistentStorage); ok {
+		if err := storage.EnsureTables(ctx, db, dialect, chatHistoryTables...); err != nil {
+			p.Logger.Error("创建对话历史表失败，回退 KV 历史存储", "error", err.Error())
+		} else {
+			p.historyDB = db
+			p.Logger.Info("对话历史使用行级存储", "dialect", dialect)
+		}
+	}
+
+	// 会话内存回收：闲置淘汰 + LRU 容量上限，防止活跃会话增多导致内存线性增长。
+	// 淘汰只丢弃内存对象，持久化历史保留，下次发言自动重建并回放
+	maxIdle := time.Duration(max(p.cfg.Session.MaxIdleMinutes, 0)) * time.Minute
+	maxSessions := max(p.cfg.Session.MaxSessions, 0)
+	if maxIdle > 0 || maxSessions > 0 {
+		p.startChatJanitor(maxIdle, maxSessions)
+		p.Logger.Info("已启用会话内存回收",
+			"max_idle_minutes", p.cfg.Session.MaxIdleMinutes, "max_sessions", maxSessions)
+	}
 
 	return nil
 }

@@ -132,6 +132,14 @@ type quotaConfig struct {
 	GlobalDailyTokens int  `cfg:"global_daily_tokens" label:"全局每日 Token 上限" group:"AI 对话 · 配额" help:"0 表示不限制；所有会话合计消耗超限后 AI 请求全部拒绝" default:"0"`
 }
 
+// sessionConfig 会话内存回收配置：限制内存中驻留的 ChatBot 会话数量与时长，
+// 防止活跃会话增多导致内存线性增长。淘汰只丢弃内存对象，对话历史已持久化，
+// 下次发言时自动重建会话并回放历史。
+type sessionConfig struct {
+	MaxIdleMinutes int `cfg:"max_idle_minutes" label:"闲置会话回收（分钟）" group:"AI 对话 · 会话" default:"120" help:"超过该时长无 AI 交互的会话从内存淘汰（历史在数据库，下次发言自动恢复；会话内 mcp_load 动态加载的工具会随淘汰失效，等同重启）；0 表示不按闲置淘汰"`
+	MaxSessions    int `cfg:"max_sessions" label:"最大驻留会话数" group:"AI 对话 · 会话" default:"128" help:"内存中最多驻留的会话数，超出时淘汰最久未活跃的；0 表示不限制"`
+}
+
 type aiChatConfig struct {
 	BaseURL          string `cfg:"plugin.ai_chat_bot.base_url" label:"Base URL" group:"AI 对话 · 模型" help:"兼容 OpenAI 规范的 API 地址" default:"https://api.deepseek.com"`
 	APIKey           string `cfg:"plugin.ai_chat_bot.api_key" label:"API Key" type:"password" sensitive:"true" group:"AI 对话 · 模型"`
@@ -169,6 +177,7 @@ type aiChatConfig struct {
 	Fallback   fallbackConfig   `cfg:"plugin.ai_chat_bot.fallback"`
 	Stream     streamConfig     `cfg:"plugin.ai_chat_bot.stream"`
 	Quota      quotaConfig      `cfg:"plugin.ai_chat_bot.quota"`
+	Session    sessionConfig    `cfg:"plugin.ai_chat_bot.session"`
 }
 
 // ConfigSchema 实现 plugin.ConfigSchemaProvider：返回配置结构体指针，

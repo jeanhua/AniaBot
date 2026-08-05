@@ -199,6 +199,15 @@ HTTP 模式下 NapCat 向 `localhost` 上报会失败，请将 NapCat 的 HTTP C
 | `plugin.ai_chat_bot.multimodal` | `false` | 主模型是否支持图片输入 |
 | `plugin.ai_chat_bot.rate_limit` | `2` | 同时处理的 AI 请求并发上限，超出后直接拒绝 |
 
+### 会话管理
+
+| 配置键 | 默认值 | 说明 |
+| --- | --- | --- |
+| `plugin.ai_chat_bot.session.max_idle_minutes` | `120` | 闲置会话回收时间（分钟），超过未活动的会话被从内存淘汰；`0` 表示不按闲置淘汰 |
+| `plugin.ai_chat_bot.session.max_sessions` | `128` | 最大驻留内存的会话数，超出时淘汰最久未活动的会话；`0` 表示不限制 |
+
+淘汰只释放内存对象，对话历史已持久化，下次发言自动重建并回放。注意：会话内通过 `mcp_load` 动态加载的工具会随淘汰失效（等同重启），再次对话时需重新加载。
+
 ### 模型参数
 
 | 配置键 | 默认值 | 说明 |

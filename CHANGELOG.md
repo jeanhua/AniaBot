@@ -10,6 +10,21 @@
 
 ## [Unreleased]
 
+### 新增
+
+- **持久层关系表能力（可选探测）**：`common/storage` 新增 `SQLPersistentStorage` 可选接口（`SQLDB()`/`SQLDialect()`）、`SQLBackend()` 探测函数与 `TableDDL`/`EnsureTables()` 幂等建表（SQLite/MySQL 双方言 DDL）。框架内置 sqlite/mysql 持久后端已实现该接口（Clone 出的插件命名空间子存储共享同一连接，探测同样成功）；插件/组件按 `bot.QQ` 同款类型断言探测，探测或建表失败只记日志并自动回退纯 KV 方案，功能不缺失。插件自建关系表统一 `ania_` 前缀
+- **AI 会话闲置回收**：`pluginaichat` 的会话缓存此前只增不减，ChatBot 实例永久驻留内存，占用随活跃会话数线性增长。现会话条目携带最近活跃时间，后台每分钟按 `plugin.ai_chat_bot.session.max_idle_minutes`（默认 120 分钟，0 禁用）闲置淘汰 + `plugin.ai_chat_bot.session.max_sessions`（默认 128 个，0 不限）LRU 容量淘汰；正在响应（持有会话锁）或有排队消息的会话跳过。淘汰只释放内存对象，历史已持久化，下次发言自动重建并回放；已知副作用：会话内 `mcp_load` 动态加载的工具随淘汰失效（等同重启，配置项说明已注明）
+
+### 变更
+
+- **AI 对话历史改为行级存储**：SQL 后端下历史从 `ania_kv` 整段 JSON（每次变更全量重写）迁移为 `ania_chat_session`（会话表）+ `ania_chat_message`（消息表，`(session_id, seq)` 联合主键，无外键）一对多两表；追加只插入新消息行（增量落盘，会话表 `msg_count` 充当序号分配器，同事务读改保证崩溃一致性），压缩/截断走单事务重排覆盖。`aichat.HistoryStore` 接口相应改为 `Load`/`Append`/`Replace`/`Clear`；非 SQL 后端回退 KV 整段 JSON，行为不变
+- **长期记忆行级化**：SQL 后端下 `memoryManager` 的持久化从整段 JSON 数组迁移为 `ania_memory` 表（每条记忆一行，`(scope, id)` 联合主键）；去重、上限、截断、embedding 时机等管理逻辑与公开行为不变，非 SQL 后端回退整段 KV
+- **Query 日志 / 任务日志行级化**：SQL 后端下分别存于 `ania_query_log` / `ania_task_log`（每条记录一行，过滤条件字段冗余为列下推 WHERE，完整 Entry 仍存 payload 列）；过滤查询不再全量列键逐条加载，容量淘汰走范围删除。`querylog`/`tasklog` 公开 API（`Record`/`Update`/`Recent`/`Query`/`Filter` 等）一行未改，面板与工具无感知；非 SQL 后端保留逐条 KV 实现
+
+### 移除
+
+- **旧版数据格式迁移路径**：`pluginaichat` 旧版无前缀历史键迁移（`migrateLegacyHistory`）与 querylog/tasklog 旧版整体数组迁移（`migrateLegacy`）已删除（旧数据按测试数据处理，不迁移）
+
 ### Fixed
 
 - **流式回复跨工具轮重复发送中间文本**：`pluginaichat` 的流式缓冲在整个 `Chat` 会话期间只增不清，工具调用轮结束（`OnStreamRoundEnd`）未重置缓冲，导致下一轮新建的流式消息以「历史各轮全文 + 新文本」开头，逐轮累积重复（Discord/Telegram/飞书均受影响）。现工具边界清空缓冲，每条消息只携带本轮文本；同时群聊 @ 提及改为仅本次回复的首条流式消息携带，后续轮次不再重复 @（避免一次回复多次提醒）

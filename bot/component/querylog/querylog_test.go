@@ -129,45 +129,6 @@ func TestSeqPersistAcrossReload(t *testing.T) {
 	}
 }
 
-func TestMigrateLegacyEntries(t *testing.T) {
-	store := newFakeStore()
-	// 模拟旧版数据：entries 键存整体数组，ID 为序号 base36（1→"1", 2→"2"）
-	legacy := []Entry{
-		{ID: "2", Query: "较新", Status: StatusSuccess},
-		{ID: "1", Query: "较旧", Status: StatusSuccess},
-	}
-	store.Set(context.Background(), "entries", legacy)
-	store.SetString(context.Background(), "seq", "2")
-
-	l := New(store, 10, nil)
-
-	// 旧键应被删除，数据拆分为逐条记录
-	if store.Has(context.Background(), "entries") {
-		t.Fatal("迁移后旧 entries 键应被删除")
-	}
-	recent := l.Recent(0)
-	if len(recent) != 2 || recent[0].Query != "较新" || recent[1].Query != "较旧" {
-		t.Fatalf("迁移后数据异常: %+v", recent)
-	}
-
-	// 序号应延续，新记录不与旧记录冲突
-	e := l.Record(Entry{Query: "新"})
-	if e.ID == "1" || e.ID == "2" {
-		t.Fatalf("迁移后 ID 冲突: %q", e.ID)
-	}
-	if got := l.Recent(1)[0].Query; got != "新" {
-		t.Fatalf("新记录应在最前，实际 %q", got)
-	}
-
-	// Update 应能命中迁移过来的记录
-	l.Update("1", func(en *Entry) { en.Status = StatusError })
-	for _, en := range l.Recent(0) {
-		if en.ID == "1" && en.Status != StatusError {
-			t.Fatalf("迁移记录的 Update 未生效: %+v", en)
-		}
-	}
-}
-
 func TestTruncate(t *testing.T) {
 	if got := Truncate("你好世界", 10); got != "你好世界" {
 		t.Fatalf("未超长不应截断: %q", got)

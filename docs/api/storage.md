@@ -87,10 +87,33 @@ list = append(list, "new item")
 p.PersistentStorage.Set(ctx, "list", list)
 ```
 
-数据量大（如持续增长的日志）时，整体读写会产生放大且单条记录体积失控，
-建议用可排序的键逐条存储（如 `e:<序号>`），通过 `Keys("e:")` 列举、按序号排序——
-框架内的 querylog / tasklog 即采用这种方式。
+数据量大（如持续增长的日志）时，整体读写会产生放大且单条记录体积失控。两种解法：
+
+- SQL 后端下探测[关系表能力](#关系表能力-可选)，每行一条记录（querylog / tasklog / AI 对话历史即采用这种方式）
+- 纯 KV 方案用可排序的键逐条存储（如 `e:<序号>`），通过 `Keys("e:")` 列举、按序号排序
 :::
+
+## 关系表能力（可选）
+
+持久层的 SQL 后端（sqlite / mysql）还实现了可选接口 `storage.SQLPersistentStorage`，插件可探测后自建关系表，获得行级存储与 SQL 查询能力：
+
+```go
+db, dialect, ok := storage.SQLBackend(p.PersistentStorage)
+if !ok {
+    // 非 SQL 后端：回退纯 KV 方案（功能不应缺失）
+}
+err := storage.EnsureTables(ctx, db, dialect, storage.TableDDL{
+    Name:   "ania_myplugin_item",
+    SQLite: []string{`CREATE TABLE IF NOT EXISTS ania_myplugin_item (...)`},
+    MySQL:  []string{`CREATE TABLE IF NOT EXISTS ania_myplugin_item (...) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`},
+})
+```
+
+- `SQLBackend(store)` 内部是类型断言（与 `bot.QQ` 同款惯例）；`Clone` 出的子存储共享同一 `*sql.DB`，探测同样成功
+- `TableDDL` 按方言提供建表语句，`EnsureTables` 幂等执行（建议 `CREATE TABLE IF NOT EXISTS`）
+- 探测或建表失败时应只记日志并回退 KV，**不要阻断插件启动**
+- 插件自建表统一 `ania_` 前缀；框架内置表：`ania_chat_session` / `ania_chat_message`（对话历史）、`ania_memory`（长期记忆）、`ania_query_log` / `ania_task_log`（日志）
+- 约定：MySQL 字符串键用 `VARCHAR(255) COLLATE utf8mb4_bin`、大载荷用 `MEDIUMTEXT`；SQL 冗余过滤列只做 WHERE 收窄，Go 侧匹配仍是最终判定，保证 SQL / KV 两条路径语义一致
 
 ## 后端配置
 

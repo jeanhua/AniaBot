@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -40,13 +39,29 @@ var ErrMemoryFull = errors.New("记忆条数已达上限")
 // 每个 scope 的记忆是一个 key 存整个 JSON 数组，单条长度不设限会把 key 撑大。
 const MaxContentRunes = 2000
 
+// memoryStore 记忆存储后端：KV 整段读写（回退）或 SQL 逐行（ania_memory 表）。
+// 去重、上限、截断与语义向量计算等逻辑留在 memoryManager 层，后端只做存取。
+type memoryStore interface {
+	// list 读取指定 scope 的全部记忆（按创建时间升序）；无记录或失败时返回 nil。
+	list(scope string) []memoryEntry
+	// insert 追加一条记忆（调用方已完成去重与上限检查）。
+	insert(scope string, e memoryEntry) bool
+	// update 按 ID 覆盖一条记忆的可变字段；ID 不存在时返回 false。
+	update(scope string, e memoryEntry) bool
+	// remove 按 ID 删除一条记忆；ID 不存在时返回 false。
+	remove(scope, id string) bool
+	// scopes 列出已有记忆的全部 scope（排序后返回）。
+	scopes() []string
+}
+
 // memoryManager 长期记忆管理器：按会话 scope 存取记忆条目。
 //
-// 每个 scope 的记忆是一个 JSON 数组整体读写（PersistentStorage 的 KV 语义，
-// 单会话记忆量级在百级，全量读写开销可忽略）。所有变更在 mu 保护下串行落盘；
-// 存储错误内部记录日志，不拖垮主对话流程（与 HistoryStore 风格一致）。
+// SQL 后端下每条记忆一行（ania_memory 表），非 SQL 后端回退为每 scope 一个
+// JSON 数组整体读写（kvMemoryStore，单会话记忆量级在百级，全量读写开销可忽略）。
+// 所有变更在 mu 保护下串行落盘；存储错误内部记录日志，不拖垮主对话流程
+// （与 HistoryStore 风格一致）。
 type memoryManager struct {
-	store      storage.PersistentStorage
+	store      memoryStore
 	logger     *slog.Logger
 	maxEntries int // 单 scope 记忆条数上限，<=0 表示不限制
 	// embedder 语义向量计算器：与知识库共享同一实例（复用 kb.embedding 配置）；
@@ -57,12 +72,22 @@ type memoryManager struct {
 }
 
 func newMemoryManager(store storage.PersistentStorage, logger *slog.Logger, maxEntries int, embedder *embedder) *memoryManager {
-	return &memoryManager{
-		store:      store.Clone("memory:"),
+	m := &memoryManager{
 		logger:     logger,
 		maxEntries: maxEntries,
 		embedder:   embedder,
 	}
+	// SQL 后端走行级存储（ania_memory 表）；探测或建表失败回退 KV 整段 JSON
+	if db, dialect, ok := storage.SQLBackend(store); ok {
+		if err := storage.EnsureTables(context.Background(), db, dialect, memoryTables...); err != nil {
+			logger.Error("创建长期记忆表失败，回退 KV 存储", "error", err.Error())
+		} else {
+			m.store = newSQLMemoryStore(db, logger)
+			return m
+		}
+	}
+	m.store = newKVMemoryStore(store)
+	return m
 }
 
 // normalizeMemoryContent 规范化记忆内容用于去重比较。
@@ -78,11 +103,7 @@ func (m *memoryManager) list(scope string) []memoryEntry {
 }
 
 func (m *memoryManager) listLocked(scope string) []memoryEntry {
-	var entries []memoryEntry
-	if ok := m.store.Get(context.Background(), scope, &entries); !ok {
-		return nil
-	}
-	return entries
+	return m.store.list(scope)
 }
 
 // add 追加一条记忆，返回写入后的条目（含生成的 ID）。
@@ -114,12 +135,11 @@ func (m *memoryManager) add(scope, userID, content string, tags []string) (memor
 		UserID:    strings.TrimSpace(userID),
 		Content:   content,
 		Tags:      tags,
-		CreatedAt: time.Now(),
+		CreatedAt: time.Now().UTC(),
 	}
 	// 入库时计算语义向量（记忆写入频率极低，锁内调用可接受；失败静默降级为纯关键词）
 	m.embedEntry(&entry)
-	entries = append(entries, entry)
-	if ok := m.store.Set(context.Background(), scope, entries); !ok {
+	if ok := m.store.insert(scope, entry); !ok {
 		m.logger.Error("保存记忆失败", "scope", scope)
 		return memoryEntry{}, errors.New("记忆保存失败，请查看日志")
 	}
@@ -141,18 +161,7 @@ func (m *memoryManager) embedEntry(entry *memoryEntry) {
 func (m *memoryManager) remove(scope, id string) bool {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-
-	entries := m.listLocked(scope)
-	for i, e := range entries {
-		if e.ID == id {
-			entries = append(entries[:i], entries[i+1:]...)
-			if ok := m.store.Set(context.Background(), scope, entries); !ok {
-				m.logger.Error("删除记忆后落盘失败", "scope", scope, "id", id)
-			}
-			return true
-		}
-	}
-	return false
+	return m.store.remove(scope, id)
 }
 
 // scopes 列出当前已有记忆的全部会话 scope（g:会话ID / f:用户ID），排序后返回。
@@ -160,14 +169,7 @@ func (m *memoryManager) remove(scope, id string) bool {
 func (m *memoryManager) scopes() []string {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-
-	keys, err := m.store.Keys(context.Background(), "")
-	if err != nil {
-		m.logger.Error("列出记忆 scope 失败", "error", err)
-		return nil
-	}
-	slices.Sort(keys)
-	return keys
+	return m.store.scopes()
 }
 
 // update 按 ID 更新指定 scope 中一条记忆的内容、关联用户 ID 与标签；
@@ -182,14 +184,14 @@ func (m *memoryManager) update(scope, id, userID, content string, tags []string)
 	defer m.mu.Unlock()
 
 	entries := m.listLocked(scope)
-	for i, e := range entries {
+	for _, e := range entries {
 		if e.ID == id {
-			entries[i].UserID = strings.TrimSpace(userID)
-			entries[i].Content = content
-			entries[i].Tags = tags
+			e.UserID = strings.TrimSpace(userID)
+			e.Content = content
+			e.Tags = tags
 			// 内容变更后语义向量需要重新计算
-			m.embedEntry(&entries[i])
-			if ok := m.store.Set(context.Background(), scope, entries); !ok {
+			m.embedEntry(&e)
+			if ok := m.store.update(scope, e); !ok {
 				m.logger.Error("更新记忆后落盘失败", "scope", scope, "id", id)
 				return errors.New("记忆保存失败，请查看日志")
 			}
