@@ -80,9 +80,8 @@ func (b *ChatBot) Chat(ctx context.Context, userInput string, callbacks llmtool.
 	compressUsage := b.window.takeCompressUsage()
 
 	messages := b.msgBuilder.BuildChatMessages(userInput, b.window.history())
-	// 记录构建完成时的真实长度作为新消息起点：BuildChatMessages 会过滤历史中的
-	// system 角色消息（旧版落盘数据遗留），若按 1+len(history) 反推会在该场景
-	// 错位，导致本轮用户消息/回复被跳过、不写入持久化历史
+	// 记录构建完成时的真实长度作为新消息起点：ExecuteWithTools 返回的
+	// updatedMessages 以 messages 为前缀，追加多出的部分即本轮新增消息
 	builtLen := len(messages)
 
 	response, updatedMessages, usage, err := b.toolOrchestrator.ExecuteWithTools(ctx, b.llmClient, messages, callbacks, opts)

@@ -168,11 +168,6 @@ func (a *telegramAdapter) loadConfig(v *viper.Viper) telegramConfig {
 	}
 }
 
-// mdEnabled 是否启用 Markdown 渲染（面板配置 bot.telegram.parse_mode 非 off）。
-func (a *telegramAdapter) mdEnabled() bool {
-	return a.parseMode() != ""
-}
-
 // parseMode 返回 Bot API 的 parse_mode 参数值：off/空 = ""（纯文本）、
 // html = "HTML"（AI markdown 先经 markdownToTelegramHTML 转换为 Telegram HTML，
 // 任意输入都不会解析失败）、markdown = "Markdown"（旧版：仅需转义 _ * [ ]，

@@ -191,38 +191,6 @@ func TestMessageJSONRoundTrip(t *testing.T) {
 	}
 }
 
-func TestDegradeImagesKeepsDataURI(t *testing.T) {
-	// data URI（base64 内联，如本地图片）不依赖外部链接、重启不失效，回放后应保留原样
-	msgs := []Message{
-		{
-			Role: RoleUser,
-			Parts: []ContentPart{
-				TextPart("看这张本地图"),
-				ImageURLPart("data:image/png;base64,iVBORw0KGgo="),
-			},
-		},
-		{
-			Role: RoleUser,
-			Parts: []ContentPart{
-				TextPart("看这张 QQ 图"),
-				ImageURLPart("https://qpic.cn/expire-soon.png"),
-			},
-		},
-	}
-
-	got := degradeImagesToText(msgs)
-
-	// data URI 图片保留
-	if got[0].Parts[1].Type != ContentPartImageURL || got[0].Parts[1].ImageURL != "data:image/png;base64,iVBORw0KGgo=" {
-		t.Fatalf("data URI 应保留原样: %+v", got[0].Parts[1])
-	}
-	// http URL 降级为带哈希的文本标记
-	wantMark := "[图片 " + message.ImageHash("https://qpic.cn/expire-soon.png") + "，链接已失效]"
-	if got[1].Parts[1].Type != ContentPartText || got[1].Parts[1].Text != wantMark {
-		t.Fatalf("http URL 应降级为文本标记: %+v", got[1].Parts[1])
-	}
-}
-
 func TestPersistDegradesDataURI(t *testing.T) {
 	// data URI（base64 内联图片）体积可达 MB 级，落盘副本必须剔除，
 	// 但内存中当前会话的消息应保留供本轮对话使用

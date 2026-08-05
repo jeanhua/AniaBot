@@ -50,49 +50,8 @@ func (w *messageWindow) load(ctx context.Context) {
 		// 加载失败不应阻断对话，按空历史继续，后续 Save 会覆盖
 		return
 	}
-	// 回放的历史中的图片 URL（多为 QQ 临时签名链接）重启后大概率失效，
-	// 若原样发给 LLM 会因拉取失败导致整轮对话报错。这里把图片片段降级为
-	// 文本标记。新落盘的数据在写入时已剔除图片（见 degradeImagesForPersist），
-	// 此处理主要兼容旧版落盘数据中仍保留的图片片段。
-	w.messages = degradeImagesToText(msgs)
-}
-
-// degradeImagesToText 将消息中基于 http(s) URL 的图片片段替换为文本标记。
-// 用于回放持久化历史时规避失效的图片 URL（如 QQ 临时签名链接）。
-// data URI（base64 内联，如本地图片）不依赖外部链接、重启不失效，故保留原样。
-// 文本片段与工具调用不变。
-func degradeImagesToText(msgs []Message) []Message {
-	for i := range msgs {
-		msg := &msgs[i]
-		if len(msg.Parts) == 0 {
-			continue
-		}
-		changed := false
-		newParts := make([]ContentPart, 0, len(msg.Parts))
-		for _, p := range msg.Parts {
-			if p.Type == ContentPartImageURL && isRemoteImageURL(p.ImageURL) {
-				// 保留图片哈希标记，AI 仍可将历史提及与具体图片对应
-				newParts = append(newParts, TextPart("[图片 "+message.ImageHash(p.ImageURL)+"，链接已失效]"))
-				changed = true
-				continue
-			}
-			newParts = append(newParts, p)
-		}
-		if changed {
-			msg.Parts = newParts
-		}
-	}
-	return msgs
-}
-
-// isRemoteImageURL 判断图片引用是否为可能失效的远程 http(s) 链接。
-// data:、本地路径等非 http 形式返回 false（视为不失效，保留原样）。
-func isRemoteImageURL(s string) bool {
-	if s == "" {
-		return false
-	}
-	lower := strings.ToLower(s)
-	return strings.HasPrefix(lower, "http://") || strings.HasPrefix(lower, "https://")
+	// 落盘副本已剔除图片片段（见 degradeImagesForPersist），回放原样恢复即可
+	w.messages = msgs
 }
 
 // persistAppend 将新追加的消息增量落盘；store 未注入或增量为空时为空操作。

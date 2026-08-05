@@ -16,7 +16,6 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/go-resty/resty/v2"
@@ -70,7 +69,6 @@ type feishuAdapter struct {
 
 	connState string
 	lastErr   string
-	started   atomic.Bool
 
 	// dedup 事件幂等去重：飞书事件订阅为 at-least-once 投递，
 	// 断线重连/ACK 丢失会重推同一事件，以消息 ID 为键去重避免重复响应。

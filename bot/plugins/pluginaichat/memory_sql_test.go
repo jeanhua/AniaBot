@@ -101,7 +101,9 @@ func TestSQLMemoryManagerScenarios(t *testing.T) {
 		t.Fatalf("去重失效: %v %s vs %s", err, e1.ID, e2.ID)
 	}
 
-	// 上限
+	// 上限（Sleep 保证两条记录 created_at 严格递增：Windows 上 time.Now 精度可能为微秒，
+	// 相同时间戳时 SQL 按 id ASC 排随机 ID 会让顺序不稳定）
+	time.Sleep(time.Millisecond)
 	if _, err := m.add("g:123", "", "第二条", nil); err != nil {
 		t.Fatal(err)
 	}
@@ -162,6 +164,9 @@ func TestMemoryStoreConformance(t *testing.T) {
 	if _, err := sqlm.add("g:1", "u1", "记忆A", []string{"标签A"}); err != nil {
 		t.Fatal(err)
 	}
+	// Sleep 保证同 scope 内 created_at 严格递增（Windows 上 time.Now 精度可能为微秒，
+	// 相同时间戳时 SQL 按 id ASC 排随机 ID、KV 按插入序，两者序列会不一致）
+	time.Sleep(time.Millisecond)
 	if _, err := kv.add("g:1", "", "记忆B", nil); err != nil {
 		t.Fatal(err)
 	}

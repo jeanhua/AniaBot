@@ -36,7 +36,7 @@ func main() {
 		return
 	}
 	// 平台适配器由注册表按配置 bot.platform.<name>.enable 在配置加载后创建
-	bot := core.NewAniaBot(nil)
+	bot := core.NewAniaBot()
 	// 插件注册
 	bot.AddPlugin(pluginsys.NewPluginSys())
 	bot.AddPlugin(pluginlog.NewPlugin())

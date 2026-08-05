@@ -13,7 +13,6 @@ import (
 type fakeAdapter struct {
 	name     string
 	platform string
-	prefix   string
 }
 
 func (f *fakeAdapter) Name() string                      { return f.name }

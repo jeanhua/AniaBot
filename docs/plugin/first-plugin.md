@@ -94,7 +94,7 @@ import (
 )
 
 func main() {
-	bot := core.NewAniaBot(nil)
+	bot := core.NewAniaBot()
 
 	bot.AddPlugin(pluginsys.NewPluginSys())
 	// ... 其他插件

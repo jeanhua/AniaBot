@@ -1,27 +1,24 @@
-package mvp
+// custom/mvp 最小可运行示例。
+//
+// 平台适配器走注册表：空白导入适配器包触发 init() 注册，与 cmd/main.go 的
+// 接入方式一致。启用的平台由 Web 面板配置键 bot.platform.<name>.enable 决定
+// （默认仅 QQ/NapCat），NapCat 的 ws/http 子模式仍由 bot.adapter.mode 配置。
+package main
 
 import (
 	"context"
 
-	"github.com/jeanhua/AniaBot/bot/adapter/napcat"
+	_ "github.com/jeanhua/AniaBot/bot/adapter/napcat" // 空白导入触发 NapCat 适配器注册
 	"github.com/jeanhua/AniaBot/bot/core"
 	"github.com/jeanhua/AniaBot/common/bot"
 	"github.com/jeanhua/AniaBot/common/model/command"
 	"github.com/jeanhua/AniaBot/common/model/message"
 	"github.com/jeanhua/AniaBot/common/msgchain"
 	"github.com/jeanhua/AniaBot/common/plugin"
-	// "github.com/jeanhua/AniaBot/bot/plugins/pluginlog"
-	// "github.com/jeanhua/AniaBot/bot/plugins/pluginrepeat"
 )
 
 func main() {
-	// adapter := napcat.NewNapcatHttpAdapter() // HTTP 适配器
-	adapter := napcat.NewNapcatWebSocketAdapter() // Websocket适配器
-	bot := core.NewAniaBot(adapter)
-	// 插件注册
-	// 系统内部插件
-	// bot.AddPlugin(pluginlog.NewPlugin())    // 控制台日志打印插件
-	// bot.AddPlugin(pluginrepeat.NewPlugin()) // 群复读机插件
+	bot := core.NewAniaBot()
 
 	// 自定义插件
 	bot.AddPlugin(NewCustomPlugin())

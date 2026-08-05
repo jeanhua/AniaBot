@@ -10,6 +10,8 @@
 
 ## [Unreleased]
 
+## [v4.3.0] - 2026-08-05
+
 ⚠️注意：本次更新带来破坏性数据变更
 
 ### 新增
@@ -27,10 +29,15 @@
 ### 移除
 
 - **旧版数据格式迁移路径**：`pluginaichat` 旧版无前缀历史键迁移（`migrateLegacyHistory`）与 querylog/tasklog 旧版整体数组迁移（`migrateLegacy`）已删除（旧数据按测试数据处理，不迁移）
+- **清理历史迁移/重构遗留的无效代码**：删除适配器注册表迁移后遗留的未使用字段（飞书适配器 `started`）、Telegram 渲染重构后遗留的未使用方法 `mdEnabled`、定时任务日志查询重构后遗留的未使用方法 `recentLogs`，以及核心路由测试中未使用的 `prefix` 字段
+- **移除旧版单适配器 API 与旧数据兼容分支**（破坏性 API 变更）：
+  - `core` 删除旧版单适配器接入：`WithAdapterFactory` 选项、`NewAniaBot` 的 adapter 参数（现为 `NewAniaBot(option ...Option)`）与 `legacy` 定义名一并移除，适配器统一走注册表（各平台包 `init()` 注册，按 `bot.platform.<name>.enable` 启用）；`cmd/main.go`、`custom/mvp` 示例与插件文档同步改为注册表接入（`custom/mvp` 包名由 `mvp` 修正为 `main`，恢复可运行）
+  - `aichat` 删除旧版落盘数据的兼容处理（旧数据一律按测试数据处理，不再兼容）：`BuildChatMessages` 不再过滤历史中的 system 角色消息，历史回放不再对远程图片 URL 降级（`degradeImagesToText`/`isRemoteImageURL` 及其测试删除）；落盘侧 `degradeImagesForPersist` 保留，新写入历史仍剔除图片片段
 
 ### Fixed
 
 - **流式回复跨工具轮重复发送中间文本**：`pluginaichat` 的流式缓冲在整个 `Chat` 会话期间只增不清，工具调用轮结束（`OnStreamRoundEnd`）未重置缓冲，导致下一轮新建的流式消息以「历史各轮全文 + 新文本」开头，逐轮累积重复（Discord/Telegram/飞书均受影响）。现工具边界清空缓冲，每条消息只携带本轮文本；同时群聊 @ 提及改为仅本次回复的首条流式消息携带，后续轮次不再重复 @（避免一次回复多次提醒）
+- **长期记忆 SQL 测试时间戳不稳定**：`pluginaichat` 的 `TestSQLMemoryManagerScenarios` / `TestMemoryStoreConformance` 在 Windows 上偶发失败——`time.Now()` 精度可能为微秒，同 scope 内两条记忆的 `created_at` 落盘格式相同，SQL 后端按 `id ASC` 排随机 ID、KV 后端按插入序，两者顺序不一致。测试现于同 scope 二次写入前保证 `created_at` 严格递增，KV 与 SQL 序列断言稳定
 - **Discord 撤回通知显示删除者**：此前删除事件不携带删除者，`OperatorId` 恒空，日志渲染为「被  撤回」。现经审计日志尽力解析（管理删除会落审计条目、本人自删不落，据「无匹配条目」推断自删；条目按作者+频道+时近匹配，需 View Audit Log 权限，无权限或作者未入缓存时操作者留空）；日志插件在操作者为空时降级渲染「被撤回」（飞书等平台同步受益）
 
 ## [v4.2.1] - 2026-08-03

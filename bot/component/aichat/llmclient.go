@@ -455,8 +455,8 @@ func (c *LLMClient) convertMessage(msg Message) (openai.ChatCompletionMessagePar
 		}
 
 		if !hasImage {
-			// 拼接全部文本片段：多片段的用户消息（如回放历史时图片片段被
-			// degradeImagesToText 降级为文本标记）只取首段会静默丢内容
+			// 拼接全部文本片段：多片段的用户消息（图片落盘后为文本标记、
+			// 或本身含多段文本）只取首段会静默丢内容
 			return openai.UserMessage(ExtractMessageText(msg)), nil
 		}
 

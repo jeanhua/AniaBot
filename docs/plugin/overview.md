@@ -152,7 +152,7 @@ import (
 )
 
 func main() {
-    bot := core.NewAniaBot(nil)
+    bot := core.NewAniaBot()
 
     bot.AddPlugin(pluginsys.NewPluginSys())
     bot.AddPlugin(myplugin.NewPlugin())   // ← 你的插件

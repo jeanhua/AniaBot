@@ -48,10 +48,8 @@ type AniaBot struct {
 
 	// adapters 已启用的平台适配器（可多开：QQ + 飞书……）
 	adapters []*adapterEntry
-	// adapterFactory 延迟创建单个适配器（旧版单适配器用法，注册表启用后保留兼容）
-	adapterFactory func(cfg *viper.Viper) adapter.Adapter
-	plugins        []plugin.Plugin
-	cfg            *viper.Viper
+	plugins  []plugin.Plugin
+	cfg      *viper.Viper
 
 	configStore *configstore.Store
 
@@ -122,25 +120,13 @@ func WithLogger(logger *slog.Logger) Option {
 	}
 }
 
-// WithAdapterFactory 延迟创建单个适配器（兼容旧用法）：Run 时配置中心加载完成后
-// 调用工厂，按配置选择具体适配器实现。多平台并存请改用适配器注册表
-// （各平台包 init() 中 adapter.Register，按 bot.platform.<name>.enable 启用）。
-func WithAdapterFactory(factory func(cfg *viper.Viper) adapter.Adapter) Option {
-	return func(ania *AniaBot) {
-		ania.adapterFactory = factory
-	}
-}
-
-func NewAniaBot(a adapter.Adapter, option ...Option) *AniaBot {
+func NewAniaBot(option ...Option) *AniaBot {
 	ctx, cancel := context.WithCancel(context.Background())
 	ania := &AniaBot{
 		ctx:       ctx,
 		cancel:    cancel,
 		pluginSet: map[string]struct{}{},
 		plugins:   make([]plugin.Plugin, 0),
-	}
-	if a != nil {
-		ania.addAdapter(adapter.Definition{Name: "legacy", Platform: "qq"}, a)
 	}
 	for _, op := range option {
 		op(ania)
@@ -287,25 +273,20 @@ func (ania *AniaBot) Run() {
 		ania.cfg = cs.ToViper()
 	}
 
-	// 适配器：注册表 + 旧版单适配器工厂二选一。创建早于插件 Start，
+	// 适配器：按注册表创建（各平台包 init() 中 adapter.Register，以
+	// bot.platform.<name>.enable 开关启用）。创建早于插件 Start，
 	// 保证 setup_pending 期间插件调用发送接口时适配器已就绪。
-	if len(ania.adapters) == 0 {
-		if ania.adapterFactory != nil {
-			a := ania.adapterFactory(ania.cfg)
-			ania.addAdapter(adapter.Definition{Name: "legacy", Platform: "qq"}, a)
+	for _, d := range adapter.Definitions() {
+		if !ania.cfg.GetBool("bot.platform." + d.Name + ".enable") {
+			continue
 		}
-		for _, d := range adapter.Definitions() {
-			if !ania.cfg.GetBool("bot.platform." + d.Name + ".enable") {
-				continue
-			}
-			a, err := d.New(ania.cfg)
-			if err != nil {
-				Logger().Error("创建适配器失败，已跳过该平台", "platform", d.Name, "error", err)
-				continue
-			}
-			ania.addAdapter(d, a)
-			Logger().Info("已启用平台适配器", "platform", d.Name)
+		a, err := d.New(ania.cfg)
+		if err != nil {
+			Logger().Error("创建适配器失败，已跳过该平台", "platform", d.Name, "error", err)
+			continue
 		}
+		ania.addAdapter(d, a)
+		Logger().Info("已启用平台适配器", "platform", d.Name)
 	}
 	if len(ania.adapters) == 0 {
 		Logger().Error("未启用任何平台适配器：请在 Web 面板的「平台适配器」配置中启用至少一个平台")
