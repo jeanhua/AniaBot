@@ -46,6 +46,14 @@ type configToolConfig struct {
 	RestartEnable bool `cfg:"restart_enable" label:"启用重启工具" group:"AI 对话 · 工具" help:"允许 AI 重启 Bot 使配置修改生效（restart_bot），默认关闭" default:"false"`
 }
 
+// skillToolConfig AI Skill 管理工具配置：允许 AI 自行安装/卸载/查看技能
+// （skill_list / skill_install / skill_remove），无需后台面板手动上传。
+// 安装支持 zip 链接下载（含 GitHub 仓库自动转换）或直接撰写 SKILL.md 内容，
+// 落盘后热重载立即生效；默认关闭以控制任意代码/提示注入风险。
+type skillToolConfig struct {
+	Enable bool `cfg:"enable" label:"启用 Skill 管理工具" group:"AI 对话 · 工具" help:"允许 AI 安装/卸载/查看技能（skill_list/skill_install/skill_remove）：AI 可先用 webSearch/webExplore 上网搜索技能资源，再从 zip 链接或 GitHub 仓库下载安装，也可直接撰写 SKILL.md 内容创建；安装后热重载立即生效，默认关闭" default:"false"`
+}
+
 type ocrConfig struct {
 	Enable      bool     `cfg:"enable" label:"启用备用识图模型" group:"AI 对话 · OCR" help:"主模型不支持多模态时将图片转文字" default:"false"`
 	BaseURL     string   `cfg:"base_url" label:"Base URL" group:"AI 对话 · OCR" default:"https://api.siliconflow.cn/v1"`
@@ -176,6 +184,7 @@ type aiChatConfig struct {
 	File       fileToolConfig       `cfg:"plugin.ai_chat_bot.file"`
 	LocalImage localImageToolConfig `cfg:"plugin.ai_chat_bot.local_image"`
 	ConfigTool configToolConfig     `cfg:"plugin.ai_chat_bot.config_tool"`
+	SkillTool  skillToolConfig      `cfg:"plugin.ai_chat_bot.skill_tool"`
 
 	OCR ocrConfig `cfg:"plugin.ai_chat_bot.ocr"`
 

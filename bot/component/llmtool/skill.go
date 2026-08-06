@@ -288,6 +288,16 @@ func isMarkdownFile(name string) bool {
 	return ext == ".md" || ext == ".markdown"
 }
 
+// SkillNameFromContent 从 SKILL.md 文本解析 frontmatter 中的技能名；
+// 无 frontmatter 或名称为空时返回空串（调用方决定回退目录名）。
+func SkillNameFromContent(content string) string {
+	meta, err := parseSkillFrontmatter(content)
+	if err != nil || meta == nil {
+		return ""
+	}
+	return meta.Name
+}
+
 // parseSkillFrontmatter 解析 SKILL.md 中的 YAML frontmatter（--- 块）
 func parseSkillFrontmatter(content string) (*SkillMeta, error) {
 	// 检查是否以 --- 开头

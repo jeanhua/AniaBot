@@ -101,6 +101,13 @@ func (p *AIChatPlugin) registerScopedTools(sessionExecutor *llmtool.SessionToolE
 			sessionExecutor.RegisterSession(tool)
 		}
 	}
+	// 注册 skill 管理工具（skill_list / skill_install / skill_remove）：让 AI
+	// 无需后台面板即可自行安装/卸载技能（配置门控，默认关闭）
+	if p.cfg.SkillTool.Enable {
+		for _, tool := range newSkillTools(p) {
+			sessionExecutor.RegisterSession(tool)
+		}
+	}
 }
 
 func (p *AIChatPlugin) mainMaxIterations() int {
