@@ -178,5 +178,6 @@ if msg.Sender.UserId == p.SystemConfig.AdminId { /* 管理员专属 */ }
 ## 下一步
 
 - [命令解析](/plugin/commands) —— `cmd` 的完整解析规则
+- [从零开发完整插件](/plugin/tutorial) —— 综合运用配置、存储、定时任务与面板服务的完整教程
 - [消息构造器](/plugin/message-builder) —— 图片、视频、合并转发等全部消息类型
 - [数据存储](/plugin/storage) —— 让插件记住东西
