@@ -155,6 +155,49 @@ flowchart TB
     I -->|panic| F
 ```
 
+### 真实代码路径
+
+上面是逻辑视图，实际实现（`bot/core/core.go`）就是一条几十行的函数：每个适配器在 `makeTrigger` 中注入回调，回调携带来源适配器 entry（平台过滤与能力包装都依赖它）：
+
+```go
+func (ania *AniaBot) onGroupEvent(e *adapterEntry, msg message.Message) {
+    ania.fillSelfID(e, &msg)               // 1. SelfId 兜底（SelfIDProvider）
+    if msg.Sender.UserId == msg.SelfId {   // 2. 自消息过滤
+        return
+    }
+    if key, ok := ania.messageDedupKey(e, msg); ok && !ania.tryClaimEvent(key) {
+        return                             // 3. 幂等去重（EventKeyer / 平台+MessageId）
+    }
+    cmd := utils.ParseCommand(msg)         // 4. 命令解析：一次解析，整条插件链共享
+
+    for _, p := range ania.plugins {       // 5. 平台过滤 + 中间件链
+        if !ania.supportsPlatform(p, e.def.Platform) {
+            continue
+        }
+        next, panicked := safeExecuteWithReturn("群聊消息事件", p, func(p plugin.Plugin) bool {
+            msgCtx, cancel := context.WithTimeout(ania.ctx, MsgEventTimeout)
+            next, err := p.OnGroupMsg(msgCtx, e.evBot, cmd, msg) // e.evBot = 能力包装外观
+            logError(err, p, "群聊消息事件")
+            cancel()
+            return next
+        })
+        if panicked {
+            next = true // panic 不阻断，继续传播
+        }
+        if !next {
+            break        // 插件返回 false：阻断
+        }
+    }
+}
+```
+
+几个实现要点：
+
+- **SelfId 兜底**：`fillSelfID` 仅在事件没带 `self_id` 时调用适配器的 `adapter.SelfIDProvider.SelfID()`（如飞书首次被 @ 前的空窗期），保证自消息过滤与 @ 提及检测（`at` 段 `Data["qq"]` 与 `SelfId` 精确比较）永远有效
+- **命令只解析一次**：`ParseCommand` 在分发前完成，所有插件收到同一个 `command.Command`，避免每个插件重复解析文本
+- **超时按插件独立**：每个插件调用都 `context.WithTimeout(MsgEventTimeout)`（消息 5 分钟、通知 5 分钟、生命周期事件 1 分钟），即使某个插件阻塞到超时，其余插件仍按顺序执行
+- **`e.evBot` 是事件来源适配器的能力外观**：分发前由 `addAdapter` 用 `adapter.WrapBot(ania, a)` 包装，插件在回调里类型断言 `bot.QQ` / `bot.StreamSender` 探测的就是它
+
 ### 幂等去重
 
 事件订阅多为 **at-least-once 投递**（飞书断线重连 / ACK 丢失会重推）。core 统一按去重键去重（`dedup.go`）：
@@ -180,6 +223,44 @@ flowchart TB
 ### 通知广播
 
 14 种公共通知与 `OnPlatformEvent` 平台事件是**广播制**：全部插件都会收到、无阻断、某个插件 panic 不影响其他插件。
+
+## 命令解析与消息提取
+
+所有插件共享的 `command.Command` 由 `bot/utils` 提供，核心是两条函数：
+
+```go
+// ParseCommand 把消息文本解析成命令；非 "/" 开头的消息返回空命令（仅携带 Mention）
+func ParseCommand(msg message.Message) command.Command {
+    input, mention := ExtraMessageStr(msg)
+    if input == "" || input[0] != '/' {
+        return command.Command{Mention: mention}
+    }
+    parts := strings.Fields(input[1:]) // 去掉 "/" 后按连续空白切分
+    return command.Command{Name: parts[0], Args: parts[1:], Mention: mention}
+}
+
+// ExtraMessageStr 只拼接 text 与 at 段；@ 到机器人自己时置 mention=true
+func ExtraMessageStr(msg message.Message) (string, bool) {
+    var builder strings.Builder
+    mention := false
+    for _, m := range msg.Message {
+        switch m.Type {
+        case "text":
+            builder.WriteString(m.Data["text"].(string))
+        case "at":
+            if qq, ok := m.Data["qq"].(string); ok && qq == msg.SelfId.String() {
+                mention = true
+            }
+        }
+    }
+    return strings.TrimSpace(builder.String()), mention
+}
+```
+
+- **只认 text / at 段**：图片、表情、视频等段不参与命令文本——`/meme 猫猫` 后面跟图片不会污染参数
+- **`strings.Fields` 按连续空白切分**：支持多空格 / Tab，`/cmd a  b` 与 `/cmd a b` 等价
+- **Mention 标记独立于命令**：`/clock list` 里 @ 机器人 与否不影响解析，AI 插件用 `Mention` 决定是否触发（未 @ 的群聊闲聊不触发）
+- **Data 用 comma-ok 断言**：消息段来自平台 JSON，`qq` 字段可能缺失或类型不对，直接类型断言会 panic——框架对此统一防御
 
 ## 插件生命周期与依赖注入
 
@@ -278,11 +359,80 @@ storage.EnsureTables(ctx, db, dialect, storage.TableDDL{...})
 
 典型的「KV 抽象 + SQL 加速」案例：AI 对话历史（`ania_chat_session` / `ania_chat_message` 行级，追加只 INSERT）、长期记忆（`ania_memory`）、操作日志（`ania_op_log`）、Query 日志（`ania_query_log`）、任务日志（`ania_task_log`）——非 SQL 后端全部回退为命名空间 KV。
 
+## 消息链构造器（msgchain）
+
+插件发消息的统一入口是 `msgchain.Builder()`，它把「意图」翻译成 `[]OB11Segment`：
+
+```go
+msgchain.Builder().Group(target).Text("你好").Mention(qid).Reply(msgID).Build()
+```
+
+实现上是一个**可变段数组的流式 builder**（`common/msgchain`）：
+
+- `Builder()` 返回空 `chainBuilder`，`Group()` / `Friend()` 各自创建独立的段数组（`[]OB11Segment`），群聊/私聊接口不同但共享同一份底层实现
+- 每个方法只是 `append` 一个段；`Data` 用 `message.XxxMessage{...}.Marshal()` 序列化成 `map[string]any`——段的数据结构全部收敛在 `common/model/message`，适配器与核心不感知 builder 细节
+- 段类型到 Data 的映射有明确约定：
+  - `Mention(qid)` → `at` 段，`Data["qq"]=qid`；`Text()` → `text` 段；`Face()` → `face` 段
+  - `ImageUrl()` **同时写 `file` 与 `url`**：`messageutils.ParseImage` 依赖 `url`（FriendlyText 渲染 / 历史回放），漏写会导致 AI 看到图片但拿不到地址
+  - `ImageBase64()` → `file: "base64://<data>"`；`ImageLocal()` → `file: "file://<path>"`——三种形态统一写 `file` 键，适配器自行识别协议头
+  - `Reply(msgID)` → `reply` 段，`Data["id"]=msgID`
+- 合并转发是另一条路径：`GroupForward()` 预填 `ForwardMessageSegment{Prompt/Summary/Source}`，`Message(userId, nickname, chain)` 每调用一次追加一个 `node` 节点（`user_id` / `nickname` / `content` 子段数组），最终整段作为一个 `forward` 段交给平台
+- `Build()` 返回只读接口（`GroupChain` / `FriendChain`），`GetGroupMsg()` 暴露段数组；接口隔离使插件拿到的链不可再被意外修改
+
+## 流式发送：先发后改
+
+AI 逐字输出时，若等全部生成完再发，用户体验差；AniaBot 用「**先发一条，再逐段编辑**」实现打字机效果。这是可选能力（插件侧 `bot.StreamSender` / 适配器侧 `adapter.StreamSenderExt`），只有支持「发后编辑」的平台实现——QQ/OneBot v11 没有消息编辑 API，断言失败时 AI 插件退化为一次性回复。
+
+```go
+type StreamHandle interface {
+    Patch(text string) error // 用 text 替换已发送消息的内容（实现方负责节流与内容上限）
+    End()                    // 结束流式（强制发送最终内容，幂等）
+}
+```
+
+以 Telegram 实现（`bot/adapter/telegram/stream.go`）为例，完整展示「先发后改」的工程细节：
+
+1. **创建**：`SendGroupStream` 把初始 chain 的文本段拼接为消息内容，`at` 段展开成 `@username ` 前缀文本，`reply` 段作为 `reply_parameters`，先 `sendMessage` 发出（内容按 4096 字节 rune 截断，不切断多字节字符），拿到 `message_id`
+2. **Patch 节流**：`Patch` 只更新内存中的 `content`；距上次成功编辑 ≥ 600ms 才真正 `editMessageText`，否则合并到下一次——Telegram 编辑有频率限制，**End 时强制发送最终内容**
+3. **前缀保留**：每次编辑都用 `prefix + content` 重新发送——AI 的 Patch 只回传增量文本，若不重新带上 `@username`，第一次编辑后提及就消失了
+4. **最终渲染降级**：流式中间编辑一律纯文本（增量中的 markdown 标记不完整，带 parse_mode 会被 400 拒绝）；`End` 时才按配置把 AI markdown 转成 Telegram HTML 渲染，解析失败自动降级纯文本重发（还原未转换的原文）
+5. **幂等跳过**：纯文本编辑且内容与上次成功发送一致时跳过——Telegram 会返回 400 "message is not modified"
+
+## 平台适配器的五种连接模式
+
+五个平台的事件接入方式各不相同，每个适配器的 `Serve(v *viper.Viper)` 是**阻塞的独立 goroutine**（core 逐个 `go a.Serve(cfg)` 启动），返回即适配器死亡，因此连接失败绝不早退。具体模式：
+
+| 平台 | 连接模式 | 实现要点 |
+| --- | --- | --- |
+| NapCat WS | WebSocket（OneBot v11 正向） | `Serve` 无限重连（指数退避 1s 翻倍、封顶 30s）；token 必须 URL 编码（含 `+ / = &` 时直接拼接会破坏 query）；**worker 池**：连接层只收发，解析与分发在 worker（默认 `CPU×2`，队列 256，满则丢弃并记日志） |
+| NapCat HTTP | HTTP 回调 + REST 反向调用 | 自带 HTTP 服务接收 NapCat 事件推送（注册在 `http.DefaultServeMux` 的 `/`——这正是面板/飞书 webhook 必须用独立 mux 的原因），发送走 OneBot REST 接口；**fail-closed**：未配置 token 时拒绝全部上报（防伪造事件注入），token 兼容 `Authorization: Bearer` 与 `access_token` 查询参数 |
+| QQ 官方 | REST 换 token + WebSocket 网关 | 先 `tokenManager` 换 `access_token`（启动期暴露 AppID/Secret 错误，之后自动刷新）；网关握手：首条 `Hello`（携带心跳周期）→ `identify`（无会话）/ `resume`（有 `sessionID+lastSeq`，服务端补发断线期间事件）→ 心跳循环；断线按原因分类走 resume 或重新 identify（会话失效时清空会话），指数退避重连 |
+| 飞书 | lark SDK 长连接 / Webhook | `larkws.NewClient(...).Start()` 阻塞，断线重连与心跳由 SDK 内部维护，适配器只挂状态回调；webhook 模式用独立 mux + 事件处理器（verification token / encrypt key 验签解密） |
+| Telegram | Bot API 长轮询 | `getMe` 校验 token（指数退避无限重试）→ `getUpdates(offset, timeout=30s)` 循环；**先 claim 后处理**：同步按 `update_id` 去重并推进 offset（重推也要推进，否则死循环重推），已 claim 的更新 `go` 异步翻译分发，翻译/图片下载不阻塞轮询；Bot API 没有消息查询/历史端点，`GetMsgDetail`/历史用适配器内存 `msgCache` 兜底 |
+| Discord | discordgo Gateway | Gateway WebSocket 收事件，心跳/断线重连/会话 resume 由库内部维护，`newSession` 失败指数退避无限重试；intents 订阅按配置声明 |
+
+共性设计：
+
+- **Serve 不早退**：配置缺失时只记日志并保持 `reconnecting` 状态（返回会让整个适配器死亡），用户改配置后重启生效
+- **连接状态外露**：实现 `AdapterStatus()/Connected()`，core 汇总成 `AdapterStatuses()` 供 Web 面板状态总览展示
+- **at-least-once 语义下先 claim 后处理**：重复投递被去重键拦截，崩溃窗口内已 claim 未处理的消息可能丢失（有界、可接受）
+
 ## Web 控制面板与审计
 
-- 面板后端 `bot/adminpanel` 提供配置/状态 API，前端（Vue 3 + Tailwind）构建产物经 `go:embed` 嵌入二进制
-- 面板通过 `adminpanel.XxxSource` 可选接口发现插件能力（定时任务、记忆、Skill、知识库、团队、配额、Query 日志等），插件实现即出现在面板，无需面板代码改动
-- 操作日志（`bot/component/oplog`）以包级单例记录面板与 AI 工具的管理操作（登录、配置修改、定时任务/记忆/Skill/团队管理、AI 改配置、重启更新等），SQL 后端走 `ania_op_log` 行级存储 + 范围删除淘汰，KV 后端走 `e:<序号>` 逐条记录，ID 均为 base36 自增序号，两种后端一致
+- 面板后端 `bot/adminpanel` 是**纯 `net/http`（零额外依赖）**：`http.ServeMux` + `go:embed` 内嵌 Vue SPA（`dist/`），前端构建产物打进二进制，单文件部署。**绝不注册到 `http.DefaultServeMux`**（NapCat HTTP 适配器占用了默认 mux 的 `/` 路由），NapCat HTTP 与飞书 webhook 同样各用独立 mux
+- **认证**：首次启动生成 10 位随机密码打印到控制台（仅显示一次，登录后可修改）；密码存 `__admin` 命名空间，格式 `salt:hash`（16 字节随机 salt + SHA-256，hex 编码），校验用 `crypto/subtle.ConstantTimeCompare` 常数时间比较防计时侧信道
+- **会话**：登录签发 32 字节随机 token（HttpOnly Cookie，24h 过期），内存 + 持久化存储**双写**——Bot 重启后旧会话仍有效；剩余有效期 < 12h 自动续期（滑动过期，活跃用户不被踢下线）；**修改密码吊销全部会话**（把可疑登录踢下线）；忘记密码可用命令行 `ResetPanelPassword` 覆盖哈希，并同样清空全部会话
+- **登录防爆破**（`loginguard.go`）：按来源 IP 计数，10 分钟窗口内失败 5 次锁定 10 分钟，每次失败前固定延迟 500ms 拖慢在线爆破；仅当对端是回环地址时才信任 `X-Forwarded-For` / `X-Real-IP`（本机反代场景），否则外部伪造头部无法绕过锁定
+- **插件能力发现**：面板通过 `adminpanel.XxxSource` 可选接口发现插件能力——`TaskLogSource`（任务日志）、`ClockTaskSource`（定时任务增删改查/启停）、`MsgLogSource`（消息日志环形缓冲 + 滚动分页）、`SkillSource`（skill 上传/删除/热重载）、`MemorySource`、`KnowledgeBaseSource`（含 URL 导入）、`TeamSource`、`QuotaSource`（用量查看/清零）、`QueryLogSource`。插件实现即出现在面板，无需面板代码改动
+- **操作日志**（`bot/component/oplog`）：包级单例记录面板与 AI 工具的管理操作（登录、配置修改、定时任务/记忆/Skill/团队管理、AI 改配置、重启更新等），SQL 后端走 `ania_op_log` 行级存储（过滤条件下推 WHERE、容量淘汰走范围删除），KV 后端走 `e:<序号>` 逐条记录，ID 均为 base36 自增序号，两种后端一致；默认保留最近 500 条
+
+## 进程自重启（sysrestart）
+
+面板「重启 Bot」按钮、自动更新与 AI 的 `restart_bot` 工具共用 `bot/component/sysrestart.Self()`，实现极简但有一个关键陷阱：
+
+- **Unix**：`syscall.Exec(exe, os.Args, os.Environ())` **原地替换进程**——PID 不变、文件句柄与控制台无缝衔接，重启对用户几乎无感
+- **Windows**：没有 exec 语义，`exec.Command` 启动新进程（继承控制台与标准流）后 `os.Exit(0)`
+- **`selfExe` 必须在包初始化时缓存**：自动更新的「改名交换」会把运行中的二进制 rename 为 `<exe>.old`，此后 Linux 上 `os.Executable()` 读 `/proc/self/exe`（跟随 inode）会指向旧二进制，导致 swap 换错文件、重启回旧版本。启动时缓存路径后，无论二进制如何被替换，重启永远使用最初那个路径
 
 ## 关键设计取舍
 

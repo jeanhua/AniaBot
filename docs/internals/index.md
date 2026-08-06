@@ -2,7 +2,7 @@
 
 本章从实现层面系统介绍 AniaBot 的技术原理：**框架部分**（多平台适配、事件分发、插件系统、配置中心、存储）与 **Agent 部分**（LLM 多格式客户端、工具调用循环、上下文窗口、历史持久化、记忆、定时任务与子代理）。
 
-- [框架核心原理](/internals/framework) —— 多平台归一化、适配器注册表、事件分发管线、插件生命周期、DI、配置中心、双层存储
+- [框架核心原理](/internals/framework) —— 多平台归一化、适配器注册表、事件分发管线（含真实代码路径）、命令解析与消息提取、插件生命周期、DI、配置中心、双层存储、消息链构造器、流式发送、五种平台连接模式、Web 面板认证与自重启
 - [AI 引擎（一）LLM 客户端与对话循环](/internals/agent-llm) —— 三种 LLM API 格式后端、重试与备用模型、消息构建、多轮工具调用循环
 - [AI 引擎（二）上下文、历史与记忆](/internals/agent-context) —— token 预算上下文窗口、LLM 压缩、行级历史持久化、会话缓存回收、长期记忆
 - [AI 引擎（三）工具、MCP 与高级编排](/internals/agent-tools) —— 反射式工具 Schema、MCP 两阶段懒加载、Skill 系统、定时任务、子代理、团队、知识库
@@ -149,7 +149,7 @@ sequenceDiagram
 
 ## 阅读建议
 
-- 想理解「框架怎么把多平台变成一种消息模型」→ [框架核心原理](/internals/framework)
+- 想理解「框架怎么把多平台变成一种消息模型」「命令如何解析、消息链如何构造、流式回复如何先发后改、各平台如何连接」→ [框架核心原理](/internals/framework)
 - 想理解「AI 怎么调用工具、怎么管理上下文」→ [AI 引擎（一）](/internals/agent-llm) 与 [（二）](/internals/agent-context)
 - 想理解「MCP / Skill / 定时任务 / 子代理如何实现」→ [AI 引擎（三）](/internals/agent-tools)
 - 想写插件 → [插件系统概览](/plugin/overview)；想查接口 → [API 参考](/api/events)
