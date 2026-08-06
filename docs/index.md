@@ -16,6 +16,9 @@ hero:
       text: 项目介绍
       link: /guide/introduction
     - theme: alt
+      text: 技术原理
+      link: /internals/
+    - theme: alt
       text: GitHub
       link: https://github.com/jeanhua/AniaBot
 

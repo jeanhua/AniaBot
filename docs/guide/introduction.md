@@ -97,6 +97,15 @@ LevelLog(-1000)  →  LevelNormal(0)  →  LevelPostHandle(1000)
 - 🛡️ **群管理**：防撤回、消息回顾、入群欢迎（需自行扩展）
 - 🛠️ **自动化 Agent**：开启 bash / file 工具后，AI 可以直接操作宿主机完成任务（默认关闭，按需开启）
 
+## 深入理解
+
+对实现原理感兴趣？从 [技术原理总览](/internals/) 开始：
+
+- [框架核心原理](/internals/framework) —— 多平台归一化、事件分发管线、插件生命周期、配置中心、双层存储
+- [AI 引擎（一）LLM 客户端与对话循环](/internals/agent-llm) —— 三种 LLM API 格式后端、重试与备用模型、多轮工具调用循环
+- [AI 引擎（二）上下文、历史与记忆](/internals/agent-context) —— token 预算上下文窗口、LLM 压缩、行级历史持久化、长期记忆
+- [AI 引擎（三）工具、MCP 与高级编排](/internals/agent-tools) —— 反射式工具 Schema、MCP 两阶段懒加载、定时任务、子代理、团队
+
 ## 下一步
 
 - [快速开始](/guide/getting-started) —— 5 分钟跑起你的机器人

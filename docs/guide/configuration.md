@@ -316,6 +316,81 @@ HTTP 模式下 NapCat 向 `localhost` 上报会失败，请将 NapCat 的 HTTP C
 
 子代理以全新一次性上下文运行、拥有与主 AI 一致的工具能力，但**不能再委派子代理**。详见 [AI 对话插件](/guide/builtin-plugins#ai-对话插件)。
 
+
+### AI 知识库（knowledge）
+
+知识库让 AI 把完整资料（文章、URL 正文等）存入会话库或全局库，并在对话中按需检索引用：
+
+| 配置键 | 默认值 | 说明 |
+| --- | --- | --- |
+| `plugin.ai_chat_bot.kb.enable` | `true` | 启用后 AI 可通过 `kb_add` / `kb_search` / `kb_forget` 等工具管理知识库 |
+| `plugin.ai_chat_bot.kb.max_docs` | `500` | 单个作用域（会话库 / 全局库）的文档条数上限 |
+| `plugin.ai_chat_bot.kb.auto_inject` | `true` | 每次对话前自动按关键词检索相关文档并注入上下文（不走向量，避免每条消息产生 embedding 成本） |
+| `plugin.ai_chat_bot.kb.embedding.enable` | `false` | 启用向量检索：入库时计算语义向量，检索时与关键词混合打分；provider 不支持时自动退回纯关键词 |
+| `plugin.ai_chat_bot.kb.embedding.base_url` | 空 | Embedding API 地址，留空使用主模型 Base URL（主模型无 embedding 接口时可填 `https://api.jina.ai/v1` 等） |
+| `plugin.ai_chat_bot.kb.embedding.api_key` | 空 | Embedding API 密钥，留空使用主模型 API Key（用 Jina 时可填 Jina AI Token） |
+| `plugin.ai_chat_bot.kb.embedding.model` | `jina-embeddings-v3` | Embedding 模型，如 `text-embedding-3-small`、`BAAI/bge-large-zh-v1.5` |
+
+长文档按 600 字符一块、60 字符重叠切片入库，检索命中块而非整篇，避免无关内容占用上下文。详见 [AI 对话插件](/guide/builtin-plugins#ai-对话插件)。
+
+### Agent 团队（team）
+
+多代理编排：主 AI 可组建团队，把子任务派发给多个带角色描述的成员代理**并行执行**：
+
+| 配置键 | 默认值 | 说明 |
+| --- | --- | --- |
+| `plugin.ai_chat_bot.team.enable` | `false` | 启用后 AI 可通过 `team_run` / `team_save` 等工具组建与调用团队 |
+| `plugin.ai_chat_bot.team.timeout_sec` | `300` | 成员默认超时（秒） |
+| `plugin.ai_chat_bot.team.max_iterations` | `10` | 成员工具调用循环的最大轮数 |
+| `plugin.ai_chat_bot.team.max_result_len` | `4000` | 单成员返回结果最大字符数，超出截断防止污染汇总上下文 |
+| `plugin.ai_chat_bot.team.max_members` | `5` | 单次最多并行成员数（硬上限 10，防并发风暴） |
+
+团队成员复用子代理执行路径（独立一次性上下文、可独立配置模型），**不能递归组建团队**。详见 [AI 对话插件](/guide/builtin-plugins#ai-对话插件)。
+
+### 每日 Token 配额（quota）
+
+按「每会话每日」与「全局每日」两个维度限制 AI 消耗（含主对话、子代理、定时任务）：
+
+| 配置键 | 默认值 | 说明 |
+| --- | --- | --- |
+| `plugin.ai_chat_bot.quota.enable` | `false` | 启用每日配额限制 |
+| `plugin.ai_chat_bot.quota.daily_tokens` | `0` | 每会话每日 token 上限；`0` 不限制，超出后该会话当日 AI 请求被拒绝 |
+| `plugin.ai_chat_bot.quota.global_daily_tokens` | `0` | 全局每日 token 上限；`0` 不限制，所有会话合计超限后全部拒绝 |
+
+计数按天持久化（键带日期天然过期），重启不丢；未设置上限时仍会记录用量，供面板「配额管理」页展示。
+
+### Query 日志（query_log）
+
+在面板记录每次 AI 回复的完整执行过程：
+
+| 配置键 | 默认值 | 说明 |
+| --- | --- | --- |
+| `plugin.ai_chat_bot.query_log.enable` | `true` | 启用 Query 日志 |
+| `plugin.ai_chat_bot.query_log.max_entries` | `200` | 日志保留条数（滚动覆盖） |
+
+每条日志包含：触发会话、发送者、用户输入、LLM 轮数、工具调用明细（名称/参数/结果/耗时）、token 用量与最终回复，状态区分 `running` / `success` / `stopped` / `timeout` / `error`。面板「Query 日志」页可筛选查看。
+
+### 流式回复（stream）
+
+| 配置键 | 默认值 | 说明 |
+| --- | --- | --- |
+| `plugin.ai_chat_bot.stream.enable` | `true` | 平台支持「先发后改」时（飞书卡片 / Telegram / Discord 消息实时更新）逐字展示回复；不支持或出错时自动退化为一次性回复 |
+
+### 重试、备用模型与压缩器
+
+| 配置键 | 默认值 | 说明 |
+| --- | --- | --- |
+| `plugin.ai_chat_bot.retry.max_attempts` | `3` | 应用层最大尝试次数；`0` 或 `1` 不重试。429 / 5xx / 网络错误时指数退避重试（SDK 已内置 429/5xx 重试，此为补充层） |
+| `plugin.ai_chat_bot.retry.base_delay_sec` | `2` | 退避基准（秒），每次重试等待 `基准×2^n` 秒并带随机抖动，上限 30 秒 |
+| `plugin.ai_chat_bot.fallback.base_url` | 空 | 备用模型 Base URL，留空使用主模型配置 |
+| `plugin.ai_chat_bot.fallback.api_key` | 空 | 备用模型 API Key，留空使用主模型配置 |
+| `plugin.ai_chat_bot.fallback.model` | 空 | 备用模型；主模型重试耗尽或遇到不可重试错误时自动切换重试一次（流式已输出首字节后不切换，避免重复输出） |
+| `plugin.ai_chat_bot.fallback.api_format` | 空 | 备用模型 API 格式，留空跟随主模型 |
+| `plugin.ai_chat_bot.compressor.base_url` | 空 | 上下文压缩器 Base URL，留空使用主模型 |
+| `plugin.ai_chat_bot.compressor.api_key` | 空 | 上下文压缩器 API Key |
+| `plugin.ai_chat_bot.compressor.model` | 空 | 压缩器模型，建议填更便宜的模型降低历史压缩成本 |
+| `plugin.ai_chat_bot.compressor.api_format` | 空 | 压缩器 API 格式，留空跟随主模型 |
+
 ## plugin.interceptor —— 请求拦截插件
 
 | 配置键 | 默认值 | 说明 |
@@ -368,3 +443,4 @@ HTTP 模式下 NapCat 向 `localhost` 上报会失败，请将 NapCat 的 HTTP C
 ```
 
 MCP 工具采用两阶段懒加载：AI 先通过发现工具查看有哪些 MCP 能力，按需加载到当前会话，避免工具描述撑爆上下文。
+

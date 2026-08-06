@@ -51,7 +51,7 @@ AniaBot 的配置存储在数据库中，**首次启动**会自动写入默认�
 
 使用该密码登录 `http://127.0.0.1:7700`，首次登录会自动进入**设置向导**：先在「平台接入」步骤勾选要启用的平台（QQ(NapCat) 默认勾选，QQ 官方 / 飞书 / Telegram / Discord 可选，填写对应连接配置与管理员 ID），再填 AI 模型配置（Base URL / API Key / 模型），保存后一键重启即可生效。
 
-默认启用 QQ 平台。要同时接入 QQ 官方 / 飞书 / Telegram，在向导中勾选对应平台并填写 AppID/AppSecret 或 Bot Token 即可（或稍后在「配置 → 平台适配器」启用，详见 [QQ 官方适配器](/guide/configuration#qqofficial-qq-官方适配器)、[飞书适配器](/guide/configuration#feishu-飞书适配器) 与 [Telegram 适配器](/guide/configuration#telegram-telegram-适配器)）。多平台可同时在线；QQ 官方与 Telegram 都无需部署额外协议端，Telegram 国内部署可在配置中填写代理或自建 API 网关地址。
+默认启用 QQ 平台。要同时接入 QQ 官方 / 飞书 / Telegram，在向导中勾选对应平台并填写 AppID/AppSecret 或 Bot Token 即可（或稍后在「配置 → 平台适配器」启用，详见 [QQ 官方适配器](/guide/configuration#qqofficial-——-qq-官方适配器)、[飞书适配器](/guide/configuration#feishu-——-飞书适配器) 与 [Telegram 适配器](/guide/configuration#telegram-——-telegram-适配器)）。多平台可同时在线；QQ 官方与 Telegram 都无需部署额外协议端，Telegram 国内部署可在配置中填写代理或自建 API 网关地址。
 
 完整配置项说明见 [配置详解](/guide/configuration)，面板使用见 [Web 控制面板](/guide/web-panel)。
 
@@ -74,7 +74,7 @@ make web       # 重新构建 Web 面板前端（修改 web/ 后需要）
 make clean     # 清理 build/
 ```
 
-所有存储后端均为纯 Go 实现（无 CGO），面板前端产物已随仓库提交并嵌入二进制，交叉编译开箱即用。
+所有存储后端均为纯 Go 实现（无 CGO），交叉编译开箱即用。Web 面板前端产物（ot/adminpanel/dist）不随仓库提交，通过 go:embed 嵌入二进制——**全新克隆后需先执行一次 make web（或 cd web && npm run build）再编译**，详见 [Web 控制面板](/guide/web-panel#面板开发)。
 
 ## 目录结构速览
 
@@ -111,3 +111,8 @@ AniaBot/
 - [配置详解](/guide/configuration) —— 每一个配置项的含义
 - [内置插件](/guide/builtin-plugins) —— 各插件的命令与用法
 - [第一个插件](/plugin/first-plugin) —— 开始写你自己的功能
+
+
+
+
+

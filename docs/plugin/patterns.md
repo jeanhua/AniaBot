@@ -107,7 +107,7 @@ func (p *MyPlugin) Start(ctx context.Context, cfg *viper.Viper) error {
 }
 ```
 
-标签与类型推断的完整说明见[第一个插件 · 声明自己的配置](/plugin/first-plugin#进阶：声明自己的配置)。
+标签与类型推断的完整说明见[第一个插件 · 声明自己的配置](/plugin/first-plugin#进阶-声明自己的配置)。
 
 ## 发送失败的处理
 
@@ -189,3 +189,4 @@ p.Logger.Error("AI请求错误", "error", err.Error(), "group", msg.GroupId)
 go test ./...
 go test -v -race ./...
 ```
+

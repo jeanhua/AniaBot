@@ -25,15 +25,15 @@
 
 ### 怎么接入飞书？
 
-在飞书开放平台创建企业自建应用并开通权限，然后在面板「配置 → 平台适配器」勾选「启用飞书平台」、填写 `bot.feishu.app_id` / `bot.feishu.app_secret` 后重启。默认走 **WebSocket 长连接**，无需公网地址。详见 [配置详解](/guide/configuration#feishu-飞书适配器)。
+在飞书开放平台创建企业自建应用并开通权限，然后在面板「配置 → 平台适配器」勾选「启用飞书平台」、填写 `bot.feishu.app_id` / `bot.feishu.app_secret` 后重启。默认走 **WebSocket 长连接**，无需公网地址。详见 [配置详解](/guide/configuration#feishu-——-飞书适配器)。
 
 ### 怎么接入 Telegram？
 
-向 [@BotFather](https://t.me/BotFather) 创建机器人拿到 Bot Token，然后在面板「配置 → 平台适配器」勾选「启用 Telegram 平台」、填写 `bot.telegram.token` 后重启。默认走 **Bot API 长轮询**，无需公网地址、无需部署协议端；国内部署如无法直连官方 API，可配置 `bot.telegram.proxy`（HTTP/SOCKS5 代理）或 `bot.telegram.api_base`（自建 Bot API 网关/反代）。详见 [配置详解](/guide/configuration#telegram-telegram-适配器)。
+向 [@BotFather](https://t.me/BotFather) 创建机器人拿到 Bot Token，然后在面板「配置 → 平台适配器」勾选「启用 Telegram 平台」、填写 `bot.telegram.token` 后重启。默认走 **Bot API 长轮询**，无需公网地址、无需部署协议端；国内部署如无法直连官方 API，可配置 `bot.telegram.proxy`（HTTP/SOCKS5 代理）或 `bot.telegram.api_base`（自建 Bot API 网关/反代）。详见 [配置详解](/guide/configuration#telegram-——-telegram-适配器)。
 
 ### 怎么接入 Discord？
 
-在 [Discord Developer Portal](https://discord.com/developers/applications) 创建应用，「Bot」页面获取 Token 并**开启 Message Content Intent**（特权意图，不开则网关拒绝连接），然后在面板「配置 → 平台适配器」勾选「启用 Discord 平台」、填写 `bot.discord.token` 后重启。走 **Gateway WebSocket**，无需公网地址、无需部署协议端；无法直连时可配置 `bot.discord.proxy`（HTTP/SOCKS5 代理，REST 与网关都生效）。详见 [配置详解](/guide/configuration#discord-discord-适配器)。
+在 [Discord Developer Portal](https://discord.com/developers/applications) 创建应用，「Bot」页面获取 Token 并**开启 Message Content Intent**（特权意图，不开则网关拒绝连接），然后在面板「配置 → 平台适配器」勾选「启用 Discord 平台」、填写 `bot.discord.token` 后重启。走 **Gateway WebSocket**，无需公网地址、无需部署协议端；无法直连时可配置 `bot.discord.proxy`（HTTP/SOCKS5 代理，REST 与网关都生效）。详见 [配置详解](/guide/configuration#discord-——-discord-适配器)。
 
 ### QQ 和飞书能同时在线吗？
 
@@ -136,3 +136,6 @@ cd docs
 npm install
 npm run docs:dev
 ```
+
+
+

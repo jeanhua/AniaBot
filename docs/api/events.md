@@ -7,7 +7,7 @@
 框架支持多平台并存（QQ、飞书、Telegram、Discord……），插件收到的事件来自哪个平台，由 `message.Message.Platform` / `BasicNotice.Platform` 标识。
 
 - **`Meta.Platforms []string`**：插件声明支持的平台（如 `[]string{"qq"}`、`[]string{"qq","feishu"}`、`[]string{"qq","feishu","telegram"}`），空 = 支持全部平台（默认）。core 按事件来源平台过滤插件，不匹配的插件收不到该平台事件。
-- **`bot.QQ` 断言**：事件回调里的 `bot.Bot` 是来源平台能力包装后的外观，QQ 平台可断言为 `bot.QQ`（见 [Bot 接口](/api/bot#qq-专属能力-bot-qq可选接口)）。
+- **`bot.QQ` 断言**：事件回调里的 `bot.Bot` 是来源平台能力包装后的外观，QQ 平台可断言为 `bot.QQ`（见 [Bot 接口](/api/bot#qq-专属能力-bot-qq-可选接口)）。
 - **`OnPlatformEvent`（可选接口）**：无法映射为公共事件（消息/通知）的平台自有事件（如飞书卡片回调、机器人入群、Telegram 机器人被拉群/移出），通过实现 `plugin.PlatformEventHandler` 的 `OnPlatformEvent(ctx, bot, message.PlatformEvent)` 接收，广播制、按 `Meta.Platforms` 过滤：
 
 ```go
@@ -308,3 +308,4 @@ const (
     LevelPostHandle = 1000  // 后置处理层
 )
 ```
+
