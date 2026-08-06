@@ -17,6 +17,10 @@
 - **AI 重启工具（`restart_bot`）**：允许 AI 重启 Bot 进程使配置修改生效（`plugin.ai_chat_bot.config_tool.restart_enable` 开启，默认关闭）。延迟数秒执行（默认 5s，可在 3-120s 内指定），先让当前回复走完发送流程再替换进程。进程自重启逻辑抽取为共享包 `bot/component/sysrestart`（面板「重启 Bot」按钮与自动更新同步改用，行为不变）
 - **面板「操作日志」模块**：新增操作审计日志，记录面板登录成功/失败、密码修改、配置更新（含预设与扩展配置文件）、定时任务/skill/记忆/团队/知识库管理、配额清零、重启、自动更新、首次设置向导完成，以及 AI 工具发起的配置修改与重启（敏感值不落日志）。新组件 `bot/component/oplog`（包级单例，core 启动时 `Init` 注入 `__oplog` 命名空间存储）：SQL 后端走 `ania_op_log` 行级存储（过滤条件下推 WHERE、容量淘汰走范围删除），非 SQL 后端回退逐条 KV 记录；默认保留最近 500 条。面板新增「操作日志」页面（分类筛选、时间范围与关键词查询、滚动分页、自动刷新），接口 `GET /api/oplogs`
 
+### 修复
+
+- **定时任务执行日志重启中断收尾**：此前定时任务执行过程中若 Bot 重启，该次执行的日志记录会永远停留在「执行中」（running）状态（goroutine 随进程销毁，无法再更新）。现 `tasklog` 新增 `interrupted` 状态与 `MarkRunningInterrupted`：`clockManager` 启动时把所有遗留 running 日志统一标记为「中断」，回填中断原因、完成时间与耗时（SQL/KV 双后端一致，SQL 按状态列下推候选、payload 终判）；面板任务日志页新增「中断」状态筛选与样式，`GET /api/tasklogs` 的 status 参数同步支持 `interrupted`
+
 ## [v4.3.0] - 2026-08-05
 
 ⚠️注意：本次更新带来破坏性数据变更

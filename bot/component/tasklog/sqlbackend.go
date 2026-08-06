@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"log/slog"
 	"strings"
+	"time"
 
 	"github.com/jeanhua/AniaBot/common/storage"
 )
@@ -128,6 +129,53 @@ func (b *sqlBackend) evict(maxSeq uint64, maxEntries int) {
 		`DELETE FROM ania_task_log WHERE seq <= ?`, maxSeq-uint64(maxEntries)); err != nil {
 		b.logger.Error("tasklog 淘汰失败", "error", err)
 	}
+}
+
+func (b *sqlBackend) markRunningInterrupted(now time.Time) int {
+	rows, err := b.db.QueryContext(context.Background(),
+		`SELECT seq, payload FROM ania_task_log WHERE status = ?`, string(StatusRunning))
+	if err != nil {
+		b.logger.Error("tasklog 查询运行中记录失败", "error", err)
+		return 0
+	}
+	type seqPayload struct {
+		seq     uint64
+		payload string
+	}
+	var found []seqPayload
+	for rows.Next() {
+		var r seqPayload
+		if err := rows.Scan(&r.seq, &r.payload); err != nil {
+			rows.Close()
+			b.logger.Error("tasklog 查询运行中记录失败", "error", err)
+			return 0
+		}
+		found = append(found, r)
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		b.logger.Error("tasklog 查询运行中记录失败", "error", err)
+		return 0
+	}
+	rows.Close()
+
+	// status 列只是收窄候选，payload 内的状态才是终判：
+	// 仅把确实为 running 的记录标记为中断，避免覆盖异常数据
+	count := 0
+	for _, r := range found {
+		var e Entry
+		if err := json.Unmarshal([]byte(r.payload), &e); err != nil {
+			b.logger.Error("tasklog 反序列化失败，跳过中断标记", "seq", r.seq, "error", err)
+			continue
+		}
+		if e.Status != StatusRunning {
+			continue
+		}
+		interruptEntry(&e, now)
+		b.overwrite(r.seq, e)
+		count++
+	}
+	return count
 }
 
 func (b *sqlBackend) recent(limit int) []Entry {

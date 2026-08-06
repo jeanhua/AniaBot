@@ -150,6 +150,27 @@ func TestSQLBackendQueryAndRecentFor(t *testing.T) {
 	}
 }
 
+func TestSQLBackendMarkRunningInterrupted(t *testing.T) {
+	l, _ := newSQLLogger(t, 10)
+	now := time.Now()
+	l.Record(Entry{TaskID: "t1", Status: StatusRunning, TriggerTime: now.Add(-time.Minute)})
+	l.Record(Entry{TaskID: "t2", Status: StatusSuccess, TriggerTime: now.Add(-3 * time.Minute)})
+	l.Record(Entry{TaskID: "t3", Status: StatusRunning, TriggerTime: now.Add(-2 * time.Minute)})
+
+	if n := l.MarkRunningInterrupted(); n != 2 {
+		t.Fatalf("want 2 interrupted, got %d", n)
+	}
+	got := l.Query(Filter{Status: StatusRunning, Limit: 10})
+	if len(got) != 0 {
+		t.Fatalf("SQL 后端应无 running 残留: %+v", got)
+	}
+	for _, x := range l.Query(Filter{Status: StatusInterrupted, Limit: 10}) {
+		if x.Error == "" || x.FinishedAt.IsZero() || x.DurationMs <= 0 {
+			t.Fatalf("running 记录未正确标记中断: %+v", x)
+		}
+	}
+}
+
 func TestSQLBackendQueryBeforeCursor(t *testing.T) {
 	l, _ := newSQLLogger(t, 10)
 	for _, title := range []string{"a", "b", "c", "d", "e"} {
@@ -207,4 +228,17 @@ func TestBackendConformance(t *testing.T) {
 		l.Update(ids[1], func(en *Entry) { en.Status = StatusSuccess })
 	}
 	compare("Update后", kv.Recent(0), sqlm.Recent(0))
+
+	// 中断标记（模拟进程重启）：追加 running 记录后两后端应一致地转为 interrupted
+	runEntry := Entry{TriggerTime: time.Now().Add(-30 * time.Second), TaskID: "r", TaskTitle: "运行中任务", TargetType: "group", TargetID: "9", Status: StatusRunning}
+	r1 := kv.Record(runEntry)
+	r2 := sqlm.Record(runEntry)
+	if r1.ID != r2.ID {
+		t.Fatalf("running 记录 ID 分配不一致: kv=%q sql=%q", r1.ID, r2.ID)
+	}
+	kvN, sqlN := kv.MarkRunningInterrupted(), sqlm.MarkRunningInterrupted()
+	if kvN != 1 || sqlN != 1 {
+		t.Fatalf("MarkRunningInterrupted 计数不一致: kv=%d sql=%d", kvN, sqlN)
+	}
+	compare("MarkRunningInterrupted后", kv.Recent(0), sqlm.Recent(0))
 }

@@ -108,6 +108,12 @@ func newClockManager(p *AIChatPlugin, defaultTimeout time.Duration, maxLog int) 
 		cron:           cron.New(),
 	}
 	m.loadAll()
+	// 进程重启后，上一次执行遗留的 running 日志已不可能再正常收尾
+	//（goroutine 随进程销毁），启动时统一标记为 interrupted，
+	// 避免面板上的执行记录长期停留在"执行中"
+	if n := m.log.MarkRunningInterrupted(); n > 0 {
+		m.logger.Info("已把上次进程遗留的运行中任务日志标记为中断", "count", n)
+	}
 	return m
 }
 

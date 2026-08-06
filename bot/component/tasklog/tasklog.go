@@ -24,10 +24,11 @@ import (
 type Status string
 
 const (
-	StatusRunning Status = "running" // 已触发，执行中
-	StatusSuccess Status = "success" // 执行成功
-	StatusTimeout Status = "timeout" // 执行超时
-	StatusError   Status = "error"   // 执行出错
+	StatusRunning     Status = "running"     // 已触发，执行中
+	StatusSuccess     Status = "success"     // 执行成功
+	StatusTimeout     Status = "timeout"     // 执行超时
+	StatusError       Status = "error"       // 执行出错
+	StatusInterrupted Status = "interrupted" // 进程重启，执行中断
 )
 
 // 字段截断上限（符文数），避免单条日志体积失控
@@ -103,6 +104,9 @@ type backend interface {
 	// query 按条件过滤日志（新在前），beforeSeq>0 时仅返回序号更小的记录，
 	// 最多 limit 条（limit<=0 不限）。f.match 为最终判定。
 	query(f Filter, beforeSeq uint64, limit int) []Entry
+	// markRunningInterrupted 把所有 running 状态日志标记为 interrupted
+	//（进程重启后无法正常收尾的遗留执行），返回更新条数。
+	markRunningInterrupted(now time.Time) int
 }
 
 // Logger 持久化执行日志记录器。
@@ -180,6 +184,25 @@ func (l *Logger) Update(id string, mutate func(*Entry)) {
 	}
 	mutate(&e)
 	l.backend.overwrite(n, e)
+}
+
+// MarkRunningInterrupted 将遗留的 running 状态日志统一标记为 interrupted
+// （进程重启导致执行中断，未能正常收尾）。返回更新条数。
+func (l *Logger) MarkRunningInterrupted() int {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.backend.markRunningInterrupted(time.Now())
+}
+
+// interruptEntry 把一条 running 日志回填为中断状态：状态、中断时间与说明，
+// 并补记耗时（从触发到重启时刻）。
+func interruptEntry(e *Entry, now time.Time) {
+	e.Status = StatusInterrupted
+	e.Error = "进程重启，执行中断"
+	e.FinishedAt = now
+	if !e.TriggerTime.IsZero() {
+		e.DurationMs = now.Sub(e.TriggerTime).Milliseconds()
+	}
 }
 
 // Recent 返回最近 limit 条日志（新在前）。limit<=0 时返回全部。

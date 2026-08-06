@@ -632,7 +632,7 @@ func (s *Server) handleFriends(w http.ResponseWriter, _ *http.Request) {
 
 // handleTaskLogs 按条件分页查询定时任务执行日志（新在前）。
 // 支持查询参数：target_type（group/friend）、target_id（群号/QQ）、task_id（任务 ID）、
-// status（running/success/timeout/error）、start / end（RFC3339 或 datetime-local 格式）、
+// status（running/success/timeout/error/interrupted）、start / end（RFC3339 或 datetime-local 格式）、
 // keyword（匹配任务标题）、limit（每页条数，默认 50，最大 200）、
 // before（分页游标：仅返回比该日志 ID 更旧的记录）。
 // 响应：{"items": [...], "has_more": bool}。
@@ -654,9 +654,9 @@ func (s *Server) handleTaskLogs(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	switch f.Status {
-	case "", tasklog.StatusRunning, tasklog.StatusSuccess, tasklog.StatusTimeout, tasklog.StatusError:
+	case "", tasklog.StatusRunning, tasklog.StatusSuccess, tasklog.StatusTimeout, tasklog.StatusError, tasklog.StatusInterrupted:
 	default:
-		writeError(w, http.StatusBadRequest, "status 仅支持 running / success / timeout / error")
+		writeError(w, http.StatusBadRequest, "status 仅支持 running / success / timeout / error / interrupted")
 		return
 	}
 	if v := q.Get("start"); v != "" {
