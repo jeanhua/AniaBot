@@ -122,7 +122,7 @@ flowchart TB
     G --> H[流式模式: 结束当前消息]
     H --> I{还有下一轮?}
     I -->|是, i < maxIterations| B
-    I -->|否, 达上限| J[追加"工具已达上限"指令<br/>去掉工具定义再调一次]
+    I -->|否, 达上限| J["追加「工具已达上限」指令<br/>去掉工具定义再调一次"]
     J --> D
 ```
 
@@ -157,3 +157,4 @@ if imageURLs := callbacks.TakeLoadedImages(); len(imageURLs) > 0 {
 - [AI 引擎（二）上下文、历史与记忆](/internals/agent-context) —— 上下文窗口如何按 token 预算压缩、历史如何持久化
 - [AI 引擎（三）工具、MCP 与高级编排](/internals/agent-tools) —— 工具如何定义、MCP 如何懒加载、定时任务与子代理
 - [技术原理总览](/internals/)
+

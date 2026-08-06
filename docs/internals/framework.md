@@ -28,7 +28,7 @@ flowchart LR
         E3[OneBot JSON] --> T3[NapCat 适配器 解析]
     end
     subgraph Mid[统一消息模型]
-        M[message.Message<br/>[]OB11Segment + Platform]
+        M["message.Message<br/>[]OB11Segment + Platform"]
         C[Core 分发 / 路由]
         PL[插件链]
         B[bot.Bot / msgchain]
@@ -298,4 +298,5 @@ storage.EnsureTables(ctx, db, dialect, storage.TableDDL{...})
 
 - [AI 引擎（一）LLM 客户端与对话循环](/internals/agent-llm) —— Agent 部分从哪里开始
 - [技术原理总览](/internals/) —— 回到总览
+
 

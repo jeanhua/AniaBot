@@ -16,7 +16,7 @@ flowchart TB
     B -->|否| C[继续对话]
     B -->|是| D[MaybeCompress]
     D --> E{压缩器可用?}
-    E -->|是| F[LLM 摘要旧对话<br/>返回 [user] 之前的对话摘要]
+    E -->|是| F["LLM 摘要旧对话<br/>返回 [user] 之前的对话摘要"]
     E -->|否| G[失败降级: 丢弃最旧一半历史]
     F --> H[替换窗口 + 全量落盘 Replace]
     G --> H
@@ -126,3 +126,4 @@ flowchart LR
 - [AI 引擎（三）工具、MCP 与高级编排](/internals/agent-tools) —— 工具如何定义、MCP/Skill/定时任务/子代理
 - [AI 引擎（一）LLM 客户端与对话循环](/internals/agent-llm) —— 请求循环本身
 - [技术原理总览](/internals/)
+
