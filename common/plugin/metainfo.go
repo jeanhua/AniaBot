@@ -34,6 +34,8 @@ type Meta struct {
 	RestyClient       *resty.Client
 	Logger            *slog.Logger
 	SystemConfig      SystemConfig
+	// ConfigEditor 配置中心读写能力；持久化存储不可用时为 nil，使用前需判空
+	ConfigEditor ConfigEditor
 }
 
 func (p *Meta) GetMeta() *Meta {
@@ -169,4 +171,8 @@ func (p *Meta) OnPanic(ctx context.Context, bot bot.Bot, name string, err any) {
 
 func (p *Meta) SetConfig(cfg SystemConfig) {
 	p.SystemConfig = cfg
+}
+
+func (p *Meta) SetConfigEditor(editor ConfigEditor) {
+	p.ConfigEditor = editor
 }

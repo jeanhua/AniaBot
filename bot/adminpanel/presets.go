@@ -2,6 +2,8 @@ package adminpanel
 
 import (
 	"net/http"
+
+	"github.com/jeanhua/AniaBot/bot/component/oplog"
 )
 
 // ---- config preset handlers（配置预设：保存当前配置为快照，一键切换） ----
@@ -25,6 +27,7 @@ func (s *Server) handlePresetSave(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.opt.Logger.Info("配置预设已通过 Web 面板保存", "name", req.Name)
+	oplog.Record(oplog.CategoryConfig, "preset_save", "面板保存配置预设: "+req.Name)
 	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
 }
 
@@ -38,6 +41,7 @@ func (s *Server) handlePresetApply(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.opt.Logger.Info("配置预设已通过 Web 面板应用", "name", name, "keys", n)
+	oplog.Record(oplog.CategoryConfig, "preset_apply", "面板应用配置预设: "+name)
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "keys": n, "need_restart": true})
 }
 
@@ -49,5 +53,6 @@ func (s *Server) handlePresetDelete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.opt.Logger.Info("配置预设已通过 Web 面板删除", "name", name)
+	oplog.Record(oplog.CategoryConfig, "preset_delete", "面板删除配置预设: "+name)
 	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
 }

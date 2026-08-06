@@ -1,7 +1,7 @@
 // 自动更新：从配置的 git 源码目录拉取最新代码，拉依赖、构建前端、编译 Go，
 // 以「改名交换」方式替换运行中的二进制（Windows 不允许覆盖运行中的 exe，
 // 但允许重命名，故先编译为 AniaBot.update，再拷贝为 <exe>.new 做 rename 交换，
-// 旧二进制保留为 <exe>.old 以便手动回滚），最后复用 restartSelf 重启进程。
+// 旧二进制保留为 <exe>.old 以便手动回滚），最后复用 sysrestart.Self 重启进程。
 //
 // 任一阶段失败都会中止更新，并记录错误分类（环境/仓库/依赖/前端/编译/系统），
 // 前端轮询 GET /api/update/status 展示实时日志与失败原因。
@@ -18,6 +18,9 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/jeanhua/AniaBot/bot/component/oplog"
+	"github.com/jeanhua/AniaBot/bot/component/sysrestart"
 )
 
 // 更新流水线阶段
@@ -111,7 +114,7 @@ func (w logWriter) Write(p []byte) (int, error) {
 // isDevRun 检测是否为 go run 开发模式（可执行文件在临时编译目录中），
 // 开发模式下禁用自动更新。
 func isDevRun() bool {
-	exe := selfExe
+	exe := sysrestart.Exe()
 	if exe == "" {
 		return false
 	}
@@ -159,7 +162,7 @@ func (s *Server) handleUpdateInfo(w http.ResponseWriter, r *http.Request) {
 	if isDevRun() {
 		mode = "dev"
 	}
-	exe := selfExe
+	exe := sysrestart.Exe()
 	srcDir := s.cfgStr("bot.update.source_dir")
 	branch := s.cfgStr("bot.update.branch")
 	if branch == "" {
@@ -301,6 +304,7 @@ func (s *Server) handleUpdateStart(w http.ResponseWriter, r *http.Request) {
 	upd.buf = ""
 	upd.mu.Unlock()
 
+	oplog.Record(oplog.CategoryUpdate, "update_start", "面板启动自动更新（分支: "+branch+"），IP: "+clientIP(r))
 	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
 	go s.runUpdate(srcDir, gitURL, branch)
 }
@@ -436,7 +440,7 @@ func (s *Server) runUpdate(srcDir, gitURL, branch string) {
 	// 会读到已被 rename 的旧二进制路径（/proc/self/exe 跟随 inode）。
 	upd.setPhase(upPhaseSwap)
 	upd.appendLog("== 替换二进制 ==")
-	exe := selfExe
+	exe := sysrestart.Exe()
 	if exe == "" {
 		fail("系统错误", fmt.Errorf("无法获取当前可执行文件路径"))
 		return
@@ -467,7 +471,7 @@ func (s *Server) runUpdate(srcDir, gitURL, branch string) {
 	s.opt.Logger.Info("自动更新完成，正在重启 AniaBot")
 	go func() {
 		time.Sleep(1500 * time.Millisecond)
-		restartSelf(s.opt.Logger)
+		sysrestart.Self(s.opt.Logger)
 	}()
 }
 

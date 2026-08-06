@@ -634,6 +634,21 @@ func (p *AIChatPlugin) Start(ctx context.Context, cfg *viper.Viper) error {
 	if err != nil {
 		return fmt.Errorf("%w: 创建工具执行器失败: %w", aniaerror.ParameterInitializeError, err)
 	}
+
+	// 配置管理 / 重启工具（默认关闭，配置中心读写能力由 core 经 DI 注入）
+	if p.cfg.ConfigTool.Enable {
+		if p.ConfigEditor != nil {
+			p.toolExecutor.Register(functool.NewConfigGetTool(p.ConfigEditor))
+			p.toolExecutor.Register(functool.NewConfigSetTool(p.ConfigEditor))
+			p.Logger.Info("已启用配置管理工具（AI 可查看/修改框架配置，敏感字段掩码，修改重启后生效）")
+		} else {
+			p.Logger.Warn("配置管理工具不可用：配置中心未注入（持久化存储异常？）")
+		}
+	}
+	if p.cfg.ConfigTool.RestartEnable {
+		p.toolExecutor.Register(functool.NewRestartBotTool(p.Logger))
+		p.Logger.Info("已启用重启工具（AI 可重启 Bot 使配置修改生效）")
+	}
 	p.Logger.Info("工具执行器初始化完成")
 
 	// AI 定时任务（clock）：AI / 用户动态管理的持久化定时任务，独立于框架 cron

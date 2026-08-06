@@ -29,6 +29,19 @@ type DI interface {
 	SetRestyClient(*resty.Client)
 	SetLogger(*slog.Logger)
 	SetConfig(SystemConfig)
+	SetConfigEditor(ConfigEditor)
+}
+
+// ConfigEditor 配置中心读写能力，由 core 在 DI 时注入（configstore.Store 实现）。
+// 配置为点分键（与历史 viper 键一致，如 plugin.ai_chat_bot.base_url），
+// 值为 JSON 解码后的原生类型。改动写入数据库，重启后生效。
+// 仅供需要读写框架配置的插件使用（如 AI 配置管理工具）；普通插件读配置
+// 仍应使用 Start 传入的 viper 或 ConfigSchema 结构体绑定。
+type ConfigEditor interface {
+	Get(key string) (any, bool)
+	Set(key string, val any) error
+	Delete(key string) bool
+	All() map[string]any
 }
 
 type BasicEvent interface {

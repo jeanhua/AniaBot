@@ -13,6 +13,9 @@
 ### 新增
 
 - **AI 对话支持三种 LLM API 格式**：`aichat` 的 `LLMClient` 重构为「重试/备用外壳 + 按格式后端（`llmBackend`）」结构，在原有 OpenAI Chat Completions 之外新增 **OpenAI Responses API** 与 **Anthropic Messages API（Claude）** 两种格式。主模型经 `plugin.ai_chat_bot.api_format`（`chat_completions` 默认 / `responses` / `anthropic`）选择，子代理、压缩器、备用模型各有独立 `api_format`（留空跟随主模型格式）；应用层重试、备用模型切换、流式增量回复、token 用量统计（含缓存命中）三种格式行为一致。Anthropic 格式完整支持深度思考（`thinking.mode` 映射 `budget_tokens`，思考块含签名随历史持久化并在 tool calling 多轮中原样回传），非流式调用内部走流式聚合以绕开 API 的大 max_tokens 流式强制
+- **AI 配置管理工具（`config_get` / `config_set`）**：AI 对话插件新增配置管理工具，允许 AI 查看与修改框架配置（`plugin.ai_chat_bot.config_tool.enable` 开启，默认关闭）。`config_get` 列出全部已注册配置项或查看单个键，敏感字段（API Key/Token 等）依据配置注册表对 AI 掩码，不会泄露进对话上下文；`config_set` 写入数据库（重启后生效），仅允许修改注册表中已声明的键（防止拼写错误产生垃圾键、挡住 `meta.*` 内部键），值按 JSON 解析保留类型（bool/数字/数组），并与面板一致禁止置空面板监听地址。配置中心读写能力经新的插件 DI 项 `plugin.ConfigEditor`（由 `configstore.Store` 实现，持久化存储不可用时为 nil）注入，普通插件读配置仍走 viper / `ConfigSchema` 结构体绑定
+- **AI 重启工具（`restart_bot`）**：允许 AI 重启 Bot 进程使配置修改生效（`plugin.ai_chat_bot.config_tool.restart_enable` 开启，默认关闭）。延迟数秒执行（默认 5s，可在 3-120s 内指定），先让当前回复走完发送流程再替换进程。进程自重启逻辑抽取为共享包 `bot/component/sysrestart`（面板「重启 Bot」按钮与自动更新同步改用，行为不变）
+- **面板「操作日志」模块**：新增操作审计日志，记录面板登录成功/失败、密码修改、配置更新（含预设与扩展配置文件）、定时任务/skill/记忆/团队/知识库管理、配额清零、重启、自动更新、首次设置向导完成，以及 AI 工具发起的配置修改与重启（敏感值不落日志）。新组件 `bot/component/oplog`（包级单例，core 启动时 `Init` 注入 `__oplog` 命名空间存储）：SQL 后端走 `ania_op_log` 行级存储（过滤条件下推 WHERE、容量淘汰走范围删除），非 SQL 后端回退逐条 KV 记录；默认保留最近 500 条。面板新增「操作日志」页面（分类筛选、时间范围与关键词查询、滚动分页、自动刷新），接口 `GET /api/oplogs`
 
 ## [v4.3.0] - 2026-08-05
 

@@ -6,6 +6,7 @@ import './style.css'
 const routes = [
   { path: '/', name: 'dashboard', component: () => import('./views/Dashboard.vue'), meta: { title: '状态总览' } },
   { path: '/console', name: 'console', component: () => import('./views/ConsoleLog.vue'), meta: { title: '控制台日志' } },
+  { path: '/oplogs', name: 'oplogs', component: () => import('./views/OpLog.vue'), meta: { title: '操作日志' } },
   { path: '/msglogs', name: 'msglogs', component: () => import('./views/MsgLog.vue'), meta: { title: '消息日志' } },
   { path: '/querylogs', name: 'querylogs', component: () => import('./views/QueryLog.vue'), meta: { title: 'Query 日志' } },
   { path: '/tokenstats', name: 'tokenstats', component: () => import('./views/TokenStats.vue'), meta: { title: 'Token 统计' } },

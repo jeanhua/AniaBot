@@ -1,6 +1,6 @@
 //go:build windows
 
-package adminpanel
+package sysrestart
 
 import (
 	"log/slog"
@@ -8,10 +8,10 @@ import (
 	"os/exec"
 )
 
-// restartSelf 以相同参数启动新进程后退出当前进程
+// Self 以相同参数启动新进程后退出当前进程
 // （Windows 不支持 exec 语义，子进程继承控制台与标准流）。
 // 使用启动时缓存的 selfExe，避免二进制被改名交换后取到旧路径。
-func restartSelf(logger *slog.Logger) {
+func Self(logger *slog.Logger) {
 	exe := selfExe
 	if exe == "" {
 		logger.Error("重启失败：无法获取可执行文件路径")

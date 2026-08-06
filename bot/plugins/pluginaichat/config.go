@@ -38,6 +38,14 @@ type localImageToolConfig struct {
 	Enable bool `cfg:"enable" label:"启用本地图片工具" group:"AI 对话 · 工具" help:"可读取宿主机本地图片，默认关闭" default:"false"`
 }
 
+// configToolConfig AI 配置管理 / 重启工具配置：允许 AI 查看与修改框架配置
+// （config_get / config_set，敏感字段对 AI 掩码，修改重启后生效），
+// 以及通过 restart_bot 重启 Bot 使配置修改生效。
+type configToolConfig struct {
+	Enable        bool `cfg:"enable" label:"启用配置管理工具" group:"AI 对话 · 工具" help:"允许 AI 查看与修改框架配置（config_get/config_set，敏感字段对 AI 掩码，修改重启后生效），默认关闭" default:"false"`
+	RestartEnable bool `cfg:"restart_enable" label:"启用重启工具" group:"AI 对话 · 工具" help:"允许 AI 重启 Bot 使配置修改生效（restart_bot），默认关闭" default:"false"`
+}
+
 type ocrConfig struct {
 	Enable      bool     `cfg:"enable" label:"启用备用识图模型" group:"AI 对话 · OCR" help:"主模型不支持多模态时将图片转文字" default:"false"`
 	BaseURL     string   `cfg:"base_url" label:"Base URL" group:"AI 对话 · OCR" default:"https://api.siliconflow.cn/v1"`
@@ -167,6 +175,7 @@ type aiChatConfig struct {
 	Bash       bashToolConfig       `cfg:"plugin.ai_chat_bot.bash"`
 	File       fileToolConfig       `cfg:"plugin.ai_chat_bot.file"`
 	LocalImage localImageToolConfig `cfg:"plugin.ai_chat_bot.local_image"`
+	ConfigTool configToolConfig     `cfg:"plugin.ai_chat_bot.config_tool"`
 
 	OCR ocrConfig `cfg:"plugin.ai_chat_bot.ocr"`
 

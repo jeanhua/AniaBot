@@ -121,6 +121,8 @@ export const api = {
   getQueryLogs: (params = {}) => request(`/api/querylogs${qs(params)}`),
   // 控制台日志分页查询：{ limit, before }（均可选），返回 { items, has_more }
   getConsoleLogs: (params = {}) => request(`/api/consolelogs${qs(params)}`),
+  // 操作日志分页查询：{ category, start, end, keyword, limit, before }（均可选），返回 { items, has_more }
+  getOpLogs: (params = {}) => request(`/api/oplogs${qs(params)}`),
   getClocks: () => request('/api/clocks'),
   // token 消耗监控指标：{ summary, today, daily[] }，含缓存命中率
   getTokenStats: () => request('/api/tokenstats'),

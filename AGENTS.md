@@ -80,7 +80,9 @@ bot/adapter/discord/     Discord adapter (bwmarrin/discordgo, Gateway WebSocket;
 bot/component/           AI chat engine
   aichat/                  ChatBot, LLMClient, MessageBuilder, ToolOrchestrator, messageWindow
   llmtool/                 Tool interface, ToolExecuter, MCP client, SkillManager, schema parser
-  functool/                Built-in tools (time, web search, meme, file, msg history, image loading)
+  functool/                Built-in tools (time, web search, meme, file, msg history, image loading, config get/set, bot restart)
+  oplog/                   Operation audit log (panel + AI tool actions; SQL ania_op_log / KV dual backend, package-level singleton)
+  sysrestart/              Process self-restart (panel restart/auto-update + restart_bot tool)
 bot/plugins/             Seven built-in plugins (sys, log, repeat, antiwithdrawal, interceptor, aichat, news)
 bot/utils/               Command parsing, message extraction, URL helpers, time formatting
 custom/                  User-created plugin examples and templates
@@ -100,7 +102,7 @@ bot/adapter/telegram → common/adapter, common/bot, common/model/message, commo
 bot/adapter/discord → common/adapter, common/bot, common/model/message, common/msgchain, external (discordgo, gorilla/websocket, x/net/proxy)
 bot/plugins/* → common/plugin, common/bot, common/storage, bot/component/*
 bot/component/aichat → bot/component/llmtool, external (openai-go, anthropic-sdk-go)
-bot/component/functool → bot/component/llmtool, bot/utils
+bot/component/functool → bot/component/llmtool, bot/component/oplog, bot/component/sysrestart, common/pluginconfig, bot/utils
 bot/component/llmtool → external (openai-go, MCP SDK)
 common/* → leaf packages (no upward dependencies)
 ```
@@ -115,7 +117,7 @@ Plugins implement `common/plugin.Plugin` by embedding `plugin.Meta` and overridi
 - **Platform scoping**: `plugin.Meta.Platforms []string` declares which platforms a plugin supports (`[]string{"qq"}` or `[]string{"qq","feishu"}`); empty = all platforms (backward compatible). Core filters plugins per-event by the source adapter's platform.
 - **Platform-specific events**: optional `plugin.PlatformEventHandler` — `OnPlatformEvent(ctx, bot, message.PlatformEvent) error` receives events that can't map to public notices (e.g. Feishu card actions, bot-added). Broadcast (non-interrupting), filtered by `Meta.Platforms`.
 - **Platform capabilities via type assertion**: in message/notice handlers the `bot.Bot` argument is the event source's capability-wrapped facade (`adapter.WrapBot`). Plugins probe optional capability interfaces: `if qb, ok := b.(bot.QQ); ok { qb.GetNCrkey() ... }`. QQ-only plugins (e.g. anti-withdrawal, which needs merge-forward + rkey) declare `Platforms: []string{"qq"}` and assert `bot.QQ`.
-- **DI injection**: Core injects `Storage` (cache) and `PersistentStorage` alongside `RestyClient`, `Logger`, and `SystemConfig` before calling `Start()`. `SystemConfig.AdminId` is a `message.QID` from `bot.admin_id` (string, may carry a platform prefix).
+- **DI injection**: Core injects `Storage` (cache) and `PersistentStorage` alongside `RestyClient`, `Logger`, `SystemConfig`, and `ConfigEditor` before calling `Start()`. `SystemConfig.AdminId` is a `message.QID` from `bot.admin_id` (string, may carry a platform prefix). `ConfigEditor` is the config-center read/write facade (`plugin.ConfigEditor`, implemented by `configstore.Store`; nil when persistent storage is unavailable — check before use) for plugins that need to read/modify framework config (e.g. the AI config tools); normal plugins should still read config via the `Start` viper or `ConfigSchema` struct binding.
 - **Lifecycle**: `Start()` → `StartCron()` → `Awake()` → message/notice events → `OnPanic()`
 - **Panic recovery**: Every plugin call is wrapped in `safeExecute`; goroutines spawned via `bot.Go()` have crash recovery that notifies all plugins.
 
@@ -125,7 +127,7 @@ Tools are defined as structs embedding `llmtool.BaseTool[ParamsType]`. Parameter
 
 Registration hierarchy:
 
-1. `functool.CreateDefaultTools()` — registers built-in tools. Always on: `time`, `web_search`, `web_explore` (both via Jina), `meme`, `msg_history`, `private_file`, `load_images` (LLM-invoked, on-demand loading of images in the user's current/quoted message; recognition via the multimodal model or OCR fallback in the callback). Opt-in (gated behind config flags for safety): `bash` (executes on the host with whitelist/blacklist regex), `file`/`send_file`, and `local_image` (reads host-local image files for the LLM to view; served as a data URI to the multimodal model or OCR fallback in the callback).
+1. `functool.CreateDefaultTools()` — registers built-in tools. Always on: `time`, `web_search`, `web_explore` (both via Jina), `meme`, `msg_history`, `private_file`, `load_images` (LLM-invoked, on-demand loading of images in the user's current/quoted message; recognition via the multimodal model or OCR fallback in the callback). Opt-in (gated behind config flags for safety): `bash` (executes on the host with whitelist/blacklist regex), `file`/`send_file`, and `local_image` (reads host-local image files for the LLM to view; served as a data URI to the multimodal model or OCR fallback in the callback). Registered separately by the aichat plugin (not in `CreateDefaultTools`): `config_get`/`config_set` (`plugin.ai_chat_bot.config_tool.enable`, default off — read/modify framework config via the DI-injected `ConfigEditor`; sensitive fields masked against the pluginconfig registry, only registered keys writable, changes take effect after restart) and `restart_bot` (`config_tool.restart_enable`, default off — delayed self-restart via `bot/component/sysrestart` to apply config changes).
 2. `functool.CreateToolsWithMCP()` — adds MCP discovery tools
 3. `functool.CreateToolsWithSkill()` — adds `skill_read` tool
 
@@ -161,7 +163,7 @@ AniaBot exposes two interface-adapted storage layers, both with Clone-based `bas
 - **CACHE** (`common/storage.Storage`, injected as `p.Storage`): volatile; supports TTL + Redis-list semantics. Backends: `memory` (default, process-local) | `redis` (opt-in, shared across instances).
 - **PERSISTENT** (`common/storage.PersistentStorage`, injected as `p.PersistentStorage`): durable KV/document store, survives restart, no TTL/list semantics. Backends: `sqlite` (default) | `mysql` (opt-in).
 
-SQL persistent backends additionally implement the **optional** `storage.SQLPersistentStorage` interface (`SQLDB()`/`SQLDialect()`); probe it with `storage.SQLBackend(store)` (type assertion, same convention as `bot.QQ`) and create plugin-owned relational tables via `storage.EnsureTables(ctx, db, dialect, storage.TableDDL{Name, SQLite, MySQL}...)` (idempotent, per-dialect DDL). Clone-derived namespace sub-stores share the same `*sql.DB` and probe successfully too. Always provide a KV fallback — probe/DDL failures must only log and degrade, never block plugin start. Plugin-created tables use the `ania_` prefix (built-ins so far: `ania_chat_session`/`ania_chat_message`, `ania_memory`, `ania_query_log`, `ania_task_log`). Conventions for these tables: MySQL string keys `VARCHAR(255) COLLATE utf8mb4_bin`, large payloads `MEDIUMTEXT`, timestamps as INTEGER unix seconds or fixed-width UTC text (lexicographic = chronological); redundant filter columns only narrow candidates in WHERE — the Go-side matcher remains the final judge so SQL/KV paths stay semantically identical.
+SQL persistent backends additionally implement the **optional** `storage.SQLPersistentStorage` interface (`SQLDB()`/`SQLDialect()`); probe it with `storage.SQLBackend(store)` (type assertion, same convention as `bot.QQ`) and create plugin-owned relational tables via `storage.EnsureTables(ctx, db, dialect, storage.TableDDL{Name, SQLite, MySQL}...)` (idempotent, per-dialect DDL). Clone-derived namespace sub-stores share the same `*sql.DB` and probe successfully too. Always provide a KV fallback — probe/DDL failures must only log and degrade, never block plugin start. Plugin-created tables use the `ania_` prefix (built-ins so far: `ania_chat_session`/`ania_chat_message`, `ania_memory`, `ania_query_log`, `ania_task_log`, `ania_op_log`). Conventions for these tables: MySQL string keys `VARCHAR(255) COLLATE utf8mb4_bin`, large payloads `MEDIUMTEXT`, timestamps as INTEGER unix seconds or fixed-width UTC text (lexicographic = chronological); redundant filter columns only narrow candidates in WHERE — the Go-side matcher remains the final judge so SQL/KV paths stay semantically identical.
 
 All SQL backends use pure-Go drivers (`modernc.org/sqlite`, `github.com/go-sql-driver/mysql`) — no CGO, cross-compile friendly. Cache config lives under `bot.store.cache` in the DB config; the persistent backend itself is bootstrapped via env vars (`ANIABOT_STORE_DRIVER` / `ANIABOT_SQLITE_PATH` / `ANIABOT_MYSQL_DSN`); factories in `bot/core/storage_factory.go`.
 
