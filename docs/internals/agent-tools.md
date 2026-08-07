@@ -57,11 +57,15 @@ type SessionToolExecutor struct { // 会话层：每个会话独立
 
 | 层级 | 内容 |
 | --- | --- |
-| `CreateDefaultTools()` | 常开：`time`、`webSearch`/`webExplore`（Jina）、`meme`、`get_msg_history`、`get_private_file_url`、`load_images`；配置门控：`bash`（黑白名单正则）、`send_file`、`local_image` |
+| `CreateDefaultTools()` | 常开：`time`、`webSearch`/`webExplore`（Jina）、`meme`（可配置接口模板，见下）、`get_msg_history`、`get_private_file_url`、`load_images`；配置门控：`bash`（黑白名单正则）、`send_file`、`local_image` |
 | `CreateToolsWithMCP()` | 追加 MCP 工具（`mcpLazyLoad` 决定发现/加载模式或全量注册） |
 | `CreateToolsWithSkill()` | 追加 `skill_read` / `skill_reload` 工具与 SkillManager |
 
 另由 aichat 插件在会话层注册：`config_get`/`config_set`（配置中心读写，敏感字段掩码、仅注册键可写、重启生效）、`restart_bot`（延迟自重启）、`mcp_list`/`mcp_add`/`mcp_remove`/`mcp_reconnect`（MCP 服务器自管理，写 `files.mcp_json` 持久化 + 运行时热注册/注销）、会话绑定的 clock/memory/knowledge/team/subagent 工具。
+
+### meme 工具的可配置接口
+
+`meme` 不绑定特定表情包平台：`plugin.ai_chat_bot.meme.url` 是请求地址模板（`${msg}` 搜索词 / `${num}` 数量 / `${key}` API Key 占位符，`key` 单独配置、面板按敏感字段掩码），`list_path` / `img_field` 是响应 JSON 的 gjson 提取路径（数组位置与元素内图片 URL 字段）。任何「返回一组图片 URL」的接口都能接入，接口失效时改配置即可切换。默认 GIPHY stickers（`list_path=data`、`img_field=images.fixed_width.url`），需免费 API Key；模板含 `${key}` 而未配置 Key 时工具返回明确指引而非上游 401 裸错误。
 
 ### 回调桥（CallBackFuncs）
 

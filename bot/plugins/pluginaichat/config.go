@@ -38,6 +38,17 @@ type localImageToolConfig struct {
 	Enable bool `cfg:"enable" label:"启用本地图片工具" group:"AI 对话 · 工具" help:"可读取宿主机本地图片，默认关闭" default:"false"`
 }
 
+// memeToolConfig meme 表情包工具配置：请求地址模板 + gjson 解析路径，
+// 任何「返回一组图片 URL」的接口都能接入，接口失效时改配置即可切换。
+// 默认 GIPHY stickers（全球最大 GIF/表情包平台，需免费 API Key）
+type memeToolConfig struct {
+	URL      string `cfg:"url" label:"表情包接口地址" group:"AI 对话 · 工具" help:"请求地址模板，支持 ${msg}（搜索词）、${num}（数量）、${key}（API Key）占位符；默认 GIPHY，国内服务器访问需代理，也可换成任意返回图片数组的自定义接口" default:"https://api.giphy.com/v1/stickers/search?api_key=${key}&q=${msg}&limit=${num}"`
+	Key      string `cfg:"key" label:"表情包 API Key" type:"password" sensitive:"true" group:"AI 对话 · 工具" help:"替换地址中的 ${key}；默认接口为 GIPHY，免费 Key 在 developers.giphy.com 申请；接口地址不含 ${key} 时留空即可"`
+	ListPath string `cfg:"list_path" label:"结果数组路径" group:"AI 对话 · 工具" help:"gjson 路径，指向响应 JSON 中的图片数组" default:"data"`
+	ImgField string `cfg:"img_field" label:"图片字段路径" group:"AI 对话 · 工具" help:"数组元素中图片 URL 的 gjson 路径，如 img_url 或 images.fixed_width.url" default:"images.fixed_width.url"`
+	Num      int    `cfg:"num" label:"请求数量" group:"AI 对话 · 工具" help:"每次请求的结果数量，随机从中挑一张发送" default:"50"`
+}
+
 // configToolConfig AI 配置管理 / 重启工具配置：允许 AI 查看与修改框架配置
 // （config_get / config_set，敏感字段对 AI 掩码，修改重启后生效），
 // 以及通过 restart_bot 重启 Bot 使配置修改生效。
@@ -195,6 +206,7 @@ type aiChatConfig struct {
 	Bash       bashToolConfig       `cfg:"plugin.ai_chat_bot.bash"`
 	File       fileToolConfig       `cfg:"plugin.ai_chat_bot.file"`
 	LocalImage localImageToolConfig `cfg:"plugin.ai_chat_bot.local_image"`
+	Meme       memeToolConfig       `cfg:"plugin.ai_chat_bot.meme"`
 	ConfigTool configToolConfig     `cfg:"plugin.ai_chat_bot.config_tool"`
 	SkillTool  skillToolConfig      `cfg:"plugin.ai_chat_bot.skill_tool"`
 	MCP        mcpConfig            `cfg:"plugin.ai_chat_bot.mcp"`

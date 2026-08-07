@@ -1,162 +1,159 @@
 package functool
 
 import (
+	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	"io"
-	"log"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
-	"time"
 
-	"github.com/go-resty/resty/v2"
-	"github.com/jeanhua/AniaBot/bot/utils"
+	"github.com/jeanhua/AniaBot/bot/component/llmtool"
 )
 
-func startMockMemeServer() *httptest.Server {
+// startMockMemeServer 返回 suol 风格响应（{"data":[{"img_url":...}]}）的模拟接口，
+// listPath/imgField 可据此验证 gjson 提取；返回空数组时用于测试空结果分支
+func startMockMemeServer(t *testing.T, giphyStyle bool, empty bool) *httptest.Server {
+	t.Helper()
 	var serverURL string
 	mux := http.NewServeMux()
 
-	mux.HandleFunc("/v1/meme.php", func(w http.ResponseWriter, r *http.Request) {
-		// parse num query (default to 3)
+	mux.HandleFunc("/meme", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if empty {
+			_ = json.NewEncoder(w).Encode(map[string]any{"data": []any{}})
+			return
+		}
 		num := 3
 		if q := r.URL.Query().Get("num"); q != "" {
-			// ignore parse errors, keep default on error
 			if n, err := fmt.Sscanf(q, "%d", &num); err != nil || n != 1 {
 				num = 3
 			}
 		}
-
-		data := make([]map[string]string, 0, num)
+		data := make([]map[string]any, 0, num)
 		for i := 0; i < num; i++ {
-			data = append(data, map[string]string{
-				"img_url": fmt.Sprintf("%s/images/%d.jpg", serverURL, i),
-			})
+			imgURL := fmt.Sprintf("%s/images/%d.gif", serverURL, i)
+			if giphyStyle {
+				data = append(data, map[string]any{
+					"images": map[string]any{
+						"fixed_width": map[string]any{"url": imgURL},
+					},
+				})
+			} else {
+				data = append(data, map[string]any{"img_url": imgURL})
+			}
 		}
-		resp := map[string]interface{}{"data": data}
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(resp)
+		_ = json.NewEncoder(w).Encode(map[string]any{"data": data})
 	})
 
-	// Serve image endpoints (respond to HEAD/GET)
 	mux.HandleFunc("/images/", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "image/jpeg")
-		// small dummy body for GET
-		if r.Method == http.MethodGet {
-			w.WriteHeader(http.StatusOK)
-			_, _ = io.WriteString(w, "JPEGDATA")
-			return
-		}
-		// HEAD: just OK
+		w.Header().Set("Content-Type", "image/gif")
 		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("GIFDATA"))
 	})
 
 	server := httptest.NewServer(mux)
 	serverURL = server.URL
+	t.Cleanup(server.Close)
 	return server
 }
 
-func TestMemeAPI(t *testing.T) {
-	tests := []struct {
-		name string
-		text string
-	}{
-		{"happy", "开心"},
-		{"angry", "生气"},
-		{"sad", "难过"},
-		{"why", "为什么"},
-	}
-
-	server := startMockMemeServer()
-	defer server.Close()
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			modifier, err := utils.NewURLModifier(server.URL + "/v1/meme.php")
-			if err != nil {
-				t.Fatalf("NewURLModifier error: %v", err)
-			}
-			modifier.SetQuery("msg", tt.text)
-			modifier.SetQuery("num", "5")
-
-			type responseTy struct {
-				Data []struct {
-					ImageUrl string `json:"img_url"`
-				} `json:"data"`
-			}
-			result := responseTy{}
-			client := resty.New()
-			resp, err := client.R().SetResult(&result).Get(modifier.String())
-			if err != nil {
-				t.Fatalf("request error: %v", err)
-			}
-
-			log.Printf("text=%s status=%d data_count=%d", tt.text, resp.StatusCode(), len(result.Data))
-
-			if resp.StatusCode() != 200 {
-				t.Fatalf("expected status 200, got %d", resp.StatusCode())
-			}
-
-			if len(result.Data) == 0 {
-				t.Fatal("expected non-empty data array")
-			}
-
-			for i, item := range result.Data {
-				if item.ImageUrl == "" {
-					t.Errorf("data[%d].ImageUrl is empty", i)
-				}
-				log.Printf("  [%d] url=%s", i, item.ImageUrl)
-			}
-		})
+// captureSendImage 返回拦截 SendImage 的回调集合与取回 base64 内容的函数
+func captureSendImage(sent *string) llmtool.CallBackFuncs {
+	return llmtool.CallBackFuncs{
+		SendImage: func(bs64 string) (string, error) {
+			*sent = bs64
+			return "ok", nil
+		},
 	}
 }
 
-func TestMemeImageURLAccessibility(t *testing.T) {
-	server := startMockMemeServer()
-	defer server.Close()
+func TestMemeExecuteSuolStyle(t *testing.T) {
+	server := startMockMemeServer(t, false, false)
+	tool := NewMemeTool(MemeConfig{
+		URL:      server.URL + "/meme?msg=${msg}&num=${num}",
+		ListPath: "data",
+		ImgField: "img_url",
+		Num:      5,
+	})
 
-	modifier, err := utils.NewURLModifier(server.URL + "/v1/meme.php")
+	var sent string
+	msg, err := tool.Execute(context.Background(), &MemeParams{Text: "开心"}, captureSendImage(&sent))
 	if err != nil {
-		t.Fatalf("NewURLModifier error: %v", err)
+		t.Fatalf("Execute error: %v", err)
 	}
-	modifier.SetQuery("msg", "开心")
-	modifier.SetQuery("num", "4")
+	if !strings.Contains(msg, "开心") {
+		t.Errorf("unexpected result message: %s", msg)
+	}
+	if got, _ := base64.StdEncoding.DecodeString(sent); string(got) != "GIFDATA" {
+		t.Errorf("SendImage got unexpected content: %q", string(got))
+	}
+}
 
-	type responseTy struct {
-		Data []struct {
-			ImageUrl string `json:"img_url"`
-		} `json:"data"`
-	}
-	result := responseTy{}
-	client := resty.New()
-	_, err = client.R().SetResult(&result).Get(modifier.String())
-	if err != nil {
-		t.Fatalf("request error: %v", err)
-	}
+func TestMemeExecuteGiphyStyle(t *testing.T) {
+	server := startMockMemeServer(t, true, false)
+	tool := NewMemeTool(MemeConfig{
+		URL:      server.URL + "/meme?api_key=${key}&q=${msg}&limit=${num}",
+		Key:      "test-key",
+		ListPath: "data",
+		ImgField: "images.fixed_width.url",
+		Num:      3,
+	})
 
-	if len(result.Data) == 0 {
-		t.Fatal("no data returned")
+	var sent string
+	if _, err := tool.Execute(context.Background(), &MemeParams{Text: "happy"}, captureSendImage(&sent)); err != nil {
+		t.Fatalf("Execute error: %v", err)
 	}
+	if sent == "" {
+		t.Error("expected SendImage to be called")
+	}
+}
 
-	httpClient := &http.Client{Timeout: 10 * time.Second}
-	for i, item := range result.Data {
-		t.Run(item.ImageUrl, func(t *testing.T) {
-			// Try HEAD, fallback to GET
-			resp, err := httpClient.Head(item.ImageUrl)
-			if err != nil {
-				t.Logf("  [%d] HEAD failed: %v, trying GET", i, err)
-				resp, err = httpClient.Get(item.ImageUrl)
-				if err != nil {
-					t.Errorf("GET request also failed for url[%d]: %v", i, err)
-					return
-				}
-			}
-			defer resp.Body.Close()
-			log.Printf("  [%d] status=%d content-type=%s url=%s", i, resp.StatusCode, resp.Header.Get("Content-Type"), item.ImageUrl)
-			if resp.StatusCode != http.StatusOK {
-				t.Errorf("expected status 200, got %d for url[%d]", resp.StatusCode, i)
-			}
-		})
+func TestMemeBuildURL(t *testing.T) {
+	cfg := MemeConfig{
+		URL: "https://example.com/api?key=${key}&msg=${msg}&num=${num}",
+		Key: "k&1",
+		Num: 7,
+	}
+	cfg.fillDefaults()
+	got := cfg.buildURL("开 心")
+	want := "https://example.com/api?key=k%261&msg=%E5%BC%80+%E5%BF%83&num=7"
+	if got != want {
+		t.Errorf("buildURL = %q, want %q", got, want)
+	}
+}
+
+func TestMemeFillDefaults(t *testing.T) {
+	cfg := MemeConfig{}
+	cfg.fillDefaults()
+	if cfg.URL != DefaultMemeURL || cfg.ListPath != DefaultMemeListPath ||
+		cfg.ImgField != DefaultMemeImgField || cfg.Num != DefaultMemeNum {
+		t.Errorf("fillDefaults got %+v", cfg)
+	}
+}
+
+func TestMemeMissingKey(t *testing.T) {
+	tool := NewMemeTool(MemeConfig{}) // 默认模板含 ${key} 但未配置 Key
+	var sent string
+	_, err := tool.Execute(context.Background(), &MemeParams{Text: "开心"}, captureSendImage(&sent))
+	if err == nil || !strings.Contains(err.Error(), "API Key") {
+		t.Errorf("expected missing-key error, got %v", err)
+	}
+}
+
+func TestMemeEmptyResult(t *testing.T) {
+	server := startMockMemeServer(t, false, true)
+	tool := NewMemeTool(MemeConfig{
+		URL:      server.URL + "/meme?msg=${msg}&num=${num}",
+		ListPath: "data",
+		ImgField: "img_url",
+		Num:      5,
+	})
+	var sent string
+	_, err := tool.Execute(context.Background(), &MemeParams{Text: "不存在的东西"}, captureSendImage(&sent))
+	if err == nil || !strings.Contains(err.Error(), "未找到相关表情包") {
+		t.Errorf("expected empty-result error, got %v", err)
 	}
 }

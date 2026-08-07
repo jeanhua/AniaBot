@@ -45,7 +45,7 @@ ChatBot.Chat()
 |------|------|------|
 | `time.go` | `time` | 返回当前时间 |
 | `jina.go` | `webSearch` / `webExplore` | 基于 Jina API 的网页搜索与浏览 |
-| `meme.go` | `meme` | 根据文本描述发送表情包图片 |
+| `meme.go` | `meme` | 根据文本描述发送表情包图片（可配置接口模板 + gjson 解析路径，默认 GIPHY）|
 | `sendfile.go` | `file` | 向用户发送生成的文件（需启用 file 配置）|
 | `bash.go` | `bash` | 在宿主机执行 shell 命令（需启用 bash 配置，支持黑白名单）|
 | `loadimages.go` | `load_images` | 加载消息中的图片供模型查看 |
@@ -58,13 +58,13 @@ ChatBot.Chat()
 
 ```go
 // 仅内置工具
-CreateDefaultTools(searchToken, bashConfig, fileConfig, localImageConfig)
+CreateDefaultTools(searchToken, memeConfig, bashConfig, fileConfig, localImageConfig)
 
 // 内置工具 + MCP（mcpLazyLoad=true 走工具发现模式，false 全量注册）
-CreateToolsWithMCP(searchToken, mcpConfigs, bashConfig, fileConfig, localImageConfig, mcpLazyLoad)
+CreateToolsWithMCP(searchToken, mcpConfigs, bashConfig, fileConfig, localImageConfig, memeConfig, mcpLazyLoad)
 
 // 内置工具 + MCP + Skill（skills 非空时只加载指定名称的 skill）
-CreateToolsWithSkill(searchToken, mcpConfigs, skillsDir, bashConfig, fileConfig, localImageConfig, skills, mcpLazyLoad)
+CreateToolsWithSkill(searchToken, mcpConfigs, skillsDir, bashConfig, fileConfig, localImageConfig, memeConfig, skills, mcpLazyLoad)
 ```
 
 三个工厂函数均返回 `error`（`CreateToolsWithSkill` 返回 `(*ToolExecuter, *SkillManager, error)`）。
