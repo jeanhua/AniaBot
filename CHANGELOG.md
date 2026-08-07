@@ -10,6 +10,8 @@
 
 ## [Unreleased]
 
+## [v4.5.0] - 2026-08-07
+
 ### 新增
 
 - **Anthropic 格式 Prompt 缓存（`cache_control` 断点）**：此前 `anthropic` 格式完全没有上游缓存（Anthropic 需显式声明断点才会缓存），现新增 `plugin.ai_chat_bot.prompt_cache.enable`（默认开启，面板「AI 对话 · 模型」组可配）与 `prompt_cache.ttl`（`5m` / `1h`，默认 5m）。启用后请求为 system 最后一个块与最后一条消息的最后一个可缓存块（文本/图片/tool_result）设置 `cache_control` 断点：system+历史前缀稳定命中，tool calling 多轮只对新增的工具往返内容付一次缓存写入，正常对话下一轮断点随历史前移；关闭后请求体与旧行为完全一致，兼容不支持 cache_control 的上游代理。`chat_completions` / `responses` 格式为提供方自动前缀缓存，不受此开关影响。`aichat` 组件新增 `PromptCacheConfig` 与 `WithPromptCache` 客户端选项（备用模型自动继承）；同时明确约定：保持 system 稳定是前缀缓存命中的前提，动态内容（如长期记忆注入）只能追加到消息尾部而非 system
