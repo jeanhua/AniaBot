@@ -3,6 +3,8 @@ package pluginaichat
 import (
 	"context"
 	"log/slog"
+	"strings"
+	"sync"
 	"time"
 
 	"github.com/openai/openai-go/v3"
@@ -12,6 +14,14 @@ import (
 // embeddingTimeout embedding 请求超时：服务无响应时调用方（kb_add/kb_search）
 // 不能永久挂起，超时后退回纯关键词检索。
 const embeddingTimeout = 30 * time.Second
+
+// embedInjectTimeout 自动注入路径的 embedding 超时：注入发生在每轮用户消息
+// 处理流程内，超时过长会直接拖慢 AI 响应，超时后本轮退化为纯关键词注入。
+const embedInjectTimeout = 10 * time.Second
+
+// embedCacheCap 查询向量缓存容量上限。群聊消息重复率低，缓存主要兜住
+// 重试/排队消息与相似问法，无需太大。
+const embedCacheCap = 128
 
 // embedder 封装 OpenAI 兼容的 embeddings 客户端（复用 openai-go/v3 的
 // EmbeddingService，与 LLMClient 同一套 SDK）。
@@ -23,6 +33,12 @@ type embedder struct {
 	client openai.Client
 	model  string
 	logger *slog.Logger
+
+	// 查询向量缓存：自动注入每轮都要 embed 用户消息，缓存相同文本的向量
+	// 避免重复付费/耗时。FIFO 淘汰，cap 见 embedCacheCap。
+	cacheMu sync.Mutex
+	cache   map[string][]float32
+	cacheQ  []string
 }
 
 // newEmbedder 创建语义向量计算器；baseURL/apiKey/model 任一为空返回 nil。
@@ -34,6 +50,7 @@ func newEmbedder(baseURL, apiKey, model string, logger *slog.Logger) *embedder {
 		client: openai.NewClient(option.WithAPIKey(apiKey), option.WithBaseURL(baseURL)),
 		model:  model,
 		logger: logger,
+		cache:  make(map[string][]float32),
 	}
 }
 
@@ -67,10 +84,15 @@ func (p *AIChatPlugin) buildKBEmbedder() *embedder {
 // 内部强制请求超时：调用方即使传入 context.Background()（如 kb_add 入库路径），
 // embedding 服务无响应时也会超时退回关键词检索，而不是永久挂起。
 func (e *embedder) EmbedMany(ctx context.Context, texts []string) [][]float32 {
+	return e.embedMany(ctx, texts, embeddingTimeout)
+}
+
+// embedMany 按指定超时批量计算文本向量。
+func (e *embedder) embedMany(ctx context.Context, texts []string, timeout time.Duration) [][]float32 {
 	if e == nil || len(texts) == 0 {
 		return nil
 	}
-	ctx, cancel := context.WithTimeout(ctx, embeddingTimeout)
+	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 	resp, err := e.client.Embeddings.New(ctx, openai.EmbeddingNewParams{
 		Model: openai.EmbeddingModel(e.model),
@@ -108,4 +130,41 @@ func (e *embedder) EmbedOne(ctx context.Context, text string) []float32 {
 		return nil
 	}
 	return vs[0]
+}
+
+// EmbedOneCached 计算单个文本向量并缓存结果（key 为去首尾空白后的原文）。
+// 供每轮对话的自动注入路径使用：相同/重试消息直接命中缓存，
+// 不为每条用户消息重复支付 embedding 成本。超时收紧为 embedInjectTimeout，
+// 服务缓慢时快速退化为纯关键词注入，不拖慢 AI 响应。出错返回 nil。
+func (e *embedder) EmbedOneCached(ctx context.Context, text string) []float32 {
+	if e == nil {
+		return nil
+	}
+	key := strings.TrimSpace(text)
+	if key == "" {
+		return nil
+	}
+	e.cacheMu.Lock()
+	if vec, ok := e.cache[key]; ok {
+		e.cacheMu.Unlock()
+		return vec
+	}
+	e.cacheMu.Unlock()
+
+	vs := e.embedMany(ctx, []string{key}, embedInjectTimeout)
+	if len(vs) == 0 {
+		return nil
+	}
+	vec := vs[0]
+
+	e.cacheMu.Lock()
+	if len(e.cacheQ) >= embedCacheCap {
+		// FIFO 淘汰最旧的一条
+		delete(e.cache, e.cacheQ[0])
+		e.cacheQ = e.cacheQ[1:]
+	}
+	e.cache[key] = vec
+	e.cacheQ = append(e.cacheQ, key)
+	e.cacheMu.Unlock()
+	return vec
 }

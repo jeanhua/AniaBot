@@ -109,12 +109,12 @@ type memoryConfig struct {
 	MaxEntries int  `cfg:"max_entries" label:"单会话记忆上限" group:"AI 对话 · 定时与记忆" default:"200"`
 	// AutoInject 每轮按用户消息纯关键词检索相关记忆并注入到用户消息前
 	// （尾部注入：system 不变，不影响上游前缀缓存；用户消息不落盘，历史无污染）
-	AutoInject bool `cfg:"auto_inject" label:"主动注入相关记忆" group:"AI 对话 · 定时与记忆" default:"false" help:"每轮按用户消息做纯关键词检索，命中后把相关记忆追加到用户消息前（system 保持不变，不影响上游前缀缓存；用户消息不落盘，历史无污染；不产生 embedding 成本）"`
+	AutoInject bool `cfg:"auto_inject" label:"主动注入相关记忆" group:"AI 对话 · 定时与记忆" default:"false" help:"每轮按用户消息检索相关记忆并追加到用户消息前（system 保持不变，不影响上游前缀缓存；用户消息不落盘，历史无污染）。启用向量检索后按语义+关键词混合检索，否则纯关键词"`
 	InjectMax  int  `cfg:"inject_max" label:"每轮注入条数上限" group:"AI 对话 · 定时与记忆" default:"3" help:"主动注入的最大记忆条数，0 表示不限制"`
 }
 
 type kbEmbeddingConfig struct {
-	Enable  bool   `cfg:"enable" label:"启用向量检索" group:"AI 对话 · 知识库" default:"false" help:"入库时计算语义向量，检索时与关键词混合打分；需要 embedding 服务支持，provider 不支持时自动退回纯关键词"`
+	Enable  bool   `cfg:"enable" label:"启用向量检索" group:"AI 对话 · 知识库" default:"false" help:"入库时计算语义向量，检索与自动注入按语义+关键词混合打分（自动注入每轮一次 embed，带缓存）；启动时自动回填存量数据的向量。需要 embedding 服务支持，provider 不支持时自动退回纯关键词"`
 	BaseURL string `cfg:"base_url" label:"Embedding Base URL" group:"AI 对话 · 知识库" help:"留空使用主模型的 Base URL；如主模型无 embedding 接口（如 DeepSeek），可填 https://api.jina.ai/v1 或其它 OpenAI 兼容服务"`
 	APIKey  string `cfg:"api_key" label:"Embedding API Key" type:"password" sensitive:"true" group:"AI 对话 · 知识库" help:"留空使用主模型的 API Key（用 Jina 时可填 Jina AI Token）"`
 	Model   string `cfg:"model" label:"Embedding 模型" group:"AI 对话 · 知识库" default:"jina-embeddings-v3" help:"如 jina-embeddings-v3、text-embedding-3-small、BAAI/bge-large-zh-v1.5"`
@@ -123,7 +123,7 @@ type kbEmbeddingConfig struct {
 type kbConfig struct {
 	Enable     bool `cfg:"enable" label:"启用知识库" group:"AI 对话 · 知识库" default:"true"`
 	MaxDocs    int  `cfg:"max_docs" label:"单作用域文档上限" group:"AI 对话 · 知识库" default:"500"`
-	AutoInject bool `cfg:"auto_inject" label:"自动注入上下文" group:"AI 对话 · 知识库" default:"true" help:"每次对话前自动关键词检索相关文档并注入上下文（不走向量，避免每条消息产生 embedding 成本）"`
+	AutoInject bool `cfg:"auto_inject" label:"自动注入上下文" group:"AI 对话 · 知识库" default:"true" help:"每次对话前自动检索相关文档并注入上下文。启用向量检索后按语义+关键词混合检索（每轮一次 embed，带缓存），未启用则纯关键词"`
 
 	Embedding kbEmbeddingConfig `cfg:"embedding"`
 }

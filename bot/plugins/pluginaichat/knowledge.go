@@ -65,11 +65,66 @@ type knowledgeManager struct {
 }
 
 func newKnowledgeManager(store storage.PersistentStorage, logger *slog.Logger, maxDocs int, emb *embedder) *knowledgeManager {
-	return &knowledgeManager{
+	km := &knowledgeManager{
 		store:    store.Clone("kb:"),
 		logger:   logger,
 		maxDocs:  maxDocs,
 		embedder: emb,
+	}
+	km.startBackfill()
+	return km
+}
+
+// startBackfill 在 embedder 可用时启动后台 goroutine，为启用向量检索之前
+// 写入、因而缺少语义向量的存量文档补算 embedding。失败文档静默跳过，
+// 下次重启再试；不阻塞插件启动。
+func (km *knowledgeManager) startBackfill() {
+	if km.embedder == nil {
+		return
+	}
+	go km.backfillEmbeddings()
+}
+
+// backfillEmbeddings 遍历所有 scope，为缺向量（或向量数与检索块数不一致）
+// 的文档逐篇补算并落盘。写回时锁内按 ID 重新定位，避免与并发的
+// update/remove 互相覆盖。
+func (km *knowledgeManager) backfillEmbeddings() {
+	filled := 0
+	for _, scope := range km.scopes() {
+		for _, doc := range km.list(scope) {
+			chunks := chunkText(doc.Content)
+			if len(doc.Emb) == len(chunks) {
+				continue
+			}
+			emb := km.embedder.EmbedMany(context.Background(), chunks)
+			if len(emb) != len(chunks) {
+				continue // 计算失败静默跳过，下次重启再试
+			}
+			km.mu.Lock()
+			docs := km.listLocked(scope)
+			updated := false
+			for i, d := range docs {
+				if d.ID == doc.ID {
+					docs[i].Emb = emb
+					updated = true
+					break
+				}
+			}
+			if !updated {
+				km.mu.Unlock()
+				continue // 文档已被并发删除
+			}
+			if ok := km.store.Set(context.Background(), scope, docs); !ok {
+				km.logger.Warn("回填知识库向量落盘失败", "scope", scope, "id", doc.ID)
+			} else {
+				filled++
+			}
+			km.mu.Unlock()
+			time.Sleep(backfillInterval)
+		}
+	}
+	if filled > 0 {
+		km.logger.Info("存量知识库向量回填完成", "filled", filled)
 	}
 }
 
@@ -277,6 +332,9 @@ type kbChunkResult struct {
 	Scope string
 	Chunk string
 	Score int
+	// Sim 该块与查询向量的余弦相似度；未启用向量检索或无向量时为 0。
+	// 自动注入用它放宽纯语义命中的准入门槛。
+	Sim float64
 }
 
 // queryTerms 从检索词生成匹配词条集合。
@@ -372,21 +430,22 @@ func scoreChunk(c kbCandidate, terms []string, df map[string]int, total float64)
 // search 在指定 scope 及全局知识库中检索匹配的文本块，按相关度降序返回 topK。
 // 关键词打分 + 语义向量混合（启用向量检索时）。供 AI 的 kb_search 工具使用。
 func (km *knowledgeManager) search(scope, query string, topK int) []kbChunkResult {
-	return km.searchImpl(scope, query, topK, km.embedder != nil)
+	var queryVec []float32
+	if km.embedder != nil {
+		queryVec = km.embedder.EmbedOne(context.Background(), query)
+	}
+	return km.searchImpl(scope, query, topK, queryVec)
 }
 
-// searchKeyword 纯关键词检索，不调 embedding API。
-// 供自动注入使用：每次对话都检索，若走向量需要为每条消息付一次 embedding 成本。
-func (km *knowledgeManager) searchKeyword(scope, query string, topK int) []kbChunkResult {
-	return km.searchImpl(scope, query, topK, false)
-}
-
-func (km *knowledgeManager) searchImpl(scope, query string, topK int, useSemantic bool) []kbChunkResult {
+// searchImpl 检索实现。queryVec 为调用方预算好的查询向量：非 nil 时启用语义
+// 混合打分，nil 时纯关键词。自动注入路径把每轮一次预算的向量透传进来，
+// 避免用户消息被重复 embed。
+func (km *knowledgeManager) searchImpl(scope, query string, topK int, queryVec []float32) []kbChunkResult {
 	if topK <= 0 {
 		topK = 5
 	}
 	terms := queryTerms(query)
-	if len(terms) == 0 && !useSemantic {
+	if len(terms) == 0 && len(queryVec) == 0 {
 		return nil
 	}
 
@@ -419,18 +478,14 @@ func (km *knowledgeManager) searchImpl(scope, query string, topK int, useSemanti
 	}
 	total := float64(len(cands))
 
-	// 查询向量（仅语义检索时）
-	var queryVec []float32
-	if useSemantic {
-		queryVec = km.embedder.EmbedOne(context.Background(), query)
-	}
-
 	results := make([]kbChunkResult, 0, len(cands))
 	for _, c := range cands {
 		score := scoreChunk(c, terms, df, total)
-		if useSemantic && queryVec != nil && c.embIdx >= 0 && c.embIdx < len(c.doc.Emb) {
-			if sim := cosineSimilarity(c.doc.Emb[c.embIdx], queryVec); sim > 0 {
-				score += int(sim * 40) // 语义相似度加分，与关键词分数同一量纲
+		var sim float64
+		if len(queryVec) > 0 && c.embIdx >= 0 && c.embIdx < len(c.doc.Emb) {
+			if s := cosineSimilarity(c.doc.Emb[c.embIdx], queryVec); s > 0 {
+				sim = s
+				score += int(s * 40) // 语义相似度加分，与关键词分数同一量纲
 			}
 		}
 		if score <= 0 {
@@ -445,6 +500,7 @@ func (km *knowledgeManager) searchImpl(scope, query string, topK int, useSemanti
 			Scope: c.doc.Scope,
 			Chunk: c.chunk,
 			Score: score,
+			Sim:   sim,
 		})
 	}
 	sort.SliceStable(results, func(i, j int) bool { return results[i].Score > results[j].Score })
@@ -472,25 +528,30 @@ func cosineSimilarity(a, b []float32) float64 {
 	return dot / (math.Sqrt(na) * math.Sqrt(nb))
 }
 
-// autoInject 对用户消息做轻量关键词检索，命中分超过 threshold 时把相关片段
-// 拼成一段上下文前缀返回（供注入到对话请求）。无命中或分数不足返回空串。
-// threshold 取结果的绝对相关度门槛：泛化词因 IDF 被压低，难以单独越过门槛。
-func (km *knowledgeManager) autoInject(scope, userMsg string, threshold int) string {
+// kbInjectMinSim 自动注入的纯语义命中准入门槛：关键词零分但余弦相似度
+// 达到该值的块也会被注入（同义不同词的话题，如「饮品」命中「咖啡」）。
+const kbInjectMinSim = 0.35
+
+// autoInject 对用户消息做检索，命中相关片段时拼成一段上下文前缀返回
+// （供注入到对话请求）。queryVec 为调用方预算好的用户消息向量：非 nil 时
+// 走关键词+语义混合检索（纯语义命中按 kbInjectMinSim 准入），nil 时退回
+// 纯关键词 + threshold 绝对分门槛（泛化词因 IDF 被压低，难以单独越过门槛）。
+// 无命中或分数不足返回空串。
+func (km *knowledgeManager) autoInject(scope, userMsg string, threshold int, queryVec []float32) string {
 	if strings.TrimSpace(userMsg) == "" {
 		return ""
 	}
 	if threshold <= 0 {
 		threshold = 30
 	}
-	// 自动注入走纯关键词检索：每次对话都触发，不承担 embedding API 成本
-	results := km.searchKeyword(scope, userMsg, 3)
+	results := km.searchImpl(scope, userMsg, 3, queryVec)
 	if len(results) == 0 {
 		return ""
 	}
 	var sb strings.Builder
 	wrote := false
 	for _, r := range results {
-		if r.Score < threshold {
+		if r.Score < threshold && r.Sim < kbInjectMinSim {
 			continue
 		}
 		if !wrote {

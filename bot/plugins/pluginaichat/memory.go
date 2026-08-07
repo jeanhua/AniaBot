@@ -88,11 +88,55 @@ func newMemoryManager(store storage.PersistentStorage, logger *slog.Logger, maxE
 			logger.Error("创建长期记忆表失败，回退 KV 存储", "error", err.Error())
 		} else {
 			m.store = newSQLMemoryStore(db, logger)
+			m.startBackfill()
 			return m
 		}
 	}
 	m.store = newKVMemoryStore(store)
+	m.startBackfill()
 	return m
+}
+
+// backfillInterval 存量向量回填的逐条间隔：回填是后台任务，放慢节奏
+// 避免触发 embedding 服务限流，也不与前台对话争抢配额。
+const backfillInterval = 200 * time.Millisecond
+
+// startBackfill 在 embedder 可用时启动后台 goroutine，为启用向量检索之前
+// 写入、因而缺少语义向量的存量记忆补算 embedding。失败条目静默跳过，
+// 下次重启再试；不阻塞插件启动。
+func (m *memoryManager) startBackfill() {
+	if m.embedder == nil {
+		return
+	}
+	go m.backfillEmbeddings()
+}
+
+// backfillEmbeddings 遍历所有 scope，为缺向量的记忆逐条补算并落盘。
+func (m *memoryManager) backfillEmbeddings() {
+	filled := 0
+	for _, scope := range m.scopes() {
+		for _, e := range m.list(scope) {
+			if len(e.Emb) > 0 {
+				continue
+			}
+			vec := m.embedder.EmbedOne(context.Background(), e.Content)
+			if len(vec) == 0 {
+				continue // 计算失败静默跳过，下次重启再试
+			}
+			m.mu.Lock()
+			e.Emb = vec
+			if ok := m.store.update(scope, e); !ok {
+				m.logger.Warn("回填记忆向量落盘失败", "scope", scope, "id", e.ID)
+			} else {
+				filled++
+			}
+			m.mu.Unlock()
+			time.Sleep(backfillInterval)
+		}
+	}
+	if filled > 0 {
+		m.logger.Info("存量记忆向量回填完成", "filled", filled)
+	}
 }
 
 // normalizeMemoryContent 规范化记忆内容用于去重比较。
@@ -206,14 +250,14 @@ func (m *memoryManager) update(scope, id, userID, content string, tags []string)
 	return fmt.Errorf("记忆不存在: %s", id)
 }
 
-// autoInject 对用户消息做纯关键词检索，把相关记忆拼成一段「【长期记忆】…」
+// autoInject 对用户消息做相关度检索，把相关记忆拼成一段「【长期记忆】…」
 // 上下文块返回，供调用方注入到用户消息前（尾部注入：system 保持不变，
 // 不影响上游前缀缓存；用户消息不落盘，注入内容不会污染持久化历史）。
 //
-// 与知识库自动注入同策略：只走关键词（复用 queryTerms 的中文切词），
-// 每轮对话都触发，不承担 embedding API 成本；语义检索仍由 AI 按需
-// 调 memory_search 完成。无命中返回空串。
-func (m *memoryManager) autoInject(scope, userMsg string, max int) string {
+// queryVec 为调用方预算好的用户消息向量：非 nil 时关键词+语义混合打分
+// （同义不同词的记忆也能命中，如「饮品」命中「咖啡」），nil 时退回纯
+// 关键词检索（与历史行为一致）。无命中返回空串。
+func (m *memoryManager) autoInject(scope, userMsg string, max int, queryVec []float32) string {
 	if strings.TrimSpace(userMsg) == "" {
 		return ""
 	}
@@ -224,7 +268,7 @@ func (m *memoryManager) autoInject(scope, userMsg string, max int) string {
 	if len(entries) == 0 {
 		return ""
 	}
-	matched := filterMemoryByRelevance(entries, queryTerms(userMsg), nil)
+	matched := filterMemoryByRelevance(entries, queryTerms(userMsg), queryVec)
 	if len(matched) == 0 {
 		return ""
 	}

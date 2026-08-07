@@ -370,15 +370,15 @@ func TestMemoryAutoInject(t *testing.T) {
 	}
 
 	// 空消息 / 无命中 → 空串
-	if got := m.autoInject("g:123", "", 3); got != "" {
+	if got := m.autoInject("g:123", "", 3, nil); got != "" {
 		t.Fatalf("空消息应返回空串: %q", got)
 	}
-	if got := m.autoInject("g:123", "今天天气不错", 3); got != "" {
+	if got := m.autoInject("g:123", "今天天气不错", 3, nil); got != "" {
 		t.Fatalf("无命中应返回空串: %q", got)
 	}
 
 	// 内容关键词命中（queryTerms 中文切词：整词+相邻二元组）
-	got := m.autoInject("g:123", "小明你晚上在吗", 3)
+	got := m.autoInject("g:123", "小明你晚上在吗", 3, nil)
 	if !strings.Contains(got, "小明讨厌被半夜@") {
 		t.Fatalf("应命中内容关键词: %q", got)
 	}
@@ -387,13 +387,13 @@ func TestMemoryAutoInject(t *testing.T) {
 	}
 
 	// max 限制注入条数（分数相同时按创建顺序稳定保留）
-	got = m.autoInject("g:123", "小明 小美", 1)
+	got = m.autoInject("g:123", "小明 小美", 1, nil)
 	if strings.Count(got, "（记于") != 1 {
 		t.Fatalf("max=1 应只注入 1 条: %q", got)
 	}
 
 	// tag 命中权重高于正文：查询「规则」应优先命中带规则标签的条目
-	got = m.autoInject("g:123", "规则 例会 晚上", 3)
+	got = m.autoInject("g:123", "规则 例会 晚上", 3, nil)
 	if !strings.Contains(got, "群规：每周三晚上八点开例会") {
 		t.Fatalf("tag 命中条目应出现: %q", got)
 	}
@@ -404,7 +404,7 @@ func TestMemoryAutoInject(t *testing.T) {
 	}
 
 	// max<=0 时使用默认 3
-	got = m.autoInject("g:123", "小明 小美 奶茶 规则", 0)
+	got = m.autoInject("g:123", "小明 小美 奶茶 规则", 0, nil)
 	if strings.Count(got, "（记于") != 3 {
 		t.Fatalf("默认应注入 3 条: %q", got)
 	}
@@ -419,11 +419,38 @@ func TestMemoryAutoInjectRuneBudget(t *testing.T) {
 			t.Fatalf("add 失败: %v", err)
 		}
 	}
-	got := m.autoInject("g:123", "长", 3)
+	got := m.autoInject("g:123", "长", 3, nil)
 	if got == "" {
 		t.Fatal("应命中并返回注入块")
 	}
 	if n := len([]rune(got)); n > memoryInjectMaxRunes+64 {
 		t.Fatalf("注入块符文数超预算: %d > %d", n, memoryInjectMaxRunes+64)
+	}
+}
+
+// TestMemoryAutoInjectSemantic 查询词与记忆内容无关键词重叠时，
+// 语义相似度加分（queryVec 非 nil）也能让记忆被注入。
+func TestMemoryAutoInjectSemantic(t *testing.T) {
+	m := newTestMemoryManager(0)
+	// 手工构造带向量的记忆（embedder=nil 时 add 不会计算向量，直接 update 写入）
+	if _, err := m.add("g:123", "", "小明喜爱熬夜喝咖啡", nil); err != nil {
+		t.Fatalf("add 失败: %v", err)
+	}
+	// 手工为记忆补向量（embedder=nil 时 add/update 都不会计算向量，
+	// 直接走底层 store 写入，模拟已有向量数据）
+	entry := m.list("g:123")[0]
+	entry.Emb = []float32{1, 0}
+	if ok := m.store.update("g:123", entry); !ok {
+		t.Fatal("store.update 失败")
+	}
+
+	// 查询词与内容零关键词重叠：纯关键词（queryVec=nil）不命中
+	if got := m.autoInject("g:123", "他平时爱喝什么饮品", 3, nil); got != "" {
+		t.Fatalf("无关键词重叠且 queryVec=nil 时不应注入: %q", got)
+	}
+	// 方向一致的查询向量：语义命中，应注入
+	got := m.autoInject("g:123", "他平时爱喝什么饮品", 3, []float32{1, 0})
+	if !strings.Contains(got, "小明喜爱熬夜喝咖啡") {
+		t.Fatalf("语义命中应注入记忆: %q", got)
 	}
 }

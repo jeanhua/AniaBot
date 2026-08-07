@@ -76,6 +76,11 @@ type AIChatPlugin struct {
 	// knowledgeManager 知识库管理器；为 nil 表示功能未启用
 	knowledgeManager *knowledgeManager
 
+	// embedder 知识库与记忆共享的语义向量计算器；为 nil 表示向量检索未启用。
+	// 注入路径用它对每条用户消息预算一次查询向量（EmbedOneCached），
+	// 复用于知识库与记忆的自动注入。
+	embedder *embedder
+
 	// teamManager Agent 团队管理器；为 nil 表示功能未启用
 	teamManager *teamManager
 
@@ -410,28 +415,37 @@ func (p *AIChatPlugin) processChatBatch(ctx context.Context, b bot.Bot, id messa
 	// 记忆/知识库检索须基于原始用户消息：下面的注入会改写 extraText
 	userText := extraText
 
-	// 知识库自动注入：对用户消息做轻量关键词检索，命中相关文档时把片段拼到
-	// 用户消息前作为参考上下文。注入在 beginQuery 之后，query 日志保留原始用户消息。
+	// 自动注入的查询向量：启用向量检索时每轮对用户消息 embed 一次（带缓存
+	// 与 10s 短超时），知识库与记忆注入复用同一向量；失败为 nil，两处自动
+	// 退化为纯关键词检索。
+	var queryVec []float32
+	if p.embedder != nil && (p.cfg.Kb.AutoInject || p.cfg.Memory.AutoInject) {
+		queryVec = p.embedder.EmbedOneCached(ctx, userText)
+	}
+
+	// 知识库自动注入：对用户消息做检索（有向量时语义+关键词混合，否则纯
+	// 关键词），命中相关文档时把片段拼到用户消息前作为参考上下文。
+	// 注入在 beginQuery 之后，query 日志保留原始用户消息。
 	if p.knowledgeManager != nil && p.cfg.Kb.AutoInject {
 		kbScope := "f:" + id.String()
 		if isGroup {
 			kbScope = "g:" + id.String()
 		}
-		if injected := p.knowledgeManager.autoInject(kbScope, extraText, 30); injected != "" {
+		if injected := p.knowledgeManager.autoInject(kbScope, extraText, 30, queryVec); injected != "" {
 			extraText = injected + "\n\n" + extraText
 		}
 	}
 
-	// 长期记忆自动注入：按原始用户消息纯关键词检索相关记忆，命中后拼到
-	// 用户消息前（尾部注入：system 保持不变，不影响上游前缀缓存；用户消息
-	// 不落盘，注入内容不会污染持久化历史；纯关键词无 embedding 成本）。
-	// 与知识库注入叠加时记忆块在最前、知识库块居中、用户消息最后。
+	// 长期记忆自动注入：按原始用户消息检索相关记忆（有向量时语义+关键词
+	// 混合，否则纯关键词），命中后拼到用户消息前（尾部注入：system 保持
+	// 不变，不影响上游前缀缓存；用户消息不落盘，注入内容不会污染持久化
+	// 历史）。与知识库注入叠加时记忆块在最前、知识库块居中、用户消息最后。
 	if p.memoryManager != nil && p.cfg.Memory.AutoInject {
 		memScope := "f:" + id.String()
 		if isGroup {
 			memScope = "g:" + id.String()
 		}
-		if injected := p.memoryManager.autoInject(memScope, userText, p.cfg.Memory.InjectMax); injected != "" {
+		if injected := p.memoryManager.autoInject(memScope, userText, p.cfg.Memory.InjectMax, queryVec); injected != "" {
 			extraText = injected + "\n\n" + extraText
 		}
 	}
@@ -699,6 +713,7 @@ func (p *AIChatPlugin) Start(ctx context.Context, cfg *viper.Viper) error {
 
 	// 语义向量计算器：知识库与长期记忆共享（复用 kb.embedding 配置）
 	embedder := p.buildKBEmbedder()
+	p.embedder = embedder
 
 	// AI 长期记忆：由 AI 通过 memory_save/search/forget 工具自行管理的跨会话记忆，
 	// 按群聊/好友 scope 隔离，持久化到 PersistentStorage（memory: 命名空间）。

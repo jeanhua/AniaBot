@@ -289,7 +289,7 @@ func TestKbSearchEmpty(t *testing.T) {
 		t.Fatalf("空库应返回 nil，实际 %v", got)
 	}
 	km.add("global", "", "只有一条内容", nil, "")
-	if got := km.searchKeyword("global", "   ", 5); got != nil {
+	if got := km.searchImpl("global", "   ", 5, nil); got != nil {
 		t.Fatalf("空 query 应返回 nil，实际 %v", got)
 	}
 }
@@ -298,17 +298,51 @@ func TestKbAutoInject(t *testing.T) {
 	km := newTestKnowledgeManager(0)
 
 	// 无相关文档时不注入
-	if got := km.autoInject("global", "帮我查下今天的天气", 30); got != "" {
+	if got := km.autoInject("global", "帮我查下今天的天气", 30, nil); got != "" {
 		t.Fatalf("无相关文档应返回空串，实际 %q", got)
 	}
 
 	km.add("global", "部署教程", "如何部署 AniaBot：make linux 编译，配置环境变量启动。", nil, "")
-	injected := km.autoInject("global", "AniaBot 怎么部署？", 30)
+	injected := km.autoInject("global", "AniaBot 怎么部署？", 30, nil)
 	if injected == "" {
 		t.Fatal("命中相关文档时应注入上下文")
 	}
 	if !strings.Contains(injected, "部署教程") {
 		t.Fatalf("注入内容应含文档标题: %q", injected)
+	}
+}
+
+// TestKbAutoInjectSemantic 查询词与文档无关键词重叠时，语义相似度
+// 达到 kbInjectMinSim 的块（queryVec 非 nil）也应被注入。
+func TestKbAutoInjectSemantic(t *testing.T) {
+	km := newTestKnowledgeManager(0)
+	doc, err := km.add("global", "饮食偏好", "小明喜爱熬夜喝咖啡。", nil, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// 手工为文档补向量（embedder=nil 时 add 不计算向量，直接写底层 KV）
+	docs := km.list("global")
+	for i := range docs {
+		if docs[i].ID == doc.ID {
+			docs[i].Emb = [][]float32{{1, 0}}
+		}
+	}
+	if ok := km.store.Set(t.Context(), "global", docs); !ok {
+		t.Fatal("store.Set 失败")
+	}
+
+	// 零关键词重叠 + queryVec=nil：不注入
+	if got := km.autoInject("global", "他平时爱喝什么饮品", 30, nil); got != "" {
+		t.Fatalf("无关键词重叠且 queryVec=nil 时不应注入: %q", got)
+	}
+	// 方向一致的查询向量：sim=1 >= kbInjectMinSim，纯语义命中应注入
+	injected := km.autoInject("global", "他平时爱喝什么饮品", 30, []float32{1, 0})
+	if !strings.Contains(injected, "小明喜爱熬夜喝咖啡") {
+		t.Fatalf("语义命中应注入文档片段: %q", injected)
+	}
+	// 方向相反的向量：sim<=0 无加分，仍不注入
+	if got := km.autoInject("global", "他平时爱喝什么饮品", 30, []float32{0, 1}); got != "" {
+		t.Fatalf("相似度不足时不应注入: %q", got)
 	}
 }
 
