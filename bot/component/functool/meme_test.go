@@ -1,14 +1,61 @@
 package functool
 
 import (
+	"encoding/json"
+	"fmt"
+	"io"
 	"log"
 	"net/http"
+	"net/http/httptest"
 	"testing"
 	"time"
 
 	"github.com/go-resty/resty/v2"
 	"github.com/jeanhua/AniaBot/bot/utils"
 )
+
+func startMockMemeServer() *httptest.Server {
+	var serverURL string
+	mux := http.NewServeMux()
+
+	mux.HandleFunc("/v1/meme.php", func(w http.ResponseWriter, r *http.Request) {
+		// parse num query (default to 3)
+		num := 3
+		if q := r.URL.Query().Get("num"); q != "" {
+			// ignore parse errors, keep default on error
+			if n, err := fmt.Sscanf(q, "%d", &num); err != nil || n != 1 {
+				num = 3
+			}
+		}
+
+		data := make([]map[string]string, 0, num)
+		for i := 0; i < num; i++ {
+			data = append(data, map[string]string{
+				"img_url": fmt.Sprintf("%s/images/%d.jpg", serverURL, i),
+			})
+		}
+		resp := map[string]interface{}{"data": data}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(resp)
+	})
+
+	// Serve image endpoints (respond to HEAD/GET)
+	mux.HandleFunc("/images/", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "image/jpeg")
+		// small dummy body for GET
+		if r.Method == http.MethodGet {
+			w.WriteHeader(http.StatusOK)
+			_, _ = io.WriteString(w, "JPEGDATA")
+			return
+		}
+		// HEAD: just OK
+		w.WriteHeader(http.StatusOK)
+	})
+
+	server := httptest.NewServer(mux)
+	serverURL = server.URL
+	return server
+}
 
 func TestMemeAPI(t *testing.T) {
 	tests := []struct {
@@ -21,14 +68,17 @@ func TestMemeAPI(t *testing.T) {
 		{"why", "为什么"},
 	}
 
+	server := startMockMemeServer()
+	defer server.Close()
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			modifier, err := utils.NewURLModifier("https://api.suol.cc/v1/meme.php")
+			modifier, err := utils.NewURLModifier(server.URL + "/v1/meme.php")
 			if err != nil {
 				t.Fatalf("NewURLModifier error: %v", err)
 			}
 			modifier.SetQuery("msg", tt.text)
-			modifier.SetQuery("num", "10")
+			modifier.SetQuery("num", "5")
 
 			type responseTy struct {
 				Data []struct {
@@ -63,12 +113,15 @@ func TestMemeAPI(t *testing.T) {
 }
 
 func TestMemeImageURLAccessibility(t *testing.T) {
-	modifier, err := utils.NewURLModifier("https://api.suol.cc/v1/meme.php")
+	server := startMockMemeServer()
+	defer server.Close()
+
+	modifier, err := utils.NewURLModifier(server.URL + "/v1/meme.php")
 	if err != nil {
 		t.Fatalf("NewURLModifier error: %v", err)
 	}
 	modifier.SetQuery("msg", "开心")
-	modifier.SetQuery("num", "10")
+	modifier.SetQuery("num", "4")
 
 	type responseTy struct {
 		Data []struct {
@@ -89,11 +142,10 @@ func TestMemeImageURLAccessibility(t *testing.T) {
 	httpClient := &http.Client{Timeout: 10 * time.Second}
 	for i, item := range result.Data {
 		t.Run(item.ImageUrl, func(t *testing.T) {
-			// 先尝试HEAD请求
+			// Try HEAD, fallback to GET
 			resp, err := httpClient.Head(item.ImageUrl)
 			if err != nil {
 				t.Logf("  [%d] HEAD failed: %v, trying GET", i, err)
-				// HEAD失败则尝试GET
 				resp, err = httpClient.Get(item.ImageUrl)
 				if err != nil {
 					t.Errorf("GET request also failed for url[%d]: %v", i, err)
