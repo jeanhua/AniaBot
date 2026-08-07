@@ -54,6 +54,18 @@ type skillToolConfig struct {
 	Enable bool `cfg:"enable" label:"启用 Skill 管理工具" group:"AI 对话 · 工具" help:"允许 AI 安装/卸载/查看技能（skill_list/skill_install/skill_remove）：AI 可先用 webSearch/webExplore 上网搜索技能资源，再从 zip 链接或 GitHub 仓库下载安装，也可直接撰写 SKILL.md 内容创建；安装后热重载立即生效，默认关闭" default:"false"`
 }
 
+// mcpConfig MCP 服务器加载策略配置
+type mcpConfig struct {
+	LazyLoad bool `cfg:"lazy_load" label:"MCP 工具懒加载" group:"AI 对话 · 工具" help:"开启后 MCP 工具按需发现/加载（mcp_discover/mcp_load），工具定义不进初始上下文、节省 token；但会话内动态加载会改变 tools 列表，可能降低上游 prompt 缓存命中率。关闭后启动时全量注册所有 MCP 工具（工具列表恒定、缓存友好，但工具较多时上下文开销大）" default:"true"`
+}
+
+// mcpToolConfig AI MCP 管理工具配置：允许 AI 自行添加/删除/重连/查看
+// MCP 服务器（mcp_list / mcp_add / mcp_remove / mcp_reconnect），配置写入
+// files.mcp_json 持久化并即时热注册生效；默认关闭以控制远程代码/工具注入风险。
+type mcpToolConfig struct {
+	Enable bool `cfg:"enable" label:"启用 MCP 管理工具" group:"AI 对话 · 工具" help:"允许 AI 添加/删除/重连/查看 MCP 服务器（mcp_list/mcp_add/mcp_remove/mcp_reconnect）：支持 stdio 命令与 streamable/sse HTTP 端点，配置写入 files.mcp_json 持久化并即时生效，默认关闭" default:"false"`
+}
+
 type ocrConfig struct {
 	Enable      bool     `cfg:"enable" label:"启用备用识图模型" group:"AI 对话 · OCR" help:"主模型不支持多模态时将图片转文字" default:"false"`
 	BaseURL     string   `cfg:"base_url" label:"Base URL" group:"AI 对话 · OCR" default:"https://api.siliconflow.cn/v1"`
@@ -185,6 +197,8 @@ type aiChatConfig struct {
 	LocalImage localImageToolConfig `cfg:"plugin.ai_chat_bot.local_image"`
 	ConfigTool configToolConfig     `cfg:"plugin.ai_chat_bot.config_tool"`
 	SkillTool  skillToolConfig      `cfg:"plugin.ai_chat_bot.skill_tool"`
+	MCP        mcpConfig            `cfg:"plugin.ai_chat_bot.mcp"`
+	MCPTool    mcpToolConfig        `cfg:"plugin.ai_chat_bot.mcp_tool"`
 
 	OCR ocrConfig `cfg:"plugin.ai_chat_bot.ocr"`
 

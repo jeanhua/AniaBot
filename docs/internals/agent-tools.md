@@ -58,10 +58,10 @@ type SessionToolExecutor struct { // 会话层：每个会话独立
 | 层级 | 内容 |
 | --- | --- |
 | `CreateDefaultTools()` | 常开：`time`、`webSearch`/`webExplore`（Jina）、`meme`、`get_msg_history`、`get_private_file_url`、`load_images`；配置门控：`bash`（黑白名单正则）、`send_file`、`local_image` |
-| `CreateToolsWithMCP()` | 追加 MCP 发现/加载工具 |
-| `CreateToolsWithSkill()` | 追加 `skill_read` 工具与 SkillManager |
+| `CreateToolsWithMCP()` | 追加 MCP 工具（`mcpLazyLoad` 决定发现/加载模式或全量注册） |
+| `CreateToolsWithSkill()` | 追加 `skill_read` / `skill_reload` 工具与 SkillManager |
 
-另由 aichat 插件在会话层注册：`config_get`/`config_set`（配置中心读写，敏感字段掩码、仅注册键可写、重启生效）、`restart_bot`（延迟自重启）、会话绑定的 clock/memory/knowledge/team/subagent 工具。
+另由 aichat 插件在会话层注册：`config_get`/`config_set`（配置中心读写，敏感字段掩码、仅注册键可写、重启生效）、`restart_bot`（延迟自重启）、`mcp_list`/`mcp_add`/`mcp_remove`/`mcp_reconnect`（MCP 服务器自管理，写 `files.mcp_json` 持久化 + 运行时热注册/注销）、会话绑定的 clock/memory/knowledge/team/subagent 工具。
 
 ### 回调桥（CallBackFuncs）
 
@@ -110,21 +110,25 @@ sequenceDiagram
 
 **为什么两阶段**：MCP 服务器可能暴露几十上百个工具，每个工具的描述都会进入 LLM 请求的 tools 字段——全量注册会让上下文爆炸。发现工具只读无副作用，加载按需进入会话；加载的工具在同一会话后续轮次中直接可用，与内置工具同权。
 
+`plugin.ai_chat_bot.mcp.lazy_load`（默认 `true`）控制是否使用该模式：关闭后启动时全量注册所有 MCP 工具（`RegisterMCP`），工具列表恒定、上游 prompt 缓存命中率更高，但工具较多时上下文开销大。
+
 其他细节：
 
 - MCP 工具结果按 8000 符文截断（超大结果会永久留在窗口历史、撑爆上下文）
 - 连接 HTTP 客户端不在整体 `http.Client.Timeout` 上设超时（会中断 SSE 长连接持续读取），改为 Transport 层 `DialContext` + `ResponseHeaderTimeout` 保护握手阶段
 - 可选 `ToolFilterFunc`（前缀/名单/关键词/组合过滤器）在连接时过滤工具
+- **运行时管理**：`ToolExecuter` 以 RWMutex 保护共享工具表与 manager 列表，支持启动后 `AddMCP` / `RemoveMCP` / `ReconnectMCP`（AI 的 `mcp_add` 等工具依赖此能力；重连后已加载到会话的旧工具句柄失效，需重新 `mcp_load`）
 
 ## Skill 系统
 
 Skill 把领域知识封装成 `SKILL.md`（支持 frontmatter 的 `name` / `description`），AI **按需阅读**而非全量塞入：
 
 - 目录结构：`skills/<name>/SKILL.md`（可带 reference.md、script.sh 等附属文件）或单文件 `skills/SKILL.md`
-- `SkillManager` 启动时加载（`skills` 白名单可只加载指定项），`Reload` 原子替换注册表（面板上传/删除后热更新）
+- `SkillManager` 启动时加载（`skills` 白名单可只加载指定项），`Reload` 原子替换注册表（面板上传/删除后热更新）；常驻的 `skill_reload` 工具走 `Refresh`（按最近一次的目录与白名单原地重载），供 AI 经 `bash` 等直接编辑本地 skill 文件后刷新缓存
 - system prompt 注入 `available_skills` 注册表（名称 + 一句话描述），模型判断需要时调用 `skill_read` 读取完整内容
 - 输出确定性：skill 列表按名称排序（作为工具结果文本回填给 LLM）
 - **AI 自管理技能**：开启 `plugin.ai_chat_bot.skill_tool.enable`（默认关闭）后，会话注册 `skill_list` / `skill_install` / `skill_remove` 三个工具——找资源不做专用搜索工具（GitHub API 搜索有频控），AI 直接用已有的 `webSearch` / `webExplore` 上网搜索技能仓库或 zip 直链，再从 zip 直链 / GitHub 仓库（自动转 codeload zip）/ SKILL.md 直链下载安装，或直接撰写 SKILL.md 全文创建技能；安装/卸载复用面板同款磁盘逻辑（zip-slip / 体积 / 校验防护），热重载立即生效，操作记入操作日志
+- **AI 自管理 MCP 服务器**：开启 `plugin.ai_chat_bot.mcp_tool.enable`（默认关闭）后，会话注册 `mcp_list` / `mcp_add` / `mcp_remove` / `mcp_reconnect` 四个工具——添加/删除经 DI 注入的 `ConfigEditor` 写入 `files.mcp_json` 持久化（名称校验满足 LLM 工具名规范，环境变量/请求头以 `KEY=VALUE` 列表传参），同时调用 `ToolExecuter.AddMCP` / `RemoveMCP` 运行时热注册/注销立即生效（持久化失败会回滚运行时注册；删除时运行时未注册的服务器容忍注销错误，保证配置层面删除总可用）；`mcp_reconnect` 对启动时连接失败从未注册的服务器会从配置读取定义重新注册
 
 ## AI 定时任务（clock）
 

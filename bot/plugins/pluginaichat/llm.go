@@ -108,6 +108,14 @@ func (p *AIChatPlugin) registerScopedTools(sessionExecutor *llmtool.SessionToolE
 			sessionExecutor.RegisterSession(tool)
 		}
 	}
+	// 注册 MCP 管理工具（mcp_list / mcp_add / mcp_remove / mcp_reconnect）：让 AI
+	// 自行管理 MCP 服务器，配置写入 files.mcp_json 持久化并即时热注册生效
+	// （配置门控，默认关闭）
+	if p.cfg.MCPTool.Enable {
+		for _, tool := range newMCPTools(p) {
+			sessionExecutor.RegisterSession(tool)
+		}
+	}
 }
 
 func (p *AIChatPlugin) mainMaxIterations() int {

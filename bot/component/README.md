@@ -60,11 +60,11 @@ ChatBot.Chat()
 // 仅内置工具
 CreateDefaultTools(searchToken, bashConfig, fileConfig, localImageConfig)
 
-// 内置工具 + MCP（工具发现模式）
-CreateToolsWithMCP(searchToken, mcpConfigs, bashConfig, fileConfig, localImageConfig)
+// 内置工具 + MCP（mcpLazyLoad=true 走工具发现模式，false 全量注册）
+CreateToolsWithMCP(searchToken, mcpConfigs, bashConfig, fileConfig, localImageConfig, mcpLazyLoad)
 
 // 内置工具 + MCP + Skill（skills 非空时只加载指定名称的 skill）
-CreateToolsWithSkill(searchToken, mcpConfigs, skillsDir, bashConfig, fileConfig, localImageConfig, skills)
+CreateToolsWithSkill(searchToken, mcpConfigs, skillsDir, bashConfig, fileConfig, localImageConfig, skills, mcpLazyLoad)
 ```
 
 三个工厂函数均返回 `error`（`CreateToolsWithSkill` 返回 `(*ToolExecuter, *SkillManager, error)`）。

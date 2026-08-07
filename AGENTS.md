@@ -128,10 +128,10 @@ Tools are defined as structs embedding `llmtool.BaseTool[ParamsType]`. Parameter
 Registration hierarchy:
 
 1. `functool.CreateDefaultTools()` — registers built-in tools. Always on: `time`, `web_search`, `web_explore` (both via Jina), `meme`, `msg_history`, `private_file`, `load_images` (LLM-invoked, on-demand loading of images in the user's current/quoted message; recognition via the multimodal model or OCR fallback in the callback). Opt-in (gated behind config flags for safety): `bash` (executes on the host with whitelist/blacklist regex), `file`/`send_file`, and `local_image` (reads host-local image files for the LLM to view; served as a data URI to the multimodal model or OCR fallback in the callback). Registered separately by the aichat plugin (not in `CreateDefaultTools`): `config_get`/`config_set` (`plugin.ai_chat_bot.config_tool.enable`, default off — read/modify framework config via the DI-injected `ConfigEditor`; sensitive fields masked against the pluginconfig registry, only registered keys writable, changes take effect after restart) and `restart_bot` (`config_tool.restart_enable`, default off — delayed self-restart via `bot/component/sysrestart` to apply config changes).
-2. `functool.CreateToolsWithMCP()` — adds MCP discovery tools
-3. `functool.CreateToolsWithSkill()` — adds `skill_read` tool
+2. `functool.CreateToolsWithMCP()` — adds MCP tools (`mcpLazyLoad` selects discovery mode vs eager registration)
+3. `functool.CreateToolsWithSkill()` — adds `skill_read` and `skill_reload` tools
 
-Each user session gets a `SessionToolExecutor` with isolated dynamic tools. MCP tools use a two-phase lazy loading pattern (discover → load per session) to avoid context window explosion.
+Each user session gets a `SessionToolExecutor` with isolated dynamic tools. MCP tools default to a two-phase lazy loading pattern (discover → load per session) to avoid context window explosion; `plugin.ai_chat_bot.mcp.lazy_load` (default on) toggles this — off means all MCP tools are registered upfront (stable tool list, better upstream prompt-cache hit rate, higher context cost). The `ToolExecuter` is RWMutex-guarded and supports runtime `AddMCP`/`RemoveMCP`/`ReconnectMCP`, backing the AI's MCP self-management tools (`mcp_list`/`mcp_add`/`mcp_remove`/`mcp_reconnect`, gated by `plugin.ai_chat_bot.mcp_tool.enable`, default off — add/remove persist to `files.mcp_json` via the DI-injected `ConfigEditor` and hot-register/unregister immediately). `skill_reload` re-reads skill files from disk after the AI edits them directly (e.g. via `bash`); panel/tool-driven install/remove already hot-reloads on its own.
 
 ### AI Chat Component
 

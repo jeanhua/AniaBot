@@ -293,6 +293,30 @@ func (m *MCPToolManager) Initialize(ctx context.Context) error {
 	return nil
 }
 
+// Name 返回该管理器对应的 MCP 服务器名称
+func (m *MCPToolManager) Name() string {
+	return m.client.config.Name
+}
+
+// Reconnect 重建客户端连接并刷新工具列表与工具缓存。
+// 会话内此前通过 mcp_load 加载的该服务器工具仍绑定旧客户端，
+// 重连后需重新 mcp_load 才能使用（旧句柄调用会以「未连接」错误失败）。
+func (m *MCPToolManager) Reconnect(ctx context.Context) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	fresh := NewMCPClient(m.client.config)
+	if err := fresh.Connect(ctx); err != nil {
+		return fmt.Errorf("重连失败: %w", err)
+	}
+	m.client.Close()
+	m.client = fresh
+	m.toolCache = make(map[string]*MCPTool)
+	m.toolDefinitions = fresh.GetTools()
+	log.Printf("[MCP:%s] 重连完成，发现 %d 个工具", fresh.config.Name, len(m.toolDefinitions))
+	return nil
+}
+
 // GetToolNames 获取所有工具名称和简短描述
 func (m *MCPToolManager) GetToolNames() []map[string]string {
 	result := make([]map[string]string, 0, len(m.toolDefinitions))
@@ -361,9 +385,11 @@ func (e *ToolExecuter) RegisterMCPWithDiscovery(client *MCPClient) error {
 		return err
 	}
 
+	e.mu.Lock()
+	defer e.mu.Unlock()
 	// 发现工具注册到共享层（只读，无副作用）
 	discoveryTool := NewMCPDiscoveryTool(manager)
-	e.Register(discoveryTool)
+	e.registerLocked(discoveryTool)
 
 	// 保存 manager，session 创建时自动注入对应的 LoaderTool
 	e.mcpManagers = append(e.mcpManagers, manager)

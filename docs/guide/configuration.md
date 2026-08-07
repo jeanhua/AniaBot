@@ -250,6 +250,8 @@ HTTP 模式下 NapCat 向 `localhost` 上报会失败，请将 NapCat 的 HTTP C
 | `plugin.ai_chat_bot.skills` | `[]` | 指定加载的 skill 名称，空 = 加载全部 |
 | `plugin.ai_chat_bot.skill_tool.enable` | `false` | 启用 AI Skill 管理工具（`skill_list` / `skill_install` / `skill_remove`），允许 AI 用 `webSearch` / `webExplore` 上网搜索技能资源后自行下载安装（zip 链接 / GitHub 仓库 / SKILL.md 直链），或直接撰写 SKILL.md 内容创建技能，安装后热重载立即生效 |
 
+常驻的 `skill_reload` 工具（无需开关）用于 AI 直接编辑本地 skill 文件（如经 `bash`）后刷新缓存——面板/管理工具的安装删除会自动热重载，绕过管理器直接改文件则需调用它刷新。
+
 ### 联网搜索
 
 | 配置键 | 默认值 | 说明 |
@@ -443,5 +445,10 @@ HTTP 模式下 NapCat 向 `localhost` 上报会失败，请将 NapCat 的 HTTP C
 }
 ```
 
-MCP 工具采用两阶段懒加载：AI 先通过发现工具查看有哪些 MCP 能力，按需加载到当前会话，避免工具描述撑爆上下文。
+MCP 工具默认采用两阶段懒加载：AI 先通过发现工具查看有哪些 MCP 能力，按需加载到当前会话，避免工具描述撑爆上下文。
+
+| 配置键 | 默认值 | 说明 |
+| --- | --- | --- |
+| `plugin.ai_chat_bot.mcp.lazy_load` | `true` | MCP 工具懒加载：开启时按需发现/加载（`mcp_discover` / `mcp_load`），节省上下文；但会话内动态加载会改变 tools 列表，可能降低上游 prompt 缓存命中率。关闭后启动时全量注册所有 MCP 工具（工具列表恒定、缓存友好，但工具较多时上下文开销大） |
+| `plugin.ai_chat_bot.mcp_tool.enable` | `false` | 启用 AI MCP 管理工具（`mcp_list` / `mcp_add` / `mcp_remove` / `mcp_reconnect`），允许 AI 自行添加/删除/重连/查看 MCP 服务器；添加/删除写入 `files.mcp_json` 持久化并即时热注册/注销生效 |
 

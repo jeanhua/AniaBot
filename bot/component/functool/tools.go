@@ -32,15 +32,23 @@ func CreateDefaultTools(searchToken string, bashConfig BashConfig, fileConfig Fi
 	return executer, nil
 }
 
-// CreateToolsWithMCP 创建工具执行器，注册内置工具和 MCP 工具（工具发现模式）
-func CreateToolsWithMCP(searchToken string, mcpConfigs []*llmtool.MCPConfig, bashConfig BashConfig, fileConfig FileConfig, localImageConfig LocalImageConfig) (*llmtool.ToolExecuter, error) {
+// CreateToolsWithMCP 创建工具执行器，注册内置工具和 MCP 工具。
+// mcpLazyLoad 为 true 时走工具发现模式（mcp_discover/mcp_load 按需加载，
+// 节省上下文）；为 false 时启动即全量注册所有 MCP 工具（工具列表恒定，
+// 上游 prompt 缓存命中率更高，但工具较多时上下文开销大）。
+func CreateToolsWithMCP(searchToken string, mcpConfigs []*llmtool.MCPConfig, bashConfig BashConfig, fileConfig FileConfig, localImageConfig LocalImageConfig, mcpLazyLoad bool) (*llmtool.ToolExecuter, error) {
 	executer, err := CreateDefaultTools(searchToken, bashConfig, fileConfig, localImageConfig)
 	if err != nil {
 		return nil, err
 	}
 	for _, config := range mcpConfigs {
 		log.Printf("正在连接MCP服务器: %s (command=%s)", config.Name, config.Command)
-		if err := executer.RegisterMCPWithConfigDiscovery(config); err != nil {
+		if mcpLazyLoad {
+			err = executer.RegisterMCPWithConfigDiscovery(config)
+		} else {
+			err = executer.RegisterMCPWithConfig(config)
+		}
+		if err != nil {
 			log.Printf("注册MCP服务器 %s 失败: %v", config.Name, err)
 			continue
 		}
@@ -52,8 +60,9 @@ func CreateToolsWithMCP(searchToken string, mcpConfigs []*llmtool.MCPConfig, bas
 // CreateToolsWithSkill 创建工具执行器，注册内置工具、MCP 工具和 Skill 工具
 // skillsDir 为空时跳过 skill 加载
 // skills 非空时只加载指定名称的 skill，为空时加载全部
-func CreateToolsWithSkill(searchToken string, mcpConfigs []*llmtool.MCPConfig, skillsDir string, bashConfig BashConfig, fileConfig FileConfig, localImageConfig LocalImageConfig, skills []string) (*llmtool.ToolExecuter, *llmtool.SkillManager, error) {
-	executer, err := CreateToolsWithMCP(searchToken, mcpConfigs, bashConfig, fileConfig, localImageConfig)
+// mcpLazyLoad 见 CreateToolsWithMCP
+func CreateToolsWithSkill(searchToken string, mcpConfigs []*llmtool.MCPConfig, skillsDir string, bashConfig BashConfig, fileConfig FileConfig, localImageConfig LocalImageConfig, skills []string, mcpLazyLoad bool) (*llmtool.ToolExecuter, *llmtool.SkillManager, error) {
+	executer, err := CreateToolsWithMCP(searchToken, mcpConfigs, bashConfig, fileConfig, localImageConfig, mcpLazyLoad)
 	if err != nil {
 		return nil, nil, err
 	}

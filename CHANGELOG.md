@@ -10,6 +10,12 @@
 
 ## [Unreleased]
 
+### 新增
+
+- **AI MCP 管理工具（`mcp_list` / `mcp_add` / `mcp_remove` / `mcp_reconnect`）**：`pluginaichat` 新增 MCP 服务器自管理能力（`plugin.ai_chat_bot.mcp_tool.enable` 开启，默认关闭），AI 无需后台面板即可自行管理 MCP 服务器：支持 stdio 本地命令与 streamable/sse HTTP 端点两种模式（环境变量/请求头以 `KEY=VALUE` 列表传参，服务器名称校验满足 LLM 工具名规范）；添加/删除经 DI 注入的 `ConfigEditor` 写入 `files.mcp_json` 持久化，同时运行时热注册/注销立即生效（持久化失败自动回滚运行时注册，删除容忍运行时未注册的服务器以保证配置层面删除总可用）；`mcp_reconnect` 重建连接并刷新工具列表，对启动时连接失败从未注册的服务器自动从配置读取定义重新注册。`llmtool` 的 `ToolExecuter` 相应改为 RWMutex 保护共享工具表与 manager 列表，新增 `AddMCP` / `RemoveMCP` / `ReconnectMCP` / `MCPServerInfos` 运行时管理能力；操作记入操作日志
+- **MCP 工具懒加载开关**：新增 `plugin.ai_chat_bot.mcp.lazy_load`（默认开启，面板「AI 对话 · 工具」组可直接切换）。开启时沿用两阶段懒加载（`mcp_discover` / `mcp_load` 按需加载，节省上下文）；关闭后启动时全量注册所有 MCP 工具——工具列表恒定、上游 prompt 缓存命中率更高，但工具较多时上下文开销大。`functool.CreateToolsWithMCP` / `CreateToolsWithSkill` 签名相应增加 `mcpLazyLoad` 参数
+- **Skill 缓存刷新工具（`skill_reload`）**：常驻注册（无需开关），供 AI 经 `bash` 等工具直接编辑本地 skill 文件（SKILL.md / 附属文档）后重新从磁盘加载全部 skill 并刷新缓存——面板与 skill 管理工具的安装/删除本就会自动热重载，此工具面向「绕过管理器直接改文件」的场景。`SkillManager` 记录最近一次加载的目录与白名单，新增 `Refresh` 原地重载
+
 ## [v4.4.0] - 2026-08-06
 
 ### 新增

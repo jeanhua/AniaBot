@@ -630,6 +630,7 @@ func (p *AIChatPlugin) Start(ctx context.Context, cfg *viper.Viper) error {
 		fileConfig,
 		localImageConfig,
 		p.cfg.Skills,
+		p.cfg.MCP.LazyLoad,
 	)
 	if err != nil {
 		return fmt.Errorf("%w: 创建工具执行器失败: %w", aniaerror.ParameterInitializeError, err)

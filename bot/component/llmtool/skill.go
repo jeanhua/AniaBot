@@ -33,6 +33,9 @@ type Skill struct {
 type SkillManager struct {
 	mu     sync.RWMutex
 	skills map[string]*Skill // key: skill name
+	// dir/names 记录最近一次加载的目录与白名单，供 Refresh 原地重载
+	dir   string
+	names []string
 }
 
 // NewSkillManager 创建一个新的 SkillManager
@@ -55,7 +58,12 @@ func (m *SkillManager) LoadFromDir(skillsDir string) error {
 func (m *SkillManager) LoadFromDirWithFilter(skillsDir string, names []string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	return m.loadFromDirLocked(skillsDir, names)
+	if err := m.loadFromDirLocked(skillsDir, names); err != nil {
+		return err
+	}
+	m.dir = skillsDir
+	m.names = names
+	return nil
 }
 
 // loadFromDirLocked 是 LoadFromDirWithFilter 的无锁内部实现
@@ -121,8 +129,29 @@ func (m *SkillManager) Reload(skillsDir string, names []string) error {
 	}
 	m.mu.Lock()
 	m.skills = tmp.skills
+	m.dir = skillsDir
+	m.names = names
 	m.mu.Unlock()
 	return nil
+}
+
+// Refresh 按最近一次加载的目录与白名单重新从磁盘加载全部 skill。
+// 用于 AI/用户直接编辑本地 skill 文件后刷新缓存（面板/工具的安装删除
+// 已自动重载，此接口面向「绕过管理器直接改文件」的场景）。
+// 返回重载后的 skill 数量；从未从目录加载过时返回错误。
+func (m *SkillManager) Refresh() (int, error) {
+	m.mu.RLock()
+	dir, names := m.dir, m.names
+	m.mu.RUnlock()
+	if dir == "" {
+		return 0, fmt.Errorf("skill 未从目录加载，无法刷新")
+	}
+	if err := m.Reload(dir, names); err != nil {
+		return 0, err
+	}
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return len(m.skills), nil
 }
 
 // Register 手动注册一个 Skill（直接传入路径）
@@ -192,10 +221,11 @@ func (m *SkillManager) BuildAvailableSkillsPrompt() string {
 	return sb.String()
 }
 
-// RegisterToExecuter 将 skill 读取工具注册到 ToolExecuter
-// 调用此方法后，Agent 就拥有了读取 SKILL.md 的能力
+// RegisterToExecuter 将 skill 读取/刷新工具注册到 ToolExecuter
+// 调用此方法后，Agent 就拥有了读取 SKILL.md 与刷新 skill 缓存的能力
 func (m *SkillManager) RegisterToExecuter(executer *ToolExecuter) {
 	executer.Register(NewSkillReadTool(m))
+	executer.Register(NewSkillReloadTool(m))
 }
 
 // ValidateSkillDir 校验指定目录下的 SKILL.md（含附属文件）能否被正常加载
@@ -444,3 +474,44 @@ func (t *SkillReadTool) Execute(ctx context.Context, params any, callbacks CallB
 // maxSkillReadRunes skill_read 单次返回的 rune 上限（宽松于工具结果截断：
 // skill 是核心指令，正常内容远小于该值）。
 const maxSkillReadRunes = 16000
+
+// ─────────────────────────────────────────────
+// SkillReloadTool：让 Agent 在直接编辑本地 skill 文件后刷新缓存
+// ─────────────────────────────────────────────
+
+// SkillReloadParams 是调用 skill_reload 工具时的参数（无参数）
+type SkillReloadParams struct{}
+
+// SkillReloadTool 工具：重新从磁盘加载全部 skill 并刷新缓存。
+// 缓存中的 skill 内容在加载时固定，AI 通过 bash 等工具直接编辑本地
+// SKILL.md/附属文档后缓存不会自动更新，需要调用本工具刷新。
+type SkillReloadTool struct {
+	BaseTool[SkillReloadParams]
+	manager *SkillManager
+}
+
+// NewSkillReloadTool 创建 SkillReloadTool
+func NewSkillReloadTool(manager *SkillManager) *SkillReloadTool {
+	return &SkillReloadTool{
+		BaseTool: MakeBaseTool(
+			"skill_reload",
+			"重新从磁盘加载全部 skill 并刷新缓存。当你通过 bash 等工具直接编辑了本地 skill 文件（SKILL.md 或附属文档）后，缓存中的内容不会自动更新，必须调用本工具刷新，后续的 skill_read 与技能匹配才会使用最新内容。未修改文件时无需调用。",
+			SkillReloadParams{},
+		),
+		manager: manager,
+	}
+}
+
+func (t *SkillReloadTool) Execute(ctx context.Context, params any, callbacks CallBackFuncs) (string, error) {
+	count, err := t.manager.Refresh()
+	if err != nil {
+		return "", err
+	}
+	metas := t.manager.List()
+	names := make([]string, 0, len(metas))
+	for _, meta := range metas {
+		names = append(names, meta.Name)
+	}
+	log.Printf("[SKILL刷新] 已重新加载 %d 个 skill", count)
+	return fmt.Sprintf("skill 缓存已刷新，当前共加载 %d 个 skill：[%s]", count, strings.Join(names, ", ")), nil
+}

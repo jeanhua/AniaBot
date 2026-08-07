@@ -242,37 +242,14 @@ func (p *AIChatPlugin) loadMCPConfigs(cfg *viper.Viper) error {
 			continue
 		}
 
-		mcpConfig := &llmtool.MCPConfig{
-			Name:        entry.Name,
-			Transport:   entry.Transport,
-			Command:     entry.Command,
-			Args:        entry.Args,
-			Env:         entry.Env,
-			Endpoint:    entry.Endpoint,
-			Headers:     entry.Headers,
-			Description: entry.Description,
-		}
-		if entry.TimeoutSecs > 0 {
-			mcpConfig.Timeout = time.Duration(entry.TimeoutSecs) * time.Second
-		}
-
-		transport := strings.ToLower(mcpConfig.Transport)
-		isHTTP := transport == "streamable" || transport == "streamable-http" || transport == "sse"
-
-		if isHTTP {
-			if mcpConfig.Endpoint == "" {
-				p.Logger.Warn("MCP 服务器配置缺少 endpoint", "name", mcpConfig.Name)
-				continue
-			}
-		} else {
-			if mcpConfig.Command == "" {
-				p.Logger.Warn("MCP 服务器配置缺少 command", "name", mcpConfig.Name)
-				continue
-			}
+		mcpConfig, err := mcpEntryToConfig(entry)
+		if err != nil {
+			p.Logger.Warn("MCP 服务器配置无效", "name", entry.Name, "error", err.Error())
+			continue
 		}
 
 		p.mcpConfigs = append(p.mcpConfigs, mcpConfig)
-		if isHTTP {
+		if mcpConfig.Endpoint != "" {
 			p.Logger.Info("已加载 MCP 服务器配置", "name", mcpConfig.Name, "transport", mcpConfig.Transport, "endpoint", mcpConfig.Endpoint)
 		} else {
 			p.Logger.Info("已加载 MCP 服务器配置", "name", mcpConfig.Name, "command", mcpConfig.Command)
@@ -281,6 +258,35 @@ func (p *AIChatPlugin) loadMCPConfigs(cfg *viper.Viper) error {
 
 	p.Logger.Info("MCP 服务器配置加载完成", "count", len(p.mcpConfigs))
 	return nil
+}
+
+// mcpEntryToConfig 将持久化条目转换为运行时 MCP 配置并做基本校验
+// （HTTP 模式缺 endpoint / stdio 模式缺 command 均视为无效）。
+func mcpEntryToConfig(entry *mcpServerEntry) (*llmtool.MCPConfig, error) {
+	mcpConfig := &llmtool.MCPConfig{
+		Name:        entry.Name,
+		Transport:   entry.Transport,
+		Command:     entry.Command,
+		Args:        entry.Args,
+		Env:         entry.Env,
+		Endpoint:    entry.Endpoint,
+		Headers:     entry.Headers,
+		Description: entry.Description,
+	}
+	if entry.TimeoutSecs > 0 {
+		mcpConfig.Timeout = time.Duration(entry.TimeoutSecs) * time.Second
+	}
+
+	transport := strings.ToLower(mcpConfig.Transport)
+	isHTTP := transport == "streamable" || transport == "streamable-http" || transport == "sse"
+	if isHTTP {
+		if mcpConfig.Endpoint == "" {
+			return nil, fmt.Errorf("缺少 endpoint")
+		}
+	} else if mcpConfig.Command == "" {
+		return nil, fmt.Errorf("缺少 command")
+	}
+	return mcpConfig, nil
 }
 
 func (p *AIChatPlugin) thinkingOpts() aichat.ChatOptions {

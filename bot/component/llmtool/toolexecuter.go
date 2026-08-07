@@ -8,9 +8,14 @@ import (
 	"reflect"
 	"sort"
 	"sync"
+	"time"
 )
 
 type ToolExecuter struct {
+	// mu 保护 tools 与 mcpManagers：启动完成后 AI 仍可通过 mcp_add/mcp_remove
+	// 等管理工具在运行时增删 MCP 服务器，而各会话的 Tools/Execute 在并发读，
+	// 并发 map 读写是不可恢复的 fatal error
+	mu          sync.RWMutex
 	tools       map[string]Tool
 	mcpManagers []*MCPToolManager
 }
@@ -26,6 +31,13 @@ func NewToolExecuter() *ToolExecuter {
 // 不能 panic：重名可能来自用户配置（如 files.mcp_json 中重复的服务器名），
 // panic 会越过注册循环的容错逻辑，中断插件的整个初始化流程。
 func (e *ToolExecuter) Register(tool Tool) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.registerLocked(tool)
+}
+
+// registerLocked 是 Register 的无锁内部实现（调用方须已持有写锁）
+func (e *ToolExecuter) registerLocked(tool Tool) {
 	if _, ok := e.tools[tool.Name()]; ok {
 		log.Printf("[ToolExecuter] 工具 '%s' 已注册，跳过重复注册", tool.Name())
 		return
@@ -45,6 +57,8 @@ func (e *ToolExecuter) Tools() []ToolDef {
 // 优先——否则 tools 字段出现两份同名 function 定义（部分提供方直接 400 拒绝），
 // 且「下发的定义」与「实际执行的工具」不一致。
 func (e *ToolExecuter) toolsWithSession(sessionTools map[string]Tool) []ToolDef {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
 	seen := make(map[string]struct{}, len(e.tools)+len(sessionTools))
 	names := make([]string, 0, len(e.tools)+len(sessionTools))
 	for name := range sessionTools {
@@ -77,6 +91,8 @@ func (e *ToolExecuter) resolveTool(name string, sessionTools map[string]Tool) (T
 			return t, true
 		}
 	}
+	e.mu.RLock()
+	defer e.mu.RUnlock()
 	t, ok := e.tools[name]
 	return t, ok
 }
@@ -116,6 +132,8 @@ func (e *ToolExecuter) executeWithSession(ctx context.Context, call ToolCall, ca
 }
 
 func (e *ToolExecuter) getToolNames() []string {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
 	names := make([]string, 0, len(e.tools))
 	for name := range e.tools {
 		names = append(names, name)
@@ -130,6 +148,8 @@ func (e *ToolExecuter) NewSessionExecutor() *SessionToolExecutor {
 		shared:       e,
 		sessionTools: make(map[string]Tool),
 	}
+	e.mu.RLock()
+	defer e.mu.RUnlock()
 	for _, manager := range e.mcpManagers {
 		loaderTool := NewMCPLoaderTool(manager, session)
 		session.sessionTools[loaderTool.Name()] = loaderTool
@@ -182,4 +202,186 @@ func (s *SessionToolExecutor) ClearDynamicMCPTools() int {
 		}
 	}
 	return cleared
+}
+
+// ─────────────────────────────────────────────
+// 运行时 MCP 管理：供 AI 的 MCP 管理工具（mcp_add/mcp_remove/mcp_reconnect）
+// 在启动完成后动态增删/重连 MCP 服务器
+// ─────────────────────────────────────────────
+
+// MCPServerInfo 是 MCP 服务器的运行时信息（供管理工具展示状态）
+type MCPServerInfo struct {
+	Name        string // 服务器名称
+	Description string // 服务器描述
+	ToolCount   int    // 发现的工具数量
+	Lazy        bool   // true=懒加载（发现模式），false=全量注册
+}
+
+// AddMCP 运行时注册 MCP 服务器：lazy 为 true 走工具发现模式（mcp_discover/mcp_load
+// 按需加载，新会话自动获得对应的 mcp_load 工具），false 全量注册所有工具。
+// 连接失败返回错误且不留残余注册。
+func (e *ToolExecuter) AddMCP(config *MCPConfig, lazy bool) error {
+	e.mu.RLock()
+	dup := e.hasMCPLocked(config.Name)
+	e.mu.RUnlock()
+	if dup {
+		return fmt.Errorf("MCP 服务器 '%s' 已注册", config.Name)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	client := NewMCPClient(config)
+	if lazy {
+		manager := NewMCPToolManager(client)
+		if err := manager.Initialize(ctx); err != nil {
+			return fmt.Errorf("连接 MCP 服务器 '%s' 失败: %w", config.Name, err)
+		}
+		e.mu.Lock()
+		defer e.mu.Unlock()
+		e.registerLocked(NewMCPDiscoveryTool(manager))
+		e.mcpManagers = append(e.mcpManagers, manager)
+		log.Printf("[MCP:%s] 运行时注册完成（发现模式），共 %d 个工具", config.Name, len(manager.toolDefinitions))
+		return nil
+	}
+
+	if err := client.Connect(ctx); err != nil {
+		return fmt.Errorf("连接 MCP 服务器 '%s' 失败: %w", config.Name, err)
+	}
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	for _, toolDef := range client.GetTools() {
+		e.registerLocked(NewMCPTool(client, toolDef))
+	}
+	log.Printf("[MCP:%s] 运行时注册完成（全量模式），共 %d 个工具", config.Name, len(client.GetTools()))
+	return nil
+}
+
+// RemoveMCP 运行时移除 MCP 服务器：关闭连接，并移除其发现工具（懒加载模式）
+// 或全部已注册工具（全量模式）。已创建会话中残留的 mcp_load/旧工具句柄
+// 在调用时会以「未连接」错误优雅失败。
+func (e *ToolExecuter) RemoveMCP(name string) error {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+
+	// 懒加载（发现模式）：移除 manager 与发现工具
+	for i, manager := range e.mcpManagers {
+		if manager.Name() == name {
+			manager.client.Close()
+			delete(e.tools, NewMCPDiscoveryTool(manager).Name())
+			e.mcpManagers = append(e.mcpManagers[:i], e.mcpManagers[i+1:]...)
+			log.Printf("[MCP:%s] 已运行时移除（发现模式）", name)
+			return nil
+		}
+	}
+
+	// 全量注册模式：移除属于该服务器的全部工具
+	removed := 0
+	var client *MCPClient
+	for toolName, tool := range e.tools {
+		if mcpTool, ok := tool.(*MCPTool); ok && mcpTool.client.config.Name == name {
+			client = mcpTool.client
+			delete(e.tools, toolName)
+			removed++
+		}
+	}
+	if removed > 0 {
+		client.Close()
+		log.Printf("[MCP:%s] 已运行时移除（全量模式），清理 %d 个工具", name, removed)
+		return nil
+	}
+
+	return fmt.Errorf("MCP 服务器 '%s' 未注册", name)
+}
+
+// ReconnectMCP 重新连接指定 MCP 服务器并刷新其工具列表（两种模式均支持）。
+// 会话内此前已加载的该服务器工具句柄随之失效，需要重新 mcp_load。
+func (e *ToolExecuter) ReconnectMCP(ctx context.Context, name string) error {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+
+	// 懒加载（发现模式）：manager 原地重连，会话内的 mcp_load 工具引用同一
+	// manager，重连后新加载的工具自动使用新连接
+	for _, manager := range e.mcpManagers {
+		if manager.Name() == name {
+			return manager.Reconnect(ctx)
+		}
+	}
+
+	// 全量注册模式：用原配置重建客户端，整体替换该服务器的工具
+	for _, tool := range e.tools {
+		mcpTool, ok := tool.(*MCPTool)
+		if !ok || mcpTool.client.config.Name != name {
+			continue
+		}
+		oldClient := mcpTool.client
+		fresh := NewMCPClient(oldClient.config)
+		if err := fresh.Connect(ctx); err != nil {
+			return fmt.Errorf("重连 MCP 服务器 '%s' 失败: %w", name, err)
+		}
+		oldClient.Close()
+		for toolName, t := range e.tools {
+			if t2, ok := t.(*MCPTool); ok && t2.client == oldClient {
+				delete(e.tools, toolName)
+			}
+		}
+		for _, toolDef := range fresh.GetTools() {
+			e.tools[toolDef.Name] = NewMCPTool(fresh, toolDef)
+		}
+		log.Printf("[MCP:%s] 重连完成（全量模式），共 %d 个工具", name, len(fresh.GetTools()))
+		return nil
+	}
+
+	return fmt.Errorf("MCP 服务器 '%s' 未注册", name)
+}
+
+// MCPServerInfos 返回当前已注册的全部 MCP 服务器信息（按名称排序，
+// 输出会作为管理工具结果回填给 LLM，必须保证顺序确定）
+func (e *ToolExecuter) MCPServerInfos() []MCPServerInfo {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+
+	infos := make([]MCPServerInfo, 0, len(e.mcpManagers))
+	for _, manager := range e.mcpManagers {
+		infos = append(infos, MCPServerInfo{
+			Name:        manager.Name(),
+			Description: manager.client.config.Description,
+			ToolCount:   len(manager.toolDefinitions),
+			Lazy:        true,
+		})
+	}
+
+	// 全量注册模式：按客户端聚合同一服务器的工具
+	eagerClients := make(map[*MCPClient]int)
+	for _, tool := range e.tools {
+		if mcpTool, ok := tool.(*MCPTool); ok {
+			eagerClients[mcpTool.client]++
+		}
+	}
+	for client, count := range eagerClients {
+		infos = append(infos, MCPServerInfo{
+			Name:        client.config.Name,
+			Description: client.config.Description,
+			ToolCount:   count,
+			Lazy:        false,
+		})
+	}
+
+	sort.Slice(infos, func(i, j int) bool { return infos[i].Name < infos[j].Name })
+	return infos
+}
+
+// hasMCPLocked 检查指定名称的 MCP 服务器是否已注册（调用方须已持有读锁或写锁）
+func (e *ToolExecuter) hasMCPLocked(name string) bool {
+	for _, manager := range e.mcpManagers {
+		if manager.Name() == name {
+			return true
+		}
+	}
+	for _, tool := range e.tools {
+		if mcpTool, ok := tool.(*MCPTool); ok && mcpTool.client.config.Name == name {
+			return true
+		}
+	}
+	return false
 }
