@@ -29,6 +29,20 @@ type retryConfig struct {
 	baseDelay   time.Duration
 }
 
+// PromptCacheConfig 上游 prompt 缓存配置。
+//
+// chat_completions / responses 格式由提供方自动做前缀缓存（无需配置）；
+// anthropic 格式必须显式声明 cache_control 断点才会启用缓存，
+// 因此本配置仅 anthropic 后端生效，其余后端忽略。
+type PromptCacheConfig struct {
+	// Enable 是否启用：anthropic 格式下为 system 与最后一条消息设置
+	// cache_control 断点；关闭时请求体与旧行为完全一致。
+	Enable bool
+	// TTL 缓存保留时长（"5m" | "1h"），仅 anthropic 格式有效；
+	// 空值使用提供方默认（5m）。
+	TTL string
+}
+
 // llmClientConfig 收集 NewLLMClient 的可选参数。
 type llmClientConfig struct {
 	maxAttempts     int
@@ -38,6 +52,7 @@ type llmClientConfig struct {
 	fallbackAPIKey  string
 	fallbackModel   string
 	fallbackFormat  string
+	promptCache     PromptCacheConfig
 }
 
 // LLMClientOption 配置 LLMClient 的可选参数（函数选项模式）。
@@ -62,6 +77,14 @@ func WithAPIFormat(format string) LLMClientOption {
 	}
 }
 
+// WithPromptCache 配置上游 prompt 缓存（见 PromptCacheConfig）。
+// 仅 anthropic 格式生效；chat_completions / responses 为自动前缀缓存，忽略此选项。
+func WithPromptCache(cfg PromptCacheConfig) LLMClientOption {
+	return func(c *llmClientConfig) {
+		c.promptCache = cfg
+	}
+}
+
 // WithFallback 配置备用模型：主模型重试耗尽或遇到不可重试错误时，改用备用模型
 // 再请求一次（备用客户端内部自带同等重试）。fallbackModel 为空表示不启用。
 // baseURL / apiKey / format 留空时回退到主模型配置。
@@ -80,7 +103,7 @@ func NewLLMClient(baseURL, apiKey, model string, opts ...LLMClientOption) (*LLMC
 		opt(&cfg)
 	}
 
-	backend, err := newLLMBackend(cfg.apiFormat, baseURL, apiKey, model)
+	backend, err := newLLMBackend(cfg.apiFormat, baseURL, apiKey, model, cfg.promptCache)
 	if err != nil {
 		return nil, err
 	}
@@ -98,7 +121,8 @@ func NewLLMClient(baseURL, apiKey, model string, opts ...LLMClientOption) (*LLMC
 		}
 		fb, err := NewLLMClient(fbBaseURL, fbAPIKey, cfg.fallbackModel,
 			WithRetry(cfg.maxAttempts, cfg.baseDelay),
-			WithAPIFormat(fbFormat)) // 不传 WithFallback 防止递归
+			WithAPIFormat(fbFormat),
+			WithPromptCache(cfg.promptCache)) // 不传 WithFallback 防止递归
 		if err != nil {
 			return nil, fmt.Errorf("create fallback client: %w", err)
 		}

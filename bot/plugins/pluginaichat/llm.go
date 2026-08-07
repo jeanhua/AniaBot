@@ -136,6 +136,12 @@ func (p *AIChatPlugin) llmClientOptions() []aichat.LLMClientOption {
 		}
 		opts = append(opts, aichat.WithRetry(p.cfg.Retry.MaxAttempts, baseDelay))
 	}
+	// Prompt 缓存：仅 anthropic 格式生效（cache_control 断点），
+	// chat_completions / responses 为自动前缀缓存，无需配置
+	opts = append(opts, aichat.WithPromptCache(aichat.PromptCacheConfig{
+		Enable: p.cfg.PromptCache.Enable,
+		TTL:    p.cfg.PromptCache.TTL,
+	}))
 	if p.cfg.Fallback.Model != "" {
 		opts = append(opts, aichat.WithFallback(p.cfg.Fallback.BaseURL, p.cfg.Fallback.APIKey, p.cfg.Fallback.Model, p.cfg.Fallback.APIFormat))
 	}

@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/anthropics/anthropic-sdk-go"
 	"github.com/jeanhua/AniaBot/bot/component/llmtool"
 )
 
@@ -315,5 +316,145 @@ func TestAnthropicStream(t *testing.T) {
 	}
 	if usage.PromptTokens != 7 || usage.CompletionTokens != 9 || usage.TotalTokens != 16 || usage.CachedTokens != 3 {
 		t.Fatalf("usage 不符: %+v", usage)
+	}
+}
+
+// TestConvertAnthropicMessagesPromptCache 缓存断点位置与 TTL：
+// 启用时 system 最后一个块与最后一条消息的最后一个可缓存块打点；
+// 禁用时与旧行为一致（不出现任何 cache_control）。
+func TestConvertAnthropicMessagesPromptCache(t *testing.T) {
+	messages := []Message{
+		TextMessage(RoleSystem, "基础提示"),
+		TextMessage(RoleSystem, "扩展提示"),
+		TextMessage(RoleUser, "你好"),
+		TextMessage(RoleUser, "今天天气"),
+	}
+
+	// 禁用：不出现任何断点
+	msgs, system, err := convertAnthropicMessages(messages, PromptCacheConfig{})
+	if err != nil {
+		t.Fatalf("convertAnthropicMessages 失败: %v", err)
+	}
+	if len(system) != 2 || system[0].CacheControl.Type != "" || system[1].CacheControl.Type != "" {
+		t.Fatalf("禁用缓存时 system 不应有断点: %+v", system)
+	}
+	for _, m := range msgs {
+		for _, block := range m.Content {
+			if block.OfText != nil && block.OfText.CacheControl.Type != "" {
+				t.Fatalf("禁用缓存时消息块不应有断点: %+v", m.Content)
+			}
+		}
+	}
+
+	// 启用（默认 TTL）：断点只落在 system 末块与最后消息末块
+	msgs, system, err = convertAnthropicMessages(messages, PromptCacheConfig{Enable: true})
+	if err != nil {
+		t.Fatalf("convertAnthropicMessages 失败: %v", err)
+	}
+	if system[0].CacheControl.Type != "" || system[1].CacheControl.Type != "ephemeral" {
+		t.Fatalf("system 应只在末块打点: %+v", system)
+	}
+	if system[1].CacheControl.TTL != "" {
+		t.Fatalf("默认 TTL 应为提供方默认（不显式下发）, got %q", system[1].CacheControl.TTL)
+	}
+	if len(msgs) != 2 {
+		t.Fatalf("消息数不符: %d", len(msgs))
+	}
+	first := msgs[0]
+	if first.Content[len(first.Content)-1].OfText.CacheControl.Type != "" {
+		t.Fatalf("非最后消息不应打点: %+v", first.Content)
+	}
+	last := msgs[len(msgs)-1]
+	if last.Content[len(last.Content)-1].OfText.CacheControl.Type != "ephemeral" {
+		t.Fatalf("最后消息末块应有 ephemeral 断点: %+v", last.Content)
+	}
+
+	// TTL 1h
+	_, system, err = convertAnthropicMessages(messages, PromptCacheConfig{Enable: true, TTL: "1h"})
+	if err != nil {
+		t.Fatalf("convertAnthropicMessages 失败: %v", err)
+	}
+	if system[1].CacheControl.TTL != anthropic.CacheControlEphemeralTTLTTL1h {
+		t.Fatalf("TTL 应为 1h, got %q", system[1].CacheControl.TTL)
+	}
+}
+
+// TestConvertAnthropicMessagesCacheToolResult tool calling 轮次中最后一条是
+// tool 结果（user 角色 + tool_result 块），断点应落在最后一个 tool_result 块上，
+// 保证下一轮工具调用能命中 system+历史+上一轮工具往返的缓存。
+func TestConvertAnthropicMessagesCacheToolResult(t *testing.T) {
+	messages := []Message{
+		TextMessage(RoleSystem, "你是助手"),
+		TextMessage(RoleUser, "查一下时间"),
+		{Role: RoleAssistant, ToolCalls: []llmtool.ToolCall{{ID: "toolu_1", Name: "time", Arguments: `{}`}}},
+		{Role: RoleTool, ToolCallID: "toolu_1", Parts: []ContentPart{TextPart("2026-08-07")}},
+	}
+	msgs, _, err := convertAnthropicMessages(messages, PromptCacheConfig{Enable: true})
+	if err != nil {
+		t.Fatalf("convertAnthropicMessages 失败: %v", err)
+	}
+	last := msgs[len(msgs)-1]
+	if last.Content[len(last.Content)-1].OfToolResult == nil ||
+		last.Content[len(last.Content)-1].OfToolResult.CacheControl.Type != "ephemeral" {
+		t.Fatalf("最后 tool_result 块应有断点: %+v", last.Content)
+	}
+}
+
+// TestAnthropicGeneratePromptCacheJSON 端到端：启用后请求体中 system 末块与
+// 最后一条消息的最后一个内容块应序列化出 cache_control，供 Anthropic 建缓存。
+func TestAnthropicGeneratePromptCacheJSON(t *testing.T) {
+	var reqBody map[string]any
+	srv := httptest.NewServer(anthropicSSEReply(
+		anthropicTextStream(`"hi"`, anthropicUsageJSON(5, 3, 2)), &reqBody))
+	defer srv.Close()
+
+	c, err := NewLLMClient(srv.URL, "test-key", "claude-test",
+		WithAPIFormat(APIFormatAnthropic),
+		WithPromptCache(PromptCacheConfig{Enable: true, TTL: "5m"}))
+	if err != nil {
+		t.Fatalf("NewLLMClient 失败: %v", err)
+	}
+	if _, _, err := c.Generate(context.Background(), []Message{
+		TextMessage(RoleSystem, "你是助手"),
+		TextMessage(RoleUser, "hello"),
+	}, ChatOptions{}); err != nil {
+		t.Fatalf("Generate 失败: %v", err)
+	}
+
+	sys := reqBody["system"].([]any)
+	lastSys := sys[len(sys)-1].(map[string]any)
+	if _, ok := lastSys["cache_control"]; !ok {
+		t.Fatalf("system 末块缺少 cache_control: %v", lastSys)
+	}
+	msgs := reqBody["messages"].([]any)
+	lastMsg := msgs[len(msgs)-1].(map[string]any)
+	content := lastMsg["content"].([]any)
+	lastBlock := content[len(content)-1].(map[string]any)
+	if _, ok := lastBlock["cache_control"]; !ok {
+		t.Fatalf("最后消息末块缺少 cache_control: %v", lastBlock)
+	}
+}
+
+// TestAnthropicGenerateNoPromptCacheByDefault 默认（未启用）时请求体保持旧形态，
+// 不含任何 cache_control 字段——与上游不支持的代理保持兼容。
+func TestAnthropicGenerateNoPromptCacheByDefault(t *testing.T) {
+	var reqBody map[string]any
+	srv := httptest.NewServer(anthropicSSEReply(
+		anthropicTextStream(`"hi"`, anthropicUsageJSON(5, 3, 2)), &reqBody))
+	defer srv.Close()
+
+	c, err := NewLLMClient(srv.URL, "test-key", "claude-test", WithAPIFormat(APIFormatAnthropic))
+	if err != nil {
+		t.Fatalf("NewLLMClient 失败: %v", err)
+	}
+	if _, _, err := c.Generate(context.Background(), []Message{
+		TextMessage(RoleSystem, "你是助手"),
+		TextMessage(RoleUser, "hello"),
+	}, ChatOptions{}); err != nil {
+		t.Fatalf("Generate 失败: %v", err)
+	}
+	raw, _ := json.Marshal(reqBody)
+	if strings.Contains(string(raw), "cache_control") {
+		t.Fatalf("默认请求体不应包含 cache_control: %s", raw)
 	}
 }

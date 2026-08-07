@@ -23,14 +23,17 @@ import (
 type anthropicBackend struct {
 	client anthropic.Client
 	model  string
+	// cache 上游 prompt 缓存配置：启用时在 system 与最后一条消息上打
+	// cache_control 断点（Anthropic 不自动缓存，必须显式声明）
+	cache PromptCacheConfig
 }
 
-func newAnthropicBackend(baseURL, apiKey, model string) *anthropicBackend {
+func newAnthropicBackend(baseURL, apiKey, model string, cache PromptCacheConfig) *anthropicBackend {
 	opts := []option.RequestOption{option.WithAPIKey(apiKey)}
 	if baseURL != "" {
 		opts = append(opts, option.WithBaseURL(baseURL))
 	}
-	return &anthropicBackend{client: anthropic.NewClient(opts...), model: model}
+	return &anthropicBackend{client: anthropic.NewClient(opts...), model: model, cache: cache}
 }
 
 // thinkingBlock 持久化到 Message.ThinkingBlocks 的元素：
@@ -85,7 +88,7 @@ func (b *anthropicBackend) generateStream(ctx context.Context, messages []Messag
 
 // buildParams 组装 Anthropic 请求参数（消息转换 + 采样/工具/思考配置）。
 func (b *anthropicBackend) buildParams(messages []Message, opts ChatOptions) (anthropic.MessageNewParams, error) {
-	msgs, system, err := convertAnthropicMessages(messages)
+	msgs, system, err := convertAnthropicMessages(messages, b.cache)
 	if err != nil {
 		return anthropic.MessageNewParams{}, err
 	}
@@ -157,7 +160,7 @@ func thinkingBudgetTokens(effort string) int64 {
 
 // convertAnthropicMessages 把内部消息模型转换为 Anthropic 消息数组 + system 块。
 // tool 结果在 Anthropic 中归属 user 角色，连续的 tool 结果合并进同一条 user 消息。
-func convertAnthropicMessages(messages []Message) ([]anthropic.MessageParam, []anthropic.TextBlockParam, error) {
+func convertAnthropicMessages(messages []Message, cache PromptCacheConfig) ([]anthropic.MessageParam, []anthropic.TextBlockParam, error) {
 	var result []anthropic.MessageParam
 	var system []anthropic.TextBlockParam
 	var pendingToolResults []anthropic.ContentBlockParamUnion
@@ -216,7 +219,54 @@ func convertAnthropicMessages(messages []Message) ([]anthropic.MessageParam, []a
 		}
 	}
 	flushToolResults()
+	if cache.Enable {
+		applyAnthropicCache(system, result, cache)
+	}
 	return result, system, nil
+}
+
+// anthropicCacheControl 构造 cache_control 断点。TTL 仅支持 1h（写入成本 2x），
+// 其余取值（含空值）使用提供方默认 5m（写入成本 1.25x，读取均为 0.1x）。
+func anthropicCacheControl(cfg PromptCacheConfig) anthropic.CacheControlEphemeralParam {
+	cc := anthropic.NewCacheControlEphemeralParam()
+	if cfg.TTL == "1h" {
+		cc.TTL = anthropic.CacheControlEphemeralTTLTTL1h
+	}
+	return cc
+}
+
+// applyAnthropicCache 为 system 与最后一条消息打上 cache_control 缓存断点：
+//   - system 走独立参数，给最后一个文本块打点即可覆盖全部 system 内容；
+//   - 消息侧给最后一条消息的最后一个可缓存内容块打点，覆盖 system + 全部历史：
+//     正常对话时最后一条是当前用户消息（下一轮成为历史、前缀不变仍可命中），
+//     tool calling 多轮时最后一条是 tool 结果/图片上下文，断点随轮次前移，
+//     每轮只对新增的工具往返内容付一次缓存写入。
+//
+// 只打在文本/图片/tool_result 块上（thinking 块不支持也不应缓存）。
+// 前缀缓存的前提是 system 内容保持稳定：动态内容（如未来的记忆注入）必须
+// 追加到消息尾部而非 system，否则会打爆整个前缀缓存。
+func applyAnthropicCache(system []anthropic.TextBlockParam, messages []anthropic.MessageParam, cfg PromptCacheConfig) {
+	if len(system) > 0 {
+		system[len(system)-1].CacheControl = anthropicCacheControl(cfg)
+	}
+	if len(messages) == 0 {
+		return
+	}
+	last := &messages[len(messages)-1]
+	for i := len(last.Content) - 1; i >= 0; i-- {
+		block := &last.Content[i]
+		switch {
+		case block.OfText != nil:
+			block.OfText.CacheControl = anthropicCacheControl(cfg)
+			return
+		case block.OfImage != nil:
+			block.OfImage.CacheControl = anthropicCacheControl(cfg)
+			return
+		case block.OfToolResult != nil:
+			block.OfToolResult.CacheControl = anthropicCacheControl(cfg)
+			return
+		}
+	}
 }
 
 // convertAnthropicAssistantBlocks 转换 assistant 消息：思考块（必须位于 tool_use

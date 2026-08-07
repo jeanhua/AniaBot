@@ -95,6 +95,15 @@ type clockConfig struct {
 	MaxLogEntries     int  `cfg:"max_log_entries" label:"日志保留条数" group:"AI 对话 · 定时与记忆" default:"500"`
 }
 
+// promptCacheConfig 上游 prompt 缓存配置：仅 anthropic 格式需要显式声明
+// cache_control 断点（chat_completions / responses 由提供方自动前缀缓存）。
+// 断点打在 system 与最后一条消息上，system 内容保持稳定即可稳定命中；
+// 动态内容（如未来要做的长期记忆注入）必须追加到消息尾部而非 system。
+type promptCacheConfig struct {
+	Enable bool   `cfg:"enable" label:"启用 Prompt 缓存" group:"AI 对话 · 模型" help:"anthropic 格式下为 system 与对话历史设置 cache_control 断点（需模型与上游支持）；chat_completions / responses 为自动前缀缓存，不受此开关影响" default:"true"`
+	TTL    string `cfg:"ttl" label:"缓存保留时长" type:"select" options:"5m,1h" group:"AI 对话 · 模型" help:"仅 anthropic 格式有效：5m 写入成本 1.25x、1h 为 2x，读取均为 0.1x；会话间隔短留 5m，长时间闲置用 1h" default:"5m"`
+}
+
 type memoryConfig struct {
 	Enable     bool `cfg:"enable" label:"启用长期记忆" group:"AI 对话 · 定时与记忆" default:"true"`
 	MaxEntries int  `cfg:"max_entries" label:"单会话记忆上限" group:"AI 对话 · 定时与记忆" default:"200"`
@@ -214,18 +223,19 @@ type aiChatConfig struct {
 
 	OCR ocrConfig `cfg:"plugin.ai_chat_bot.ocr"`
 
-	Clock      clockConfig      `cfg:"plugin.ai_chat_bot.clock"`
-	Memory     memoryConfig     `cfg:"plugin.ai_chat_bot.memory"`
-	Kb         kbConfig         `cfg:"plugin.ai_chat_bot.kb"`
-	Subagent   subagentConfig   `cfg:"plugin.ai_chat_bot.subagent"`
-	Team       teamConfig       `cfg:"plugin.ai_chat_bot.team"`
-	QueryLog   queryLogConfig   `cfg:"plugin.ai_chat_bot.query_log"`
-	Compressor compressorConfig `cfg:"plugin.ai_chat_bot.compressor"`
-	Retry      retryConfig      `cfg:"plugin.ai_chat_bot.retry"`
-	Fallback   fallbackConfig   `cfg:"plugin.ai_chat_bot.fallback"`
-	Stream     streamConfig     `cfg:"plugin.ai_chat_bot.stream"`
-	Quota      quotaConfig      `cfg:"plugin.ai_chat_bot.quota"`
-	Session    sessionConfig    `cfg:"plugin.ai_chat_bot.session"`
+	Clock       clockConfig       `cfg:"plugin.ai_chat_bot.clock"`
+	PromptCache promptCacheConfig `cfg:"plugin.ai_chat_bot.prompt_cache"`
+	Memory      memoryConfig      `cfg:"plugin.ai_chat_bot.memory"`
+	Kb          kbConfig          `cfg:"plugin.ai_chat_bot.kb"`
+	Subagent    subagentConfig    `cfg:"plugin.ai_chat_bot.subagent"`
+	Team        teamConfig        `cfg:"plugin.ai_chat_bot.team"`
+	QueryLog    queryLogConfig    `cfg:"plugin.ai_chat_bot.query_log"`
+	Compressor  compressorConfig  `cfg:"plugin.ai_chat_bot.compressor"`
+	Retry       retryConfig       `cfg:"plugin.ai_chat_bot.retry"`
+	Fallback    fallbackConfig    `cfg:"plugin.ai_chat_bot.fallback"`
+	Stream      streamConfig      `cfg:"plugin.ai_chat_bot.stream"`
+	Quota       quotaConfig       `cfg:"plugin.ai_chat_bot.quota"`
+	Session     sessionConfig     `cfg:"plugin.ai_chat_bot.session"`
 }
 
 // ConfigSchema 实现 plugin.ConfigSchemaProvider：返回配置结构体指针，
