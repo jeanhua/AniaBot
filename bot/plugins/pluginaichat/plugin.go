@@ -407,6 +407,9 @@ func (p *AIChatPlugin) processChatBatch(ctx context.Context, b bot.Bot, id messa
 
 	recorder := p.beginQuery(chat, id, isGroup, batch, extraText)
 
+	// 记忆/知识库检索须基于原始用户消息：下面的注入会改写 extraText
+	userText := extraText
+
 	// 知识库自动注入：对用户消息做轻量关键词检索，命中相关文档时把片段拼到
 	// 用户消息前作为参考上下文。注入在 beginQuery 之后，query 日志保留原始用户消息。
 	if p.knowledgeManager != nil && p.cfg.Kb.AutoInject {
@@ -415,6 +418,20 @@ func (p *AIChatPlugin) processChatBatch(ctx context.Context, b bot.Bot, id messa
 			kbScope = "g:" + id.String()
 		}
 		if injected := p.knowledgeManager.autoInject(kbScope, extraText, 30); injected != "" {
+			extraText = injected + "\n\n" + extraText
+		}
+	}
+
+	// 长期记忆自动注入：按原始用户消息纯关键词检索相关记忆，命中后拼到
+	// 用户消息前（尾部注入：system 保持不变，不影响上游前缀缓存；用户消息
+	// 不落盘，注入内容不会污染持久化历史；纯关键词无 embedding 成本）。
+	// 与知识库注入叠加时记忆块在最前、知识库块居中、用户消息最后。
+	if p.memoryManager != nil && p.cfg.Memory.AutoInject {
+		memScope := "f:" + id.String()
+		if isGroup {
+			memScope = "g:" + id.String()
+		}
+		if injected := p.memoryManager.autoInject(memScope, userText, p.cfg.Memory.InjectMax); injected != "" {
 			extraText = injected + "\n\n" + extraText
 		}
 	}

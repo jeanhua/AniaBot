@@ -354,3 +354,76 @@ func TestMemorySearchLegacyEntryNoEmb(t *testing.T) {
 		t.Fatalf("Emb 缺失的旧数据无关键词命中时应被过滤，got %d 条", len(matched))
 	}
 }
+
+// TestMemoryAutoInject 主动注入：纯关键词检索（中文切词）、条数上限、
+// 字符预算与无命中兜底。
+func TestMemoryAutoInject(t *testing.T) {
+	m := newTestMemoryManager(0)
+	if _, err := m.add("g:123", "456", "小明讨厌被半夜@", []string{"偏好"}); err != nil {
+		t.Fatalf("add 失败: %v", err)
+	}
+	if _, err := m.add("g:123", "", "群规：每周三晚上八点开例会", []string{"规则"}); err != nil {
+		t.Fatalf("add 失败: %v", err)
+	}
+	if _, err := m.add("g:123", "", "小美喜欢喝奶茶", nil); err != nil {
+		t.Fatalf("add 失败: %v", err)
+	}
+
+	// 空消息 / 无命中 → 空串
+	if got := m.autoInject("g:123", "", 3); got != "" {
+		t.Fatalf("空消息应返回空串: %q", got)
+	}
+	if got := m.autoInject("g:123", "今天天气不错", 3); got != "" {
+		t.Fatalf("无命中应返回空串: %q", got)
+	}
+
+	// 内容关键词命中（queryTerms 中文切词：整词+相邻二元组）
+	got := m.autoInject("g:123", "小明你晚上在吗", 3)
+	if !strings.Contains(got, "小明讨厌被半夜@") {
+		t.Fatalf("应命中内容关键词: %q", got)
+	}
+	if !strings.HasPrefix(got, "【长期记忆】") {
+		t.Fatalf("应以【长期记忆】开头: %q", got)
+	}
+
+	// max 限制注入条数（分数相同时按创建顺序稳定保留）
+	got = m.autoInject("g:123", "小明 小美", 1)
+	if strings.Count(got, "（记于") != 1 {
+		t.Fatalf("max=1 应只注入 1 条: %q", got)
+	}
+
+	// tag 命中权重高于正文：查询「规则」应优先命中带规则标签的条目
+	got = m.autoInject("g:123", "规则 例会 晚上", 3)
+	if !strings.Contains(got, "群规：每周三晚上八点开例会") {
+		t.Fatalf("tag 命中条目应出现: %q", got)
+	}
+	idxRule := strings.Index(got, "群规：每周三晚上八点开例会")
+	idxMilk := strings.Index(got, "小美喜欢喝奶茶")
+	if idxRule < 0 || (idxMilk >= 0 && idxMilk < idxRule) {
+		t.Fatalf("tag 命中条目应排在正文命中之前: %q", got)
+	}
+
+	// max<=0 时使用默认 3
+	got = m.autoInject("g:123", "小明 小美 奶茶 规则", 0)
+	if strings.Count(got, "（记于") != 3 {
+		t.Fatalf("默认应注入 3 条: %q", got)
+	}
+}
+
+// TestMemoryAutoInjectRuneBudget 超长记忆时注入块受 memoryInjectMaxRunes 预算约束。
+func TestMemoryAutoInjectRuneBudget(t *testing.T) {
+	m := newTestMemoryManager(0)
+	long := strings.Repeat("长", 1500)
+	for i := 0; i < 3; i++ {
+		if _, err := m.add("g:123", "", long, nil); err != nil {
+			t.Fatalf("add 失败: %v", err)
+		}
+	}
+	got := m.autoInject("g:123", "长", 3)
+	if got == "" {
+		t.Fatal("应命中并返回注入块")
+	}
+	if n := len([]rune(got)); n > memoryInjectMaxRunes+64 {
+		t.Fatalf("注入块符文数超预算: %d > %d", n, memoryInjectMaxRunes+64)
+	}
+}

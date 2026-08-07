@@ -10,6 +10,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 
 	"github.com/jeanhua/AniaBot/bot/component/tasklog"
 	"github.com/jeanhua/AniaBot/common/storage"
@@ -38,6 +39,10 @@ var ErrMemoryFull = errors.New("记忆条数已达上限")
 // MaxContentRunes 单条记忆内容的符文数上限，超出部分截断。
 // 每个 scope 的记忆是一个 key 存整个 JSON 数组，单条长度不设限会把 key 撑大。
 const MaxContentRunes = 2000
+
+// memoryInjectMaxRunes 主动注入块的字符数上限：注入内容追加在消息尾部，
+// 超限会白白占用上下文，从分数最低的条目开始截断。
+const memoryInjectMaxRunes = 1500
 
 // memoryStore 记忆存储后端：KV 整段读写（回退）或 SQL 逐行（ania_memory 表）。
 // 去重、上限、截断与语义向量计算等逻辑留在 memoryManager 层，后端只做存取。
@@ -199,6 +204,47 @@ func (m *memoryManager) update(scope, id, userID, content string, tags []string)
 		}
 	}
 	return fmt.Errorf("记忆不存在: %s", id)
+}
+
+// autoInject 对用户消息做纯关键词检索，把相关记忆拼成一段「【长期记忆】…」
+// 上下文块返回，供调用方注入到用户消息前（尾部注入：system 保持不变，
+// 不影响上游前缀缓存；用户消息不落盘，注入内容不会污染持久化历史）。
+//
+// 与知识库自动注入同策略：只走关键词（复用 queryTerms 的中文切词），
+// 每轮对话都触发，不承担 embedding API 成本；语义检索仍由 AI 按需
+// 调 memory_search 完成。无命中返回空串。
+func (m *memoryManager) autoInject(scope, userMsg string, max int) string {
+	if strings.TrimSpace(userMsg) == "" {
+		return ""
+	}
+	if max <= 0 {
+		max = 3
+	}
+	entries := m.list(scope)
+	if len(entries) == 0 {
+		return ""
+	}
+	matched := filterMemoryByRelevance(entries, queryTerms(userMsg), nil)
+	if len(matched) == 0 {
+		return ""
+	}
+	if len(matched) > max {
+		matched = matched[:max]
+	}
+
+	var sb strings.Builder
+	sb.WriteString("【长期记忆】以下记忆可能与当前话题相关，可参考（与话题无关可忽略）：\n")
+	budget := memoryInjectMaxRunes
+	for _, e := range matched {
+		if budget <= 0 {
+			break
+		}
+		line := tasklog.Truncate(formatMemoryLine(e), budget)
+		sb.WriteString(line)
+		sb.WriteString("\n")
+		budget -= utf8.RuneCountInString(line) + 1
+	}
+	return strings.TrimRight(sb.String(), "\n")
 }
 
 // newMemoryID 生成短随机 ID（8 位十六进制）。
