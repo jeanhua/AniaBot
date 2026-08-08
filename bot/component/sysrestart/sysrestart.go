@@ -4,7 +4,11 @@
 // 以相同命令行参数重启当前进程，使配置修改生效。
 package sysrestart
 
-import "os"
+import (
+	"os"
+	"sync"
+	"sync/atomic"
+)
 
 // selfExe 进程启动时捕获的可执行文件路径。
 //
@@ -14,6 +18,11 @@ import "os"
 // 因此必须在任何 rename 发生之前（包初始化时）把路径固定下来，
 // 更新替换与重启统一使用这个启动时的路径。
 var selfExe = captureSelfExe()
+
+var (
+	restartMu      sync.Mutex
+	restartStarted atomic.Bool
+)
 
 // captureSelfExe 返回当前可执行文件路径，失败时返回空串。
 func captureSelfExe() string {

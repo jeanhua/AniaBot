@@ -38,13 +38,14 @@ const (
 
 // updateState 更新任务的内存状态（同一时间只允许一个任务）。
 type updateState struct {
-	mu      sync.Mutex
-	running bool
-	phase   string
-	logs    []string
-	err     string
-	errKind string
-	buf     string // logWriter 的半行缓冲
+	mu         sync.Mutex
+	running    bool
+	restarting bool
+	phase      string
+	logs       []string
+	err        string
+	errKind    string
+	buf        string // logWriter 的半行缓冲
 }
 
 var upd = &updateState{}
@@ -74,10 +75,33 @@ func (u *updateState) fail(kind string, err error) {
 	u.mu.Unlock()
 }
 
+// tryBegin 尝试占用更新任务；已有更新在运行，或已完成但仍在重启窗口内时返回 false。
+func (u *updateState) tryBegin() bool {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	if u.running || u.restarting {
+		return false
+	}
+	u.running = true
+	u.phase = upPhaseEnv
+	u.logs = nil
+	u.err = ""
+	u.errKind = ""
+	u.buf = ""
+	return true
+}
+
 func (u *updateState) finish() {
 	u.mu.Lock()
 	u.running = false
 	u.phase = upPhaseDone
+	u.restarting = true
+	u.mu.Unlock()
+}
+
+func (u *updateState) clearRestarting() {
+	u.mu.Lock()
+	u.restarting = false
 	u.mu.Unlock()
 }
 
@@ -87,11 +111,12 @@ func (u *updateState) snapshot() map[string]any {
 	logs := make([]string, len(u.logs))
 	copy(logs, u.logs)
 	return map[string]any{
-		"running": u.running,
-		"phase":   u.phase,
-		"logs":    logs,
-		"error":   u.err,
-		"errKind": u.errKind,
+		"running":    u.running,
+		"restarting": u.restarting,
+		"phase":      u.phase,
+		"logs":       logs,
+		"error":      u.err,
+		"errKind":    u.errKind,
 	}
 }
 
@@ -290,19 +315,10 @@ func (s *Server) handleUpdateStart(w http.ResponseWriter, r *http.Request) {
 	}
 	gitURL := s.cfgStr("bot.update.git_url")
 
-	upd.mu.Lock()
-	if upd.running {
-		upd.mu.Unlock()
-		writeError(w, http.StatusConflict, "已有更新任务正在进行中")
+	if !upd.tryBegin() {
+		writeError(w, http.StatusConflict, "已有更新任务正在进行中或正在重启")
 		return
 	}
-	upd.running = true
-	upd.phase = upPhaseEnv
-	upd.logs = nil
-	upd.err = ""
-	upd.errKind = ""
-	upd.buf = ""
-	upd.mu.Unlock()
 
 	oplog.Record(oplog.CategoryUpdate, "update_start", "面板启动自动更新（分支: "+branch+"），IP: "+clientIP(r))
 	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
@@ -472,6 +488,9 @@ func (s *Server) runUpdate(srcDir, gitURL, branch string) {
 	go func() {
 		time.Sleep(1500 * time.Millisecond)
 		sysrestart.Self(s.opt.Logger)
+		// Self 正常时会替换/退出当前进程；只有重启失败才会回到这里，
+		// 此时清掉重启标记，允许手动重试下一次更新。
+		upd.clearRestarting()
 	}()
 }
 

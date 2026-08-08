@@ -12,6 +12,12 @@ import (
 // （Windows 不支持 exec 语义，子进程继承控制台与标准流）。
 // 使用启动时缓存的 selfExe，避免二进制被改名交换后取到旧路径。
 func Self(logger *slog.Logger) {
+	restartMu.Lock()
+	defer restartMu.Unlock()
+	if restartStarted.Load() {
+		logger.Warn("忽略重复的重启请求，已有一个新进程正在启动")
+		return
+	}
 	exe := selfExe
 	if exe == "" {
 		logger.Error("重启失败：无法获取可执行文件路径")
@@ -29,5 +35,6 @@ func Self(logger *slog.Logger) {
 		logger.Error("重启失败", "error", err)
 		return
 	}
+	restartStarted.Store(true)
 	os.Exit(0)
 }

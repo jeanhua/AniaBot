@@ -88,6 +88,7 @@
     <!-- 进度 -->
     <div v-if="started" class="tcard p-5">
       <div class="tlabel mb-4">Progress / 更新进度</div>
+      <div v-if="status.restarting" class="mb-3 text-xs text-zinc-500">更新完成，等待 Bot 重启...</div>
       <div class="flex flex-wrap items-center gap-y-2 mb-5">
         <template v-for="(p, i) in phases" :key="p.key">
           <div class="flex items-center gap-1.5">
@@ -147,7 +148,7 @@ const startMsg = ref('')
 const started = ref(false)      // 本页面观察到过更新任务在运行
 const rebooting = ref(false)
 const logEl = ref(null)
-const status = reactive({ running: false, phase: '', logs: [], error: '', errKind: '' })
+const status = reactive({ running: false, restarting: false, phase: '', logs: [], error: '', errKind: '' })
 
 const canUpdate = computed(() =>
   info.value
@@ -156,6 +157,7 @@ const canUpdate = computed(() =>
   && !info.value.dirError
   && !(info.value.needClone && !info.value.gitUrl)
   && !status.running
+  && !status.restarting
   && !rebooting.value,
 )
 
