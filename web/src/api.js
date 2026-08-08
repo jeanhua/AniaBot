@@ -143,6 +143,7 @@ export const api = {
     request(`/api/clocks/${encodeURIComponent(id)}`, { method: 'DELETE' }),
 
   getSkills: () => request('/api/skills'),
+  getSkillDetail: (name) => request(`/api/skills/${encodeURIComponent(name)}`),
   // 上传 skill（zip 压缩包，multipart 表单，不走 JSON 请求封装）
   async uploadSkill(file) {
     const fd = new FormData()

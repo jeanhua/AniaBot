@@ -91,6 +91,12 @@ type SkillSource interface {
 	SkillUpload(filename string, data []byte) error
 }
 
+// SkillDetailSource 可选接口：在 SkillSource 之外提供 SKILL 详情查看能力。
+// 插件未实现时，面板详情入口会返回「功能未启用」，不影响列表 / 上传 / 删除。
+type SkillDetailSource interface {
+	SkillDetail(name string) (plugininfo.SkillDetail, error)
+}
+
 // MemorySource 可选接口：插件实现后，面板「记忆管理」页可对其 AI 长期记忆
 // 做列表 / 新增 / 编辑 / 删除（当前由 AI 对话插件实现）。改动即时生效，无需重启。
 type MemorySource interface {
@@ -250,6 +256,7 @@ func (s *Server) routes() {
 	s.mux.Handle("DELETE /api/clocks/{id}", s.requireAuth(http.HandlerFunc(s.handleClockDelete)))
 	s.mux.Handle("GET /api/skills", s.requireAuth(http.HandlerFunc(s.handleSkillList)))
 	s.mux.Handle("POST /api/skills", s.requireAuth(http.HandlerFunc(s.handleSkillUpload)))
+	s.mux.Handle("GET /api/skills/{name}", s.requireAuth(http.HandlerFunc(s.handleSkillDetail)))
 	s.mux.Handle("DELETE /api/skills/{name}", s.requireAuth(http.HandlerFunc(s.handleSkillDelete)))
 	s.mux.Handle("GET /api/memory/scopes", s.requireAuth(http.HandlerFunc(s.handleMemoryScopes)))
 	s.mux.Handle("GET /api/memory/list", s.requireAuth(http.HandlerFunc(s.handleMemoryList)))
@@ -1017,6 +1024,29 @@ func (s *Server) handleSkillUpload(w http.ResponseWriter, r *http.Request) {
 	s.opt.Logger.Info("skill 已通过 Web 面板上传", "file", header.Filename)
 	oplog.Record(oplog.CategorySkill, "skill_upload", "面板上传 skill: "+header.Filename)
 	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
+}
+
+// handleSkillDetail 返回指定 skill 的 SKILL.md 完整内容与附属文件信息。
+func (s *Server) handleSkillDetail(w http.ResponseWriter, r *http.Request) {
+	if s.opt.Skills == nil {
+		writeError(w, http.StatusNotFound, "skill 功能未启用")
+		return
+	}
+	src, ok := s.opt.Skills.(SkillDetailSource)
+	if !ok {
+		writeError(w, http.StatusNotFound, "skill 详情功能未启用")
+		return
+	}
+	name := r.PathValue("name")
+	detail, err := src.SkillDetail(name)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if detail.Files == nil {
+		detail.Files = []plugininfo.SkillFileInfo{}
+	}
+	writeJSON(w, http.StatusOK, detail)
 }
 
 // handleSkillDelete 按名称删除 skill（同时从磁盘移除）。

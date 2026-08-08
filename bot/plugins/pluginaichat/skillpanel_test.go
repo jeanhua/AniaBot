@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/jeanhua/AniaBot/bot/component/llmtool"
+	"github.com/jeanhua/AniaBot/common/plugininfo"
 )
 
 // newTestSkillPlugin 构造一个挂载临时 skills 目录的插件实例
@@ -160,6 +161,51 @@ func TestSkillUploadAndDelete(t *testing.T) {
 	// 删除不存在的 skill
 	if err := p.SkillDelete("no-such"); err == nil {
 		t.Fatal("删除不存在的 skill 应报错")
+	}
+}
+
+func TestSkillDetail(t *testing.T) {
+	p := newTestSkillPlugin(t)
+	data := makeZip(t, map[string]string{
+		"my-skill/SKILL.md":       testSkillMD,
+		"my-skill/reference.md":   "ref-content",
+		"my-skill/scripts/run.sh": "echo hi",
+	})
+	if err := p.SkillUpload("my-skill.zip", data); err != nil {
+		t.Fatalf("SkillUpload 失败: %v", err)
+	}
+
+	detail, err := p.SkillDetail("test-skill")
+	if err != nil {
+		t.Fatalf("SkillDetail 失败: %v", err)
+	}
+	if detail.Name != "test-skill" || detail.Description != "测试" {
+		t.Fatalf("详情元信息不符: %+v", detail)
+	}
+	if detail.Content != testSkillMD {
+		t.Fatalf("SKILL.md 内容不符: %+v", detail.Content)
+	}
+	if len(detail.Files) != 2 {
+		t.Fatalf("附属文件数量不符: %+v", detail.Files)
+	}
+	var ref, extra *plugininfo.SkillFileInfo
+	for i := range detail.Files {
+		switch detail.Files[i].Kind {
+		case "reference":
+			ref = &detail.Files[i]
+		case "extra":
+			extra = &detail.Files[i]
+		}
+	}
+	if ref == nil || ref.Name != "reference.md" || ref.Content != "ref-content" {
+		t.Fatalf("附属文档详情不符: %+v", detail.Files)
+	}
+	if extra == nil || extra.Name != "scripts/run.sh" || extra.Size == 0 {
+		t.Fatalf("附带文件详情不符: %+v", detail.Files)
+	}
+
+	if _, err := p.SkillDetail("no-such"); err == nil {
+		t.Fatal("查看不存在的 skill 应报错")
 	}
 }
 

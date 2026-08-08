@@ -8,3 +8,20 @@ type SkillInfo struct {
 	Refs        []string `json:"refs"`     // 附属 Markdown 文档
 	Extras      []string `json:"extras"`   // 其他附带文件（脚本等）
 }
+
+// SkillFileInfo 是 skill 详情中的附属文件信息。
+type SkillFileInfo struct {
+	Name    string `json:"name"`
+	Kind    string `json:"kind"` // reference / extra
+	Size    int64  `json:"size"`
+	Content string `json:"content,omitempty"` // 仅 Markdown 附属文档返回正文
+}
+
+// SkillDetail 是面板查看 SKILL 详情时返回的完整内容。
+type SkillDetail struct {
+	Name        string          `json:"name"`
+	Description string          `json:"description"`
+	Location    string          `json:"location"`
+	Content     string          `json:"content"` // SKILL.md 完整内容（含 frontmatter）
+	Files       []SkillFileInfo `json:"files"`
+}

@@ -62,6 +62,43 @@ func (p *AIChatPlugin) buildSkillInfo(meta *llmtool.SkillMeta) plugininfo.SkillI
 	return info
 }
 
+// SkillDetail 返回 SKILL.md 完整内容与附属文件信息（供 Web 面板查看详情）。
+func (p *AIChatPlugin) SkillDetail(name string) (plugininfo.SkillDetail, error) {
+	if p.skillManager == nil {
+		return plugininfo.SkillDetail{}, fmt.Errorf("skill 功能未初始化")
+	}
+	skill, ok := p.skillManager.Get(name)
+	if !ok {
+		return plugininfo.SkillDetail{}, fmt.Errorf("skill '%s' 不存在", name)
+	}
+	detail := plugininfo.SkillDetail{
+		Name:        skill.Meta.Name,
+		Description: skill.Meta.Description,
+		Location:    skillLocation(p.skillsDir, skill.Path),
+		Content:     skill.Content,
+	}
+	for rel, content := range skill.References {
+		detail.Files = append(detail.Files, plugininfo.SkillFileInfo{
+			Name:    rel,
+			Kind:    "reference",
+			Size:    int64(len(content)),
+			Content: content,
+		})
+	}
+	for rel, absPath := range skill.ExtraFiles {
+		info := plugininfo.SkillFileInfo{
+			Name: rel,
+			Kind: "extra",
+		}
+		if stat, err := os.Stat(absPath); err == nil {
+			info.Size = stat.Size()
+		}
+		detail.Files = append(detail.Files, info)
+	}
+	sort.Slice(detail.Files, func(i, j int) bool { return detail.Files[i].Name < detail.Files[j].Name })
+	return detail, nil
+}
+
 // SkillDelete 按名称删除 skill：从磁盘移除对应目录/文件后热重载注册表。
 func (p *AIChatPlugin) SkillDelete(name string) error {
 	if p.skillManager == nil {
