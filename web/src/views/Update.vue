@@ -96,7 +96,7 @@
               class="w-4 h-4 rounded-full border flex items-center justify-center text-[9px] font-mono"
               :class="phaseClass(p.key)"
             >{{ phaseDone(p.key) ? '✓' : i + 1 }}</span>
-            <span class="text-[10px] tracking-[0.1em] uppercase" :class="phaseTextClass(p.key)">{{ p.label }}</span>
+            <span class="text-[10px] tracking-widest uppercase" :class="phaseTextClass(p.key)">{{ p.label }}</span>
           </div>
           <span v-if="i < phases.length - 1" class="mx-2 h-px w-5 bg-zinc-200" />
         </template>
