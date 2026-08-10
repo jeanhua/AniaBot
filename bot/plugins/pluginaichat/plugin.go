@@ -94,6 +94,10 @@ type AIChatPlugin struct {
 
 	// quotaManager 每日 Token 配额管理器；为 nil 表示功能未启用
 	quotaManager *quotaManager
+
+	// msgEventTimeout 框架级消息处理超时（bot.msg_event_timeout_sec，Start 时
+	// 从全量 viper 读取）：tryProcessPending 等后台触发的会话处理复用同一预算
+	msgEventTimeout time.Duration
 }
 
 const (
@@ -596,6 +600,14 @@ func (p *AIChatPlugin) Start(ctx context.Context, cfg *viper.Viper) error {
 
 	// 加载群聊/好友独立 prompt 覆盖配置（框架级共享键，仍走 viper）
 	p.loadPromptOverrides(cfg)
+
+	// 框架级消息处理超时（bot.msg_event_timeout_sec）：后台触发的会话处理
+	// （tryProcessPending）复用同一预算；与 core.msgEventTimeout 同样的兜底/限幅
+	if sec := cfg.GetInt("bot.msg_event_timeout_sec"); sec > 0 {
+		p.msgEventTimeout = time.Duration(min(sec, 86400)) * time.Second
+	} else {
+		p.msgEventTimeout = 5 * time.Minute
+	}
 
 	if p.cfg.Thinking.Mode == "" {
 		p.cfg.Thinking.Mode = "auto"

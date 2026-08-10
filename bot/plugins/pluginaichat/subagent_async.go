@@ -214,7 +214,7 @@ func (p *AIChatPlugin) tryProcessPending(b bot.Bot, id message.QID, isGroup bool
 		return
 	}
 
-	chatCtx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	chatCtx, cancel := context.WithTimeout(context.Background(), p.msgEventTimeout)
 	defer cancel()
 	p.setActiveContext(id, isGroup, cancel)
 	defer p.clearActiveContext(id, isGroup)

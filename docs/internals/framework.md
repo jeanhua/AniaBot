@@ -148,7 +148,7 @@ flowchart TB
     E --> F[按 Order 遍历插件]
     F --> G{supportsPlatform?}
     G -->|否| H[跳过]
-    G -->|是| I[safeExecute 包裹执行<br/>MsgEventTimeout = 5min]
+    G -->|是| I[safeExecute 包裹执行<br/>msgEventTimeout 默认 5min 可配]
     I --> J{返回 false?}
     J -->|是| K[阻断，停止传播]
     J -->|否| F
@@ -175,7 +175,7 @@ func (ania *AniaBot) onGroupEvent(e *adapterEntry, msg message.Message) {
             continue
         }
         next, panicked := safeExecuteWithReturn("群聊消息事件", p, func(p plugin.Plugin) bool {
-            msgCtx, cancel := context.WithTimeout(ania.ctx, MsgEventTimeout)
+            msgCtx, cancel := context.WithTimeout(ania.ctx, ania.msgEventTimeout())
             next, err := p.OnGroupMsg(msgCtx, e.evBot, cmd, msg) // e.evBot = 能力包装外观
             logError(err, p, "群聊消息事件")
             cancel()
@@ -195,7 +195,7 @@ func (ania *AniaBot) onGroupEvent(e *adapterEntry, msg message.Message) {
 
 - **SelfId 兜底**：`fillSelfID` 仅在事件没带 `self_id` 时调用适配器的 `adapter.SelfIDProvider.SelfID()`（如飞书首次被 @ 前的空窗期），保证自消息过滤与 @ 提及检测（`at` 段 `Data["qq"]` 与 `SelfId` 精确比较）永远有效
 - **命令只解析一次**：`ParseCommand` 在分发前完成，所有插件收到同一个 `command.Command`，避免每个插件重复解析文本
-- **超时按插件独立**：每个插件调用都 `context.WithTimeout(MsgEventTimeout)`（消息 5 分钟、通知 5 分钟、生命周期事件 1 分钟），即使某个插件阻塞到超时，其余插件仍按顺序执行
+- **超时按插件独立**：每个插件调用都 `context.WithTimeout(...)`（消息处理默认 5 分钟，面板 `bot.msg_event_timeout_sec` 可调；通知 5 分钟、生命周期事件 1 分钟），即使某个插件阻塞到超时，其余插件仍按顺序执行
 - **`e.evBot` 是事件来源适配器的能力外观**：分发前由 `addAdapter` 用 `adapter.WrapBot(ania, a)` 包装，插件在回调里类型断言 `bot.QQ` / `bot.StreamSender` 探测的就是它
 
 ### 幂等去重

@@ -45,6 +45,7 @@ type queryRecorder struct {
 }
 
 // beginQuery 开始记录一次 Query：写入 running 状态的日志并挂载工具调用观察者。
+// 观察者把每次工具调用增量落盘（明细 + 已耗时），面板执行中即可见进度。
 // 日志功能未启用时返回 nil，调用方直接跳过。
 func (p *AIChatPlugin) beginQuery(chat *aichat.ChatBot, id message.QID, isGroup bool, batch []message.Message, query string) *queryRecorder {
 	if p.queryLogger == nil {
@@ -73,22 +74,34 @@ func (p *AIChatPlugin) beginQuery(chat *aichat.ChatBot, id message.QID, isGroup 
 		Status:   querylog.StatusRunning,
 	})
 	chat.SetToolObserver(func(info aichat.ToolCallInfo) {
-		r.toolCallsTotal++
-		if len(r.toolCalls) >= querylog.MaxToolCallRecords {
-			return // 明细最多保留 MaxToolCallRecords 条，总数仍计入 ToolCallsTotal
-		}
-		rec := querylog.ToolCallRecord{
-			Name:       info.Name,
-			Arguments:  querylog.Truncate(info.Arguments, querylog.MaxArgsRunes),
-			Result:     querylog.Truncate(info.Result, querylog.MaxResultRunes),
-			DurationMs: info.DurationMs,
-		}
-		if info.Err != nil {
-			rec.Error = info.Err.Error()
-		}
-		r.toolCalls = append(r.toolCalls, rec)
+		p.onToolCall(r, info)
 	})
 	return r
+}
+
+// onToolCall 工具调用观察者回调：累计明细并即时增量落盘——面板按 running 状态
+// 轮询时能看到执行中的工具调用进度与已耗时，无需等 finishQuery 才可见中间流程。
+// 观察者由 orchestrator 串行调用（无需额外加锁），Logger.Update 内部有互斥。
+func (p *AIChatPlugin) onToolCall(r *queryRecorder, info aichat.ToolCallInfo) {
+	r.toolCallsTotal++
+	rec := querylog.ToolCallRecord{
+		Name:       info.Name,
+		Arguments:  querylog.Truncate(info.Arguments, querylog.MaxArgsRunes),
+		Result:     querylog.Truncate(info.Result, querylog.MaxResultRunes),
+		DurationMs: info.DurationMs,
+	}
+	if info.Err != nil {
+		rec.Error = info.Err.Error()
+	}
+	if len(r.toolCalls) < querylog.MaxToolCallRecords {
+		r.toolCalls = append(r.toolCalls, rec) // 明细最多保留 MaxToolCallRecords 条，总数仍计入 ToolCallsTotal
+	}
+	p.queryLogger.Update(r.entry.ID, func(e *querylog.Entry) {
+		// 复制 slice 再存入，避免与后续 append 共享底层数组
+		e.ToolCalls = append([]querylog.ToolCallRecord(nil), r.toolCalls...)
+		e.ToolCallsTotal = r.toolCallsTotal
+		e.DurationMs = time.Since(r.start).Milliseconds()
+	})
 }
 
 // finishQuery 结束记录：回填状态、耗时、token 用量、工具调用明细与最终回复/错误。

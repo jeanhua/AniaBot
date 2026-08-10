@@ -92,7 +92,7 @@
           </div>
           <p class="mt-2 text-sm text-slate-700 whitespace-pre-wrap break-all leading-relaxed line-clamp-3">{{ log.query }}</p>
           <div class="mt-2 flex items-center gap-3 text-[11px] text-slate-400 font-mono flex-wrap">
-            <span v-if="log.status !== 'running'">用时 {{ fmtDuration(log.duration_ms) }}</span>
+            <span>{{ log.status === 'running' ? '已用时' : '用时' }} {{ fmtDuration(elapsedMs(log)) }}</span>
             <span v-if="log.iterations">LLM {{ log.iterations }} 轮</span>
             <span v-if="log.total_tokens">tokens {{ log.total_tokens }} ({{ log.prompt_tokens }}+{{ log.completion_tokens }})</span>
             <span v-if="log.senders?.length">来自 {{ log.senders.join(', ') }}</span>
@@ -136,7 +136,7 @@
         <div class="px-5 py-4 space-y-4 overflow-y-auto">
           <!-- 概要指标 -->
           <div class="flex items-center gap-3 text-[11px] text-slate-400 font-mono flex-wrap">
-            <span v-if="detail.status !== 'running'">用时 {{ fmtDuration(detail.duration_ms) }}</span>
+            <span>{{ detail.status === 'running' ? '已用时' : '用时' }} {{ fmtDuration(elapsedMs(detail)) }}</span>
             <span v-if="detail.iterations">LLM {{ detail.iterations }} 轮</span>
             <span v-if="detail.total_tokens">tokens {{ detail.total_tokens }} ({{ detail.prompt_tokens }}+{{ detail.completion_tokens }})</span>
             <span v-if="detail.senders?.length">来自 {{ detail.senders.join(', ') }}</span>
@@ -218,11 +218,14 @@ const logs = ref([]) // 新在前
 const autoRefresh = ref(true)
 // detail 为当前弹窗展示的日志（null 表示弹窗关闭）
 const detail = ref(null)
+// now 每秒跳动一次，驱动 running 条目「已用时」实时刷新
+const now = ref(Date.now())
 const hasMore = ref(false) // 是否还有更早的日志可加载
 const loadingMore = ref(false)
 const loadedOlder = ref(false) // 是否已加载过更早分页（是则刷新不再重置 hasMore）
 const sentinel = ref(null)
 let timer = null
+let tickTimer = null
 let observer = null
 
 const hasFilter = computed(() => Object.values(applied).some((v) => v !== ''))
@@ -264,6 +267,15 @@ function fmtDuration(ms) {
   if (!ms && ms !== 0) return '-'
   if (ms < 1000) return `${ms}ms`
   return `${(ms / 1000).toFixed(1)}s`
+}
+
+// elapsedMs 条目耗时：running 条目按开始时间实时计算（随 now 每秒跳动），
+// 已完成条目用落盘的 duration_ms
+function elapsedMs(log) {
+  if (log.status !== 'running') return log.duration_ms
+  const t = new Date(log.time).getTime()
+  if (isNaN(t)) return log.duration_ms
+  return Math.max(0, now.value - t)
 }
 
 function statusText(s) {
@@ -335,6 +347,7 @@ function onVisible() {
 onMounted(() => {
   load()
   timer = setInterval(() => { if (!document.hidden && autoRefresh.value) load() }, 4000)
+  tickTimer = setInterval(() => { now.value = Date.now() }, 1000)
   observer = new IntersectionObserver(
     (entries) => { if (entries.some((e) => e.isIntersecting)) loadMore() },
     { rootMargin: '300px' },
@@ -346,6 +359,7 @@ onMounted(() => {
 
 onUnmounted(() => {
   clearInterval(timer)
+  clearInterval(tickTimer)
   observer?.disconnect()
   document.removeEventListener('visibilitychange', onVisible)
   document.removeEventListener('keydown', onKeydown)

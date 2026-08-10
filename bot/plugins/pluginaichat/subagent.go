@@ -18,7 +18,8 @@ const (
 	// subagentMaxTimeoutSec 子代理单次执行的超时上限（秒），防止 AI 传入离谱的 timeout_sec
 	subagentMaxTimeoutSec = 1800
 	// subagentParentReserve 为主请求预留的收尾时间。框架对单次消息处理有总预算
-	// （core.MsgEventTimeout=5min），子代理超时必须早于该预算触发，超时才能作为
+	// （bot.msg_event_timeout_sec，默认 5min，见 core.MsgEventTimeout），子代理超时
+	// 必须早于该预算触发，超时才能作为
 	// 工具结果优雅返回、让主 AI 用剩余时间完成最终回复；否则父 deadline 先触发，
 	// 整个主请求会以「请求超时」中止
 	subagentParentReserve = 30 * time.Second

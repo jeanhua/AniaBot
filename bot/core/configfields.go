@@ -11,6 +11,7 @@ import (
 var frameworkConfigFields = []pluginconfig.Field{
 	// Bot 基础
 	{Key: "bot.admin_id", Label: "管理员 ID", Type: "string", Group: "Bot 基础", Help: "接收启动/异常通知的管理员 ID。QQ 为纯数字 QQ 号；其他平台为带平台前缀的 ID（如飞书 fs:ou_xxx、Telegram tg:123456、Discord dc:123456）"},
+	{Key: "bot.msg_event_timeout_sec", Label: "消息处理超时(秒)", Type: "int", Group: "Bot 基础", Help: "单条消息事件（如一次 AI 回复）的最大执行时长，超时强制中止；AI 执行复杂任务（多轮工具调用/子代理）被超时中断时调大，0 或负数回退默认 300 秒", Default: 300},
 
 	// Web 面板
 	{Key: "bot.admin_panel.enable", Label: "启用面板", Type: "bool", Group: "Web 面板", Help: "是否启用 Web 控制面板；关闭后可用环境变量 ANIA_BOT_ADMIN_PANEL_ENABLE=true 覆盖重新开启", Default: true},

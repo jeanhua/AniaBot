@@ -185,7 +185,7 @@ func resolveSubagentTimeout(defaultTimeout, timeoutSec, parentCtx) (timeout, err
 }
 ```
 
-设计动机：框架对单次消息处理有总预算（`core.MsgEventTimeout` = 5 分钟）。子代理超时必须**早于**父 deadline 触发，超时才能作为工具结果优雅返回、让主 AI 用剩余时间完成最终回复；否则父 deadline 先触发，整个主请求以「请求超时」中止。`/stop` 通过父请求 context 一并取消子代理。
+设计动机：框架对单次消息处理有总预算（`bot.msg_event_timeout_sec`，默认 5 分钟，面板可调）。子代理超时必须**早于**父 deadline 触发，超时才能作为工具结果优雅返回、让主 AI 用剩余时间完成最终回复；否则父 deadline 先触发，整个主请求以「请求超时」中止。`/stop` 通过父请求 context 一并取消子代理。
 
 ### 定时任务专属：异步子代理
 

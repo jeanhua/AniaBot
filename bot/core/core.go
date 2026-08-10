@@ -78,9 +78,32 @@ const (
 	StartCronEventTimeout = time.Minute
 	AwakeEventTimeout     = time.Minute
 
+	// MsgEventTimeout 单条消息事件处理超时的默认值（bot.msg_event_timeout_sec
+	// 未配置/非法时的兜底）；实际超时见 AniaBot.msgEventTimeout
 	MsgEventTimeout    = time.Minute * 5
 	NoticeEventTimeout = time.Minute * 5
+
+	// msgEventMaxTimeoutSec 消息处理超时的配置上限（秒）：先限幅 int 再乘
+	// time.Second，防止超大配置值 int64 溢出为负 duration（context 立即过期）
+	msgEventMaxTimeoutSec = 86400
 )
+
+// msgEventTimeout 单条消息事件（如一次 AI 回复）的处理超时：取面板配置
+// bot.msg_event_timeout_sec，缺失/非法时兜底 MsgEventTimeout（5 分钟）。
+// 每次事件读取，配置在重启后随 viper 快照生效。
+func (ania *AniaBot) msgEventTimeout() time.Duration {
+	sec := 0
+	if ania.cfg != nil { // 测试等场景下未注入配置时直接走默认值
+		sec = ania.cfg.GetInt("bot.msg_event_timeout_sec")
+	}
+	if sec <= 0 {
+		return MsgEventTimeout
+	}
+	if sec > msgEventMaxTimeoutSec {
+		sec = msgEventMaxTimeoutSec
+	}
+	return time.Duration(sec) * time.Second
+}
 
 //go:embed logo.txt
 var LogoASCII string
@@ -615,7 +638,7 @@ func (ania *AniaBot) onGroupEvent(e *adapterEntry, msg message.Message) {
 			continue
 		}
 		next, panicked := safeExecuteWithReturn("群聊消息事件", p, func(p plugin.Plugin) bool {
-			msgCtx, cancel := context.WithTimeout(ania.ctx, MsgEventTimeout)
+			msgCtx, cancel := context.WithTimeout(ania.ctx, ania.msgEventTimeout())
 			next, err := p.OnGroupMsg(msgCtx, e.evBot, cmd, msg)
 			logError(err, p, "群聊消息事件")
 			cancel()
@@ -652,7 +675,7 @@ func (ania *AniaBot) onFriendEvent(e *adapterEntry, msg message.Message) {
 			continue
 		}
 		next, panicked := safeExecuteWithReturn("私聊消息事件", p, func(p plugin.Plugin) bool {
-			msgCtx, cancel := context.WithTimeout(ania.ctx, MsgEventTimeout)
+			msgCtx, cancel := context.WithTimeout(ania.ctx, ania.msgEventTimeout())
 			next, err := p.OnFriendMsg(msgCtx, e.evBot, cmd, msg)
 			logError(err, p, "私聊消息事件")
 			cancel()
