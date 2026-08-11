@@ -116,50 +116,106 @@
       <p v-if="error" class="text-sm text-red-600">{{ error }}</p>
     </template>
 
-    <!-- Prompt 覆盖：图形化表单 -->
+    <!-- Prompt 覆盖：列表 + 弹窗编辑 -->
     <template v-else>
-      <p class="text-xs text-slate-500">按群聊 / 好友覆盖 AI 的系统提示词，留空的条目保存时会被忽略。修改保存后重启生效。</p>
+      <p class="text-xs text-slate-500">按群聊 / 好友覆盖 AI 的系统提示词，点击条目可弹出编辑框。修改保存后重启生效。</p>
 
-      <section class="bg-white rounded-xl shadow-sm border border-slate-200/60 overflow-hidden">
-        <div class="px-6 py-3.5 border-b border-slate-100 flex items-center justify-between">
-          <h2 class="text-sm font-semibold text-slate-800">群聊覆盖</h2>
-          <button class="text-xs text-zinc-700 hover:text-zinc-900 font-medium transition-colors" @click="promptGroups.push({ id: '', prompt: '' })">+ 添加</button>
-        </div>
-        <div class="p-6 space-y-5">
-          <p v-if="promptGroups.length === 0" class="text-xs text-slate-400">暂无群聊 Prompt 覆盖</p>
-          <div v-for="(item, i) in promptGroups" :key="i" class="space-y-2 bg-slate-50/60 rounded-lg p-4 border border-slate-100">
-            <div class="flex items-center gap-2">
-              <input v-model="item.id" type="text" placeholder="群 ID（如 123456 或 fs:oc_xxx）" :class="inputClass + ' w-72! bg-white'" />
-              <button class="text-xs text-red-500 hover:text-red-700 shrink-0 transition-colors" @click="promptGroups.splice(i, 1)">删除</button>
-            </div>
-            <textarea v-model="item.prompt" rows="3" placeholder="该群使用的系统提示词" :class="inputClass + ' bg-white'" />
+      <template v-for="section in promptSections" :key="section.kind">
+        <section class="bg-white rounded-xl shadow-sm border border-slate-200/60 overflow-hidden">
+          <div class="px-6 py-3.5 border-b border-slate-100 flex items-center justify-between">
+            <h2 class="text-sm font-semibold text-slate-800">
+              {{ section.title }}
+              <span class="ml-2 text-xs font-normal text-slate-400">{{ section.items.length }} 条</span>
+            </h2>
+            <button class="text-xs text-zinc-700 hover:text-zinc-900 font-medium transition-colors" @click="openPromptEditor(section.kind)">+ 添加</button>
           </div>
-        </div>
-      </section>
-
-      <section class="bg-white rounded-xl shadow-sm border border-slate-200/60 overflow-hidden">
-        <div class="px-6 py-3.5 border-b border-slate-100 flex items-center justify-between">
-          <h2 class="text-sm font-semibold text-slate-800">好友覆盖</h2>
-          <button class="text-xs text-zinc-700 hover:text-zinc-900 font-medium transition-colors" @click="promptFriends.push({ id: '', prompt: '' })">+ 添加</button>
-        </div>
-        <div class="p-6 space-y-5">
-          <p v-if="promptFriends.length === 0" class="text-xs text-slate-400">暂无好友 Prompt 覆盖</p>
-          <div v-for="(item, i) in promptFriends" :key="i" class="space-y-2 bg-slate-50/60 rounded-lg p-4 border border-slate-100">
-            <div class="flex items-center gap-2">
-              <input v-model="item.id" type="text" placeholder="用户 ID（如 123456 或 fs:ou_xxx）" :class="inputClass + ' w-72! bg-white'" />
-              <button class="text-xs text-red-500 hover:text-red-700 shrink-0 transition-colors" @click="promptFriends.splice(i, 1)">删除</button>
-            </div>
-            <textarea v-model="item.prompt" rows="3" placeholder="该好友会话使用的系统提示词" :class="inputClass + ' bg-white'" />
-          </div>
-        </div>
-      </section>
+          <p v-if="section.items.length === 0" class="px-6 py-8 text-xs text-slate-400">{{ section.empty }}</p>
+          <ul v-else class="divide-y divide-slate-100">
+            <li
+              v-for="(item, i) in section.items"
+              :key="i"
+              class="px-5 py-3.5 flex items-start gap-4 cursor-pointer hover:bg-slate-50/80 transition-colors"
+              @click="openPromptEditor(section.kind, item, i)"
+            >
+              <div class="min-w-0 flex-1">
+                <div class="flex items-center gap-2 min-w-0">
+                  <span class="text-sm font-medium text-slate-800 font-mono truncate">{{ item.id || '未填写 ID' }}</span>
+                  <span class="text-[11px] text-slate-400 shrink-0">{{ (item.prompt || '').length }} 字</span>
+                </div>
+                <p class="text-xs text-slate-500 leading-relaxed whitespace-pre-wrap break-all mt-1 line-clamp-2">{{ previewPrompt(item.prompt) }}</p>
+              </div>
+              <div class="flex items-center gap-1 shrink-0">
+                <button
+                  class="text-xs text-zinc-600 hover:text-zinc-900 hover:bg-zinc-100 px-2.5 py-1.5 rounded-lg font-medium transition-colors"
+                  @click.stop="openPromptEditor(section.kind, item, i)"
+                >
+                  编辑
+                </button>
+                <button
+                  class="text-xs text-red-500 hover:text-red-600 hover:bg-red-50 px-2.5 py-1.5 rounded-lg font-medium transition-colors"
+                  @click.stop="deletePrompt(section.kind, i)"
+                >
+                  删除
+                </button>
+              </div>
+            </li>
+          </ul>
+        </section>
+      </template>
       <p v-if="error" class="text-sm text-red-600">{{ error }}</p>
     </template>
+
+    <!-- Prompt 覆盖：新增 / 编辑弹窗 -->
+    <Teleport to="body">
+      <div
+        v-if="showPromptEditor"
+        class="fixed inset-0 bg-zinc-950/50 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+        @click.self="closePromptEditor"
+      >
+        <form
+          class="bg-white rounded-xl shadow-2xl border border-zinc-200 w-full max-w-lg max-h-[90vh] overflow-y-auto"
+          @submit.prevent="savePromptEditor"
+        >
+          <div class="px-6 py-4 border-b border-zinc-100 flex items-center justify-between">
+            <h3 class="text-sm font-semibold text-slate-800">{{ promptDraft.id ? '编辑覆盖' : '新增覆盖' }}</h3>
+            <button type="button" class="text-slate-400 hover:text-slate-700 transition-colors" @click="closePromptEditor">✕</button>
+          </div>
+          <div class="px-6 py-5 space-y-4">
+            <div>
+              <label class="block text-xs font-medium text-slate-600 mb-1.5">
+                {{ promptDraft.kind === 'friends' ? '用户 ID' : '群 ID' }} <span class="text-red-500">*</span>
+              </label>
+              <input
+                v-model.trim="promptDraft.id"
+                type="text"
+                :placeholder="promptDraft.kind === 'friends' ? '用户 ID（如 123456 或 fs:ou_xxx）' : '群 ID（如 123456 或 fs:oc_xxx）'"
+                :class="inputClass"
+              />
+            </div>
+            <div>
+              <label class="block text-xs font-medium text-slate-600 mb-1.5">系统提示词 <span class="text-red-500">*</span></label>
+              <textarea
+                v-model.trim="promptDraft.prompt"
+                rows="10"
+                placeholder="该会话使用的系统提示词"
+                :class="inputClass + ' font-mono leading-relaxed resize-y'"
+              />
+              <p class="text-[11px] text-slate-400 mt-1.5">{{ promptDraft.prompt.length }} 字</p>
+            </div>
+            <p v-if="promptEditorError" class="text-sm text-red-600">{{ promptEditorError }}</p>
+            <div class="flex justify-end gap-2 pt-1">
+              <button type="button" class="px-4 py-2 text-sm text-slate-600 hover:bg-slate-100 rounded-lg transition-colors" @click="closePromptEditor">取消</button>
+              <button type="submit" class="px-4 py-2 text-sm bg-zinc-900 text-white rounded-lg hover:bg-zinc-800 transition-colors">保存</button>
+            </div>
+          </div>
+        </form>
+      </div>
+    </Teleport>
   </div>
 </template>
 
 <script setup>
-import { computed, defineComponent, h, onMounted, ref } from 'vue'
+import { computed, defineComponent, h, onMounted, reactive, ref } from 'vue'
 import { api } from '../api.js'
 
 const inputClass = 'w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-400 focus:border-zinc-400 transition-shadow'
@@ -227,6 +283,16 @@ const mcpServers = ref([])
 const promptGroups = ref([])
 const promptFriends = ref([])
 
+const showPromptEditor = ref(false)
+const promptEditorError = ref('')
+const promptEditingIndex = ref(-1)
+const promptDraft = reactive({ kind: 'groups', id: '', prompt: '' })
+
+const promptSections = computed(() => [
+  { kind: 'groups', title: '群聊覆盖', empty: '暂无群聊 Prompt 覆盖', items: promptGroups.value },
+  { kind: 'friends', title: '好友覆盖', empty: '暂无好友 Prompt 覆盖', items: promptFriends.value },
+])
+
 const currentTab = computed(() => tabs.find((t) => t.name === current.value))
 
 // ---- 解析：JSON -> 表单模型 ----
@@ -262,6 +328,63 @@ function parsePrompt(content) {
     groups: Object.entries(data.groups || {}).map(([id, prompt]) => ({ id, prompt })),
     friends: Object.entries(data.friends || {}).map(([id, prompt]) => ({ id, prompt })),
   }
+}
+
+function previewPrompt(prompt) {
+  return (prompt || '').trim() || '（未填写系统提示词）'
+}
+
+function openPromptEditor(kind, item = null, index = -1) {
+  promptDraft.kind = kind
+  promptDraft.id = item?.id || ''
+  promptDraft.prompt = item?.prompt || ''
+  promptEditingIndex.value = index
+  promptEditorError.value = ''
+  showPromptEditor.value = true
+}
+
+function closePromptEditor() {
+  showPromptEditor.value = false
+  promptEditorError.value = ''
+}
+
+function savePromptEditor() {
+  const id = promptDraft.id.trim()
+  const prompt = promptDraft.prompt.trim()
+  if (!id) {
+    promptEditorError.value = '请填写 ID'
+    return
+  }
+  if (!prompt) {
+    promptEditorError.value = '请填写系统提示词'
+    return
+  }
+
+  const list = promptDraft.kind === 'friends' ? promptFriends : promptGroups
+  if (promptEditingIndex.value >= 0 && list.value[promptEditingIndex.value]) {
+    const duplicateIndex = list.value.findIndex((row) => row.id === id)
+    if (duplicateIndex >= 0 && duplicateIndex !== promptEditingIndex.value) {
+      promptEditorError.value = '该 ID 已存在'
+      return
+    }
+    list.value[promptEditingIndex.value] = { id, prompt }
+  } else {
+    if (list.value.some((row) => row.id === id)) {
+      promptEditorError.value = '该 ID 已存在'
+      return
+    }
+    list.value.push({ id, prompt })
+  }
+  closePromptEditor()
+}
+
+function deletePrompt(kind, index) {
+  const list = kind === 'friends' ? promptFriends : promptGroups
+  const item = list.value[index]
+  if (!item) return
+  if (!confirm(`确定删除「${item.id || '未填写 ID'}」的覆盖吗？`)) return
+  list.value.splice(index, 1)
+  if (promptDraft.kind === kind && promptEditingIndex.value === index) closePromptEditor()
 }
 
 // ---- 序列化：表单模型 -> JSON ----
