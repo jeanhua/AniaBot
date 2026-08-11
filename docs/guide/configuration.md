@@ -230,7 +230,7 @@ HTTP 模式下 NapCat 向 `localhost` 上报会失败，请将 NapCat 的 HTTP C
 | `plugin.ai_chat_bot.max_token` | `8192` | 单次回复最大 token |
 | `plugin.ai_chat_bot.thinking.enable` | `false` | 深度思考开关 |
 | `plugin.ai_chat_bot.thinking.mode` | `auto` | `none` / `low` / `medium` / `high` / `auto` |
-| `plugin.ai_chat_bot.prompt` | 你是一个ai对话机器人，在QQ上和别人聊天，说话不要长篇大论<br><br>## 注意<br>- 当你不理解用户的问题时，要先获取用户最近的历史消息，再根据历史消息回答用户的问题 | 系统提示词（system prompt） |
+| `plugin.ai_chat_bot.prompt` | 内置场景化 system prompt，按工具场景选择并说明异常处理方式（完整默认值见 `bot/plugins/pluginaichat/config.go` 的 `defaultPrompt`） | 系统提示词（system prompt） |
 
 ::: tip 按群/按人定制人格
 在面板的「文件编辑 → Prompt 覆盖」页（配置键 `files.prompt_json`，原 `aniabot.prompt.json`），可为特定群聊或好友覆盖 system prompt：
