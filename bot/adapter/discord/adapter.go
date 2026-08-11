@@ -212,7 +212,7 @@ func parseMsgID(s string) (channelID, messageID string, ok bool) {
 	return raw[:sep], raw[sep+1:], true
 }
 
-// parseChannelID 解析 "dc:<channel_id>"；非 dc: 前缀（如 QQ 裸数字 ID）返回 ok=false，
+// parseChannelID 解析 "dc:<channel_id>"；非 dc: 前缀（如 QQ 的 qq: 数字 ID）返回 ok=false，
 // 避免把其他平台/默认平台的 ID 误当作本平台目标。
 func parseChannelID(q message.QID) (string, bool) {
 	s := q.String()

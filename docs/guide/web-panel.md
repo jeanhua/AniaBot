@@ -47,7 +47,7 @@ ANIA_BOT_ADMIN_PANEL_ENABLE=true ./AniaBot
 
 全新安装的**首次登录**会自动进入设置向导，引导完成最基本的配置（其余配置可随时在面板中完善）：
 
-1. **平台接入** —— 勾选要启用的平台：QQ(NapCat，默认勾选，填写连接地址与 Access Token) 和/或 QQ 官方（填写 AppID / AppSecret，可选沙箱环境）和/或 飞书（填写 App ID / Secret 与事件订阅方式）和/或 Telegram（填写 Bot Token，可选代理）和/或 Discord（填写 Bot Token，需在 Developer Portal 开启 Message Content Intent，可选代理），以及管理员 ID（QQ 号或带前缀的 ID）
+1. **平台接入** —— 勾选要启用的平台：QQ(NapCat，默认勾选，填写连接地址与 Access Token) 和/或 QQ 官方（填写 AppID / AppSecret，可选沙箱环境）和/或 飞书（填写 App ID / Secret 与事件订阅方式）和/或 Telegram（填写 Bot Token，可选代理）和/或 Discord（填写 Bot Token，需在 Developer Portal 开启 Message Content Intent，可选代理），以及管理员 ID（QQ 为 `qq:QQ号`，其他平台为带前缀的 ID）
 2. **AI 对话模型** —— Base URL、API Key、模型
 3. **完成** —— 保存到数据库后一键「重启 Bot 生效」
 
@@ -122,7 +122,7 @@ ANIA_BOT_ADMIN_PANEL_ENABLE=true ./AniaBot
 
 AI 定时任务的执行记录，每 4 秒自动刷新（可关闭），支持按条件筛选：
 
-- 状态（执行中/成功/超时/出错/中断）、群聊/私聊、目标会话 ID（QQ 为数字，其他平台带前缀）、触发时间范围、任务标题关键词
+- 状态（执行中/成功/超时/出错/中断）、群聊/私聊、目标会话 ID（QQ 为 `qq:数字`，其他平台带前缀）、触发时间范围、任务标题关键词
 - 每条记录展示状态、目标、触发时间、耗时、LLM 轮数、工具调用次数与 Token 用量；点击记录弹出详情（任务 ID、触发/完成时间、任务内容、错误信息、工具调用明细（名称/参数/结果/耗时）、最终回复等）
 
 

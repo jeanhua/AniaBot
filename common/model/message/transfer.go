@@ -78,7 +78,7 @@ func ParseMention(s OB11Segment, m *MentionMessage) bool {
 		return false
 	}
 
-	m.QQ = QID(qq)
+	m.QQ = FromString(qq)
 	return true
 }
 
@@ -92,7 +92,7 @@ func ParseReply(s OB11Segment, r *ReplyMessage) bool {
 		return false
 	}
 
-	r.Id = QID(idStr)
+	r.Id = FromString(idStr)
 	return true
 }
 

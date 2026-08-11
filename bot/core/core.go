@@ -193,8 +193,8 @@ func (ania *AniaBot) makeTrigger(e *adapterEntry) adapter.TriggerWrapper {
 	}
 }
 
-// route 按统一 ID 前缀路由到对应平台适配器；未命中任何前缀时回退到
-// 无前缀的默认适配器（QQ 历史裸数字 ID 兼容）。
+// route 按统一 ID 前缀路由到对应平台适配器；未迁移的裸数字 QQ ID
+// 仍回退到 QQ 平台，保证升级期间兼容旧数据。
 func (ania *AniaBot) route(id message.QID) adapter.Adapter {
 	if len(ania.adapters) == 0 {
 		return nil
@@ -203,6 +203,14 @@ func (ania *AniaBot) route(id message.QID) adapter.Adapter {
 	for _, e := range ania.adapters {
 		if e.def.IDPrefix != "" && strings.HasPrefix(s, e.def.IDPrefix) {
 			return e.adapter
+		}
+	}
+	// 旧版 QQ 无前缀数字 ID 兼容：未迁移时仍路由到 QQ（NapCat）。
+	if message.NormalizeQQID(string(id)) != string(id) {
+		for _, e := range ania.adapters {
+			if e.def.Platform == "qq" {
+				return e.adapter
+			}
 		}
 	}
 	for _, e := range ania.adapters {
@@ -253,6 +261,13 @@ func (ania *AniaBot) Run() {
 			os.Exit(1)
 		}
 		ania.persistent = store
+	}
+
+	// 旧版 QQ ID 为裸数字，升级后统一迁移到 qq: 前缀。
+	// 必须在配置中心读取前执行，保证 admin_id、插件配置和 AI 持久化数据
+	// 都以新 ID 格式加载。
+	if err := migrateQQIDPrefix(context.Background(), ania.persistent, Logger().WithGroup("Migration")); err != nil {
+		Logger().Error("QQ ID 前缀迁移失败，部分旧数据可能仍是无前缀格式", "error", err)
 	}
 
 	// 操作日志（面板「操作日志」页数据源）：记录面板与 AI 工具的管理操作，

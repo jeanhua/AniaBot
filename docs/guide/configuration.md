@@ -32,7 +32,7 @@ AniaBot 的全部配置存储在**数据库**中（持久化存储的 `ania_kv` 
 | `bot.adapter.ws.address` | `ANIA_BOT_ADAPTER_WS_ADDRESS` |
 | `plugin.ai_chat_bot.api_key` | `ANIA_PLUGIN_AI_CHAT_BOT_API_KEY` |
 
-非字符串类型（int / bool / 数组等）按 JSON 解析，如 `ANIA_BOT_ADMIN_ID=123456789`。覆盖生效时启动日志会打印 `环境变量覆盖配置 key=...`。
+非字符串类型（int / bool / 数组等）按 JSON 解析，如 `ANIA_BOT_ADMIN_ID=qq:123456789`。覆盖生效时启动日志会打印 `环境变量覆盖配置 key=...`。
 
 ::: tip 典型用途：恢复被关闭的面板
 如果在面板中误将 `bot.admin_panel.enable` 关闭导致面板无法访问，可用 `ANIA_BOT_ADMIN_PANEL_ENABLE=true` 启动临时拉起面板，改回后再正常启动。详见 [Web 控制面板](/guide/web-panel#启用与访问)。
@@ -46,7 +46,7 @@ AniaBot 的全部配置存储在**数据库**中（持久化存储的 `ania_kv` 
 
 | 配置键 | 默认值 | 说明 |
 | --- | --- | --- |
-| `bot.admin_id` | `123456789` | 管理员 ID。QQ 为纯数字 QQ 号，其他平台为带前缀的 ID（如飞书 `fs:ou_xxx`）。拥有最高权限：远程 `/exit` 退出、强制执行定时推送、查看全部定时任务、接收 panic 告警与启动通知等 |
+| `bot.admin_id` | `qq:123456789` | 管理员 ID。QQ 为 `qq:QQ号`（如 `qq:123456789`），其他平台为带前缀的 ID（如飞书 `fs:ou_xxx`）。拥有最高权限：远程 `/exit` 退出、强制执行定时推送、查看全部定时任务、接收 panic 告警与启动通知等 |
 | `bot.msg_event_timeout_sec` | `300` | 单条消息事件（如一次 AI 回复）的最大执行时长（秒），超时强制中止。AI 执行复杂任务（多轮工具调用/子代理）被超时中断时调大 |
 
 ### admin_panel —— Web 控制面板
@@ -91,7 +91,7 @@ QQ 官方适配器覆盖**群聊 @机器人** 与 **单聊（C2C）** 两大场�
 - 无消息历史 / 单条消息查询 / 群资料 API：历史仅覆盖适配器运行期间的内存缓存（AI 会话历史不受影响，由持久化存储承载）
 - 无消息编辑 API：不支持流式回复（自动退化一次性发送）
 - 媒体（图片/视频/语音/文件）先经 `/files` 上传换取 file_info 再发送，URL 直传与本地字节分片上传都支持
-- openid 为 per-AppID 身份：同一用户在群聊（member_openid）与单聊（user_openid）下 ID 不同，且与 NapCat 的数字 QQ 号完全无关
+- openid 为 per-AppID 身份：同一用户在群聊（member_openid）与单聊（user_openid）下 ID 不同，且与 NapCat 的 `qq:` QQ ID 完全无关
 - 开启「接收所有消息」（全量模式）后，群内非 @ 消息也会像 NapCat 一样流经插件链（词云、计数、消息清理等插件可正常工作），AI 仍然只在被 @ 时响应；机器人自己发送的消息会被自动过滤，防止自我循环；消息正文中残留的 `<@openid>` 提及标记会自动剥离，不会污染 AI 输入
 - 频道（guild）场景不在支持范围；合并转发、戳一戳、群签到、rkey 等 NapCat 专属能力 QQ 官方**没有**——依赖它们的插件（如防撤回）在本平台不生效
 :::
@@ -401,8 +401,8 @@ HTTP 模式下 NapCat 向 `localhost` 上报会失败，请将 NapCat 的 HTTP C
 | --- | --- | --- |
 | `plugin.interceptor.enable` | `false` | 是否启用请求拦截，关闭时放行全部消息 |
 | `plugin.interceptor.mode` | `blacklist` | 名单模式：`blacklist` 名单内屏蔽 / `whitelist` 仅名单内放行 |
-| `plugin.interceptor.groups` | `[]` | 群 ID 名单，每行一个（QQ 为群号，其他平台为带前缀的群 ID，如 `fs:oc_xxx`） |
-| `plugin.interceptor.friends` | `[]` | 用户 ID 名单，每行一个（QQ 为 QQ 号，其他平台带前缀），对私聊及群聊消息发送者均生效 |
+| `plugin.interceptor.groups` | `[]` | 群 ID 名单，每行一个（QQ 为 `qq:群号`，其他平台为带前缀的群 ID，如 `fs:oc_xxx`） |
+| `plugin.interceptor.friends` | `[]` | 用户 ID 名单，每行一个（QQ 为 `qq:QQ号`，其他平台带前缀），对私聊及群聊消息发送者均生效 |
 
 被拦截的会话消息不再传播到后续插件（AI 对话插件收不到，不产生 AI 请求）。
 
@@ -418,7 +418,7 @@ HTTP 模式下 NapCat 向 `localhost` 上报会失败，请将 NapCat 的 HTTP C
 | --- | --- | --- |
 | `plugin.dailyNews.api` | `https://60s.viki.moe/v2/60s?encoding=image-proxy` | 新闻图 API |
 | `plugin.dailyNews.cron` | `0 18 * * *` | cron 表达式，默认每天 18:00 触发 |
-| `plugin.dailyNews.groups` | `[123456, 7891011]` | 接收推送的群 ID 列表（QQ 为群号，其他平台带前缀） |
+| `plugin.dailyNews.groups` | `[qq:123456, qq:7891011]` | 接收推送的群 ID 列表（QQ 为 `qq:群号`，其他平台带前缀） |
 
 ## files.mcp_json —— MCP 服务定义
 

@@ -45,7 +45,7 @@ type ClockTask struct {
 	Title      string      `json:"title"`       // 任务标题
 	Content    string      `json:"content"`     // 任务内容，触发时作为对话内容发送给 AI
 	TargetType string      `json:"target_type"` // group / friend
-	TargetID   string      `json:"target_id"`   // 目标会话 ID（QQ 为数字，其他平台带前缀）
+	TargetID   string      `json:"target_id"`   // 目标会话 ID（QQ 为 qq: 前缀，其他平台带各自前缀）
 	Enabled    bool        `json:"enabled"`
 	RunOnce    bool        `json:"run_once"`    // 单次任务：触发执行完成后自动销毁
 	TimeoutSec int         `json:"timeout_sec"` // 单次执行超时秒数，<=0 用默认值

@@ -204,7 +204,7 @@
 
           <div>
             <label class="block text-xs font-medium text-slate-600 mb-1.5">管理员 ID</label>
-            <input v-model="form.adminId" type="text" placeholder="QQ 号或带前缀的 ID（如 fs:ou_xxx），接收启动/异常通知" :class="inputClass" />
+            <input v-model="form.adminId" type="text" placeholder="QQ 为 qq:QQ号，其他平台为带前缀的 ID（如 fs:ou_xxx），接收启动/异常通知" :class="inputClass" />
           </div>
         </div>
 

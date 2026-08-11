@@ -89,8 +89,8 @@ type clockCreateParams struct {
 	Title      string `json:"title" desc:"任务标题，简短描述任务目的"`
 	Content    string `json:"content" desc:"任务内容，触发时作为对话内容发送给AI，应写清完整可执行的指令"`
 	TargetType string `json:"target_type,omitempty" desc:"触发对象类型 group(群聊)/friend(私聊)，不填默认当前会话"`
-	TargetID   string `json:"target_id,omitempty" desc:"触发对象ID（QQ 为群号/QQ号，其他平台为带前缀的ID，如 fs:oc_xxx），不填默认当前会话"`
-	CreatedBy  string `json:"created_by,omitempty" desc:"群聊任务触发时要@的用户ID（QQ 为数字QQ号，其他平台为带前缀的ID，如 fs:ou_xxx），一般填当前让你创建任务的群成员（其消息以 [nickname:昵称 id:用户ID] 开头，取其中的id）；不填则触发时不@任何人；私聊任务无需填写"`
+	TargetID   string `json:"target_id,omitempty" desc:"触发对象ID（QQ 为 qq:群号/QQ号，其他平台为带前缀的ID，如 fs:oc_xxx），不填默认当前会话"`
+	CreatedBy  string `json:"created_by,omitempty" desc:"群聊任务触发时要@的用户ID（QQ 为 qq:QQ号，其他平台为带前缀的ID，如 fs:ou_xxx），一般填当前让你创建任务的群成员（其消息以 [nickname:昵称 id:用户ID] 开头，取其中的id）；不填则触发时不@任何人；私聊任务无需填写"`
 	RunOnce    bool   `json:"run_once,omitempty" desc:"是否为单次任务：true表示触发执行一次后自动销毁，false(默认)为重复执行"`
 	TimeoutSec int    `json:"timeout_sec,omitempty" desc:"单次执行超时秒数，不填用默认值"`
 	Note       string `json:"note,omitempty" desc:"备注信息"`

@@ -64,7 +64,7 @@ flowchart LR
 type QID string // 提供 String() / Uint64()
 ```
 
-- **QQ 历史裸数字 ID 无前缀**：存量数据零迁移，未命中任何前缀的 ID 自动路由到无前缀的默认适配器
+- **QQ 统一带 `qq:` 前缀**：旧版裸数字数据在启动时自动迁移，未迁移的裸数字 ID 仍兼容回退到 QQ
 - 其他平台统一带前缀：QQ 官方 `qo:`、飞书 `fs:`、Telegram `tg:`（消息 ID 为 `tg:<chat_id>:<message_id>`）、Discord `dc:<channel_id>:<message_id>`
 - 前缀在适配器的 `Definition.IDPrefix` 中声明，注册时**重复前缀直接 panic**（启动期编程错误）
 
@@ -117,7 +117,7 @@ func (ania *AniaBot) addAdapter(def adapter.Definition, a adapter.Adapter) {
 type Definition struct {
     Name         string                  // 适配器名，启用键 bot.platform.<name>.enable
     Platform     string                  // 平台标识（"qq" / "feishu" / ...），写入事件 Platform
-    IDPrefix     string                  // ID 前缀（"fs:" / "tg:" / "dc:"），空 = 无前缀默认平台
+    IDPrefix     string                  // ID 前缀（"qq:" / "fs:" / "tg:" / "dc:"）
     ConfigFields []pluginconfig.Field    // 面板动态渲染的配置字段
     New          func(*viper.Viper) (Adapter, error)
 }

@@ -34,22 +34,25 @@ func (f *fakeAdapter) GetFriendMsgHistory(message.QID, int, int) (*[]message.Mes
 	return nil, false
 }
 
-// TestRouteIDPrefix 验证多适配器按统一 ID 前缀路由：飞书 fs: 前缀路由到飞书适配器，
-// 无前缀（QQ 历史数字 ID）路由到默认适配器。
+// TestRouteIDPrefix 验证多适配器按统一 ID 前缀路由：QQ qq: 前缀路由到 NapCat，
+// 飞书 fs: 前缀路由到飞书适配器，旧版裸数字 QQ ID 仍兼容回退到 QQ。
 func TestRouteIDPrefix(t *testing.T) {
 	a := &AniaBot{}
 	qq := &fakeAdapter{name: "napcat", platform: "qq"}
 	fs := &fakeAdapter{name: "feishu", platform: "feishu"}
 	a.adapters = []*adapterEntry{
-		{def: adapter.Definition{Name: "napcat", Platform: "qq", IDPrefix: ""}, adapter: qq},
+		{def: adapter.Definition{Name: "napcat", Platform: "qq", IDPrefix: message.QQIDPrefix}, adapter: qq},
 		{def: adapter.Definition{Name: "feishu", Platform: "feishu", IDPrefix: "fs:"}, adapter: fs},
 	}
 
+	if got := a.route("qq:123456789"); got != qq {
+		t.Fatalf("qq: 前缀应路由到 QQ 适配器，got %v", got.Name())
+	}
 	if got := a.route("fs:oc_123456"); got != fs {
 		t.Fatalf("fs: 前缀应路由到飞书适配器，got %v", got.Name())
 	}
 	if got := a.route("123456789"); got != qq {
-		t.Fatalf("无前缀数字 ID 应路由到默认(QQ)适配器，got %v", got.Name())
+		t.Fatalf("旧版无前缀数字 ID 应兼容回退到 QQ 适配器，got %v", got.Name())
 	}
 }
 

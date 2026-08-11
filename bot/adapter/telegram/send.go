@@ -32,7 +32,7 @@ func (a *telegramAdapter) sendToChat(target message.QID, segs []message.OB11Segm
 	return a.sendChain(context.Background(), chatID, segs)
 }
 
-// parseChatID 解析 "tg:<chat_id>"；非 tg: 前缀（如 QQ 裸数字 ID）返回 ok=false，
+// parseChatID 解析 "tg:<chat_id>"；非 tg: 前缀（如 QQ 的 qq: 数字 ID）返回 ok=false，
 // 避免把其他平台/默认平台的 ID 误当作本平台目标。
 func parseChatID(q message.QID) (int64, bool) {
 	s := q.String()

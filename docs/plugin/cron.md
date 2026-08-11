@@ -48,7 +48,7 @@ import (
 
 type hourlyConfig struct {
 	// 多平台下群 ID 不一定是数字（如飞书 fs:oc_xxx），用 []string 承载
-	Groups []string `cfg:"plugin.hourly.groups" label:"报时群 ID 列表" group:"整点报时" help:"每行一个群 ID（QQ 为群号，其他平台带前缀）"`
+	Groups []string `cfg:"plugin.hourly.groups" label:"报时群 ID 列表" group:"整点报时" help:"每行一个群 ID（QQ 为 qq:群号，其他平台带前缀）"`
 }
 
 type HourlyPlugin struct {

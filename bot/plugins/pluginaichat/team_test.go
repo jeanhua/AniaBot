@@ -402,14 +402,14 @@ func TestNewTeamTools(t *testing.T) {
 		t.Fatalf("工具名 = %q, want team_run", groupTools[0].Name())
 	}
 	desc := groupTools[0].Description()
-	for _, want := range []string{"群聊（会话 ID 12345）", "规划师", "研究员", "编辑", "300 秒", "5 个成员"} {
+	for _, want := range []string{"群聊（会话 ID qq:12345）", "规划师", "研究员", "编辑", "300 秒", "5 个成员"} {
 		if !strings.Contains(desc, want) {
 			t.Fatalf("team_run 描述应包含 %q, got %q", want, desc)
 		}
 	}
 
 	friendTools := newTeamTools(p, nil, message.FromUint64(67890), false)
-	if !strings.Contains(friendTools[0].Description(), "私聊（对方 ID 67890）") {
+	if !strings.Contains(friendTools[0].Description(), "私聊（对方 ID qq:67890）") {
 		t.Fatalf("私聊会话描述应包含对方 ID, got %q", friendTools[0].Description())
 	}
 }

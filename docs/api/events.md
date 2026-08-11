@@ -67,7 +67,7 @@ type OB11Segment struct {
 }
 ```
 
-`message.QID` 是 `string` 的封装，提供 `String()` / `Uint64()` 方法与 `FromString()` / `FromUint64()` 构造函数。**多平台下 ID 采用前缀体系**：QQ 为裸数字（历史数据零迁移），其他平台带前缀（如飞书 `fs:oc_xxx`、Telegram `tg:123456`，Telegram 消息 ID 为 `tg:<chat_id>:<message_id>`）；core 按前缀路由到对应适配器。`Uint64()` 仅对数字 ID（QQ）有效，其他平台返回 0。用整数构造 QID 时**不要**使用 `message.QID(x)`（这会把 int 转成 Unicode 码点），应使用 `message.FromUint64(uint64(x))`。
+`message.QID` 是 `string` 的封装，提供 `String()` / `Uint64()` 方法与 `FromString()` / `FromUint64()` 构造函数。**多平台下 ID 采用前缀体系**：QQ 为 `qq:数字`（如 `qq:123456`，旧版裸数字会在升级时自动迁移），其他平台带前缀（如飞书 `fs:oc_xxx`、Telegram `tg:123456`，Telegram 消息 ID 为 `tg:<chat_id>:<message_id>`）；core 按前缀路由到对应适配器。`Uint64()` 对 QQ ID（`qq:数字` 或旧版裸数字）有效，其他平台返回 0。用整数构造 QID 时**不要**使用 `message.QID(x)`（这会把 int 转成 Unicode 码点），应使用 `message.FromUint64(uint64(x))`。
 
 ### command.Command
 

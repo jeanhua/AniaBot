@@ -129,7 +129,7 @@ func (p *DailyBriefPlugin) reply(b bot.Bot, msg message.Message, text string) {
 type dailyBriefConfig struct {
 	Enable bool     `cfg:"plugin.daily_brief.enable" label:"启用每日早报" group:"每日早报" default:"true"`
 	Cron   string   `cfg:"plugin.daily_brief.cron" label:"推送时间(cron)" group:"每日早报" default:"30 8 * * *"`
-	Groups []string `cfg:"plugin.daily_brief.groups" label:"推送群 ID" group:"每日早报" help:"每行一个，QQ 为群号，其他平台带前缀（如 fs:oc_xxx）"`
+	Groups []string `cfg:"plugin.daily_brief.groups" label:"推送群 ID" group:"每日早报" help:"每行一个，QQ 为 qq:群号，其他平台带前缀（如 fs:oc_xxx）"`
 }
 
 // ConfigSchema 返回配置结构体指针（框架在依赖注入前调用，必须每次返回同一指针）
@@ -244,7 +244,7 @@ func (p *DailyBriefPlugin) push(b bot.Bot, groupID message.QID) {
 要点：
 
 - `p.cfg.Cron` 是配置里的 cron 表达式（默认每天 08:30），启动时读取，改配置重启后生效
-- 配置的群 ID 是多平台统一 ID（QQ 为群号、飞书 `fs:oc_xxx`、Telegram 带前缀），`message.FromString` 直接构造 `QID`，core 会自动路由到对应平台适配器
+- 配置的群 ID 是多平台统一 ID（QQ 为 `qq:群号`、飞书 `fs:oc_xxx`、Telegram 带前缀），`message.FromString` 直接构造 `QID`，core 会自动路由到对应平台适配器
 - `SendGroupMsg` 返回 `(msgId, success)`，失败只返回 false 不会 panic——推送失败要自行处理（这里记入任务日志）
 - `tasklog.Logger` 负责执行日志的持久化与容量淘汰（这里保留 100 条）
 

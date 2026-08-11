@@ -26,8 +26,8 @@ func botQQ(b bot.Bot) bot.QQ {
 	return nil
 }
 
-// parseQID 解析目标 ID：纯数字（QQ 群号/QQ号）规范化为 QID，其他
-// （多平台带前缀，如飞书 fs:oc_xxx）原样保留。
+// parseQID 解析目标 ID：纯数字（QQ 群号/QQ号）规范化为 qq: 前缀 QID，
+// 其他（多平台带前缀，如飞书 fs:oc_xxx）原样保留。
 func parseQID(s string) message.QID {
 	if n, err := strconv.ParseUint(s, 10, 64); err == nil {
 		return message.FromUint64(n)

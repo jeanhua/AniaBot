@@ -212,7 +212,7 @@ const KvEditor = defineComponent({
 
 const tabs = [
   { name: 'mcp', label: 'MCP 服务器', desc: '格式: {"servers": [{name, transport(stdio/streamable/sse), command/endpoint, args, env, headers, timeout, description}]}' },
-  { name: 'prompt', label: 'Prompt 覆盖', desc: '格式: {"groups": {"群ID": "prompt"}, "friends": {"用户ID": "prompt"}}（QQ 为数字，其他平台带前缀）' },
+  { name: 'prompt', label: 'Prompt 覆盖', desc: '格式: {"groups": {"群ID": "prompt"}, "friends": {"用户ID": "prompt"}}（QQ 为 qq: 前缀，其他平台带各自前缀）' },
 ]
 
 const current = ref('mcp')

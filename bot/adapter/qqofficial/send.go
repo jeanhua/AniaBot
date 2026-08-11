@@ -99,7 +99,7 @@ func (a *qqOfficialAdapter) SendFriendMsg(userId message.QID, chain msgchain.Fri
 	return a.sendChain(context.Background(), openid, false, chain.GetFriendMsg())
 }
 
-// parseOpenID 解析 "qo:<openid>"；非 qo: 前缀（如 QQ 裸数字 ID）返回 ok=false，
+// parseOpenID 解析 "qo:<openid>"；非 qo: 前缀（如 QQ 的 qq: 数字 ID）返回 ok=false，
 // 避免把其他平台/默认平台的 ID 误当作本平台目标。
 func parseOpenID(q message.QID) (string, bool) {
 	s := q.String()

@@ -131,57 +131,66 @@ func request[T any](n *napcatWebSocketAdapter, action string, params any, prefix
 }
 
 func (n *napcatWebSocketAdapter) SendGroupMsg(groupId message.QID, chain msgchain.GroupChain) (message.QID, bool) {
-	params := map[string]any{"group_id": groupId, "message": chain.GetGroupMsg()}
+	params := map[string]any{"group_id": rawQQ(groupId), "message": stripQQSegments(chain.GetGroupMsg())}
 	res, ok := request[message.Message](n, "send_group_msg", params, "ack")
 	if !ok || res == nil {
 		return "", false
 	}
+	message.NormalizeQQMessage(res)
 	return res.MessageId, true
 }
 
 func (n *napcatWebSocketAdapter) SendGroupAIVoiceMsg(groupId message.QID, character, msg string) (message.QID, bool) {
-	params := message.AiVoiceMsg{GroupId: groupId, Character: character, Text: msg}
+	params := message.AiVoiceMsg{GroupId: message.QID(rawQQ(groupId)), Character: character, Text: msg}
 	res, ok := request[message.Message](n, "send_group_ai_record", params, "ack")
 	if !ok || res == nil {
 		return "", false
 	}
+	message.NormalizeQQMessage(res)
 	return res.MessageId, true
 }
 
 func (n *napcatWebSocketAdapter) SendFriendMsg(userId message.QID, chain msgchain.FriendChain) (message.QID, bool) {
-	params := map[string]any{"user_id": userId, "message": chain.GetFriendMsg()}
+	params := map[string]any{"user_id": rawQQ(userId), "message": stripQQSegments(chain.GetFriendMsg())}
 	res, ok := request[message.Message](n, "send_private_msg", params, "ack")
 	if !ok || res == nil {
 		return "", false
 	}
+	message.NormalizeQQMessage(res)
 	return res.MessageId, true
 }
 
 func (n *napcatWebSocketAdapter) SendGroupForwardMsg(groupId message.QID, chain msgchain.GroupForwardChain) (message.QID, bool) {
-	params := message.GroupForwardMessage{GroupId: groupId, ForwardMessageSegment: chain.GetForwardMsg()}
+	params := message.GroupForwardMessage{GroupId: message.QID(rawQQ(groupId)), ForwardMessageSegment: stripQQForward(chain.GetForwardMsg())}
 	res, ok := request[message.Message](n, "send_forward_msg", params, "ack")
 	if !ok || res == nil {
 		return "", false
 	}
+	message.NormalizeQQMessage(res)
 	return res.MessageId, true
 }
 
 func (n *napcatWebSocketAdapter) SendFriendForwardMsg(userId message.QID, chain msgchain.FriendForwardChain) (message.QID, bool) {
-	params := message.FriendForwardMessage{UserId: userId, ForwardMessageSegment: chain.GetForwardMsg()}
+	params := message.FriendForwardMessage{UserId: message.QID(rawQQ(userId)), ForwardMessageSegment: stripQQForward(chain.GetForwardMsg())}
 	res, ok := request[message.Message](n, "send_forward_msg", params, "ack")
 	if !ok || res == nil {
 		return "", false
 	}
+	message.NormalizeQQMessage(res)
 	return res.MessageId, true
 }
 
 func (n *napcatWebSocketAdapter) GetMsgDetail(msgId message.QID) (*message.Message, bool) {
-	params := map[string]message.QID{"message_id": msgId}
-	return request[message.Message](n, "get_msg", params, "dt")
+	params := map[string]message.QID{"message_id": message.QID(rawQQ(msgId))}
+	res, ok := request[message.Message](n, "get_msg", params, "dt")
+	if ok && res != nil {
+		message.NormalizeQQMessage(res)
+	}
+	return res, ok
 }
 
 func (n *napcatWebSocketAdapter) GetForwardMsg(msgId message.QID) (*[]message.Message, bool) {
-	params := map[string]message.QID{"message_id": msgId}
+	params := map[string]message.QID{"message_id": message.QID(rawQQ(msgId))}
 	type fwData struct {
 		Messages []message.Message `json:"messages"`
 	}
@@ -189,11 +198,14 @@ func (n *napcatWebSocketAdapter) GetForwardMsg(msgId message.QID) (*[]message.Me
 	if !ok || res == nil {
 		return nil, false
 	}
+	for i := range res.Messages {
+		message.NormalizeQQMessage(&res.Messages[i])
+	}
 	return &res.Messages, true
 }
 
 func (n *napcatWebSocketAdapter) GetGroupUserInfo(groupId, userId message.QID) (*message.GroupUserInfo, bool) {
-	params := map[string]any{"group_id": groupId, "user_id": userId, "no_cache": true}
+	params := map[string]any{"group_id": rawQQ(groupId), "user_id": rawQQ(userId), "no_cache": true}
 	return request[message.GroupUserInfo](n, "get_group_member_info", params, "ugif")
 }
 
@@ -206,9 +218,9 @@ func (n *napcatWebSocketAdapter) GetNCrkey() ([]message.NCrkey, bool) {
 }
 
 func (n *napcatWebSocketAdapter) SendPokeMsg(userId message.QID, groupId *message.QID) (success bool) {
-	params := map[string]message.QID{"user_id": userId}
+	params := map[string]message.QID{"user_id": message.QID(rawQQ(userId))}
 	if groupId != nil {
-		params["group_id"] = *groupId
+		params["group_id"] = message.QID(rawQQ(*groupId))
 	}
 	_, ok := request[any](n, "send_poke", params, "ack")
 	if !ok {
@@ -226,12 +238,12 @@ func (n *napcatWebSocketAdapter) GetFriendList() (*[]message.Friend, bool) {
 }
 
 func (n *napcatWebSocketAdapter) GetGroupDetail(groupId message.QID) (*message.GroupInfo, bool) {
-	params := map[string]message.QID{"group_id": groupId}
+	params := map[string]message.QID{"group_id": message.QID(rawQQ(groupId))}
 	return request[message.GroupInfo](n, "get_group_detail_info", params, "group_info")
 }
 
 func (n *napcatWebSocketAdapter) SetMsgEmojiLike(msgId message.QID, emojiId int, like bool) (success bool) {
-	params := message.EmojiLike{MessageID: msgId, EmojiId: emojiId, Set: like}
+	params := message.EmojiLike{MessageID: message.QID(rawQQ(msgId)), EmojiId: emojiId, Set: like}
 	_, ok := request[any](n, "set_msg_emoji_like", params, "ack")
 	if !ok {
 		return false
@@ -241,7 +253,7 @@ func (n *napcatWebSocketAdapter) SetMsgEmojiLike(msgId message.QID, emojiId int,
 
 func (n *napcatWebSocketAdapter) SendGroupSign(groupId message.QID) (success bool) {
 	params := map[string]message.QID{
-		"group_id": groupId,
+		"group_id": message.QID(rawQQ(groupId)),
 	}
 	_, ok := request[any](n, "send_group_sign", params, "ack")
 	if !ok {
@@ -252,7 +264,7 @@ func (n *napcatWebSocketAdapter) SendGroupSign(groupId message.QID) (success boo
 
 func (n *napcatWebSocketAdapter) GetGroupMsgHistory(groupId message.QID, count int, message_seq int) (*[]message.Message, bool) {
 	params := map[string]any{
-		"group_id":    groupId,
+		"group_id":    rawQQ(groupId),
 		"count":       count,
 		"message_seq": message_seq,
 	}
@@ -263,12 +275,15 @@ func (n *napcatWebSocketAdapter) GetGroupMsgHistory(groupId message.QID, count i
 	if !ok || res == nil {
 		return nil, false
 	}
+	for i := range res.Messages {
+		message.NormalizeQQMessage(&res.Messages[i])
+	}
 	return &res.Messages, true
 }
 
 func (n *napcatWebSocketAdapter) GetFriendMsgHistory(userId message.QID, count int, message_seq int) (*[]message.Message, bool) {
 	params := map[string]any{
-		"user_id":     userId,
+		"user_id":     rawQQ(userId),
 		"count":       count,
 		"message_seq": message_seq,
 	}
@@ -278,6 +293,9 @@ func (n *napcatWebSocketAdapter) GetFriendMsgHistory(userId message.QID, count i
 	res, ok := request[fwData](n, "get_friend_msg_history", params, "fw")
 	if !ok || res == nil {
 		return nil, false
+	}
+	for i := range res.Messages {
+		message.NormalizeQQMessage(&res.Messages[i])
 	}
 	return &res.Messages, true
 }
@@ -292,7 +310,7 @@ func (n *napcatWebSocketAdapter) GetAIChatacter() (*[]message.AIChatacter, bool)
 
 func (n *napcatWebSocketAdapter) GetPrivateFileURL(userId message.QID, fileId string) (string, bool) {
 	params := map[string]any{
-		"user_id": userId,
+		"user_id": rawQQ(userId),
 		"file_id": fileId,
 	}
 	type privateFileData struct {
@@ -456,6 +474,7 @@ func (n *napcatWebSocketAdapter) onMsg(data []byte) {
 	case "message", "message_sent":
 		var msg message.Message
 		if err := json.Unmarshal(data, &msg); err == nil {
+			message.NormalizeQQMessage(&msg)
 			if msg.MessageType == "group" && n.trigger.OnGroupMsg != nil {
 				if msg.RawMessage != "" {
 					n.trigger.OnGroupMsg(msg)

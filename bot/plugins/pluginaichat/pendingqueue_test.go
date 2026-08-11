@@ -31,7 +31,7 @@ func TestPendingQueueEnqueueAndDrain(t *testing.T) {
 	if len(items) != 2 {
 		t.Fatalf("drain 应返回 2 条消息, 实际 %d 条", len(items))
 	}
-	if items[0].MessageId != message.QID("1") || items[1].MessageId != message.QID("2") {
+	if items[0].MessageId != message.FromUint64(1) || items[1].MessageId != message.FromUint64(2) {
 		t.Fatalf("drain 应保持入队顺序")
 	}
 

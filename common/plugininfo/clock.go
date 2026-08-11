@@ -17,7 +17,7 @@ type ClockTaskInfo struct {
 	Enabled    bool      `json:"enabled"`
 	RunOnce    bool      `json:"run_once"`
 	TimeoutSec int       `json:"timeout_sec"` // 单次执行超时秒数，0 表示用默认值
-	CreatedBy  string    `json:"created_by"`  // 创建者 ID，空表示无（QQ 为数字，其他平台带前缀）
+	CreatedBy  string    `json:"created_by"`  // 创建者 ID，空表示无（QQ 为 qq: 前缀，其他平台带各自前缀）
 	CreatedAt  time.Time `json:"created_at"`
 	LastRunAt  time.Time `json:"last_run_at,omitempty"`
 	NextRunAt  time.Time `json:"next_run_at,omitempty"`
@@ -32,7 +32,7 @@ type ClockTaskUpdate struct {
 	TimeoutSec *int    `json:"timeout_sec"`
 	Enabled    *bool   `json:"enabled"`
 	TargetType *string `json:"target_type"` // group / friend
-	TargetID   *string `json:"target_id"`   // 目标会话 ID（QQ 为数字，其他平台带前缀）
+	TargetID   *string `json:"target_id"`   // 目标会话 ID（QQ 为 qq: 前缀，其他平台带各自前缀）
 	RunOnce    *bool   `json:"run_once"`
 }
 
@@ -42,7 +42,7 @@ type ClockTaskCreate struct {
 	Title      string `json:"title"`
 	Content    string `json:"content"`
 	TargetType string `json:"target_type"` // group / friend
-	TargetID   string `json:"target_id"`   // 目标会话 ID（QQ 为数字，其他平台带前缀，如 fs:oc_xxx）
+	TargetID   string `json:"target_id"`   // 目标会话 ID（QQ 为 qq: 前缀，其他平台带各自前缀，如 fs:oc_xxx）
 	Enabled    bool   `json:"enabled"`
 	RunOnce    bool   `json:"run_once"`
 	TimeoutSec int    `json:"timeout_sec"`

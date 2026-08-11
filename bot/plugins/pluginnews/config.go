@@ -6,7 +6,7 @@ type newsConfig struct {
 	Enable bool     `cfg:"plugin.dailynews.enable" label:"启用每日新闻" group:"每日新闻插件" help:"关闭后停止定时播报并忽略 /news 命令" default:"true"`
 	API    string   `cfg:"plugin.dailynews.api" label:"API 端点" group:"每日新闻插件" default:"https://60s.viki.moe/v2/60s?encoding=image-proxy"`
 	Cron   string   `cfg:"plugin.dailynews.cron" label:"Cron 表达式" group:"每日新闻插件" help:"如 0 18 * * * 表示每天 18 点" default:"0 18 * * *"`
-	Groups []string `cfg:"plugin.dailynews.groups" label:"播报群 ID 列表" group:"每日新闻插件" help:"每行一个群 ID（QQ 为群号，其他平台为带前缀的群 ID）" default:"123456,7891011"`
+	Groups []string `cfg:"plugin.dailynews.groups" label:"播报群 ID 列表" group:"每日新闻插件" help:"每行一个群 ID（QQ 为 qq:群号，其他平台为带前缀的群 ID）" default:"qq:123456,qq:7891011"`
 }
 
 // ConfigSchema 实现 plugin.ConfigSchemaProvider：返回配置结构体指针，

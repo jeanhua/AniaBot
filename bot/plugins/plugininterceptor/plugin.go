@@ -132,10 +132,10 @@ func (p *InterceptorPlugin) blockedInGroup(group, user message.QID) bool {
 	return hit
 }
 
-// idPrefixes 已知的平台 ID 前缀（QQ 为纯数字无前缀）。
+// idPrefixes 已知的平台 ID 前缀（QQ 为 qq:，其余平台为各自前缀）。
 // 用于解析"群ID:用户ID"规则时确定群段边界：群段带前缀时第一个冒号属于前缀，
 // 边界在第二个冒号处；否则边界在第一个冒号处。
-var idPrefixes = []string{"tg:", "fs:", "dc:"}
+var idPrefixes = []string{message.QQIDPrefix, "qo:", "tg:", "fs:", "dc:"}
 
 // splitGroupUser 解析一行"群ID:用户ID"规则，返回群 ID 与用户 ID。
 func splitGroupUser(line string) (group, user message.QID, ok bool) {
@@ -160,7 +160,7 @@ func splitGroupUser(line string) (group, user message.QID, ok bool) {
 	if g == "" || u == "" {
 		return "", "", false
 	}
-	return message.QID(g), message.QID(u), true
+	return message.FromString(g), message.FromString(u), true
 }
 
 func (p *InterceptorPlugin) OnFriendMsg(ctx context.Context, bot bot.Bot, cmd command.Command, msg message.Message) (bool, error) {

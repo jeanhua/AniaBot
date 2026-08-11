@@ -20,8 +20,8 @@ type Definition struct {
 	Name string
 	// Platform 平台标识（如 "qq"、"feishu"），写入事件 Platform，供插件 Meta.Platforms 过滤
 	Platform string
-	// IDPrefix 该平台 ID 的框架统一前缀（如飞书 "fs:"）；
-	// 为空表示无前缀的默认平台——未命中任何前缀的 ID 路由到它（QQ 历史数字 ID 兼容）
+	// IDPrefix 该平台 ID 的框架统一前缀（如 QQ "qq:"、飞书 "fs:"）；
+	// 为空表示无前缀的默认平台（仅兼容旧版自定义适配器）
 	IDPrefix string
 	// ConfigFields 平台配置字段（面板动态渲染），应包含 bot.platform.<name>.enable
 	ConfigFields []pluginconfig.Field

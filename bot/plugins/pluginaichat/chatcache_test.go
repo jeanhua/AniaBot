@@ -62,15 +62,15 @@ func storeIdleEntry(p *AIChatPlugin, key string, id message.QID, isGroup bool, i
 func TestEvictChatsIdle(t *testing.T) {
 	p := newEvictTestPlugin()
 	id := message.FromUint64(1001)
-	storeIdleEntry(p, "g:1001", id, true, 3*time.Hour)
-	storeIdleEntry(p, "g:1002", message.FromUint64(1002), true, 10*time.Minute)
+	storeIdleEntry(p, "g:qq:1001", id, true, 3*time.Hour)
+	storeIdleEntry(p, "g:qq:1002", message.FromUint64(1002), true, 10*time.Minute)
 
 	p.evictChats(2*time.Hour, 0)
 
-	if _, ok := p.chats.Load("g:1001"); ok {
+	if _, ok := p.chats.Load("g:qq:1001"); ok {
 		t.Fatal("闲置 3 小时的会话应被淘汰")
 	}
-	if _, ok := p.chats.Load("g:1002"); !ok {
+	if _, ok := p.chats.Load("g:qq:1002"); !ok {
 		t.Fatal("最近活跃的会话不应被淘汰")
 	}
 }
@@ -78,7 +78,7 @@ func TestEvictChatsIdle(t *testing.T) {
 func TestEvictChatsSkipsLockedSession(t *testing.T) {
 	p := newEvictTestPlugin()
 	id := message.FromUint64(1003)
-	storeIdleEntry(p, "g:1003", id, true, 3*time.Hour)
+	storeIdleEntry(p, "g:qq:1003", id, true, 3*time.Hour)
 
 	// 模拟该会话正在响应（持有会话锁）
 	if !p.tryLock(id, true) {
@@ -87,7 +87,7 @@ func TestEvictChatsSkipsLockedSession(t *testing.T) {
 	defer p.unLock(id, true)
 
 	p.evictChats(2*time.Hour, 0)
-	if _, ok := p.chats.Load("g:1003"); !ok {
+	if _, ok := p.chats.Load("g:qq:1003"); !ok {
 		t.Fatal("响应中的会话不应被淘汰")
 	}
 }
@@ -95,42 +95,42 @@ func TestEvictChatsSkipsLockedSession(t *testing.T) {
 func TestEvictChatsSkipsPendingQueue(t *testing.T) {
 	p := newEvictTestPlugin()
 	id := message.FromUint64(1004)
-	storeIdleEntry(p, "g:1004", id, true, 3*time.Hour)
+	storeIdleEntry(p, "g:qq:1004", id, true, 3*time.Hour)
 
 	// 遗留排队消息：淘汰窗口内到达的消息只能排队，不得连会话一起丢
 	p.enqueuePending(id, true, message.Message{})
 
 	p.evictChats(2*time.Hour, 0)
-	if _, ok := p.chats.Load("g:1004"); !ok {
+	if _, ok := p.chats.Load("g:qq:1004"); !ok {
 		t.Fatal("有排队消息的会话不应被淘汰")
 	}
 }
 
 func TestEvictChatsLRU(t *testing.T) {
 	p := newEvictTestPlugin()
-	storeIdleEntry(p, "g:1", message.FromUint64(1), true, 1*time.Hour)
-	storeIdleEntry(p, "g:2", message.FromUint64(2), true, 2*time.Hour)
-	storeIdleEntry(p, "f:3", message.FromUint64(3), false, 10*time.Minute)
+	storeIdleEntry(p, "g:qq:1", message.FromUint64(1), true, 1*time.Hour)
+	storeIdleEntry(p, "g:qq:2", message.FromUint64(2), true, 2*time.Hour)
+	storeIdleEntry(p, "f:qq:3", message.FromUint64(3), false, 10*time.Minute)
 
 	p.evictChats(0, 2)
 
-	if _, ok := p.chats.Load("g:2"); ok {
+	if _, ok := p.chats.Load("g:qq:2"); ok {
 		t.Fatal("最久未活跃的会话应被淘汰")
 	}
-	if _, ok := p.chats.Load("g:1"); !ok {
+	if _, ok := p.chats.Load("g:qq:1"); !ok {
 		t.Fatal("次旧会话应保留")
 	}
-	if _, ok := p.chats.Load("f:3"); !ok {
+	if _, ok := p.chats.Load("f:qq:3"); !ok {
 		t.Fatal("最活跃会话应保留")
 	}
 }
 
 func TestEvictChatsDisabled(t *testing.T) {
 	p := newEvictTestPlugin()
-	storeIdleEntry(p, "g:1", message.FromUint64(1), true, 100*time.Hour)
+	storeIdleEntry(p, "g:qq:1", message.FromUint64(1), true, 100*time.Hour)
 
 	p.evictChats(0, 0)
-	if _, ok := p.chats.Load("g:1"); !ok {
+	if _, ok := p.chats.Load("g:qq:1"); !ok {
 		t.Fatal("策略均为 0 时不应淘汰任何会话")
 	}
 }
@@ -138,11 +138,11 @@ func TestEvictChatsDisabled(t *testing.T) {
 func TestTouchChat(t *testing.T) {
 	p := newEvictTestPlugin()
 	id := message.FromUint64(1005)
-	storeIdleEntry(p, "g:1005", id, true, 3*time.Hour)
+	storeIdleEntry(p, "g:qq:1005", id, true, 3*time.Hour)
 
-	p.touchChat("g:1005")
+	p.touchChat("g:qq:1005")
 
-	v, _ := p.chats.Load("g:1005")
+	v, _ := p.chats.Load("g:qq:1005")
 	e := v.(*chatEntry)
 	if time.Since(time.Unix(e.lastActive.Load(), 0)) > time.Minute {
 		t.Fatal("touchChat 应刷新活跃时间")

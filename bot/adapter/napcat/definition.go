@@ -28,7 +28,7 @@ func init() {
 	adapter.Register(adapter.Definition{
 		Name:         "napcat",
 		Platform:     "qq",
-		IDPrefix:     "", // QQ 历史裸数字 ID，作为默认路由目标
+		IDPrefix:     message.QQIDPrefix,
 		ConfigFields: napcatConfigFields,
 		New: func(cfg *viper.Viper) (adapter.Adapter, error) {
 			return NewAdapter(cfg), nil

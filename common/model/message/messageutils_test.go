@@ -13,7 +13,7 @@ func TestFriendlyTextNicknameFallback(t *testing.T) {
 		Sender:  MessageSender{UserId: FromUint64(123456)},
 	}
 	text := msg.FriendlyText(true)
-	want := "[nickname:用户 id:123456]: 你好"
+	want := "[nickname:用户 id:qq:123456]: 你好"
 	if !strings.HasPrefix(text, want) {
 		t.Fatalf("空昵称应兜底为「用户」, got %q", text)
 	}
@@ -21,14 +21,14 @@ func TestFriendlyTextNicknameFallback(t *testing.T) {
 	// 有昵称时保持原样
 	msg.Sender.Nickname = "小明"
 	text = msg.FriendlyText(true)
-	if !strings.HasPrefix(text, "[nickname:小明 id:123456]: ") {
+	if !strings.HasPrefix(text, "[nickname:小明 id:qq:123456]: ") {
 		t.Fatalf("有昵称时应显示昵称, got %q", text)
 	}
 
 	// 群名片优先于昵称
 	msg.Sender.Card = "群名片"
 	text = msg.FriendlyText(true)
-	if !strings.HasPrefix(text, "[nickname:群名片 id:123456]: ") {
+	if !strings.HasPrefix(text, "[nickname:群名片 id:qq:123456]: ") {
 		t.Fatalf("群名片应优先, got %q", text)
 	}
 }
