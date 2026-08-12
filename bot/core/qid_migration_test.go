@@ -30,6 +30,8 @@ func TestMigrateQQIDPrefixKV(t *testing.T) {
 		{"plugin:clock:", "task:a", `{"target_id":"123","created_by":"456"}`},
 		{"plugin:quota:", "daily:2026-08-11:g:123", `50`},
 		{"plugin:history:", "g:fs:ou_x", `[]`},
+		{"__config_presets:", "日常", `{"name":"日常","created_at":"2026-08-01T10:00:00Z","updated_at":"2026-08-02T10:00:00Z","config":{"bot.admin_id":"123","plugin.dailynews.groups":["456"]}}`},
+		{"__config_presets:", "无QQID", `{"name":"无QQID","created_at":"2026-08-01T10:00:00Z","updated_at":"2026-08-02T10:00:00Z","config":{"plugin.ai_chat_bot.model":"gpt-4o"}}`},
 	}
 	for _, r := range rows {
 		if _, err := db.ExecContext(ctx,
@@ -68,6 +70,10 @@ func TestMigrateQQIDPrefixKV(t *testing.T) {
 	check("plugin:clock:", "task:a", `{"created_by":"qq:456","target_id":"qq:123"}`)
 	check("plugin:quota:", "daily:2026-08-11:g:qq:123", `50`)
 	check("plugin:history:", "g:fs:ou_x", `[]`)
+	// 预设迁移必须保留 name/created_at/updated_at 元数据（map 回写键序确定）
+	check("__config_presets:", "日常", `{"config":{"bot.admin_id":"qq:123","plugin.dailynews.groups":["qq:456"]},"created_at":"2026-08-01T10:00:00Z","name":"日常","updated_at":"2026-08-02T10:00:00Z"}`)
+	// 无需迁移的预设保持原样
+	check("__config_presets:", "无QQID", `{"name":"无QQID","created_at":"2026-08-01T10:00:00Z","updated_at":"2026-08-02T10:00:00Z","config":{"plugin.ai_chat_bot.model":"gpt-4o"}}`)
 
 	var oldCount int
 	if err := db.QueryRowContext(ctx,

@@ -77,9 +77,12 @@ func (s *Store) SavePreset(name string) error {
 }
 
 // PresetList 返回全部预设的概要列表（按名称排序）。
+// 同时修复历史脏数据：早期 QQ ID 前缀迁移会把预设的 name/时间戳清成零值
+// （存储键不受影响），导致面板出现无法应用/删除的无名预设；此处按存储键
+// 回填名称并持久化修复。
 func (s *Store) PresetList() []PresetInfo {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
+	s.mu.Lock()
+	defer s.mu.Unlock()
 
 	keys, err := s.presets.Keys(context.Background(), "")
 	if err != nil {
@@ -91,6 +94,20 @@ func (s *Store) PresetList() []PresetInfo {
 		p, ok := s.getPresetLocked(k)
 		if !ok {
 			continue
+		}
+		if p.Name == "" {
+			p.Name = k
+			if p.CreatedAt.IsZero() {
+				p.CreatedAt = time.Now()
+			}
+			if p.UpdatedAt.IsZero() {
+				p.UpdatedAt = p.CreatedAt
+			}
+			if s.presets.Set(context.Background(), k, p) {
+				s.logger.Info("已修复丢失名称的配置预设", "name", k)
+			} else {
+				s.logger.Warn("修复配置预设失败", "name", k)
+			}
 		}
 		out = append(out, PresetInfo{
 			Name:      p.Name,

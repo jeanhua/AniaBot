@@ -297,17 +297,22 @@ func migratePromptJSON(raw string) (string, bool) {
 }
 
 func migratePresetRaw(raw string) (string, bool) {
-	var preset struct {
-		Config map[string]any `json:"config"`
+	// 用 map 而非结构体解析：保留 name/created_at/updated_at 等全部元数据，
+	// 仅改写 config 快照内的 QQ ID。此前用仅含 Config 字段的结构体回写，
+	// 会把预设名称和时间戳清成零值，导致面板出现无法删除的无名预设。
+	var preset map[string]any
+	if err := json.Unmarshal([]byte(raw), &preset); err != nil {
+		return raw, false
 	}
-	if err := json.Unmarshal([]byte(raw), &preset); err != nil || preset.Config == nil {
+	cfg, ok := preset["config"].(map[string]any)
+	if !ok {
 		return raw, false
 	}
 	changed := false
-	for key, val := range preset.Config {
+	for key, val := range cfg {
 		next, ok := migrateConfigValue(key, val)
 		if ok {
-			preset.Config[key] = next
+			cfg[key] = next
 			changed = true
 		}
 	}

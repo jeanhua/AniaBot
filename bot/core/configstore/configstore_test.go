@@ -264,3 +264,44 @@ func TestPresetSaveApplyDelete(t *testing.T) {
 		t.Fatal("应用不存在的预设应报错")
 	}
 }
+
+func TestPresetListHealsNamelessPreset(t *testing.T) {
+	s := newTestStore(t)
+	if err := s.Init(); err != nil {
+		t.Fatal(err)
+	}
+	// 模拟历史 QQ ID 迁移造成的脏数据：存储键存在，
+	// 但 JSON 中的 name/created_at/updated_at 元数据被清成零值
+	raw := `{"config":{"plugin.ai_chat_bot.model":"gpt-4o"}}`
+	if !s.presets.SetString(context.Background(), "DeepSeek 日常", raw) {
+		t.Fatal("写入脏预设失败")
+	}
+
+	list := s.PresetList()
+	if len(list) != 1 {
+		t.Fatalf("PresetList = %+v", list)
+	}
+	if list[0].Name != "DeepSeek 日常" {
+		t.Fatalf("修复后名称 = %q，应回填为存储键", list[0].Name)
+	}
+	if list[0].CreatedAt.IsZero() || list[0].UpdatedAt.IsZero() {
+		t.Fatal("修复后时间戳不应为零值")
+	}
+	if list[0].KeyCount != 1 {
+		t.Fatalf("KeyCount = %d", list[0].KeyCount)
+	}
+
+	// 修复应已持久化
+	healed, ok := s.presets.GetString(context.Background(), "DeepSeek 日常")
+	if !ok || !strings.Contains(healed, `"name":"DeepSeek 日常"`) {
+		t.Fatalf("修复未持久化: %q", healed)
+	}
+
+	// 修复后预设可正常删除
+	if !s.DeletePreset("DeepSeek 日常") {
+		t.Fatal("修复后应可按名称删除")
+	}
+	if len(s.PresetList()) != 0 {
+		t.Fatal("删除后预设列表应为空")
+	}
+}
