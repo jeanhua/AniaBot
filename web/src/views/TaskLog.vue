@@ -353,6 +353,10 @@
                 <input v-model.trim="clockForm.target_id" type="text" class="form-input" placeholder="如 123456 或 fs:oc_xxx" />
               </div>
             </div>
+            <div v-if="clockForm.target_type === 'group'">
+              <label class="form-label">提醒 @</label>
+              <input v-model.trim="clockForm.created_by" type="text" class="form-input" placeholder="触发时 @ 的用户 ID，如 qq:123456，留空不 @" />
+            </div>
             <div>
               <label class="form-label">备注</label>
               <input v-model.trim="clockForm.note" type="text" class="form-input" placeholder="可选，触发时附带给 AI" />
@@ -438,6 +442,7 @@ function blankClockForm() {
     timeout_sec: 0,
     note: '',
     run_once: false,
+    created_by: '',
   }
 }
 
@@ -458,6 +463,7 @@ function openEdit(t) {
     timeout_sec: t.timeout_sec || 0,
     note: t.note || '',
     run_once: t.run_once,
+    created_by: t.created_by || '',
   }
 }
 
@@ -479,6 +485,7 @@ async function saveClock() {
         target_type: f.target_type,
         target_id: f.target_id,
         run_once: f.run_once,
+        created_by: f.target_type === 'group' ? f.created_by : '',
       })
     } else {
       await api.createClock({
@@ -491,6 +498,7 @@ async function saveClock() {
         run_once: f.run_once,
         timeout_sec: f.timeout_sec || 0,
         note: f.note,
+        created_by: f.target_type === 'group' ? f.created_by : '',
       })
     }
     clockForm.value = null

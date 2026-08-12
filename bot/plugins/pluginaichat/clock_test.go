@@ -159,6 +159,42 @@ func TestClockManagerCRUDAndPersist(t *testing.T) {
 	}
 }
 
+func TestClockUpdateCreatedBy(t *testing.T) {
+	p := &AIChatPlugin{}
+	p.Logger = slog.Default()
+	p.PersistentStorage = newPFake()
+
+	m := newClockManager(p, 30*time.Second, 100)
+	id, err := m.Add(&ClockTask{Cron: "@every 1h", Title: "喝水", Content: "提醒喝水", TargetType: "group", TargetID: "123", Enabled: true})
+	if err != nil {
+		t.Fatalf("Add failed: %v", err)
+	}
+
+	// 纯数字创建者规范化为 qq: 前缀
+	creator := "456"
+	if _, err := m.Update(id, ClockUpdateFields{CreatedBy: &creator}); err != nil {
+		t.Fatalf("Update created_by failed: %v", err)
+	}
+	if g, _ := m.Get(id); g.CreatedBy != "qq:456" {
+		t.Fatalf("want qq:456, got %q", g.CreatedBy)
+	}
+
+	// 非法值 "0" 应报错
+	zero := "0"
+	if _, err := m.Update(id, ClockUpdateFields{CreatedBy: &zero}); err == nil {
+		t.Fatal("expected error for created_by=0")
+	}
+
+	// 空字符串清除创建者
+	empty := ""
+	if _, err := m.Update(id, ClockUpdateFields{CreatedBy: &empty}); err != nil {
+		t.Fatalf("Update clear created_by failed: %v", err)
+	}
+	if g, _ := m.Get(id); g.CreatedBy != "" {
+		t.Fatalf("want empty created_by, got %q", g.CreatedBy)
+	}
+}
+
 func TestBuildTriggerPrompt(t *testing.T) {
 	p := &AIChatPlugin{}
 	p.Logger = slog.Default()

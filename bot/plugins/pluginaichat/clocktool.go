@@ -188,6 +188,7 @@ type clockUpdateParams struct {
 	RunOnce    *bool   `json:"run_once,omitempty" desc:"是否改为单次任务（true=触发一次后销毁，false=重复执行）"`
 	TimeoutSec *int    `json:"timeout_sec,omitempty" desc:"新的超时秒数"`
 	Note       *string `json:"note,omitempty" desc:"新的备注"`
+	CreatedBy  *string `json:"created_by,omitempty" desc:"新的@提醒用户ID（仅群聊任务生效，格式同 clock_create），传空字符串表示触发时不再@任何人"`
 }
 
 type clockUpdateTool struct {
@@ -231,6 +232,7 @@ func (t *clockUpdateTool) Execute(_ context.Context, params any, _ llmtool.CallB
 		RunOnce:    p.RunOnce,
 		TimeoutSec: p.TimeoutSec,
 		Note:       p.Note,
+		CreatedBy:  p.CreatedBy,
 	}
 	task, err := t.mgr.Update(p.ID, f)
 	if err != nil {

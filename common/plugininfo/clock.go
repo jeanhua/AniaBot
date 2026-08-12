@@ -34,6 +34,7 @@ type ClockTaskUpdate struct {
 	TargetType *string `json:"target_type"` // group / friend
 	TargetID   *string `json:"target_id"`   // 目标会话 ID（QQ 为 qq: 前缀，其他平台带各自前缀）
 	RunOnce    *bool   `json:"run_once"`
+	CreatedBy  *string `json:"created_by"` // 群任务触发时 @ 的用户 ID，空字符串表示不再 @
 }
 
 // ClockTaskCreate 新建定时任务的参数。
@@ -47,4 +48,5 @@ type ClockTaskCreate struct {
 	RunOnce    bool   `json:"run_once"`
 	TimeoutSec int    `json:"timeout_sec"`
 	Note       string `json:"note"`
+	CreatedBy  string `json:"created_by"` // 群任务触发时 @ 的用户 ID，留空不 @
 }

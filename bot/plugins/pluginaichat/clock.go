@@ -68,6 +68,7 @@ type ClockUpdateFields struct {
 	RunOnce    *bool
 	TimeoutSec *int
 	Note       *string
+	CreatedBy  *string // 群任务触发时 @ 的用户 ID，空字符串表示不再 @
 }
 
 // clockManager AI 定时任务调度器：持久化 + 调度 + 触发执行 + 执行日志。
@@ -164,6 +165,13 @@ func (p *AIChatPlugin) CreateClockTask(c plugininfo.ClockTaskCreate) (string, er
 	if p.clockManager == nil {
 		return "", fmt.Errorf("定时任务功能未启用")
 	}
+	var creator message.QID
+	if s := strings.TrimSpace(c.CreatedBy); s != "" {
+		if s == "0" {
+			return "", fmt.Errorf("created_by 必须是用户 ID")
+		}
+		creator = parseQID(s)
+	}
 	return p.clockManager.Add(&ClockTask{
 		Cron:       c.Cron,
 		Title:      c.Title,
@@ -174,6 +182,7 @@ func (p *AIChatPlugin) CreateClockTask(c plugininfo.ClockTaskCreate) (string, er
 		RunOnce:    c.RunOnce,
 		TimeoutSec: c.TimeoutSec,
 		Note:       c.Note,
+		CreatedBy:  creator,
 	})
 }
 
@@ -192,6 +201,7 @@ func (p *AIChatPlugin) UpdateClockTask(id string, f plugininfo.ClockTaskUpdate) 
 		TargetType: f.TargetType,
 		TargetID:   f.TargetID,
 		RunOnce:    f.RunOnce,
+		CreatedBy:  f.CreatedBy,
 	})
 	return err
 }
@@ -352,6 +362,14 @@ func (m *clockManager) Update(id string, f ClockUpdateFields) (*ClockTask, error
 	}
 	if f.Note != nil {
 		nt.Note = *f.Note
+	}
+	if f.CreatedBy != nil {
+		s := strings.TrimSpace(*f.CreatedBy)
+		if s == "0" {
+			return nil, fmt.Errorf("created_by 必须是用户 ID")
+		}
+		// 空字符串清除创建者（触发时不再 @）；纯数字规范化为 qq: 前缀
+		nt.CreatedBy = parseQID(s)
 	}
 	nt.UpdatedAt = time.Now()
 	m.tasks[id] = &nt
