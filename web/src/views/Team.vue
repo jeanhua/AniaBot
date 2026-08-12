@@ -238,16 +238,7 @@ function fmtDate(iso) {
 
 // 加载群/好友名称映射（失败时静默回退为显示号码）
 async function loadNames() {
-  const map = {}
-  try {
-    const groups = await api.getGroups()
-    for (const g of groups || []) map[`g:${g.group_id}`] = g.group_name
-  } catch { /* 适配器未连接时忽略 */ }
-  try {
-    const friends = await api.getFriends()
-    for (const f of friends || []) map[`f:${f.user_id}`] = f.remark || f.nickname
-  } catch { /* 适配器未连接时忽略 */ }
-  names.value = map
+  names.value = await api.getContactNameMap()
 }
 
 async function load() {

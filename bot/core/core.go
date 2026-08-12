@@ -502,12 +502,16 @@ func (ania *AniaBot) startAdminPanel() {
 		}
 	}
 
-	// 面板的 QQ 专属能力来源（群/好友列表）：默认适配器若实现了 QQ 能力则提供
-	var qq bot.QQ
+	// 面板通讯录来源（群/好友列表）：收集所有实现 adapter.ContactsExt 的适配器，
+	// 支持多平台并列展示；无枚举 API 的平台（Telegram、QQ 官方）自然缺席。
+	contacts := make([]adminpanel.ContactSource, 0, len(ania.adapters))
 	for _, e := range ania.adapters {
-		if qb, ok := e.evBot.(bot.QQ); ok {
-			qq = qb
-			break
+		if ce, ok := e.adapter.(adapter.ContactsExt); ok {
+			contacts = append(contacts, adminpanel.ContactSource{
+				Name:     e.def.Name,
+				Platform: e.def.Platform,
+				Contacts: ce,
+			})
 		}
 	}
 
@@ -516,7 +520,7 @@ func (ania *AniaBot) startAdminPanel() {
 		Config:     ania.configStore,
 		Persistent: ania.persistent,
 		Bot:        ania,
-		QQ:         qq,
+		Contacts:   contacts,
 		Adapter: func() string {
 			if ania.configStore != nil && ania.configStore.SetupPending() {
 				return "setup_pending"

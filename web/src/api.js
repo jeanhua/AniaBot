@@ -111,8 +111,38 @@ export const api = {
   getStatus: () => request('/api/status'),
   getHost: () => request('/api/host'),
   getPlugins: () => request('/api/plugins'),
-  getGroups: () => request('/api/groups'),
-  getFriends: () => request('/api/friends'),
+  // 通讯录：支持群/好友列表的平台适配器列表 [{adapter, platform}]
+  getContactSources: () => request('/api/contact/sources'),
+  // 指定适配器的群列表或好友列表：kind 为 groups / friends
+  getContacts: (adapter, kind = 'groups') =>
+    request(`/api/contacts${qs({ adapter, kind })}`),
+  // 聚合全部平台的群/好友名称映射：{ "g:<群ID>": 群名, "f:<用户ID>": 备注或昵称 }
+  // 供记忆/团队等页面把 scope 显示为名称；单个平台失败静默跳过（回退显示 ID）
+  async getContactNameMap() {
+    const map = {}
+    let sources = []
+    try {
+      sources = await request('/api/contact/sources')
+    } catch {
+      return map
+    }
+    for (const s of sources || []) {
+      try {
+        const groups = await api.getContacts(s.adapter, 'groups')
+        for (const g of groups || []) {
+          if (g.group_name) map[`g:${g.group_id}`] = g.group_name
+        }
+      } catch { /* 适配器未连接时忽略 */ }
+      try {
+        const friends = await api.getContacts(s.adapter, 'friends')
+        for (const f of friends || []) {
+          const name = f.remark || f.nickname
+          if (name) map[`f:${f.user_id}`] = name
+        }
+      } catch { /* 适配器未连接时忽略 */ }
+    }
+    return map
+  },
   // 消息日志分页查询：{ limit, before }（均可选），返回 { items, has_more }
   getMsgLogs: (params = {}) => request(`/api/msglogs${qs(params)}`),
   // 定时任务执行日志分页查询：{ target_type, target_id, task_id, status, start, end, keyword, limit, before }（均可选）

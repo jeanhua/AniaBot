@@ -33,7 +33,7 @@ import (
 	"github.com/jeanhua/AniaBot/bot/component/sysrestart"
 	"github.com/jeanhua/AniaBot/bot/component/tasklog"
 	"github.com/jeanhua/AniaBot/bot/core/configstore"
-	"github.com/jeanhua/AniaBot/common/bot"
+	"github.com/jeanhua/AniaBot/common/adapter"
 	"github.com/jeanhua/AniaBot/common/pluginconfig"
 	"github.com/jeanhua/AniaBot/common/plugininfo"
 	"github.com/jeanhua/AniaBot/common/storage"
@@ -43,7 +43,7 @@ import (
 var distFS embed.FS
 
 // BotInfo 面板需要的 Bot 运行信息（由 *core.AniaBot 实现，避免 import 环）。
-// 群/好友列表属 QQ 平台专属能力，不在此接口，经 Options.QQ 提供。
+// 群/好友列表属平台适配器专属能力，不在此接口，经 Options.Contacts 提供。
 type BotInfo interface {
 	GetPluginList() []plugininfo.PluginInfo
 	GoroutineNum() int32
@@ -56,6 +56,15 @@ type AdapterStatus struct {
 	Platform string `json:"platform"`
 	State    string `json:"state"`
 	Detail   string `json:"detail"`
+}
+
+// ContactSource 单个适配器的通讯录（群/好友列表）能力来源。
+// 仅收集了实现 adapter.ContactsExt 的适配器；Telegram、QQ 官方等无枚举 API
+// 的平台不会出现在列表中。
+type ContactSource struct {
+	Name     string              // 适配器名（如 napcat、feishu）
+	Platform string              // 平台标识（如 qq、feishu）
+	Contacts adapter.ContactsExt // 通讯录能力
 }
 
 // TaskLogSource 可选接口：插件实现后，面板「任务日志」页可按条件查询其定时任务
@@ -167,7 +176,7 @@ type Options struct {
 	Config          *configstore.Store                                 // 配置中心
 	Persistent      storage.PersistentStorage                          // 根持久化存储（__admin 命名空间存密码哈希）
 	Bot             BotInfo                                            // 运行信息来源
-	QQ              bot.QQ                                             // QQ 平台专属能力来源（群/好友列表等），可为 nil
+	Contacts        []ContactSource                                    // 各平台通讯录（群/好友列表）能力来源，可为空
 	Adapter         func() string                                      // 适配器连接状态描述
 	AdapterDetail   func() string                                      // 适配器状态详情（最近错误/重试次数，可为 nil）
 	AdapterStatuses func() []AdapterStatus                             // 各平台适配器状态列表（可为 nil）
@@ -240,8 +249,8 @@ func (s *Server) routes() {
 	s.mux.Handle("GET /api/status", s.requireAuth(http.HandlerFunc(s.handleStatus)))
 	s.mux.Handle("GET /api/host", s.requireAuth(http.HandlerFunc(s.handleHost)))
 	s.mux.Handle("GET /api/plugins", s.requireAuth(http.HandlerFunc(s.handlePlugins)))
-	s.mux.Handle("GET /api/groups", s.requireAuth(http.HandlerFunc(s.handleGroups)))
-	s.mux.Handle("GET /api/friends", s.requireAuth(http.HandlerFunc(s.handleFriends)))
+	s.mux.Handle("GET /api/contact/sources", s.requireAuth(http.HandlerFunc(s.handleContactSources)))
+	s.mux.Handle("GET /api/contacts", s.requireAuth(http.HandlerFunc(s.handleContacts)))
 	s.mux.Handle("GET /api/tasklogs", s.requireAuth(http.HandlerFunc(s.handleTaskLogs)))
 	s.mux.Handle("GET /api/msglogs", s.requireAuth(http.HandlerFunc(s.handleMsgLogs)))
 	s.mux.Handle("GET /api/querylogs", s.requireAuth(http.HandlerFunc(s.handleQueryLogs)))
@@ -611,30 +620,58 @@ func (s *Server) handlePlugins(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusOK, dtos)
 }
 
-func (s *Server) handleGroups(w http.ResponseWriter, _ *http.Request) {
-	if s.opt.QQ == nil {
-		writeError(w, http.StatusBadGateway, "当前未启用 QQ 平台适配器，无法获取群列表")
+// handleContactSources 返回支持通讯录（群/好友列表）的适配器列表。
+// 只含实现了 adapter.ContactsExt 的已启用适配器；前端据此渲染平台标签页。
+func (s *Server) handleContactSources(w http.ResponseWriter, _ *http.Request) {
+	type sourceDTO struct {
+		Adapter  string `json:"adapter"`
+		Platform string `json:"platform"`
+	}
+	out := make([]sourceDTO, 0, len(s.opt.Contacts))
+	for _, c := range s.opt.Contacts {
+		out = append(out, sourceDTO{Adapter: c.Name, Platform: c.Platform})
+	}
+	writeJSON(w, http.StatusOK, out)
+}
+
+// handleContacts 返回指定适配器的群列表或好友列表。
+// 查询参数：adapter（适配器名，必填）、kind（groups/friends，默认 groups）。
+func (s *Server) handleContacts(w http.ResponseWriter, r *http.Request) {
+	name := r.URL.Query().Get("adapter")
+	kind := r.URL.Query().Get("kind")
+	if kind == "" {
+		kind = "groups"
+	}
+	if kind != "groups" && kind != "friends" {
+		writeError(w, http.StatusBadRequest, "kind 仅支持 groups / friends")
 		return
 	}
-	groups, ok := s.opt.QQ.GetGroupList()
+	var src *ContactSource
+	for i := range s.opt.Contacts {
+		if s.opt.Contacts[i].Name == name {
+			src = &s.opt.Contacts[i]
+			break
+		}
+	}
+	if src == nil {
+		writeError(w, http.StatusBadRequest, "适配器不支持通讯录或未启用")
+		return
+	}
+	if kind == "friends" {
+		friends, ok := src.Contacts.GetFriendList()
+		if !ok || friends == nil {
+			writeError(w, http.StatusBadGateway, "获取好友列表失败（适配器未连接？）")
+			return
+		}
+		writeJSON(w, http.StatusOK, friends)
+		return
+	}
+	groups, ok := src.Contacts.GetGroupList()
 	if !ok || groups == nil {
 		writeError(w, http.StatusBadGateway, "获取群列表失败（适配器未连接？）")
 		return
 	}
 	writeJSON(w, http.StatusOK, groups)
-}
-
-func (s *Server) handleFriends(w http.ResponseWriter, _ *http.Request) {
-	if s.opt.QQ == nil {
-		writeError(w, http.StatusBadGateway, "当前未启用 QQ 平台适配器，无法获取好友列表")
-		return
-	}
-	friends, ok := s.opt.QQ.GetFriendList()
-	if !ok || friends == nil {
-		writeError(w, http.StatusBadGateway, "获取好友列表失败（适配器未连接？）")
-		return
-	}
-	writeJSON(w, http.StatusOK, friends)
 }
 
 // handleTaskLogs 按条件分页查询定时任务执行日志（新在前）。

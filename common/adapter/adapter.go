@@ -22,10 +22,22 @@ type Adapter interface {
 	Serve(*viper.Viper)
 }
 
+// ContactsExt 通讯录（群/好友列表）能力，可选接口。
+// 平台支持枚举群聊/好友时实现（如 NapCat、飞书、Discord）；core 与 Web 面板
+// 通过类型断言探测，断言失败即平台不支持（如 Telegram、QQ 官方无对应枚举 API）。
+// 平台无好友概念（飞书/Discord 无法枚举私聊对端）时 GetFriendList 返回空列表。
+type ContactsExt interface {
+	// GetGroupList 获取群聊列表
+	GetGroupList() (*[]message.GroupInfo, bool)
+	// GetFriendList 获取好友列表（平台无好友概念时返回空列表）
+	GetFriendList() (*[]message.Friend, bool)
+}
+
 // QQExt QQ（NapCat/OneBot v11）平台专属能力，可选接口。
 // 合并转发、戳一戳、群签到、rkey、AI 语音等只有 QQ 具备的能力；
 // 对应插件侧外观接口为 bot.QQ。
 type QQExt interface {
+	ContactsExt
 	// SendGroupAIVoiceMsg 发送群AI语音消息
 	SendGroupAIVoiceMsg(groupId message.QID, character, msg string) (msgId message.QID, success bool)
 	// SendPokeMsg 发送戳一戳消息
@@ -40,10 +52,6 @@ type QQExt interface {
 	SendGroupSign(groupId message.QID) (success bool)
 	// GetNCrkey 获取NCRKEY
 	GetNCrkey() ([]message.NCrkey, bool)
-	// GetFriendList 获取好友列表
-	GetFriendList() (*[]message.Friend, bool)
-	// GetGroupList 获取群聊列表
-	GetGroupList() (*[]message.GroupInfo, bool)
 	// GetGroupUserInfo 获取群用户信息
 	GetGroupUserInfo(groupId, userId message.QID) (info *message.GroupUserInfo, success bool)
 	// GetForwardMsg 获取转发消息
