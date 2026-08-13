@@ -366,7 +366,7 @@ func TestClockToolsScopeIsolation(t *testing.T) {
 
 	// 群 A 的工具视角
 	toolsA := newClockTools(m, clockTargetGroup, "123")
-	var delA, updA, logA, listA, createA llmtool.Tool
+	var delA, updA, logA, listA, createA, getA llmtool.Tool
 	for _, tool := range toolsA {
 		switch tool.Name() {
 		case "clock_delete":
@@ -379,7 +379,22 @@ func TestClockToolsScopeIsolation(t *testing.T) {
 			listA = tool
 		case "clock_create":
 			createA = tool
+		case "clock_get":
+			getA = tool
 		}
+	}
+
+	// 查看他群任务详情被拒绝
+	if _, err := getA.Execute(context.Background(), &clockGetParams{ID: tb}, llmtool.CallBackFuncs{}); err == nil || !strings.Contains(err.Error(), "无权操作") {
+		t.Fatalf("跨会话查看详情应被拒绝, err=%v", err)
+	}
+	// 查看本群任务详情成功，包含完整内容
+	detail, err := getA.Execute(context.Background(), &clockGetParams{ID: ta}, llmtool.CallBackFuncs{})
+	if err != nil {
+		t.Fatalf("本会话查看详情应成功: %v", err)
+	}
+	if !strings.Contains(detail, "A群任务") || !strings.Contains(detail, "内容") {
+		t.Fatalf("详情应包含标题与内容: %s", detail)
 	}
 
 	// 删除他群任务被拒绝

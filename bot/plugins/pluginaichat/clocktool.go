@@ -64,7 +64,11 @@ func newClockTools(mgr *clockManager, defType string, defID string) []llmtool.To
 			clockToolBase: base,
 		},
 		&clockListTool{
-			BaseTool:      llmtool.MakeBaseTool("clock_list", "列出定时任务。当前会话为"+sessionDesc+"，不传参数默认列出当前会话的任务", clockListParams{}),
+			BaseTool:      llmtool.MakeBaseTool("clock_list", "列出定时任务（仅摘要，完整详情用clock_get）。当前会话为"+sessionDesc+"，不传参数默认列出当前会话的任务", clockListParams{}),
+			clockToolBase: base,
+		},
+		&clockGetTool{
+			BaseTool:      llmtool.MakeBaseTool("clock_get", "按ID查看定时任务的完整详情，包括任务内容、备注、超时、下次触发时间等", clockGetParams{}),
 			clockToolBase: base,
 		},
 		&clockUpdateTool{
@@ -174,6 +178,33 @@ func (t *clockListTool) Execute(_ context.Context, params any, _ llmtool.CallBac
 		sb.WriteString("\n")
 	}
 	return sb.String(), nil
+}
+
+// ---- clock_get ----
+
+type clockGetParams struct {
+	ID string `json:"id" desc:"任务ID"`
+}
+
+type clockGetTool struct {
+	llmtool.BaseTool[clockGetParams]
+	clockToolBase
+}
+
+func (t *clockGetTool) Execute(_ context.Context, params any, _ llmtool.CallBackFuncs) (string, error) {
+	p := params.(*clockGetParams)
+	if strings.TrimSpace(p.ID) == "" {
+		return "", fmt.Errorf("id 不能为空")
+	}
+	task, ok := t.mgr.Get(p.ID)
+	if !ok {
+		return "", fmt.Errorf("定时任务不存在: %s", p.ID)
+	}
+	// 归属校验：只能查看当前会话的任务
+	if err := t.checkTaskOwned(task); err != nil {
+		return "", err
+	}
+	return formatTaskDetail(task), nil
 }
 
 // ---- clock_update ----
