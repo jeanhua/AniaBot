@@ -94,7 +94,12 @@
           <div class="mt-2 flex items-center gap-3 text-[11px] text-slate-400 font-mono flex-wrap">
             <span>{{ log.status === 'running' ? '已用时' : '用时' }} {{ fmtDuration(elapsedMs(log)) }}</span>
             <span v-if="log.iterations">LLM {{ log.iterations }} 轮</span>
-            <span v-if="log.total_tokens">tokens {{ log.total_tokens }} ({{ log.prompt_tokens }}+{{ log.completion_tokens }})</span>
+            <template v-if="log.total_tokens">
+              <span>tokens 总计 {{ log.total_tokens }}</span>
+              <span>输入 {{ log.prompt_tokens }}</span>
+              <span>输出 {{ log.completion_tokens }}</span>
+              <span v-if="log.cached_tokens">缓存命中 {{ log.cached_tokens }}</span>
+            </template>
             <span v-if="log.senders?.length">来自 {{ log.senders.join(', ') }}</span>
             <span class="ml-auto text-zinc-400">详情 ⤢</span>
           </div>
@@ -138,7 +143,12 @@
           <div class="flex items-center gap-3 text-[11px] text-slate-400 font-mono flex-wrap">
             <span>{{ detail.status === 'running' ? '已用时' : '用时' }} {{ fmtDuration(elapsedMs(detail)) }}</span>
             <span v-if="detail.iterations">LLM {{ detail.iterations }} 轮</span>
-            <span v-if="detail.total_tokens">tokens {{ detail.total_tokens }} ({{ detail.prompt_tokens }}+{{ detail.completion_tokens }})</span>
+            <template v-if="detail.total_tokens">
+              <span>tokens 总计 {{ detail.total_tokens }}</span>
+              <span>输入 {{ detail.prompt_tokens }}</span>
+              <span>输出 {{ detail.completion_tokens }}</span>
+              <span v-if="detail.cached_tokens">缓存命中 {{ detail.cached_tokens }}</span>
+            </template>
             <span v-if="detail.senders?.length">来自 {{ detail.senders.join(', ') }}</span>
           </div>
 

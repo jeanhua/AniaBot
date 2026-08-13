@@ -206,7 +206,12 @@
           <div class="mt-2 flex items-center gap-3 text-[11px] text-slate-400 font-mono flex-wrap">
             <span v-if="log.status !== 'running'">用时 {{ fmtDuration(log.duration_ms) }}</span>
             <span v-if="log.iterations">LLM {{ log.iterations }} 轮</span>
-            <span v-if="log.total_tokens">tokens {{ log.total_tokens }} ({{ log.prompt_tokens }}+{{ log.completion_tokens }})</span>
+            <template v-if="log.total_tokens">
+              <span>tokens 总计 {{ log.total_tokens }}</span>
+              <span>输入 {{ log.prompt_tokens }}</span>
+              <span>输出 {{ log.completion_tokens }}</span>
+              <span v-if="log.cached_tokens">缓存命中 {{ log.cached_tokens }}</span>
+            </template>
             <span v-if="log.error" class="text-red-500 truncate max-w-80">{{ log.error }}</span>
             <span class="ml-auto text-zinc-400">详情 ⤢</span>
           </div>
@@ -260,7 +265,10 @@
             <dd class="text-zinc-700 font-mono">{{ detail.iterations || '—' }}</dd>
             <dt class="text-[10px] tracking-[0.15em] uppercase text-zinc-400 self-center">Token 用量</dt>
             <dd class="text-zinc-700 font-mono">
-              {{ detail.total_tokens ? `${detail.total_tokens} (${detail.prompt_tokens}+${detail.completion_tokens})` : '—' }}
+              {{ detail.total_tokens
+                ? `总计 ${detail.total_tokens} · 输入 ${detail.prompt_tokens} · 输出 ${detail.completion_tokens}` +
+                  (detail.cached_tokens ? ` · 缓存命中 ${detail.cached_tokens}` : '')
+                : '—' }}
             </dd>
           </dl>
 
