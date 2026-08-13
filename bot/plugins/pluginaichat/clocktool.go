@@ -126,6 +126,7 @@ func (t *clockCreateTool) Execute(_ context.Context, params any, _ llmtool.CallB
 		Note:       p.Note,
 		Enabled:    true,
 		CreatedBy:  creator,
+		Creator:    "ai",
 	}
 	id, err := t.mgr.Add(task)
 	if err != nil {
@@ -234,7 +235,7 @@ func (t *clockUpdateTool) Execute(_ context.Context, params any, _ llmtool.CallB
 		Note:       p.Note,
 		CreatedBy:  p.CreatedBy,
 	}
-	task, err := t.mgr.Update(p.ID, f)
+	task, err := t.mgr.Update(p.ID, f, "ai")
 	if err != nil {
 		return "", err
 	}

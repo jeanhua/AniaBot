@@ -47,9 +47,11 @@ type ClockTask struct {
 	TargetType string      `json:"target_type"` // group / friend
 	TargetID   string      `json:"target_id"`   // 目标会话 ID（QQ 为 qq: 前缀，其他平台带各自前缀）
 	Enabled    bool        `json:"enabled"`
-	RunOnce    bool        `json:"run_once"`    // 单次任务：触发执行完成后自动销毁
-	TimeoutSec int         `json:"timeout_sec"` // 单次执行超时秒数，<=0 用默认值
-	CreatedBy  message.QID `json:"created_by"`  // 创建者 ID（用于群聊 @ 提醒），空表示无
+	RunOnce    bool        `json:"run_once"`          // 单次任务：触发执行完成后自动销毁
+	TimeoutSec int         `json:"timeout_sec"`       // 单次执行超时秒数，<=0 用默认值
+	CreatedBy  message.QID `json:"created_by"`        // @ 提醒对象 ID（群聊触发时 @ 该成员；仅群任务有意义，私聊任务为空），空表示不 @
+	Creator    string      `json:"creator,omitempty"` // 创建人标识：用户 ID / ai / panel，空表示未知（早期数据无此字段）
+	Updater    string      `json:"updater,omitempty"` // 最近更新人标识：用户 ID / ai / panel，空表示创建后未被更新过
 	Note       string      `json:"note,omitempty"`
 	CreatedAt  time.Time   `json:"created_at"`
 	UpdatedAt  time.Time   `json:"updated_at"`
@@ -144,6 +146,8 @@ func (m *clockManager) taskInfos() []plugininfo.ClockTaskInfo {
 			RunOnce:    t.RunOnce,
 			TimeoutSec: t.TimeoutSec,
 			CreatedBy:  t.CreatedBy.String(),
+			Creator:    t.Creator,
+			Updater:    t.Updater,
 			CreatedAt:  t.CreatedAt,
 			LastRunAt:  t.LastRunAt,
 			NextRunAt:  t.NextRunAt,
@@ -183,6 +187,7 @@ func (p *AIChatPlugin) CreateClockTask(c plugininfo.ClockTaskCreate) (string, er
 		TimeoutSec: c.TimeoutSec,
 		Note:       c.Note,
 		CreatedBy:  creator,
+		Creator:    "panel",
 	})
 }
 
@@ -202,7 +207,7 @@ func (p *AIChatPlugin) UpdateClockTask(id string, f plugininfo.ClockTaskUpdate) 
 		TargetID:   f.TargetID,
 		RunOnce:    f.RunOnce,
 		CreatedBy:  f.CreatedBy,
-	})
+	}, "panel")
 	return err
 }
 
@@ -317,8 +322,9 @@ func (m *clockManager) Add(t *ClockTask) (string, error) {
 	return t.ID, nil
 }
 
-// Update 按字段更新任务并重新调度。
-func (m *clockManager) Update(id string, f ClockUpdateFields) (*ClockTask, error) {
+// Update 按字段更新任务并重新调度。actor 为操作人标识（用户 ID / ai / panel），
+// 非空时记录为最近更新人。
+func (m *clockManager) Update(id string, f ClockUpdateFields, actor string) (*ClockTask, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -370,6 +376,9 @@ func (m *clockManager) Update(id string, f ClockUpdateFields) (*ClockTask, error
 		}
 		// 空字符串清除创建者（触发时不再 @）；纯数字规范化为 qq: 前缀
 		nt.CreatedBy = parseQID(s)
+	}
+	if actor != "" {
+		nt.Updater = actor
 	}
 	nt.UpdatedAt = time.Now()
 	m.tasks[id] = &nt

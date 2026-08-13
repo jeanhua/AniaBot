@@ -17,7 +17,9 @@ type ClockTaskInfo struct {
 	Enabled    bool      `json:"enabled"`
 	RunOnce    bool      `json:"run_once"`
 	TimeoutSec int       `json:"timeout_sec"` // 单次执行超时秒数，0 表示用默认值
-	CreatedBy  string    `json:"created_by"`  // 创建者 ID，空表示无（QQ 为 qq: 前缀，其他平台带各自前缀）
+	CreatedBy  string    `json:"created_by"`  // 群任务触发时 @ 提醒的用户 ID（QQ 为 qq: 前缀，其他平台带各自前缀），空表示不 @
+	Creator    string    `json:"creator"`     // 创建人标识：用户 ID / ai / panel，空表示未知（早期数据）
+	Updater    string    `json:"updater"`     // 最近更新人标识：用户 ID / ai / panel，空表示创建后未被更新过
 	CreatedAt  time.Time `json:"created_at"`
 	LastRunAt  time.Time `json:"last_run_at,omitempty"`
 	NextRunAt  time.Time `json:"next_run_at,omitempty"`

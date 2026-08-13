@@ -64,13 +64,13 @@ func (p *AIChatPlugin) handleClockCommand(ctx context.Context, b bot.Bot, cmd co
 	case "del", "delete", "rm":
 		p.replyClock(b, msg, p.cmdDelete(rest, targetType, targetID, isAdmin))
 	case "on", "enable":
-		p.replyClock(b, msg, p.cmdToggle(rest, true, targetType, targetID, isAdmin))
+		p.replyClock(b, msg, p.cmdToggle(rest, true, targetType, targetID, isAdmin, msg.Sender.UserId))
 	case "off", "disable":
-		p.replyClock(b, msg, p.cmdToggle(rest, false, targetType, targetID, isAdmin))
+		p.replyClock(b, msg, p.cmdToggle(rest, false, targetType, targetID, isAdmin, msg.Sender.UserId))
 	case "info":
 		p.replyClock(b, msg, p.cmdInfo(rest, targetType, targetID, isAdmin))
 	case "timeout":
-		p.replyClock(b, msg, p.cmdTimeout(rest, targetType, targetID, isAdmin))
+		p.replyClock(b, msg, p.cmdTimeout(rest, targetType, targetID, isAdmin, msg.Sender.UserId))
 	case "run":
 		if !isAdmin {
 			p.replyClock(b, msg, "仅管理员可手动触发任务")
@@ -115,7 +115,7 @@ func (p *AIChatPlugin) cmdList(targetType string, targetID string, all bool) str
 	return sb.String()
 }
 
-func (p *AIChatPlugin) cmdAdd(args []string, targetType string, targetID string, creator message.QID) string {
+func (p *AIChatPlugin) cmdAdd(args []string, targetType string, targetID string, sender message.QID) string {
 	// 格式：[--once] <cron> | <标题> | <内容>，cron 可含空格，以 | 切分三段
 	// 可选 --once 前缀标志：标记为单次任务，触发执行后自动销毁
 	runOnce := false
@@ -142,7 +142,8 @@ func (p *AIChatPlugin) cmdAdd(args []string, targetType string, targetID string,
 		TargetID:   targetID,
 		RunOnce:    runOnce,
 		Enabled:    true,
-		CreatedBy:  creator,
+		CreatedBy:  sender, // 默认 @ 创建人本人
+		Creator:    sender.String(),
 	}
 	id, err := p.clockManager.Add(task)
 	if err != nil {
@@ -190,7 +191,7 @@ func (p *AIChatPlugin) cmdDelete(args []string, targetType, targetID string, isA
 	return "定时任务不存在: " + id
 }
 
-func (p *AIChatPlugin) cmdToggle(args []string, enable bool, targetType, targetID string, isAdmin bool) string {
+func (p *AIChatPlugin) cmdToggle(args []string, enable bool, targetType, targetID string, isAdmin bool, sender message.QID) string {
 	id := pickID(args)
 	if id == "" {
 		verb := "on"
@@ -207,7 +208,7 @@ func (p *AIChatPlugin) cmdToggle(args []string, enable bool, targetType, targetI
 		return "无权操作该定时任务（只能操作当前会话的任务）"
 	}
 	f := ClockUpdateFields{Enabled: &enable}
-	if _, err := p.clockManager.Update(id, f); err != nil {
+	if _, err := p.clockManager.Update(id, f, sender.String()); err != nil {
 		return err.Error()
 	}
 	if enable {
@@ -253,7 +254,7 @@ func (p *AIChatPlugin) cmdRun(args []string) string {
 }
 
 // cmdTimeout 设置任务超时：/clock timeout <id> <秒数>（秒数为0表示恢复默认）。
-func (p *AIChatPlugin) cmdTimeout(args []string, targetType, targetID string, isAdmin bool) string {
+func (p *AIChatPlugin) cmdTimeout(args []string, targetType, targetID string, isAdmin bool, sender message.QID) string {
 	if len(args) < 2 {
 		return "用法：/clock timeout <id> <秒数>"
 	}
@@ -270,7 +271,7 @@ func (p *AIChatPlugin) cmdTimeout(args []string, targetType, targetID string, is
 		return "无权操作该定时任务（只能操作当前会话的任务）"
 	}
 	f := ClockUpdateFields{TimeoutSec: &sec}
-	if _, err := p.clockManager.Update(id, f); err != nil {
+	if _, err := p.clockManager.Update(id, f, sender.String()); err != nil {
 		return err.Error()
 	}
 	if sec > 0 {
@@ -370,6 +371,12 @@ func formatTaskDetail(t *ClockTask) string {
 	if t.Note != "" {
 		sb.WriteString(fmt.Sprintf("备注: %s\n", t.Note))
 	}
+	if t.Creator != "" {
+		sb.WriteString("创建人: " + actorText(t.Creator) + "\n")
+	}
+	if t.Updater != "" {
+		sb.WriteString("更新人: " + actorText(t.Updater) + "\n")
+	}
 	if !t.CreatedAt.IsZero() {
 		sb.WriteString("创建于: " + t.CreatedAt.Local().Format("2006-01-02 15:04") + "\n")
 	}
@@ -401,6 +408,17 @@ func enabledText(on bool) string {
 		return "启用"
 	}
 	return "停用"
+}
+
+// actorText 把操作人标识转为可读文本：ai / panel 为固定标识，其余为用户 ID 原样返回。
+func actorText(actor string) string {
+	switch actor {
+	case "ai":
+		return "AI"
+	case "panel":
+		return "面板"
+	}
+	return actor
 }
 
 // runOnceText 返回任务模式的中文描述。

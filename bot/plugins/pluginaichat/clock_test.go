@@ -120,11 +120,14 @@ func TestClockManagerCRUDAndPersist(t *testing.T) {
 
 	// Update 禁用
 	dis := false
-	if _, err := m.Update(id, ClockUpdateFields{Enabled: &dis}); err != nil {
+	if _, err := m.Update(id, ClockUpdateFields{Enabled: &dis}, "tester"); err != nil {
 		t.Fatalf("Update failed: %v", err)
 	}
 	if g, _ := m.Get(id); g.Enabled {
 		t.Fatal("expected disabled")
+	}
+	if g, _ := m.Get(id); g.Updater != "tester" {
+		t.Fatalf("want updater=tester, got %q", g.Updater)
 	}
 
 	// ListByTarget 过滤
@@ -172,7 +175,7 @@ func TestClockUpdateCreatedBy(t *testing.T) {
 
 	// 纯数字创建者规范化为 qq: 前缀
 	creator := "456"
-	if _, err := m.Update(id, ClockUpdateFields{CreatedBy: &creator}); err != nil {
+	if _, err := m.Update(id, ClockUpdateFields{CreatedBy: &creator}, "tester"); err != nil {
 		t.Fatalf("Update created_by failed: %v", err)
 	}
 	if g, _ := m.Get(id); g.CreatedBy != "qq:456" {
@@ -181,13 +184,13 @@ func TestClockUpdateCreatedBy(t *testing.T) {
 
 	// 非法值 "0" 应报错
 	zero := "0"
-	if _, err := m.Update(id, ClockUpdateFields{CreatedBy: &zero}); err == nil {
+	if _, err := m.Update(id, ClockUpdateFields{CreatedBy: &zero}, "tester"); err == nil {
 		t.Fatal("expected error for created_by=0")
 	}
 
 	// 空字符串清除创建者
 	empty := ""
-	if _, err := m.Update(id, ClockUpdateFields{CreatedBy: &empty}); err != nil {
+	if _, err := m.Update(id, ClockUpdateFields{CreatedBy: &empty}, "tester"); err != nil {
 		t.Fatalf("Update clear created_by failed: %v", err)
 	}
 	if g, _ := m.Get(id); g.CreatedBy != "" {
@@ -317,7 +320,7 @@ func TestRunOncePersistedAcrossReload(t *testing.T) {
 
 	// Update 可切换为重复任务
 	no := false
-	if _, err := m2.Update(loaded[0].ID, ClockUpdateFields{RunOnce: &no}); err != nil {
+	if _, err := m2.Update(loaded[0].ID, ClockUpdateFields{RunOnce: &no}, "tester"); err != nil {
 		t.Fatalf("Update failed: %v", err)
 	}
 	m3 := newClockManager(p, 30*time.Second, 100)

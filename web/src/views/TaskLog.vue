@@ -72,8 +72,14 @@
                   </template>
                   <dt class="text-[10px] tracking-[0.15em] uppercase text-zinc-400 self-center">超时时间</dt>
                   <dd class="text-zinc-700">{{ t.timeout_sec > 0 ? t.timeout_sec + ' 秒' : '默认' }}</dd>
-                  <dt class="text-[10px] tracking-[0.15em] uppercase text-zinc-400 self-center">创建者</dt>
-                  <dd class="text-zinc-700 font-mono">{{ t.created_by || '—' }}</dd>
+                  <template v-if="t.target_type === 'group' && t.created_by">
+                    <dt class="text-[10px] tracking-[0.15em] uppercase text-zinc-400 self-center">提醒 @</dt>
+                    <dd class="text-zinc-700 font-mono">{{ t.created_by }}</dd>
+                  </template>
+                  <dt class="text-[10px] tracking-[0.15em] uppercase text-zinc-400 self-center">创建人</dt>
+                  <dd class="text-zinc-700 font-mono">{{ fmtActor(t.creator) }}</dd>
+                  <dt class="text-[10px] tracking-[0.15em] uppercase text-zinc-400 self-center">更新人</dt>
+                  <dd class="text-zinc-700 font-mono">{{ fmtActor(t.updater) }}</dd>
                   <dt class="text-[10px] tracking-[0.15em] uppercase text-zinc-400 self-center">创建时间</dt>
                   <dd class="text-zinc-700">{{ fmtTimeFull(t.created_at) }}</dd>
                 </dl>
@@ -595,6 +601,14 @@ function fmtDuration(ms) {
   if (!ms && ms !== 0) return '-'
   if (ms < 1000) return `${ms}ms`
   return `${(ms / 1000).toFixed(1)}s`
+}
+
+// 操作人标识人性化：ai / panel 是固定标识，其余为用户 ID 原样展示
+function fmtActor(s) {
+  if (!s) return '—'
+  if (s === 'ai') return 'AI'
+  if (s === 'panel') return '面板'
+  return s
 }
 
 function statusText(s) {
