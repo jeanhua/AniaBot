@@ -1,6 +1,6 @@
 // Package sysrestart 提供进程自重启能力。
 //
-// 供 Web 控制面板（重启按钮 / 自动更新）与 AI 工具（restart_bot）共用：
+// 供 Web 控制面板（重启按钮 / 自动更新）与系统插件的 /reboot 命令共用：
 // 以相同命令行参数重启当前进程，使配置修改生效。
 package sysrestart
 

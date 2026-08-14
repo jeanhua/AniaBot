@@ -80,9 +80,9 @@ bot/adapter/discord/     Discord adapter (bwmarrin/discordgo, Gateway WebSocket;
 bot/component/           AI chat engine
   aichat/                  ChatBot, LLMClient, MessageBuilder, ToolOrchestrator, messageWindow
   llmtool/                 Tool interface, ToolExecuter, MCP client, SkillManager, schema parser
-  functool/                Built-in tools (time, web search, meme, file, msg history, image loading, config get/set, bot restart)
+  functool/                Built-in tools (time, web search, meme, file, msg history, image loading, config get/set)
   oplog/                   Operation audit log (panel + AI tool actions; SQL ania_op_log / KV dual backend, package-level singleton)
-  sysrestart/              Process self-restart (panel restart/auto-update + restart_bot tool)
+  sysrestart/              Process self-restart (panel restart/auto-update + /reboot command in pluginsys)
 bot/plugins/             Seven built-in plugins (sys, log, repeat, antiwithdrawal, interceptor, aichat, news)
 bot/utils/               Command parsing, message extraction, URL helpers, time formatting
 custom/                  User-created plugin examples and templates
@@ -127,7 +127,7 @@ Tools are defined as structs embedding `llmtool.BaseTool[ParamsType]`. Parameter
 
 Registration hierarchy:
 
-1. `functool.CreateDefaultTools()` — registers built-in tools. Always on: `time`, `web_search`, `web_explore` (both via Jina), `meme` (configurable API template + gjson parsing via `plugin.ai_chat_bot.meme.*`, default GIPHY), `msg_history`, `private_file`, `load_images` (LLM-invoked, on-demand loading of images in the user's current/quoted message; recognition via the multimodal model or OCR fallback in the callback). Opt-in (gated behind config flags for safety): `bash` (executes on the host with whitelist/blacklist regex), `file`/`send_file`, and `local_image` (reads host-local image files for the LLM to view; served as a data URI to the multimodal model or OCR fallback in the callback). Registered separately by the aichat plugin (not in `CreateDefaultTools`): `config_get`/`config_set` (`plugin.ai_chat_bot.config_tool.enable`, default off — read/modify framework config via the DI-injected `ConfigEditor`; sensitive fields masked against the pluginconfig registry, only registered keys writable, changes take effect after restart) and `restart_bot` (`config_tool.restart_enable`, default off — delayed self-restart via `bot/component/sysrestart` to apply config changes).
+1. `functool.CreateDefaultTools()` — registers built-in tools. Always on: `time`, `web_search`, `web_explore` (both via Jina), `meme` (configurable API template + gjson parsing via `plugin.ai_chat_bot.meme.*`, default GIPHY), `msg_history`, `private_file`, `load_images` (LLM-invoked, on-demand loading of images in the user's current/quoted message; recognition via the multimodal model or OCR fallback in the callback). Opt-in (gated behind config flags for safety): `bash` (executes on the host with whitelist/blacklist regex), `file`/`send_file`, and `local_image` (reads host-local image files for the LLM to view; served as a data URI to the multimodal model or OCR fallback in the callback). Registered separately by the aichat plugin (not in `CreateDefaultTools`): `config_get`/`config_set` (`plugin.ai_chat_bot.config_tool.enable`, default off — read/modify framework config via the DI-injected `ConfigEditor`; sensitive fields masked against the pluginconfig registry, only registered keys writable, changes take effect after restart — the AI is instructed to tell the user an admin must send the `/reboot` command, handled by pluginsys via `bot/component/sysrestart`).
 2. `functool.CreateToolsWithMCP()` — adds MCP tools (`mcpLazyLoad` selects discovery mode vs eager registration)
 3. `functool.CreateToolsWithSkill()` — adds `skill_read` and `skill_reload` tools
 

@@ -5,15 +5,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
-	"log/slog"
 	"sort"
 	"strings"
-	"time"
 	"unicode/utf8"
 
 	"github.com/jeanhua/AniaBot/bot/component/llmtool"
 	"github.com/jeanhua/AniaBot/bot/component/oplog"
-	"github.com/jeanhua/AniaBot/bot/component/sysrestart"
 	"github.com/jeanhua/AniaBot/common/pluginconfig"
 )
 
@@ -146,7 +143,7 @@ type ConfigSetTool struct {
 
 func NewConfigSetTool(store ConfigStore) *ConfigSetTool {
 	return &ConfigSetTool{
-		BaseTool: llmtool.MakeBaseTool("config_set", "修改 Bot 框架配置（写入数据库，重启后生效；可用 restart_bot 工具重启使其生效）。只能修改已注册的配置键，先用 config_get 查看可用键与当前值。修改前请确认用户已明确要求", ConfigSetParams{}),
+		BaseTool: llmtool.MakeBaseTool("config_set", "修改 Bot 框架配置（写入数据库，重启后生效）。只能修改已注册的配置键，先用 config_get 查看可用键与当前值。修改前请确认用户已明确要求。修改完成后请提醒用户：需由管理员发送 /reboot 命令重启 Bot 使配置生效（/reboot 仅管理员可用，普通用户发送会提示无权限）", ConfigSetParams{}),
 		store:    store,
 	}
 }
@@ -198,7 +195,7 @@ func (t *ConfigSetTool) Execute(ctx context.Context, params any, _ llmtool.CallB
 	}
 	oplog.Record(oplog.CategoryAI, "config_set", fmt.Sprintf("AI 修改配置 %s: %s → %s", key, detailOld, detailVal))
 
-	return fmt.Sprintf("已更新配置 %s = %s（重启后生效，可告知用户使用 restart_bot 重启）", key, detailVal), nil
+	return fmt.Sprintf("已更新配置 %s = %s（重启后生效；请提醒用户由管理员发送 /reboot 重启使配置生效）", key, detailVal), nil
 }
 
 // decodeJSONValue 按 JSON 解码配置值（bool/数字/数组/对象/带引号字符串）。
@@ -208,54 +205,4 @@ func decodeJSONValue(s string) (any, error) {
 		return nil, err
 	}
 	return v, nil
-}
-
-// ---- restart_bot：重启使配置生效 ----
-
-type RestartBotParams struct {
-	DelaySec int `json:"delay_sec,omitempty" desc:"延迟多少秒后重启（默认 5 秒，给当前回复留出发送时间；范围 3-120）"`
-}
-
-// restartDelayBounds restart_bot 延迟秒数的限幅范围
-const (
-	restartDelayDefault = 5
-	restartDelayMin     = 3
-	restartDelayMax     = 120
-)
-
-type RestartBotTool struct {
-	llmtool.BaseTool[RestartBotParams]
-	logger *slog.Logger
-}
-
-func NewRestartBotTool(logger *slog.Logger) *RestartBotTool {
-	if logger == nil {
-		logger = slog.Default()
-	}
-	return &RestartBotTool{
-		BaseTool: llmtool.MakeBaseTool("restart_bot", "重启 Bot 进程（以相同参数重新启动），用于使 config_set 修改的配置生效。重启期间会短暂离线，重启完成后自动恢复。执行前请确认用户已明确要求重启", RestartBotParams{}),
-		logger:   logger,
-	}
-}
-
-func (t *RestartBotTool) Execute(ctx context.Context, params any, _ llmtool.CallBackFuncs) (string, error) {
-	p, ok := params.(*RestartBotParams)
-	if !ok {
-		return "", fmt.Errorf("restart_bot: 参数类型错误")
-	}
-	delay := p.DelaySec
-	if delay <= 0 {
-		delay = restartDelayDefault
-	}
-	delay = max(restartDelayMin, min(delay, restartDelayMax))
-	log.Printf("执行restart_bot... 延迟: %ds", delay)
-
-	oplog.Record(oplog.CategoryAI, "restart", fmt.Sprintf("AI 请求重启 Bot（延迟 %d 秒）", delay))
-
-	// 延迟重启：先返回工具结果让回复走完发送流程，再替换进程
-	go func() {
-		time.Sleep(time.Duration(delay) * time.Second)
-		sysrestart.Self(t.logger)
-	}()
-	return fmt.Sprintf("已安排 %d 秒后重启 Bot，重启期间将短暂离线，配置修改会在重启后生效", delay), nil
 }

@@ -8,6 +8,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/jeanhua/AniaBot/bot/component/oplog"
+	"github.com/jeanhua/AniaBot/bot/component/sysrestart"
 	"github.com/jeanhua/AniaBot/common/bot"
 	"github.com/jeanhua/AniaBot/common/model/command"
 	"github.com/jeanhua/AniaBot/common/model/message"
@@ -15,6 +17,9 @@ import (
 	"github.com/jeanhua/AniaBot/common/plugin"
 	"github.com/jeanhua/AniaBot/common/plugininfo"
 )
+
+// rebootDelay /reboot 重启前的延迟，给回复消息留出发送时间
+const rebootDelay = 2 * time.Second
 
 type PluginSys struct {
 	plugin.Meta
@@ -83,6 +88,29 @@ func (p *PluginSys) OnFriendMsg(ctx context.Context, bot bot.Bot, cmd command.Co
 		bot.Stop()
 		os.Exit(0)
 		return false, nil
+	} else if cmd.Name == "reboot" {
+		if msg.Sender.UserId != p.SystemConfig.AdminId {
+			builder := msgchain.Builder().Friend()
+			builder.Text("没有权限，只有管理员才能重启 AniaBot")
+			_, ok := bot.SendFriendMsg(msg.Sender.UserId, builder.Build())
+			if !ok {
+				p.Logger.Error("Bot消息发送失败，无法响应 /reboot")
+			}
+			return false, nil
+		}
+		builder := msgchain.Builder().Friend()
+		builder.Text("AniaBot即将重启，重启期间将短暂离线...")
+		_, ok := bot.SendFriendMsg(msg.Sender.UserId, builder.Build())
+		if !ok {
+			p.Logger.Error("Bot消息发送失败，无法响应 /reboot")
+		}
+		oplog.Record(oplog.CategorySystem, "restart", fmt.Sprintf("管理员 %s 通过 /reboot 命令重启 Bot", msg.Sender.UserId))
+		// 延迟重启：先让回复走完发送流程，再替换进程
+		go func() {
+			time.Sleep(rebootDelay)
+			sysrestart.Self(p.Logger)
+		}()
+		return false, nil
 	}
 	return true, nil
 }
@@ -112,6 +140,29 @@ func (p *PluginSys) OnGroupMsg(ctx context.Context, bot bot.Bot, cmd command.Com
 		if !ok {
 			p.Logger.Error("Bot消息发送失败，无法响应 /help")
 		}
+		return false, nil
+	} else if cmd.Name == "reboot" && cmd.Mention {
+		c := msgchain.Builder().Group()
+		c.Mention(msg.Sender.UserId)
+		if msg.Sender.UserId != p.SystemConfig.AdminId {
+			c.Text(" 没有权限，只有管理员才能重启 AniaBot")
+			_, ok := bot.SendGroupMsg(msg.GroupId, c.Build())
+			if !ok {
+				p.Logger.Error("Bot消息发送失败，无法响应 /reboot")
+			}
+			return false, nil
+		}
+		c.Text(" AniaBot即将重启，重启期间将短暂离线...")
+		_, ok := bot.SendGroupMsg(msg.GroupId, c.Build())
+		if !ok {
+			p.Logger.Error("Bot消息发送失败，无法响应 /reboot")
+		}
+		oplog.Record(oplog.CategorySystem, "restart", fmt.Sprintf("管理员 %s 通过 /reboot 命令重启 Bot（群 %s）", msg.Sender.UserId, msg.GroupId))
+		// 延迟重启：先让回复走完发送流程，再替换进程
+		go func() {
+			time.Sleep(rebootDelay)
+			sysrestart.Self(p.Logger)
+		}()
 		return false, nil
 	}
 	return true, nil

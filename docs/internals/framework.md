@@ -428,7 +428,7 @@ type StreamHandle interface {
 
 ## 进程自重启（sysrestart）
 
-面板「重启 Bot」按钮、自动更新与 AI 的 `restart_bot` 工具共用 `bot/component/sysrestart.Self()`，实现极简但有一个关键陷阱：
+面板「重启 Bot」按钮、自动更新与系统插件的 `/reboot` 命令（仅管理员）共用 `bot/component/sysrestart.Self()`，实现极简但有一个关键陷阱：
 
 - **Unix**：`syscall.Exec(exe, os.Args, os.Environ())` **原地替换进程**——PID 不变、文件句柄与控制台无缝衔接，重启对用户几乎无感
 - **Windows**：没有 exec 语义，`exec.Command` 启动新进程（继承控制台与标准流）后 `os.Exit(0)`
