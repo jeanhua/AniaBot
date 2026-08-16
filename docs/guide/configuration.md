@@ -286,9 +286,32 @@ HTTP 模式下 NapCat 向 `localhost` 上报会失败，请将 NapCat 的 HTTP C
 | `plugin.ai_chat_bot.bash.enable` | `false` | 允许 AI 在宿主机执行 shell 命令 |
 | `plugin.ai_chat_bot.bash.shell` | 空 | 命令解释器，留空使用系统默认（Linux/macOS 为 `sh`，Windows 为 `cmd`），可填 `/bin/bash`、`/bin/ash` 等 |
 | `plugin.ai_chat_bot.bash.env` | `[]` | 环境变量，如 `["HOME=/root"]` |
-| `plugin.ai_chat_bot.bash.whitelist` | `[]` | 非空时仅允许匹配这些正则的命令 |
-| `plugin.ai_chat_bot.bash.blacklist` | `["config(\\.dev)?\\.(yaml|yml|json)", "^mkfs", "^shutdown", "^reboot"]` | 匹配这些正则的命令被禁止 |
+| `plugin.ai_chat_bot.bash.whitelist` | `[]` | 命中这些正则的命令直接放行；黑白名单都不命中（含均未配置）时经工具审批确认后执行 |
+| `plugin.ai_chat_bot.bash.blacklist` | `["config(\\.dev)?\\.(yaml|yml|json)", "^mkfs", "^shutdown", "^reboot"]` | 匹配这些正则的命令被禁止（优先于白名单） |
 | `plugin.ai_chat_bot.local_image.enable` | `false` | 允许 AI 读取宿主机本地图片 |
+
+### 任务清单（todo）
+
+| 配置键 | 默认值 | 说明 |
+| --- | --- | --- |
+| `plugin.ai_chat_bot.todo.enable` | `true` | 启用后 AI 可用 `todo_write` 维护当前会话的任务清单（内存态），复杂多步任务逐项推进；有未完成项时后续对话自动注入提醒 |
+
+### 工具审批（approval）
+
+| 配置键 | 默认值 | 说明 |
+| --- | --- | --- |
+| `plugin.ai_chat_bot.approval.enable` | `false` | 启用后下列工具执行前需人工确认（请求发送者或管理员回复「允许/拒绝」）；同时作为 bash 未列名命令的审批通道 |
+| `plugin.ai_chat_bot.approval.tools` | `file,config_set` | 需审批的工具名（逗号分隔）；bash 有命令级黑白名单 + 审批三段式，无需列入 |
+| `plugin.ai_chat_bot.approval.timeout_sec` | `120` | 审批超时（秒），超时无回复自动拒绝；范围 10~240 |
+
+### AI 钩子（hooks）
+
+| 配置键 | 默认值 | 说明 |
+| --- | --- | --- |
+| `plugin.ai_chat_bot.hooks.enable` | `false` | 启用后按 `files.hooks_json`（面板「扩展配置」页编辑）在会话事件上执行 shell 命令；钩子在宿主机执行，请仅配置可信命令 |
+| `plugin.ai_chat_bot.hooks.timeout_sec` | `10` | 单个钩子默认超时（秒），可在 JSON 中按条覆盖，上限 60 |
+
+钩子事件：`SessionStart` / `UserPromptSubmit` / `PreToolUse` / `PostToolUse` / `Stop` / `SubagentStop` / `PreCompact`；其中 `UserPromptSubmit` 与 `PreToolUse` 可阻断（退出码 2）。`PreToolUse` 挂在高频工具上会按轮放大延迟，请谨慎配置。语义详见 [AI 引擎（三）](/internals/agent-tools#钩子系统-hooks)。
 
 ### AI 定时任务（clock）
 

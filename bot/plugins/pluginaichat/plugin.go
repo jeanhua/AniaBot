@@ -10,10 +10,12 @@ import (
 	"sync"
 	"time"
 
+	"github.com/jeanhua/AniaBot/bot/component/agenthook"
 	"github.com/jeanhua/AniaBot/bot/component/aichat"
 	"github.com/jeanhua/AniaBot/bot/component/functool"
 	"github.com/jeanhua/AniaBot/bot/component/llmtool"
 	"github.com/jeanhua/AniaBot/bot/component/querylog"
+	"github.com/jeanhua/AniaBot/bot/utils"
 	"github.com/jeanhua/AniaBot/common/aniaerror"
 	"github.com/jeanhua/AniaBot/common/bot"
 	"github.com/jeanhua/AniaBot/common/model/command"
@@ -95,6 +97,28 @@ type AIChatPlugin struct {
 	// quotaManager 每日 Token 配额管理器；为 nil 表示功能未启用
 	quotaManager *quotaManager
 
+	// hookManager AI 钩子管理器（shell 钩子 + 其他插件注册的 Go 钩子）；
+	// Start 时始终构造，未启用（hooks.enable=false）时 Run 内部短路
+	hookManager *agenthook.Manager
+	// goHookHandlers core 收集的其他插件 Go 钩子（SetGoHookHandlers 注入，
+	// 时序上在 Start 之后，防御性兜底：manager 未就绪时暂存）
+	goHookHandlers []agenthook.Handler
+	// sessionInject SessionStart 钩子产出的待注入上下文（按会话暂存，
+	// 下一轮对话消费一次后删除）
+	sessionInject sync.Map
+
+	// planManager 计划模式状态（/plan on 开启后副作用工具被门禁阻断）；
+	// Start 时始终构造（无开关：不主动开启即为纯内存空状态）
+	planManager *planManager
+	// commandManager 自定义斜杠命令（files.commands_json，面板可编辑）；
+	// Start 时始终构造，命中后消息改写为展开模板走正常对话流程
+	commandManager *commandManager
+	// todoManager 任务清单（todo_write 工具，内存态按会话隔离）；
+	// Start 时始终构造，cfg.Todo.Enable 控制是否注册工具与注入提醒
+	todoManager *todoManager
+	// approvalManager 工具审批管理器；为 nil 表示功能未启用
+	approvalManager *approvalManager
+
 	// msgEventTimeout 框架级消息处理超时（bot.msg_event_timeout_sec，Start 时
 	// 从全量 viper 读取）：tryProcessPending 等后台触发的会话处理复用同一预算
 	msgEventTimeout time.Duration
@@ -103,6 +127,10 @@ type AIChatPlugin struct {
 const (
 	LockExpTime     = time.Minute * 10
 	promptConfigKey = "files.prompt_json"
+	// hooksConfigKey / commandsConfigKey 与 configstore.KeyHooksJSON/KeyCommandsJSON
+	// 同值；按 promptConfigKey 先例在插件本地定义，避免 plugins → core 依赖
+	hooksConfigKey    = "files.hooks_json"
+	commandsConfigKey = "files.commands_json"
 )
 
 type promptOverrideConfig struct {
@@ -124,6 +152,14 @@ func NewAIChatPlugin() *AIChatPlugin {
 }
 
 func (p *AIChatPlugin) OnGroupMsg(ctx context.Context, bot bot.Bot, cmd command.Command, msg message.Message) (bool, error) {
+	// 工具审批回复必须最先拦截：审批等待期间会话锁被占用（回复走不到正常聊天
+	// 流程），且回复通常不带 @（mention 门会把它挡掉）
+	if p.approvalManager != nil {
+		if text, _ := utils.ExtraMessageStr(msg); p.approvalManager.tryHandleReply(msg.GroupId, true, msg.Sender.UserId, text) {
+			return false, nil
+		}
+	}
+
 	if cmd.Name == "clock" {
 		return p.handleClockCommand(ctx, bot, cmd, msg)
 	}
@@ -185,6 +221,19 @@ func (p *AIChatPlugin) OnGroupMsg(ctx context.Context, bot bot.Bot, cmd command.
 		return false, nil
 	}
 
+	if cmd.Name == "plan" {
+		return p.handlePlanCommand(ctx, bot, cmd, msg)
+	}
+
+	if cmd.Name == "cmd" {
+		return p.handleCmdCommand(ctx, bot, cmd, msg)
+	}
+
+	// 自定义斜杠命令：命中则把消息改写为展开后的纯文本，继续走正常对话流程
+	if p.commandManager != nil {
+		p.commandManager.rewriteCustomCommand(cmd, &msg)
+	}
+
 	if !p.tryLock(msg.GroupId, true) {
 		// 当前正在响应：消息进入排队队列，响应结束后自动合并处理
 		first, ok := p.enqueuePending(msg.GroupId, true, msg)
@@ -229,6 +278,13 @@ func (p *AIChatPlugin) OnGroupMsg(ctx context.Context, bot bot.Bot, cmd command.
 }
 
 func (p *AIChatPlugin) OnFriendMsg(ctx context.Context, bot bot.Bot, cmd command.Command, msg message.Message) (bool, error) {
+	// 工具审批回复必须最先拦截：审批等待期间会话锁被占用，回复走不到正常聊天流程
+	if p.approvalManager != nil {
+		if text, _ := utils.ExtraMessageStr(msg); p.approvalManager.tryHandleReply(msg.Sender.UserId, false, msg.Sender.UserId, text) {
+			return false, nil
+		}
+	}
+
 	if cmd.Name == "clock" {
 		return p.handleClockCommand(ctx, bot, cmd, msg)
 	}
@@ -248,6 +304,19 @@ func (p *AIChatPlugin) OnFriendMsg(ctx context.Context, bot bot.Bot, cmd command
 			bot.SendFriendMsg(msg.Sender.UserId, builder.Build())
 		}
 		return false, nil
+	}
+
+	if cmd.Name == "plan" {
+		return p.handlePlanCommand(ctx, bot, cmd, msg)
+	}
+
+	if cmd.Name == "cmd" {
+		return p.handleCmdCommand(ctx, bot, cmd, msg)
+	}
+
+	// 自定义斜杠命令：命中则把消息改写为展开后的纯文本，继续走正常对话流程
+	if p.commandManager != nil {
+		p.commandManager.rewriteCustomCommand(cmd, &msg)
 	}
 
 	if !p.tryLock(msg.Sender.UserId, false) {
@@ -337,6 +406,16 @@ func (p *AIChatPlugin) processChatBatch(ctx context.Context, b bot.Bot, id messa
 		p.quotaManager.Add(sessionKey(id, isGroup), u)
 	}, batch...)
 
+	// 命令级人工审批（bash 三段式中不在黑白名单的命令在工具内部调用）：与门禁
+	// 审批腿共用 approvalManager；提示同样走纯发送闭包（与流式消息互不干扰）。
+	if p.approvalManager != nil {
+		requester := lastMsg.Sender.UserId
+		sendPrompt := func(text string) { p.sendPlainText(b, id, isGroup, text) }
+		msgFuncs.RequestApproval = func(ctx context.Context, toolName, summary string) (bool, string) {
+			return p.approvalManager.request(ctx, sessionKey(id, isGroup), toolName, summary, requester, sendPrompt)
+		}
+	}
+
 	// 每日配额检查：超限直接拒绝并丢弃排队消息（含子代理/定时任务的消耗，
 	// 见各调用点 Add）。检查放在 beginQuery 之前，避免被拒请求留下无效的
 	// Query 日志记录（running 状态悬挂）
@@ -347,6 +426,10 @@ func (p *AIChatPlugin) processChatBatch(ctx context.Context, b bot.Bot, id messa
 	}
 
 	chatOpts := p.buildChatOptions()
+	// 请求级工具门禁：计划模式 → PreToolUse 钩子 → 工具审批（见 gate.go）。
+	// 审批提示走纯发送闭包，与进行中的流式消息互不干扰。
+	chatOpts.PreToolGate = p.buildPreToolGate(sessionKey(id, isGroup), agenthook.AgentKindMain, lastMsg.Sender.UserId,
+		func(text string) { p.sendPlainText(b, id, isGroup, text) })
 
 	// 流式回复：平台支持「先发后改」（如飞书卡片/Telegram/Discord 消息 Patch）时逐字展示；
 	// 平台不支持或流式创建失败时自动退化为一次性回复（下方原发送路径）。
@@ -454,6 +537,28 @@ func (p *AIChatPlugin) processChatBatch(ctx context.Context, b bot.Bot, id messa
 		}
 	}
 
+	// SessionStart 钩子上下文注入：会话（重）创建时钩子产出的上下文只消费一次
+	// （尾部注入，同上的缓存与落盘约束）
+	if v, ok := p.sessionInject.LoadAndDelete(sessionKey(id, isGroup)); ok {
+		if injected, _ := v.(string); injected != "" {
+			extraText = injected + "\n\n" + extraText
+		}
+	}
+
+	// 任务清单提醒：有未完成项且内容有变化时注入（哈希去重，避免每轮重复污染）；
+	// 尾部注入，同上的缓存与落盘约束
+	if p.cfg.Todo.Enable && p.todoManager != nil {
+		if reminder := p.todoManager.pendingReminder(sessionKey(id, isGroup)); reminder != "" {
+			extraText = reminder + "\n\n" + extraText
+		}
+	}
+
+	// 计划模式附言：每轮尾部注入（plan 可中途开关，buildScenePrompt 的一次性
+	// 场景提示跟不上）；子代理/定时任务路径只有门禁拦截，不带附言。
+	if p.planManager != nil && p.planManager.IsOn(sessionKey(id, isGroup)) {
+		extraText = "【计划模式】当前处于计划模式：请只做分析与规划并输出实施计划，不要执行任何会产生实际副作用的操作（修改文件、运行命令、改配置、建任务等会被系统自动阻止）。用户确认计划后会退出计划模式再执行。\n\n" + extraText
+	}
+
 	resp, usage, err := chat.Chat(ctx, extraText, msgFuncs, chatOpts)
 	// 流式回复收尾：Chat 返回后结束流式消息（幂等；工具轮边界已由 OnStreamRoundEnd 处理）
 	if streamHandle != nil {
@@ -464,6 +569,13 @@ func (p *AIChatPlugin) processChatBatch(ctx context.Context, b bot.Bot, id messa
 	// 主对话消耗计入会话与全局配额（子代理/团队/定时任务在其各自调用点累加）
 	p.quotaManager.Add(sessionKey(id, isGroup), usage)
 	if err != nil {
+		// UserPromptSubmit 钩子阻断：不算请求失败——把原因告知用户后继续
+		// 处理后续排队消息（不丢弃、不记错误日志）
+		var blocked *aichat.PromptBlockedError
+		if errors.As(err, &blocked) {
+			p.sendPlainText(b, id, isGroup, blocked.Reason)
+			return true
+		}
 		// 出错或取消时丢弃剩余排队消息，避免连续报错刷屏
 		p.drainPending(id, isGroup)
 		switch {
@@ -476,6 +588,15 @@ func (p *AIChatPlugin) processChatBatch(ctx context.Context, b bot.Bot, id messa
 			p.sendPlainText(b, id, isGroup, "无法解析的错误信息，请查看日志")
 		}
 		return false
+	}
+
+	// Stop 钩子（仅通知）：一次完整响应成功结束
+	if p.hookManager != nil {
+		p.hookManager.Run(ctx, agenthook.EventStop, agenthook.Payload{
+			SessionKey: sessionKey(id, isGroup),
+			AgentKind:  agenthook.AgentKindMain,
+			Prompt:     querylog.Truncate(resp, 1000),
+		})
 	}
 
 	if len(strings.TrimSpace(resp)) == 0 {
@@ -638,6 +759,43 @@ func (p *AIChatPlugin) Start(ctx context.Context, cfg *viper.Viper) error {
 
 	if err := p.loadMCPConfigs(cfg); err != nil {
 		p.Logger.Warn("加载 MCP 配置失败", "error", err.Error())
+	}
+
+	// AI 钩子：按 files.hooks_json 配置在会话事件上执行 shell 命令（面板「扩展配置」
+	// 页编辑，秒级热生效）；同时接收其他插件注册的 Go 钩子（core 在全部插件
+	// Start 后收集注入，见 SetGoHookHandlers）。管理器始终构造，未启用时 Run 短路。
+	p.hookManager = agenthook.NewManager(p.ConfigEditor, hooksConfigKey, p.Logger.WithGroup("hooks"))
+	p.hookManager.SetEnabled(p.cfg.Hooks.Enable)
+	if len(p.goHookHandlers) > 0 {
+		p.hookManager.SetGoHandlers(p.goHookHandlers)
+		p.goHookHandlers = nil
+	}
+	if p.cfg.Hooks.Enable {
+		if err := p.hookManager.Reload(); err != nil {
+			p.Logger.Warn("加载钩子配置失败", "error", err.Error())
+		}
+		p.Logger.Info("已启用 AI 钩子功能", "timeout_sec", p.cfg.Hooks.TimeoutSec)
+	} else {
+		p.Logger.Info("AI 钩子功能未启用（plugin.ai_chat_bot.hooks.enable=false）")
+	}
+
+	// 计划模式：始终可用（无配置开关），/plan on 开启后副作用工具被门禁阻断
+	p.planManager = newPlanManager()
+
+	// 任务清单：始终构造（todo_write 注册与否由 cfg.Todo.Enable 在 getChat 决定）
+	p.todoManager = newTodoManager()
+
+	// 自定义斜杠命令：始终构造（无开关；配置中心不可用时管理操作报错、查询为空）
+	p.commandManager = newCommandManager(p.ConfigEditor, commandsConfigKey, p.Logger)
+
+	// 工具审批：默认关闭；启用后 approval.tools 列出的工具与 bash 未列名命令
+	// 需请求发送者或管理员回复确认
+	if p.cfg.Approval.Enable {
+		toolNames := strings.Split(p.cfg.Approval.Tools, ",")
+		p.approvalManager = newApprovalManager(toolNames, p.cfg.Approval.TimeoutSec, p.SystemConfig.AdminId, p.Logger)
+		p.Logger.Info("已启用工具审批", "tools", p.approvalManager.tools, "timeout_sec", p.cfg.Approval.TimeoutSec)
+	} else {
+		p.Logger.Info("工具审批未启用（plugin.ai_chat_bot.approval.enable=false）")
 	}
 
 	p.Logger.Info("初始化工具执行器...")
@@ -821,6 +979,17 @@ func (p *AIChatPlugin) Awake(ctx context.Context, bot bot.Bot) error {
 		p.clockManager.Start(bot)
 	}
 	return nil
+}
+
+// SetGoHookHandlers 实现 agenthook.HandlerRegistry：接收 core 收集的其他插件
+// Go 钩子。时序上 core 在全部插件 Start 之后注入；防御性兜底：manager 未就绪
+// 时暂存，Start 中转交。
+func (p *AIChatPlugin) SetGoHookHandlers(handlers []agenthook.Handler) {
+	if p.hookManager != nil {
+		p.hookManager.SetGoHandlers(handlers)
+		return
+	}
+	p.goHookHandlers = handlers
 }
 
 func (p *AIChatPlugin) loadPromptOverrides(cfg *viper.Viper) {

@@ -11,8 +11,10 @@ import (
 	"sync"
 	"time"
 
+	"github.com/jeanhua/AniaBot/bot/component/agenthook"
 	"github.com/jeanhua/AniaBot/bot/component/aichat"
 	"github.com/jeanhua/AniaBot/bot/component/llmtool"
+	"github.com/jeanhua/AniaBot/bot/component/querylog"
 	"github.com/jeanhua/AniaBot/bot/component/tasklog"
 	"github.com/jeanhua/AniaBot/common/bot"
 	"github.com/jeanhua/AniaBot/common/model/message"
@@ -724,8 +726,16 @@ func (m *clockManager) executeTask(ctx context.Context, task *ClockTask, rec *ta
 		chat.SetToolObserver(rec.observe)
 	}
 
+	// 钩子与工具门禁（AgentKind=clock；审批仅管理员可批，提示发送到任务目标）
+	if p.hookManager != nil {
+		chat.SetHookRunner(p.hookManager, sessionKey(targetQID, isGroup), agenthook.AgentKindClock)
+	}
+
 	cbs := m.makeClockCallback(ctx, task, extra.add)
-	resp, usage, err := chat.Chat(ctx, m.buildTriggerPrompt(task), cbs, p.buildChatOptions())
+	chatOpts := p.buildChatOptions()
+	chatOpts.PreToolGate = p.buildPreToolGate(sessionKey(targetQID, isGroup), agenthook.AgentKindClock, message.FromUint64(0),
+		func(text string) { m.sendText(task, text) })
+	resp, usage, err := chat.Chat(ctx, m.buildTriggerPrompt(task), cbs, chatOpts)
 	if err != nil {
 		// 失败路径同样并入已产生的派生用量（子代理可能已部分执行）
 		return "", mergeTokenUsage(usage, extra.take()), err
@@ -744,6 +754,14 @@ func (m *clockManager) executeTask(ctx context.Context, task *ClockTask, rec *ta
 	// 中途碎片的非预期消息。工具主动调用的图片/文件仍正常发送。
 	if strings.TrimSpace(resp) != "" {
 		m.sendText(task, resp)
+	}
+	// Stop 钩子（仅通知）：定时任务一次完整执行结束
+	if p.hookManager != nil {
+		p.hookManager.Run(ctx, agenthook.EventStop, agenthook.Payload{
+			SessionKey: sessionKey(targetQID, isGroup),
+			AgentKind:  agenthook.AgentKindClock,
+			Prompt:     querylog.Truncate(resp, 1000),
+		})
 	}
 	return resp, usage, nil
 }
@@ -842,6 +860,16 @@ func (m *clockManager) makeClockCallback(ctx context.Context, task *ClockTask, u
 		p := m.plugin
 		cbs.LoadLocalImage = func(path string) (string, error) {
 			return p.loadLocalImageInto(ctx, path, &loadedImages, usageSink), nil
+		}
+	}
+	// 命令级人工审批（bash 三段式）：定时任务无人值守，requester=0 即仅管理员可批；
+	// 审批提示发到任务目标会话
+	if am := m.plugin.approvalManager; am != nil {
+		targetQID := qid
+		targetIsGroup := isGroup
+		cbs.RequestApproval = func(ctx context.Context, toolName, summary string) (bool, string) {
+			return am.request(ctx, sessionKey(targetQID, targetIsGroup), toolName, summary, message.FromUint64(0),
+				func(text string) { m.sendText(task, text) })
 		}
 	}
 	return cbs

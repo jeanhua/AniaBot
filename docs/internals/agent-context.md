@@ -28,6 +28,7 @@ flowchart TB
 - 摘要以 **user 角色**消息保存（`"以下是之前的对话摘要：..."`），而非 system：system 位置已被完整 basePrompt 占用，重复 system 会稀释指令且浪费 token
 - 压缩 prompt 明确要求「保留关键信息、用户意图、讨论结论和重要上下文，省略工具调用细节和中间推理过程」
 - 压缩的 token 消耗并入当次请求统计（`compressUsage`），但不计入迭代轮数
+- 压缩判定通过后、真正执行前触发 `PreCompact` 钩子（仅通知，见 [AI 引擎（三）](/internals/agent-tools#钩子系统-hooks)）
 
 ### 失败降级：truncateOldestHalf
 

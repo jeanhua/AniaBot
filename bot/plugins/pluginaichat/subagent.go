@@ -8,8 +8,10 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/jeanhua/AniaBot/bot/component/agenthook"
 	"github.com/jeanhua/AniaBot/bot/component/aichat"
 	"github.com/jeanhua/AniaBot/bot/component/llmtool"
+	"github.com/jeanhua/AniaBot/bot/component/querylog"
 	"github.com/jeanhua/AniaBot/common/bot"
 	"github.com/jeanhua/AniaBot/common/model/message"
 )
@@ -160,6 +162,22 @@ func (p *AIChatPlugin) runSubagentWithOptions(ctx context.Context, b bot.Bot, id
 	}
 	chat.SetMaxIterations(maxIterations)
 
+	// 钩子与工具门禁：子代理同样走 PreToolUse/PostToolUse 等钩子与计划模式/审批门禁
+	// （AgentKind=subagent 供钩子配置区分）；门禁审批路径仅管理员可批（requester=0），
+	// 审批提示发到当前会话
+	sKey := sessionKey(id, isGroup)
+	if p.hookManager != nil {
+		chat.SetHookRunner(p.hookManager, sKey, agenthook.AgentKindSubagent)
+		// SubagentStop 钩子（仅通知）：同步/异步/团队/定时任务子代理都经本函数执行
+		defer func() {
+			p.hookManager.Run(context.Background(), agenthook.EventSubagentStop, agenthook.Payload{
+				SessionKey: sKey,
+				AgentKind:  agenthook.AgentKindSubagent,
+				Prompt:     querylog.Truncate(task, 1000),
+			})
+		}()
+	}
+
 	logger := p.Logger.WithGroup("subagent")
 	// 工具回调派生的 LLM 消耗（备用图片识别）累加到 extra，收尾时并入本次用量
 	extra := &usageAcc{}
@@ -167,7 +185,10 @@ func (p *AIChatPlugin) runSubagentWithOptions(ctx context.Context, b bot.Bot, id
 
 	logger.Info("子代理开始执行", "id", id, "is_group", isGroup, "timeout", timeout, "task", task)
 	start := time.Now()
-	resp, usage, err := chat.Chat(runCtx, "【子代理任务】\n"+task, cbs, p.buildChatOptions())
+	chatOpts := p.buildChatOptions()
+	chatOpts.PreToolGate = p.buildPreToolGate(sKey, agenthook.AgentKindSubagent, message.FromUint64(0),
+		func(text string) { p.sendPlainText(b, id, isGroup, text) })
+	resp, usage, err := chat.Chat(runCtx, "【子代理任务】\n"+task, cbs, chatOpts)
 	duration := time.Since(start)
 	usage = mergeTokenUsage(usage, extra.take())
 	if err != nil {
@@ -241,6 +262,10 @@ func (p *AIChatPlugin) makeSubagentCallbacks(ctx context.Context, parent llmtool
 		SendFile:          parent.SendFile,
 		GetMsgHistory:     parent.GetMsgHistory,
 		GetPrivateFileURL: parent.GetPrivateFileURL,
+		// 命令级人工审批透传父会话（同 SendImage 先例）：子代理内 bash 未列名命令
+		// 的审批提示发到父会话，权限判断沿用父会话的 requester（定时任务触发的
+		// 子代理其父回调 requester=0，天然仅管理员可批）
+		RequestApproval: parent.RequestApproval,
 		// 用户消息图片的加载状态属于主请求；子代理确需查看时在结果中说明，由主 AI 自行加载
 		LoadImages: func() (string, error) {
 			return "子代理无法直接加载用户消息中的图片；如确需查看，请在最终结果中说明，由主 AI 自行调用 load_images", nil

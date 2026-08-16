@@ -1,6 +1,7 @@
 package aichat
 
 import (
+	"context"
 	"encoding/json"
 
 	"github.com/jeanhua/AniaBot/bot/component/llmtool"
@@ -85,6 +86,12 @@ type ChatOptions struct {
 	// OnStreamRoundEnd 工具调用轮结束回调（toolexecutor 在工具边界调用）：
 	// 调用方应 End 当前流式消息；下一轮首个增量创建新消息。
 	OnStreamRoundEnd func()
+
+	// PreToolGate 请求级工具门禁（可选）：每次工具调用前在该工具的 goroutine 内
+	// 调用，实现必须并发安全。block=true 时工具不执行，result 作为该工具的
+	// 结果消息回填（工具循环继续，语义等同工具报错），并照常触发工具观察者。
+	// 用于计划模式、PreToolUse 钩子、人工审批等调用前拦截场景。
+	PreToolGate func(ctx context.Context, call llmtool.ToolCall) (block bool, result string)
 }
 
 func TextPart(text string) ContentPart {

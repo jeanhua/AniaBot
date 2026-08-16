@@ -42,10 +42,11 @@ type BashTool struct {
 	blacklist []*regexp.Regexp
 }
 
-// resolveShell 解析实际使用的 shell 及其包装参数。
+// ResolveShell 解析实际使用的 shell 及其包装参数。
 // 未配置时使用系统默认 shell，命令由该 shell 解释，
 // AI 可在命令中显式调用 bash/ash/python 等其他解释器。
-func resolveShell(configured string) (shell, shellArg string) {
+// 导出供 agenthook 等需要在宿主机执行管理员配置命令的组件复用。
+func ResolveShell(configured string) (shell, shellArg string) {
 	if configured == "" {
 		if runtime.GOOS == "windows" {
 			return "cmd", "/C"
@@ -59,8 +60,20 @@ func resolveShell(configured string) (shell, shellArg string) {
 	return configured, "-c"
 }
 
+// CmdVerdict 命令校验结论（三段式权限模型）。
+type CmdVerdict int
+
+const (
+	// CmdAllow 命中白名单（或无任何名单），直接放行
+	CmdAllow CmdVerdict = iota
+	// CmdDeny 命中黑名单，直接拒绝
+	CmdDeny
+	// CmdAsk 既不在黑名单也不在白名单：需人工审批（经 CallBackFuncs.RequestApproval）
+	CmdAsk
+)
+
 func NewBashTool(config BashConfig) (*BashTool, error) {
-	shell, shellArg := resolveShell(config.Shell)
+	shell, shellArg := ResolveShell(config.Shell)
 
 	compile := func(patterns []string) ([]*regexp.Regexp, error) {
 		regs := make([]*regexp.Regexp, 0, len(patterns))
@@ -83,7 +96,7 @@ func NewBashTool(config BashConfig) (*BashTool, error) {
 		return nil, err
 	}
 
-	desc := fmt.Sprintf("在宿主机上执行 shell 命令（由 %s 解释执行），超时2分钟，输出最大4096字符。注意：不要假设环境存在 bash，运行 .sh 脚本优先用 `sh 脚本路径`；需要 python3 等其他解释器时先用 `command -v` 确认其存在", shell)
+	desc := fmt.Sprintf("在宿主机上执行 shell 命令（由 %s 解释执行），超时2分钟，输出最大4096字符。权限分三档：命中黑名单直接拒绝；命中白名单直接放行；两者都不命中时会向用户发起审批，等用户回复「允许」后才执行（审批未启用则拒绝）。注意：不要假设环境存在 bash，运行 .sh 脚本优先用 `sh 脚本路径`；需要 python3 等其他解释器时先用 `command -v` 确认其存在", shell)
 	return &BashTool{
 		BaseTool:  llmtool.MakeBaseTool("bash", desc, BashParams{}),
 		shell:     shell,
@@ -94,30 +107,36 @@ func NewBashTool(config BashConfig) (*BashTool, error) {
 	}, nil
 }
 
-func (t *BashTool) checkCommand(cmd string) error {
+// checkCommand 三段式校验：黑名单优先（命中即拒绝）；白名单命中即放行；
+// 两者都不命中返回 CmdAsk 交由人工审批（含两份名单都为空的场景——此时所有命令
+// 都需要审批，避免「未配置名单=全部放行」的隐式风险）。
+func (t *BashTool) checkCommand(cmd string) (CmdVerdict, error) {
 	for _, blocked := range t.blacklist {
 		if blocked.MatchString(cmd) {
-			return fmt.Errorf("bash: 命令被规则 %q 禁止", blocked.String())
+			return CmdDeny, fmt.Errorf("bash: 命令被规则 %q 禁止", blocked.String())
 		}
 	}
 
-	if len(t.whitelist) > 0 {
-		allowed := false
-		for _, w := range t.whitelist {
-			if w.MatchString(cmd) {
-				allowed = true
-				break
-			}
-		}
-		if !allowed {
-			return fmt.Errorf("bash: 命令不匹配任何白名单规则")
+	for _, w := range t.whitelist {
+		if w.MatchString(cmd) {
+			return CmdAllow, nil
 		}
 	}
 
-	return nil
+	return CmdAsk, nil
 }
 
-func (t *BashTool) Execute(ctx context.Context, params any, _ llmtool.CallBackFuncs) (string, error) {
+// summarizeCommand 审批提示中的命令摘要：压缩空白并按 rune 截断，避免超长命令刷屏。
+func summarizeCommand(cmd string) string {
+	const maxRunes = 300
+	compact := strings.Join(strings.Fields(cmd), " ")
+	if r := []rune(compact); len(r) > maxRunes {
+		return string(r[:maxRunes]) + "…"
+	}
+	return compact
+}
+
+func (t *BashTool) Execute(ctx context.Context, params any, cbs llmtool.CallBackFuncs) (string, error) {
 	p, ok := params.(*BashParams)
 	if !ok {
 		return "", fmt.Errorf("bash: 参数类型错误")
@@ -128,8 +147,18 @@ func (t *BashTool) Execute(ctx context.Context, params any, _ llmtool.CallBackFu
 
 	log.Println("执行bash... 参数: ", p.Command)
 
-	if err := t.checkCommand(p.Command); err != nil {
+	verdict, err := t.checkCommand(p.Command)
+	if err != nil {
 		return "", err
+	}
+	if verdict == CmdAsk {
+		if cbs.RequestApproval == nil {
+			return "", fmt.Errorf("bash: 命令 %q 不在白名单中且当前未启用人工审批，已拒绝。如需放行：请管理员把匹配该命令的正则加入白名单（plugin.ai_chat_bot.bash.whitelist），或启用工具审批（plugin.ai_chat_bot.approval.enable）", summarizeCommand(p.Command))
+		}
+		allowed, reason := cbs.RequestApproval(ctx, "bash", "执行命令："+summarizeCommand(p.Command))
+		if !allowed {
+			return "", fmt.Errorf("bash: 命令未获批准：%s", reason)
+		}
 	}
 
 	// 基于调用方 ctx 派生超时：/stop 取消请求时命令随之终止，
@@ -148,7 +177,7 @@ func (t *BashTool) Execute(ctx context.Context, params any, _ llmtool.CallBackFu
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
 
-	err := cmd.Run()
+	err = cmd.Run()
 
 	result := stdout.String()
 	if stderr.Len() > 0 {

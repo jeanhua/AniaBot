@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jeanhua/AniaBot/bot/component/agenthook"
 	"github.com/jeanhua/AniaBot/bot/component/llmtool"
 )
 
@@ -50,7 +51,7 @@ func TestExecuteToolCallsParallelPreservesOrder(t *testing.T) {
 		{ID: "call_fast", Name: "fast", Arguments: "{}"},
 		{ID: "call_third", Name: "third", Arguments: "{}"},
 	}
-	results, err := o.executeToolCalls(context.Background(), calls, llmtool.CallBackFuncs{})
+	results, err := o.executeToolCalls(context.Background(), calls, llmtool.CallBackFuncs{}, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -86,7 +87,7 @@ func TestExecuteToolCallsErrorContinues(t *testing.T) {
 		{ID: "c1", Name: "bad", Arguments: "{}"},
 		{ID: "c2", Name: "good", Arguments: "{}"},
 	}
-	results, err := o.executeToolCalls(context.Background(), calls, llmtool.CallBackFuncs{})
+	results, err := o.executeToolCalls(context.Background(), calls, llmtool.CallBackFuncs{}, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -118,7 +119,7 @@ func TestExecuteToolCallsPanicIsolated(t *testing.T) {
 		{ID: "c1", Name: "panic", Arguments: "{}"},
 		{ID: "c2", Name: "ok", Arguments: "{}"},
 	}
-	results, err := o.executeToolCalls(context.Background(), calls, llmtool.CallBackFuncs{})
+	results, err := o.executeToolCalls(context.Background(), calls, llmtool.CallBackFuncs{}, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -141,7 +142,7 @@ func TestExecuteToolCallsContextCancel(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel() // 预先取消
 
-	_, err := o.executeToolCalls(ctx, []llmtool.ToolCall{{ID: "c1", Name: "x", Arguments: "{}"}}, llmtool.CallBackFuncs{})
+	_, err := o.executeToolCalls(ctx, []llmtool.ToolCall{{ID: "c1", Name: "x", Arguments: "{}"}}, llmtool.CallBackFuncs{}, nil)
 	if !errors.Is(err, context.Canceled) {
 		t.Fatalf("expected context.Canceled, got %v", err)
 	}
@@ -179,7 +180,7 @@ func TestExecuteToolCallsObserverAndCallbacksRace(t *testing.T) {
 		return s, nil
 	}}
 
-	results, err := o.executeToolCalls(context.Background(), calls, cbs)
+	results, err := o.executeToolCalls(context.Background(), calls, cbs, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -193,6 +194,90 @@ func TestExecuteToolCallsObserverAndCallbacksRace(t *testing.T) {
 		if got := ExtractMessageText(r); got != "result:t"+fmt.Sprint(i) {
 			t.Fatalf("result[%d] = %q", i, got)
 		}
+	}
+}
+
+// TestExecuteToolCallsGateBlocks 门禁阻断的工具不执行、结果文本回填到正确下标、
+// 循环继续且观察者照常记录（面板可见被拦调用）。
+func TestExecuteToolCallsGateBlocks(t *testing.T) {
+	var ran []string
+	var mu sync.Mutex
+	exec := &fakeToolExecutor{fn: func(ctx context.Context, call llmtool.ToolCall, _ llmtool.CallBackFuncs) (string, error) {
+		mu.Lock()
+		ran = append(ran, call.Name)
+		mu.Unlock()
+		return "result:" + call.Name, nil
+	}}
+	o := newTestOrchestrator(exec)
+
+	var observed []string
+	o.SetToolObserver(func(info ToolCallInfo) {
+		observed = append(observed, info.Name)
+	})
+
+	gate := func(ctx context.Context, call llmtool.ToolCall) (bool, string) {
+		if call.Name == "danger" {
+			return true, "【计划模式】工具已被阻止"
+		}
+		return false, ""
+	}
+	calls := []llmtool.ToolCall{
+		{ID: "c1", Name: "danger", Arguments: "{}"},
+		{ID: "c2", Name: "good", Arguments: "{}"},
+	}
+	results, err := o.executeToolCalls(context.Background(), calls, llmtool.CallBackFuncs{}, gate)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got := ExtractMessageText(results[0]); got != "【计划模式】工具已被阻止" {
+		t.Fatalf("blocked result = %q", got)
+	}
+	if got := ExtractMessageText(results[1]); got != "result:good" {
+		t.Fatalf("good result = %q", got)
+	}
+	if len(ran) != 1 || ran[0] != "good" {
+		t.Fatalf("被阻断的工具不应执行, ran=%v", ran)
+	}
+	if len(observed) != 2 {
+		t.Fatalf("阻断与执行都应触发观察者, observed=%v", observed)
+	}
+}
+
+// TestExecuteToolCallsPostToolUse 执行完成的工具触发 PostToolUse 钩子（载荷含工具名与
+// 截断结果）；被门禁阻断的调用未真正执行，不触发。
+func TestExecuteToolCallsPostToolUse(t *testing.T) {
+	exec := &fakeToolExecutor{}
+	o := newTestOrchestrator(exec)
+
+	type record struct {
+		tool, result string
+	}
+	var records []record
+	var mu sync.Mutex
+	o.SetHookRunner(&fakeHookRunner{run: func(ctx context.Context, ev agenthook.Event, p agenthook.Payload) agenthook.Result {
+		mu.Lock()
+		defer mu.Unlock()
+		if ev == agenthook.EventPostToolUse {
+			records = append(records, record{tool: p.ToolName, result: p.ToolResult})
+		}
+		return agenthook.Result{}
+	}}, agenthook.Payload{SessionKey: "g:1", AgentKind: agenthook.AgentKindMain})
+
+	gate := func(ctx context.Context, call llmtool.ToolCall) (bool, string) {
+		return call.Name == "blocked", "被阻断"
+	}
+	calls := []llmtool.ToolCall{
+		{ID: "c1", Name: "blocked", Arguments: "{}"},
+		{ID: "c2", Name: "good", Arguments: "{}"},
+	}
+	if _, err := o.executeToolCalls(context.Background(), calls, llmtool.CallBackFuncs{}, gate); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(records) != 1 || records[0].tool != "good" {
+		t.Fatalf("只有真正执行的工具才触发 PostToolUse, records=%+v", records)
+	}
+	if records[0].result != "result:good" {
+		t.Fatalf("PostToolUse 载荷结果不符: %q", records[0].result)
 	}
 }
 

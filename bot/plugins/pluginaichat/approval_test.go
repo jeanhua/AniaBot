@@ -1,0 +1,300 @@
+package pluginaichat
+
+import (
+	"context"
+	"io"
+	"log/slog"
+	"strings"
+	"sync"
+	"testing"
+	"time"
+
+	"github.com/jeanhua/AniaBot/bot/component/agenthook"
+	"github.com/jeanhua/AniaBot/bot/component/llmtool"
+	"github.com/jeanhua/AniaBot/common/model/message"
+)
+
+func newTestApprovalManager(tools []string, timeout time.Duration) *approvalManager {
+	set := make(map[string]struct{}, len(tools))
+	for _, name := range tools {
+		set[name] = struct{}{}
+	}
+	return &approvalManager{
+		tools:   set,
+		timeout: timeout,
+		admin:   message.FromUint64(999),
+		logger:  slog.New(slog.NewTextHandler(io.Discard, nil)),
+		pending: make(map[string]*approvalRequest),
+	}
+}
+
+// testSKey 测试用群会话键（QID 带平台前缀，不能用字面量 "g:1" 代替）
+var testSKey = sessionKey(message.FromUint64(1), true)
+
+func TestParseApprovalReply(t *testing.T) {
+	cases := []struct {
+		text      string
+		wantAllow bool
+		wantOK    bool
+	}{
+		{"允许", true, true}, {"同意", true, true}, {"批准", true, true},
+		{"allow", true, true}, {"Approve", true, true}, {"yes", true, true}, {"Y", true, true},
+		{"拒绝", false, true}, {"deny", false, true}, {"reject", false, true}, {"No", false, true},
+		{" 允许 ", true, true}, // 去空白
+		{"允许吧", false, false}, {"", false, false}, {"随便", false, false}, {"好的", false, false},
+	}
+	for _, tc := range cases {
+		allow, ok := parseApprovalReply(tc.text)
+		if allow != tc.wantAllow || ok != tc.wantOK {
+			t.Errorf("%q: got (%v,%v), want (%v,%v)", tc.text, allow, ok, tc.wantAllow, tc.wantOK)
+		}
+	}
+}
+
+// TestApprovalRequestAndReply 审批全流程：提示消息发出 → 发送者回复「允许」→ 放行；
+// 管理员亦可批；无关人员回复不消费。
+func TestApprovalRequestAndReply(t *testing.T) {
+	m := newTestApprovalManager([]string{"file"}, time.Second*5)
+	requester := message.FromUint64(123)
+
+	var prompts []string
+	var mu sync.Mutex
+	sendPrompt := func(text string) {
+		mu.Lock()
+		prompts = append(prompts, text)
+		mu.Unlock()
+	}
+
+	done := make(chan struct{})
+	var allowed bool
+	var reason string
+	go func() {
+		allowed, reason = m.request(context.Background(), testSKey, "file", "读取 /tmp/a.txt", requester, sendPrompt)
+		close(done)
+	}()
+
+	// 等 pending 注册
+	for i := 0; i < 100; i++ {
+		m.mu.Lock()
+		_, ok := m.pending[testSKey]
+		m.mu.Unlock()
+		if ok {
+			break
+		}
+		time.Sleep(time.Millisecond)
+	}
+
+	// 无关人员回复不消费
+	if m.tryHandleReply(message.FromUint64(1), true, message.FromUint64(777), "允许") {
+		t.Fatal("非请求者/管理员的回复不应被消费")
+	}
+	// 非审批内容不消费
+	if m.tryHandleReply(message.FromUint64(1), true, requester, "好的") {
+		t.Fatal("非审批内容不应被消费")
+	}
+	// 请求者批准
+	if !m.tryHandleReply(message.FromUint64(1), true, requester, "允许") {
+		t.Fatal("请求者的「允许」应被消费")
+	}
+
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("审批未结束")
+	}
+	if !allowed || reason != "" {
+		t.Fatalf("批准后应放行, allowed=%v reason=%q", allowed, reason)
+	}
+	mu.Lock()
+	if len(prompts) != 1 || !strings.Contains(prompts[0], "【工具审批】") || !strings.Contains(prompts[0], "file") {
+		t.Fatalf("审批提示不符: %v", prompts)
+	}
+	mu.Unlock()
+}
+
+// TestApprovalAdminOnlyForSyntheticRequester requester=0（子代理/定时任务路径）
+// 时仅管理员可批。
+func TestApprovalAdminOnlyForSyntheticRequester(t *testing.T) {
+	m := newTestApprovalManager(nil, time.Second*5)
+	done := make(chan struct{})
+	var allowed bool
+	go func() {
+		allowed, _ = m.request(context.Background(), testSKey, "bash", "执行命令：ls", message.FromUint64(0), func(string) {})
+		close(done)
+	}()
+	for i := 0; i < 100; i++ {
+		m.mu.Lock()
+		_, ok := m.pending[testSKey]
+		m.mu.Unlock()
+		if ok {
+			break
+		}
+		time.Sleep(time.Millisecond)
+	}
+
+	if m.tryHandleReply(message.FromUint64(1), true, message.FromUint64(555), "允许") {
+		t.Fatal("requester=0 时普通用户不应有权审批")
+	}
+	if !m.tryHandleReply(message.FromUint64(1), true, message.FromUint64(999), "允许") {
+		t.Fatal("管理员应可审批")
+	}
+	<-done
+	if !allowed {
+		t.Fatal("管理员批准后应放行")
+	}
+}
+
+// TestApprovalTimeoutAutoDeny 超时无回复自动拒绝。
+func TestApprovalTimeoutAutoDeny(t *testing.T) {
+	m := newTestApprovalManager(nil, 30*time.Millisecond)
+	allowed, reason := m.request(context.Background(), testSKey, "file", "s", message.FromUint64(1), func(string) {})
+	if allowed || !strings.Contains(reason, "超时") {
+		t.Fatalf("超时应自动拒绝, allowed=%v reason=%q", allowed, reason)
+	}
+	// 超时后 pending 已清理，后续消息不消费
+	if m.tryHandleReply(message.FromUint64(1), true, message.FromUint64(1), "允许") {
+		t.Fatal("超时结束后不应再消费回复")
+	}
+}
+
+// TestApprovalSerializedPerSession 同会话并行工具触发的多个审批逐个提示：
+// 第二个审批的提示在第一个了结后才发出。
+func TestApprovalSerializedPerSession(t *testing.T) {
+	m := newTestApprovalManager(nil, time.Second*5)
+	requester := message.FromUint64(1)
+
+	var prompts []string
+	var mu sync.Mutex
+	sendPrompt := func(text string) {
+		mu.Lock()
+		prompts = append(prompts, text)
+		mu.Unlock()
+	}
+
+	done1 := make(chan struct{})
+	go func() {
+		m.request(context.Background(), testSKey, "file", "第一个", requester, sendPrompt)
+		close(done1)
+	}()
+	// 等第一个审批挂起
+	for i := 0; i < 100; i++ {
+		m.mu.Lock()
+		_, ok := m.pending[testSKey]
+		m.mu.Unlock()
+		if ok {
+			break
+		}
+		time.Sleep(time.Millisecond)
+	}
+
+	done2 := make(chan struct{})
+	go func() {
+		m.request(context.Background(), testSKey, "file", "第二个", requester, sendPrompt)
+		close(done2)
+	}()
+	// 第二个不应在第一个了结前发提示
+	time.Sleep(50 * time.Millisecond)
+	mu.Lock()
+	if len(prompts) != 1 {
+		t.Fatalf("第二个审批应等待第一个了结, prompts=%v", prompts)
+	}
+	mu.Unlock()
+
+	m.tryHandleReply(message.FromUint64(1), true, requester, "拒绝")
+	<-done1
+	// 第一个了结后第二个提示发出
+	for i := 0; i < 100; i++ {
+		mu.Lock()
+		n := len(prompts)
+		mu.Unlock()
+		if n == 2 {
+			break
+		}
+		time.Sleep(time.Millisecond)
+	}
+	mu.Lock()
+	if len(prompts) != 2 || !strings.Contains(prompts[1], "第二个") {
+		t.Fatalf("第二个审批提示不符: %v", prompts)
+	}
+	mu.Unlock()
+	m.tryHandleReply(message.FromUint64(1), true, requester, "允许")
+	<-done2
+}
+
+// TestGateLegOrdering 门禁顺序固定为 计划模式 → 钩子 → 审批：被前腿否决的工具
+// 不应再打扰后腿（钩子不执行、不发起审批）。
+func TestGateLegOrdering(t *testing.T) {
+	var legs []string
+	var mu sync.Mutex
+	record := func(s string) { mu.Lock(); legs = append(legs, s); mu.Unlock() }
+
+	// 钩子腿：阻断 hookblocked，记录执行
+	hm := agenthook.NewManager(nil, "files.hooks_json", nil)
+	hm.SetEnabled(true)
+	hm.SetGoHandlers([]agenthook.Handler{hookRecordFunc(func(ev agenthook.Event, p agenthook.Payload) agenthook.Result {
+		record("hook:" + p.ToolName)
+		if p.ToolName == "hookblocked" {
+			return agenthook.Result{Block: true, Reason: "钩子拒绝"}
+		}
+		return agenthook.Result{}
+	})})
+
+	am := newTestApprovalManager([]string{"apprtool"}, time.Second)
+	// 审批腿：记录并立即由管理员批准（pending 注册先于 sendPrompt，可同步回复）
+	p := &AIChatPlugin{planManager: newPlanManager(), hookManager: hm, approvalManager: am}
+	requester := message.FromUint64(1)
+	sendPrompt := func(text string) {
+		record("approval")
+		am.tryHandleReply(message.FromUint64(1), true, message.FromUint64(999), "允许")
+	}
+	gate := p.buildPreToolGate(testSKey, agenthook.AgentKindMain, requester, sendPrompt)
+	call := func(name string) (bool, string) {
+		return gate(context.Background(), llmtool.ToolCall{Name: name, Arguments: `{"a":  1}`})
+	}
+
+	// 1. 计划模式腿阻断：钩子/审批不执行
+	p.planManager.Set(testSKey, true)
+	if blocked, res := call("bash"); !blocked || !strings.Contains(res, "计划模式") {
+		t.Fatalf("计划模式应阻断 bash, got %v %q", blocked, res)
+	}
+	mu.Lock()
+	if len(legs) != 0 {
+		t.Fatalf("计划模式阻断后不应执行后续腿, legs=%v", legs)
+	}
+	mu.Unlock()
+	p.planManager.Set(testSKey, false)
+
+	// 2. 钩子腿阻断：审批不执行
+	if blocked, res := call("hookblocked"); !blocked || !strings.Contains(res, "钩子拒绝") {
+		t.Fatalf("钩子应阻断, got %v %q", blocked, res)
+	}
+	mu.Lock()
+	if len(legs) != 1 || legs[0] != "hook:hookblocked" {
+		t.Fatalf("钩子阻断后不应发起审批, legs=%v", legs)
+	}
+	mu.Unlock()
+
+	// 3. 前两腿放行 → 审批腿执行（管理员批准 → 放行）
+	blocked, _ := call("apprtool")
+	mu.Lock()
+	got := append([]string(nil), legs...)
+	mu.Unlock()
+	if blocked {
+		t.Fatal("管理员批准后应放行")
+	}
+	want := []string{"hook:hookblocked", "hook:apprtool", "approval"}
+	if strings.Join(got, ",") != strings.Join(want, ",") {
+		t.Fatalf("门禁腿执行顺序不符: got %v, want %v", got, want)
+	}
+
+	// 4. 三门全放行
+	if blocked, _ := call("time"); blocked {
+		t.Fatal("只读工具应全部放行")
+	}
+}
+
+type hookRecordFunc func(ev agenthook.Event, p agenthook.Payload) agenthook.Result
+
+func (f hookRecordFunc) OnAgentHook(_ context.Context, ev agenthook.Event, p agenthook.Payload) agenthook.Result {
+	return f(ev, p)
+}

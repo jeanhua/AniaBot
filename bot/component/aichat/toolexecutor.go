@@ -6,6 +6,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/jeanhua/AniaBot/bot/component/agenthook"
 	"github.com/jeanhua/AniaBot/bot/component/llmtool"
 )
 
@@ -19,6 +20,10 @@ type ToolOrchestrator struct {
 	msgBuilder    *MessageBuilder
 	maxIterations int
 	toolObserver  func(ToolCallInfo)
+	// hookRunner/hookBase 钩子执行器与会话身份（SessionKey/AgentKind），
+	// 由 ChatBot.SetHookRunner 注入；nil 时 PostToolUse 埋点跳过
+	hookRunner HookRunner
+	hookBase   agenthook.Payload
 }
 
 // ToolCallInfo 一次工具调用的执行记录，供工具调用观察者（SetToolObserver）使用，
@@ -50,6 +55,23 @@ func (o *ToolOrchestrator) SetMaxIterations(max int) {
 // 调用方需保证同一 orchestrator 的 ExecuteWithTools 串行执行。
 func (o *ToolOrchestrator) SetToolObserver(fn func(ToolCallInfo)) {
 	o.toolObserver = fn
+}
+
+// SetHookRunner 注入钩子执行器与会话身份（工具调用完成后触发 PostToolUse 钩子），
+// 传 nil 取消。由调用方保证同一 orchestrator 的 ExecuteWithTools 串行执行。
+func (o *ToolOrchestrator) SetHookRunner(r HookRunner, base agenthook.Payload) {
+	o.hookRunner = r
+	o.hookBase = base
+}
+
+// observe 串行调用工具观察者（存在时）。同轮并行工具共享 obsMu。
+func (o *ToolOrchestrator) observe(mu *sync.Mutex, info ToolCallInfo) {
+	if o.toolObserver == nil {
+		return
+	}
+	mu.Lock()
+	o.toolObserver(info)
+	mu.Unlock()
 }
 
 type TokenUsage struct {
@@ -133,7 +155,7 @@ func (o *ToolOrchestrator) ExecuteWithTools(
 			callbacks.SendText(content)
 		}
 
-		toolResults, err := o.executeToolCalls(ctx, resp.ToolCalls, callbacks)
+		toolResults, err := o.executeToolCalls(ctx, resp.ToolCalls, callbacks, opts.PreToolGate)
 		if err != nil {
 			return "", messages, totalUsage, err
 		}
@@ -173,6 +195,7 @@ func (o *ToolOrchestrator) executeToolCalls(
 	ctx context.Context,
 	toolCalls []llmtool.ToolCall,
 	callbacks llmtool.CallBackFuncs,
+	gate func(context.Context, llmtool.ToolCall) (bool, string),
 ) ([]Message, error) {
 	// 并行执行同一轮的多个工具调用：结果切片预分配、每个工具按 index 回填，
 	// 保证 tool 结果消息与 assistant 消息中 tool_calls 数组的顺序一一对应
@@ -200,19 +223,30 @@ func (o *ToolOrchestrator) executeToolCalls(
 			}()
 
 			start := time.Now()
+			// 请求级工具门禁（计划模式 / PreToolUse 钩子 / 人工审批）：阻断时工具不执行，
+			// 门禁文本作为该工具的结果消息回填（循环继续，语义等同工具报错）；
+			// 在 goroutine 内调用而非 spawn 前统一调用——审批等待不阻塞同轮其他工具的启动，
+			// 门禁内部的会话级串行化（如审批按会话排队）由实现方负责。门禁必须并发安全。
+			if gate != nil {
+				if block, text := gate(ctx, call); block {
+					o.observe(&obsMu, ToolCallInfo{
+						Name: call.Name, Arguments: call.Arguments,
+						Result: text, DurationMs: time.Since(start).Milliseconds(),
+					})
+					results[i] = o.msgBuilder.BuildToolMessage(call.ID, call.Name, text)
+					return
+				}
+			}
+
 			result, err := o.executor.Execute(ctx, call, lockedCbs)
 
-			obsMu.Lock()
-			if o.toolObserver != nil {
-				o.toolObserver(ToolCallInfo{
-					Name:       call.Name,
-					Arguments:  call.Arguments,
-					Result:     result,
-					DurationMs: time.Since(start).Milliseconds(),
-					Err:        err,
-				})
-			}
-			obsMu.Unlock()
+			o.observe(&obsMu, ToolCallInfo{
+				Name:       call.Name,
+				Arguments:  call.Arguments,
+				Result:     result,
+				DurationMs: time.Since(start).Milliseconds(),
+				Err:        err,
+			})
 
 			if err != nil {
 				if ctx.Err() != nil {
@@ -223,6 +257,15 @@ func (o *ToolOrchestrator) executeToolCalls(
 					mu.Unlock()
 				}
 				result = fmt.Sprintf("Error executing tool: %v", err)
+			}
+			// PostToolUse 钩子（仅通知，结果被忽略）：结果文本截断后随载荷上报；
+			// 被门禁阻断的调用未真正执行工具，不触发本事件
+			if o.hookRunner != nil {
+				payload := o.hookBase
+				payload.ToolName = call.Name
+				payload.ToolInput = call.Arguments
+				payload.ToolResult = truncateRunes(result, hookToolResultRunes)
+				_ = o.hookRunner.Run(ctx, agenthook.EventPostToolUse, payload)
 			}
 			results[i] = o.msgBuilder.BuildToolMessage(call.ID, call.Name, result)
 		}(i, call)
@@ -261,6 +304,10 @@ func (o *ToolOrchestrator) lockedCallbacks(callbacks llmtool.CallBackFuncs) llmt
 		LoadImages:        wrap0(callbacks.LoadImages, &mu),
 		TakeLoadedImages:  wrap0s(callbacks.TakeLoadedImages, &mu),
 		LoadLocalImage:    strWrap(callbacks.LoadLocalImage),
+		// RequestApproval 刻意透传不加锁：审批会阻塞等待真人回复（默认 120s），
+		// 进互斥锁会卡死同轮并行工具的 SendText 等回调；并发安全由实现方
+		// （approvalManager 的会话级锁）负责。
+		RequestApproval: callbacks.RequestApproval,
 	}
 }
 

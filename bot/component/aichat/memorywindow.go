@@ -6,6 +6,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"github.com/jeanhua/AniaBot/bot/component/agenthook"
 	"github.com/jeanhua/AniaBot/common/model/message"
 )
 
@@ -25,6 +26,10 @@ type messageWindow struct {
 	// compressUsage 最近一次成功压缩的 token 用量，由 ChatBot.Chat 取走并入统计
 	compressUsage TokenUsage
 	store         HistoryStore
+	// hookRunner/hookBase 钩子执行器与会话身份，由 ChatBot.SetHookRunner 注入；
+	// nil 时 PreCompact 埋点跳过
+	hookRunner HookRunner
+	hookBase   agenthook.Payload
 }
 
 func newMessageWindow(maxContextTokens int, llmClient *LLMClient, compressor CompressorFunc, store HistoryStore, compressorClient ...*LLMClient) *messageWindow {
@@ -38,6 +43,12 @@ func newMessageWindow(maxContextTokens int, llmClient *LLMClient, compressor Com
 		w.compressorClient = compressorClient[0]
 	}
 	return w
+}
+
+// setHookRunner 注入钩子执行器与会话身份（PreCompact 埋点），传 nil 取消。
+func (w *messageWindow) setHookRunner(r HookRunner, base agenthook.Payload) {
+	w.hookRunner = r
+	w.hookBase = base
 }
 
 // load 从持久化存储回放历史；存储为空或未注入时保持空窗口。
@@ -178,6 +189,11 @@ func (w *messageWindow) estimateTokens() int {
 func (w *messageWindow) MaybeCompress(ctx context.Context) error {
 	if !w.needsCompression() || w.compressor == nil || w.llmClient == nil {
 		return nil
+	}
+
+	// PreCompact 钩子（仅通知）：压缩是对话存续的必要环节，不允许钩子阻断
+	if w.hookRunner != nil {
+		_ = w.hookRunner.Run(ctx, agenthook.EventPreCompact, w.hookBase)
 	}
 
 	// 压缩客户端可选独立配置：未设置时复用主对话 client

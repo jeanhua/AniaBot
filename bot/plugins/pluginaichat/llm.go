@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/jeanhua/AniaBot/bot/component/agenthook"
 	"github.com/jeanhua/AniaBot/bot/component/aichat"
 	"github.com/jeanhua/AniaBot/bot/component/llmtool"
 	"github.com/jeanhua/AniaBot/common/bot"
@@ -212,6 +213,10 @@ func (p *AIChatPlugin) getChat(b bot.Bot, id message.QID, isGroup bool, prompt s
 		// 每个会话创建独立的 SessionToolExecutor，动态加载的工具互不影响
 		sessionExecutor := p.toolExecutor.NewSessionExecutor()
 		p.registerScopedTools(sessionExecutor, id, isGroup)
+		// 注册任务清单工具（仅主会话；子代理/定时任务的一次性会话不共享父会话清单）
+		if p.cfg.Todo.Enable && p.todoManager != nil {
+			sessionExecutor.RegisterSession(newTodoWriteTool(p.todoManager, key))
+		}
 		// 注册子代理委派工具（仅主会话；子代理的一次性会话不注册，防止递归委派）
 		if p.cfg.Subagent.Enable {
 			for _, tool := range newSubagentTools(p, b, id, isGroup) {
@@ -256,9 +261,22 @@ func (p *AIChatPlugin) getChat(b bot.Bot, id message.QID, isGroup bool, prompt s
 		if p.skillManager != nil {
 			c.SetSkillManager(p.skillManager)
 		}
+		// 注入钩子执行器：UserPromptSubmit / PreCompact / PostToolUse 埋点生效
+		if p.hookManager != nil {
+			c.SetHookRunner(p.hookManager, key, agenthook.AgentKindMain)
+		}
 		// 回放持久化的历史，使对话跨重启延续
 		c.LoadHistory(context.Background())
 		p.chats.Store(key, newChatEntry(c, id, isGroup))
+		// SessionStart 钩子：会话（重）创建（首次发言或被淘汰后重建）；
+		// 产出的上下文暂存，由下一轮对话消费一次（见 processChatBatch）
+		if p.hookManager != nil {
+			res := p.hookManager.Run(context.Background(), agenthook.EventSessionStart,
+				agenthook.Payload{SessionKey: key, AgentKind: agenthook.AgentKindMain})
+			if res.Context != "" {
+				p.sessionInject.Store(key, res.Context)
+			}
+		}
 		return c
 	}
 }

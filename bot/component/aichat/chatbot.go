@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/jeanhua/AniaBot/bot/component/agenthook"
 	"github.com/jeanhua/AniaBot/bot/component/llmtool"
 )
 
@@ -12,6 +13,10 @@ type ChatBot struct {
 	msgBuilder       *MessageBuilder
 	toolOrchestrator *ToolOrchestrator
 	window           *messageWindow
+	// hookRunner/hookBase 钩子执行器与会话身份（SessionKey/AgentKind），
+	// 由 SetHookRunner 注入；nil 时 UserPromptSubmit 埋点跳过
+	hookRunner HookRunner
+	hookBase   agenthook.Payload
 }
 
 // chatBotConfig 收集 NewChatBot 的可选参数。
@@ -79,6 +84,23 @@ func (b *ChatBot) Chat(ctx context.Context, userInput string, callbacks llmtool.
 	// 大小也不代表当前上下文长度）
 	compressUsage := b.window.takeCompressUsage()
 
+	// UserPromptSubmit 钩子：可阻断本轮输入（返回 PromptBlockedError，由插件层
+	// 把原因告知用户后继续正常流程），或注入附加上下文——尾部注入：拼到用户
+	// 消息前而非 system，保持上游前缀缓存稳定（同记忆/知识库注入的约束）
+	if b.hookRunner != nil {
+		payload := b.hookBase
+		payload.Prompt = userInput
+		if res := b.hookRunner.Run(ctx, agenthook.EventUserPromptSubmit, payload); res.Block {
+			reason := res.Reason
+			if reason == "" {
+				reason = "请求已被钩子阻断"
+			}
+			return "", TokenUsage{}, &PromptBlockedError{Reason: reason}
+		} else if res.Context != "" {
+			userInput = res.Context + "\n\n" + userInput
+		}
+	}
+
 	messages := b.msgBuilder.BuildChatMessages(userInput, b.window.history())
 	// 记录构建完成时的真实长度作为新消息起点：ExecuteWithTools 返回的
 	// updatedMessages 以 messages 为前缀，追加多出的部分即本轮新增消息
@@ -133,6 +155,17 @@ func (b *ChatBot) SetToolOrchestrator(orchestrator *ToolOrchestrator) {
 // 由调用方保证同一 ChatBot 的 Chat 调用串行（插件层按会话加锁）。
 func (b *ChatBot) SetToolObserver(fn func(ToolCallInfo)) {
 	b.toolOrchestrator.SetToolObserver(fn)
+}
+
+// SetHookRunner 注入钩子执行器与会话身份（sessionKey 与 agentKind：
+// main/subagent/clock），同时下发到工具编排器（PostToolUse）与消息窗口
+// （PreCompact）；传 nil 取消。由调用方保证同一 ChatBot 的 Chat 调用串行。
+func (b *ChatBot) SetHookRunner(r HookRunner, sessionKey, agentKind string) {
+	base := agenthook.Payload{SessionKey: sessionKey, AgentKind: agentKind}
+	b.hookRunner = r
+	b.hookBase = base
+	b.toolOrchestrator.SetHookRunner(r, base)
+	b.window.setHookRunner(r, base)
 }
 
 func (b *ChatBot) SetSkillManager(manager *llmtool.SkillManager) {

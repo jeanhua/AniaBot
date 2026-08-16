@@ -26,10 +26,12 @@ import (
 // Namespace 配置在持久化存储中的保留命名空间。
 const Namespace = "__config"
 
-// 特殊配置键：MCP 服务器 / Prompt 覆盖的原始 JSON 文本
+// 特殊配置键：MCP 服务器 / Prompt 覆盖 / AI 钩子 / 自定义命令的原始 JSON 文本
 const (
-	KeyMCPJSON    = "files.mcp_json"
-	KeyPromptJSON = "files.prompt_json"
+	KeyMCPJSON      = "files.mcp_json"
+	KeyPromptJSON   = "files.prompt_json"
+	KeyHooksJSON    = "files.hooks_json"
+	KeyCommandsJSON = "files.commands_json"
 )
 
 // 内部元数据键（不进入 viper）

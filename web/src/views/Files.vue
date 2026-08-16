@@ -1,9 +1,7 @@
 <template>
   <div class="space-y-5">
     <Transition name="fade">
-      <div v-if="saved" class="bg-emerald-50 border border-emerald-200 text-emerald-800 text-sm rounded-xl px-4 py-3">
-        已保存，将在 <b>重启 Bot 后生效</b>。
-      </div>
+      <div v-if="saved" class="bg-emerald-50 border border-emerald-200 text-emerald-800 text-sm rounded-xl px-4 py-3" v-html="savedHint" />
     </Transition>
 
     <div class="flex items-center justify-between">
@@ -19,17 +17,17 @@
         </button>
       </div>
       <div class="flex gap-2">
-        <button class="px-3 py-1.5 text-sm rounded-lg border border-slate-300 text-slate-600 hover:bg-slate-50 transition-colors" @click="toggleRaw">
+        <button v-if="hasForm" class="px-3 py-1.5 text-sm rounded-lg border border-slate-300 text-slate-600 hover:bg-slate-50 transition-colors" @click="toggleRaw">
           {{ rawMode ? '表单模式' : '源码模式 (JSON)' }}
         </button>
-        <button v-if="!rawMode" :disabled="saving" class="px-4 py-1.5 text-sm rounded-lg bg-zinc-900 text-white hover:bg-zinc-800 disabled:opacity-40 transition-colors" @click="onSave">
+        <button v-if="!rawMode && hasForm" :disabled="saving" class="px-4 py-1.5 text-sm rounded-lg bg-zinc-900 text-white hover:bg-zinc-800 disabled:opacity-40 transition-colors" @click="onSave">
           {{ saving ? '保存中...' : '保存' }}
         </button>
       </div>
     </div>
 
-    <!-- 源码模式：原始 JSON -->
-    <section v-if="rawMode" class="bg-white rounded-xl shadow-sm border border-slate-200/60 p-6 space-y-3">
+    <!-- 源码模式：原始 JSON（无表单的 tab 恒为源码模式） -->
+    <section v-if="rawMode || !hasForm" class="bg-white rounded-xl shadow-sm border border-slate-200/60 p-6 space-y-3">
       <p class="text-xs text-slate-500">{{ currentTab.desc }}</p>
       <textarea
         v-model="rawText"
@@ -117,7 +115,7 @@
     </template>
 
     <!-- Prompt 覆盖：列表 + 弹窗编辑 -->
-    <template v-else>
+    <template v-else-if="current === 'prompt'">
       <p class="text-xs text-slate-500">按群聊 / 好友覆盖 AI 的系统提示词，点击条目可弹出编辑框。修改保存后重启生效。</p>
 
       <template v-for="section in promptSections" :key="section.kind">
@@ -269,6 +267,8 @@ const KvEditor = defineComponent({
 const tabs = [
   { name: 'mcp', label: 'MCP 服务器', desc: '格式: {"servers": [{name, transport(stdio/streamable/sse), command/endpoint, args, env, headers, timeout, description}]}' },
   { name: 'prompt', label: 'Prompt 覆盖', desc: '格式: {"groups": {"群ID": "prompt"}, "friends": {"用户ID": "prompt"}}（QQ 为 qq: 前缀，其他平台带各自前缀）' },
+  { name: 'hooks', label: 'AI 钩子', desc: '格式: {"hooks": {"事件名": [{matcher(工具名正则,可空), command, timeout_sec(可空)}]}}。事件: SessionStart/UserPromptSubmit/PreToolUse/PostToolUse/Stop/SubagentStop/PreCompact。stdin 接收 JSON 载荷；退出码 0=通过(stdout 注入上下文) / 2=阻断(stderr 为原因) / 其他=仅记日志。保存后数秒内生效', hot: true },
+  { name: 'commands', label: '自定义命令', desc: '格式: {"commands": {"命令名": "提示词模板"}}。模板中 $args 为用户参数占位符（无占位符时参数追加到末尾）；命令名字母开头、最长 32 字符，不得与内置命令撞名。保存后数秒内生效', hot: true },
 ]
 
 const current = ref('mcp')
@@ -294,6 +294,10 @@ const promptSections = computed(() => [
 ])
 
 const currentTab = computed(() => tabs.find((t) => t.name === current.value))
+
+// 仅 mcp/prompt 有图形化表单；hooks/commands 恒为源码模式（保存后热生效，无需重启）
+const hasForm = computed(() => current.value === 'mcp' || current.value === 'prompt')
+const savedHint = computed(() => (currentTab.value?.hot ? '已保存，<b>数秒内自动生效</b>。' : '已保存，将在 <b>重启 Bot 后生效</b>。'))
 
 // ---- 解析：JSON -> 表单模型 ----
 
@@ -441,6 +445,7 @@ async function load() {
   error.value = ''
   const data = await api.getFile(current.value)
   rawText.value = data.content || ''
+  if (!hasForm.value) return // hooks/commands 为纯源码模式，无需解析表单
   try {
     if (current.value === 'mcp') {
       mcpServers.value = parseMcp(rawText.value)

@@ -524,11 +524,13 @@ func (s *Server) handleConfigPut(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "need_restart": true})
 }
 
-// ---- file handlers（MCP / Prompt 覆盖 JSON） ----
+// ---- file handlers（MCP / Prompt 覆盖 / 钩子 / 自定义命令 JSON） ----
 
 var fileKeys = map[string]string{
-	"mcp":    configstore.KeyMCPJSON,
-	"prompt": configstore.KeyPromptJSON,
+	"mcp":      configstore.KeyMCPJSON,
+	"prompt":   configstore.KeyPromptJSON,
+	"hooks":    configstore.KeyHooksJSON,
+	"commands": configstore.KeyCommandsJSON,
 }
 
 func (s *Server) handleFileGet(w http.ResponseWriter, r *http.Request) {

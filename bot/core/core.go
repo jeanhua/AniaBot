@@ -15,6 +15,7 @@ import (
 
 	"github.com/go-resty/resty/v2"
 	"github.com/jeanhua/AniaBot/bot/adminpanel"
+	"github.com/jeanhua/AniaBot/bot/component/agenthook"
 	"github.com/jeanhua/AniaBot/bot/component/consollog"
 	"github.com/jeanhua/AniaBot/bot/component/msglog"
 	"github.com/jeanhua/AniaBot/bot/component/oplog"
@@ -383,6 +384,24 @@ func (ania *AniaBot) Run() {
 			logError(err, p, "初始化")
 			cancel()
 		})
+	}
+
+	// 收集实现了 agenthook.Handler 的插件（AI 代理生命周期 Go 钩子），注入给实现
+	// agenthook.HandlerRegistry 的插件（AI 对话插件）——与 startAdminPanel 的
+	// 「可选接口 + 类型断言」source 收集同款惯例
+	var hookHandlers []agenthook.Handler
+	for _, p := range ania.plugins {
+		if h, ok := p.(agenthook.Handler); ok {
+			hookHandlers = append(hookHandlers, h)
+		}
+	}
+	if len(hookHandlers) > 0 {
+		for _, p := range ania.plugins {
+			if r, ok := p.(agenthook.HandlerRegistry); ok {
+				r.SetGoHookHandlers(hookHandlers)
+			}
+		}
+		Logger().Info("已注入 AI 代理 Go 钩子", "handlers", len(hookHandlers))
 	}
 
 	// 初始化cron

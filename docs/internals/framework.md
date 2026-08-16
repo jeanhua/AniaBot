@@ -290,6 +290,8 @@ AddPlugin() → 按 Order 排序
 
 注入实现是 `Meta.SetStorage(...)` 等 setter；`ConfigSchema()` / `ConfigFields()` 在 DI **之前**被调用（纯元信息声明，实现不得依赖注入字段，且必须每次返回同一指针）。
 
+除启动前 DI 外，core 在全部插件 `Start` 完成后还有一轮**可选接口收集**（类型断言惯例，与面板 `XxxSource` 能力发现同款）：实现 `agenthook.Handler` 的插件会被收集为 AI 代理 Go 钩子，注入给实现 `agenthook.HandlerRegistry` 的插件（pluginaichat），见 [AI 引擎（三）](/internals/agent-tools#钩子系统-hooks)。
+
 ### 并发模型
 
 - 插件每次调用被 `safeExecute` 包裹，panic 只影响自身
