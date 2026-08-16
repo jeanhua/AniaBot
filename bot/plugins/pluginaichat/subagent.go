@@ -164,7 +164,7 @@ func (p *AIChatPlugin) runSubagentWithOptions(ctx context.Context, b bot.Bot, id
 
 	// 钩子与工具门禁：子代理同样走 PreToolUse/PostToolUse 等钩子与计划模式/审批门禁
 	// （AgentKind=subagent 供钩子配置区分）；门禁审批路径仅管理员可批（requester=0），
-	// 审批提示发到当前会话
+	// 管理员审批提示私聊发给管理员（回退时发到当前会话）
 	sKey := sessionKey(id, isGroup)
 	if p.hookManager != nil {
 		chat.SetHookRunner(p.hookManager, sKey, agenthook.AgentKindSubagent)
@@ -187,7 +187,8 @@ func (p *AIChatPlugin) runSubagentWithOptions(ctx context.Context, b bot.Bot, id
 	start := time.Now()
 	chatOpts := p.buildChatOptions()
 	chatOpts.PreToolGate = p.buildPreToolGate(sKey, agenthook.AgentKindSubagent, message.FromUint64(0),
-		func(text string) { p.sendPlainText(b, id, isGroup, text) })
+		func(text string) { p.sendPlainText(b, id, isGroup, text) },
+		p.buildAdminPromptSender(b))
 	resp, usage, err := chat.Chat(runCtx, "【子代理任务】\n"+task, cbs, chatOpts)
 	duration := time.Since(start)
 	usage = mergeTokenUsage(usage, extra.take())

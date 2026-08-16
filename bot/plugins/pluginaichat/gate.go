@@ -19,13 +19,16 @@ import (
 //
 // 主会话 / 子代理 / 定时任务三条执行路径共用本门禁：requester 为 message.FromUint64(0)
 // 时仅管理员可批（子代理/定时任务路径）。配置修改类工具（config_set/config_file_set）
-// 恒走管理员审批腿（requester 强制为 0，仅管理员可批，与 approval.enable 无关）。
+// 恒走管理员审批腿（requester 强制为 0，仅管理员可批，与 approval.enable 无关）：
+// 审批提示优先私聊发给管理员，管理员在私聊（或发起会话）中回复。
 // 各管理器为 nil 时对应环节自动跳过；
 // 实现并发安全（同轮并行工具调用各自过门；审批的会话级串行化由 approvalManager 负责）。
 //
-// sendPrompt 为审批提示的纯发送闭包（不走工具回调 SendText——子代理/定时任务路径
-// 的 SendText 是丢弃桩，且纯发送与进行中的流式消息互不干扰）。
-func (p *AIChatPlugin) buildPreToolGate(sKey, agentKind string, requester message.QID, sendPrompt func(text string)) func(context.Context, llmtool.ToolCall) (bool, string) {
+// sendPrompt 为发起会话的纯发送闭包（不走工具回调 SendText——子代理/定时任务路径
+// 的 SendText 是丢弃桩，且纯发送与进行中的流式消息互不干扰）；sendAdminPrompt 把
+// 管理员审批提示私聊发给管理员并返回是否成功（nil 表示无管理员通道，提示改发
+// 发起会话）。
+func (p *AIChatPlugin) buildPreToolGate(sKey, agentKind string, requester message.QID, sendPrompt func(text string), sendAdminPrompt func(text string) bool) func(context.Context, llmtool.ToolCall) (bool, string) {
 	return func(ctx context.Context, call llmtool.ToolCall) (bool, string) {
 		// 1. 计划模式：副作用工具直接阻断，AI 只输出计划
 		if p.planManager != nil && p.planManager.IsOn(sKey) {
@@ -49,10 +52,11 @@ func (p *AIChatPlugin) buildPreToolGate(sKey, agentKind string, requester messag
 				return true, "工具调用被钩子阻止: " + reason
 			}
 		}
-		// 3. 配置修改类工具：仅管理员可批（requester 强制为 0，始终生效）
+		// 3. 配置修改类工具：仅管理员可批（requester 强制为 0，始终生效）；
+		// 提示优先私聊发给管理员，管理员在私聊或发起会话中回复「允许/拒绝」
 		if p.approvalManager != nil && p.approvalManager.needsAdminApproval(call.Name) {
-			// request 返回 (allowed, reason)，门禁语义为 (block, result)，注意取反
-			allowed, reason := p.approvalManager.request(ctx, sKey, call.Name, summarizeApprovalArgs(call), message.FromUint64(0), sendPrompt)
+			// requestAdminOnly 返回 (allowed, reason)，门禁语义为 (block, result)，注意取反
+			allowed, reason := p.approvalManager.requestAdminOnly(ctx, sKey, call.Name, summarizeApprovalArgs(call), sendAdminPrompt, sendPrompt)
 			if !allowed {
 				return true, "工具调用未获管理员批准: " + reason
 			}

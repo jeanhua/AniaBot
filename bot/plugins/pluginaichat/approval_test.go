@@ -20,11 +20,12 @@ func newTestApprovalManager(tools []string, timeout time.Duration) *approvalMana
 		set[name] = struct{}{}
 	}
 	return &approvalManager{
-		tools:   set,
-		timeout: timeout,
-		admin:   message.FromUint64(999),
-		logger:  slog.New(slog.NewTextHandler(io.Discard, nil)),
-		pending: make(map[string]*approvalRequest),
+		tools:        set,
+		timeout:      timeout,
+		admin:        message.FromUint64(999),
+		logger:       slog.New(slog.NewTextHandler(io.Discard, nil)),
+		pending:      make(map[string]*approvalRequest),
+		adminPending: make(map[string]*approvalRequest),
 	}
 }
 
@@ -84,16 +85,16 @@ func TestApprovalRequestAndReply(t *testing.T) {
 		time.Sleep(time.Millisecond)
 	}
 
-	// 无关人员回复不消费
-	if m.tryHandleReply(message.FromUint64(1), true, message.FromUint64(777), "允许") {
-		t.Fatal("非请求者/管理员的回复不应被消费")
+	// 无关人员的审批回复：消费并提示无权，但不影响待批请求
+	if consumed, hint := m.tryHandleReply(message.FromUint64(1), true, message.FromUint64(777), "允许"); !consumed || hint == "" {
+		t.Fatal("无关人员的审批回复应被消费并提示无权")
 	}
 	// 非审批内容不消费
-	if m.tryHandleReply(message.FromUint64(1), true, requester, "好的") {
+	if consumed, _ := m.tryHandleReply(message.FromUint64(1), true, requester, "好的"); consumed {
 		t.Fatal("非审批内容不应被消费")
 	}
 	// 请求者批准
-	if !m.tryHandleReply(message.FromUint64(1), true, requester, "允许") {
+	if consumed, _ := m.tryHandleReply(message.FromUint64(1), true, requester, "允许"); !consumed {
 		t.Fatal("请求者的「允许」应被消费")
 	}
 
@@ -132,10 +133,10 @@ func TestApprovalAdminOnlyForSyntheticRequester(t *testing.T) {
 		time.Sleep(time.Millisecond)
 	}
 
-	if m.tryHandleReply(message.FromUint64(1), true, message.FromUint64(555), "允许") {
-		t.Fatal("requester=0 时普通用户不应有权审批")
+	if consumed, hint := m.tryHandleReply(message.FromUint64(1), true, message.FromUint64(555), "允许"); !consumed || !strings.Contains(hint, "管理员") {
+		t.Fatal("requester=0 时普通用户的审批回复应被消费并提示仅管理员可批")
 	}
-	if !m.tryHandleReply(message.FromUint64(1), true, message.FromUint64(999), "允许") {
+	if consumed, _ := m.tryHandleReply(message.FromUint64(1), true, message.FromUint64(999), "允许"); !consumed {
 		t.Fatal("管理员应可审批")
 	}
 	<-done
@@ -152,7 +153,7 @@ func TestApprovalTimeoutAutoDeny(t *testing.T) {
 		t.Fatalf("超时应自动拒绝, allowed=%v reason=%q", allowed, reason)
 	}
 	// 超时后 pending 已清理，后续消息不消费
-	if m.tryHandleReply(message.FromUint64(1), true, message.FromUint64(1), "允许") {
+	if consumed, _ := m.tryHandleReply(message.FromUint64(1), true, message.FromUint64(1), "允许"); consumed {
 		t.Fatal("超时结束后不应再消费回复")
 	}
 }
@@ -247,7 +248,7 @@ func TestGateLegOrdering(t *testing.T) {
 		record("approval")
 		am.tryHandleReply(message.FromUint64(1), true, message.FromUint64(999), "允许")
 	}
-	gate := p.buildPreToolGate(testSKey, agenthook.AgentKindMain, requester, sendPrompt)
+	gate := p.buildPreToolGate(testSKey, agenthook.AgentKindMain, requester, sendPrompt, nil)
 	call := func(name string) (bool, string) {
 		return gate(context.Background(), llmtool.ToolCall{Name: name, Arguments: `{"a":  1}`})
 	}
@@ -300,11 +301,12 @@ func (f hookRecordFunc) OnAgentHook(_ context.Context, ev agenthook.Event, p age
 }
 
 // TestAdminApprovalOnlyAdminCanApprove 配置修改类工具恒走管理员审批腿：
-// requester 非 0 时请求者本人也不能批准，仅管理员可批。
+// requester 非 0 时请求者本人也不能批准，仅管理员可批（无管理员私聊通道时
+// 提示回退到发起会话）。
 func TestAdminApprovalOnlyAdminCanApprove(t *testing.T) {
 	am := newTestApprovalManager(nil, time.Second*5)
 	p := &AIChatPlugin{approvalManager: am}
-	gate := p.buildPreToolGate(testSKey, agenthook.AgentKindMain, message.FromUint64(123), func(string) {})
+	gate := p.buildPreToolGate(testSKey, agenthook.AgentKindMain, message.FromUint64(123), func(string) {}, nil)
 
 	done := make(chan struct{})
 	var blocked bool
@@ -324,12 +326,12 @@ func TestAdminApprovalOnlyAdminCanApprove(t *testing.T) {
 		time.Sleep(time.Millisecond)
 	}
 
-	// 请求者本人不能批准（管理员审批语义）
-	if am.tryHandleReply(message.FromUint64(1), true, message.FromUint64(123), "允许") {
-		t.Fatal("配置修改需管理员审批，请求者本人不应能批准")
+	// 请求者本人不能批准（管理员审批语义）：审批回复被消费并提示仅管理员可批
+	if consumed, hint := am.tryHandleReply(message.FromUint64(1), true, message.FromUint64(123), "允许"); !consumed || !strings.Contains(hint, "管理员") {
+		t.Fatal("配置修改需管理员审批，请求者本人的审批回复应被消费并提示")
 	}
 	// 管理员批准后放行
-	if !am.tryHandleReply(message.FromUint64(1), true, message.FromUint64(999), "允许") {
+	if consumed, _ := am.tryHandleReply(message.FromUint64(1), true, message.FromUint64(999), "允许"); !consumed {
 		t.Fatal("管理员应可审批")
 	}
 	select {
@@ -342,11 +344,158 @@ func TestAdminApprovalOnlyAdminCanApprove(t *testing.T) {
 	}
 }
 
+// TestAdminApprovalViaPrivateChat 管理员审批提示私聊发给管理员，管理员在私聊中
+// 回复「允许」放行；发起会话只收到「已通知管理员」提示。
+func TestAdminApprovalViaPrivateChat(t *testing.T) {
+	am := newTestApprovalManager(nil, time.Second*5)
+	p := &AIChatPlugin{approvalManager: am}
+
+	var adminPrompts, originPrompts []string
+	var mu sync.Mutex
+	gate := p.buildPreToolGate(testSKey, agenthook.AgentKindMain, message.FromUint64(123),
+		func(text string) {
+			mu.Lock()
+			originPrompts = append(originPrompts, text)
+			mu.Unlock()
+		},
+		func(text string) bool {
+			mu.Lock()
+			adminPrompts = append(adminPrompts, text)
+			mu.Unlock()
+			return true
+		})
+
+	done := make(chan struct{})
+	var blocked bool
+	go func() {
+		blocked, _ = gate(context.Background(), llmtool.ToolCall{Name: "config_set", Arguments: `{"key":"a"}`})
+		close(done)
+	}()
+	// 等管理员私聊索引登记
+	adminSKey := sessionKey(message.FromUint64(999), false)
+	for i := 0; i < 100; i++ {
+		am.mu.Lock()
+		_, ok := am.adminPending[adminSKey]
+		am.mu.Unlock()
+		if ok {
+			break
+		}
+		time.Sleep(time.Millisecond)
+	}
+
+	// 管理员私聊回复放行
+	if consumed, _ := am.tryHandleReply(message.FromUint64(999), false, message.FromUint64(999), "允许"); !consumed {
+		t.Fatal("管理员私聊中的「允许」应被消费")
+	}
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("审批未结束")
+	}
+	if blocked {
+		t.Fatal("管理员批准后应放行")
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if len(adminPrompts) != 1 || !strings.Contains(adminPrompts[0], "【工具审批】") || !strings.Contains(adminPrompts[0], "config_set") {
+		t.Fatalf("审批提示应发给管理员私聊: %v", adminPrompts)
+	}
+	if len(originPrompts) != 1 || !strings.Contains(originPrompts[0], "已通知管理员") {
+		t.Fatalf("发起会话应收到已通知提示: %v", originPrompts)
+	}
+}
+
+// TestAdminApprovalOriginReplyStillWorks 提示发给管理员私聊后，管理员在发起
+// 会话（群聊）中回复「允许」同样可批；非管理员回复不消费。
+func TestAdminApprovalOriginReplyStillWorks(t *testing.T) {
+	am := newTestApprovalManager(nil, time.Second*5)
+	p := &AIChatPlugin{approvalManager: am}
+	gate := p.buildPreToolGate(testSKey, agenthook.AgentKindMain, message.FromUint64(123),
+		func(string) {}, func(string) bool { return true })
+
+	done := make(chan struct{})
+	var blocked bool
+	go func() {
+		blocked, _ = gate(context.Background(), llmtool.ToolCall{Name: "config_set", Arguments: `{}`})
+		close(done)
+	}()
+	for i := 0; i < 100; i++ {
+		am.mu.Lock()
+		_, ok := am.pending[testSKey]
+		am.mu.Unlock()
+		if ok {
+			break
+		}
+		time.Sleep(time.Millisecond)
+	}
+	// 非管理员在发起会话的审批回复：消费并提示，不影响待批请求
+	if consumed, hint := am.tryHandleReply(message.FromUint64(1), true, message.FromUint64(123), "允许"); !consumed || hint == "" {
+		t.Fatal("非管理员的审批回复应被消费并提示")
+	}
+	// 管理员在发起会话回复放行
+	if consumed, _ := am.tryHandleReply(message.FromUint64(1), true, message.FromUint64(999), "允许"); !consumed {
+		t.Fatal("管理员在发起会话的回复应被消费")
+	}
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("审批未结束")
+	}
+	if blocked {
+		t.Fatal("管理员批准后应放行")
+	}
+}
+
+// TestAdminApprovalFallbackToOrigin 管理员私聊发送失败时回退到发起会话提示。
+func TestAdminApprovalFallbackToOrigin(t *testing.T) {
+	am := newTestApprovalManager(nil, time.Second*5)
+	p := &AIChatPlugin{approvalManager: am}
+	var originPrompts []string
+	var mu sync.Mutex
+	gate := p.buildPreToolGate(testSKey, agenthook.AgentKindMain, message.FromUint64(123),
+		func(text string) {
+			mu.Lock()
+			originPrompts = append(originPrompts, text)
+			mu.Unlock()
+		},
+		func(string) bool { return false })
+
+	done := make(chan struct{})
+	var blocked bool
+	go func() {
+		blocked, _ = gate(context.Background(), llmtool.ToolCall{Name: "config_set", Arguments: `{}`})
+		close(done)
+	}()
+	for i := 0; i < 100; i++ {
+		am.mu.Lock()
+		_, ok := am.pending[testSKey]
+		am.mu.Unlock()
+		if ok {
+			break
+		}
+		time.Sleep(time.Millisecond)
+	}
+	mu.Lock()
+	if len(originPrompts) != 1 || !strings.Contains(originPrompts[0], "【工具审批】") {
+		t.Fatalf("私聊失败应回退到发起会话提示: %v", originPrompts)
+	}
+	mu.Unlock()
+	am.tryHandleReply(message.FromUint64(1), true, message.FromUint64(999), "允许")
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("审批未结束")
+	}
+	if blocked {
+		t.Fatal("管理员批准后应放行")
+	}
+}
+
 // TestAdminApprovalRefusedBlocks 管理员拒绝时配置修改工具被阻断。
 func TestAdminApprovalRefusedBlocks(t *testing.T) {
 	am := newTestApprovalManager(nil, time.Second*5)
 	p := &AIChatPlugin{approvalManager: am}
-	gate := p.buildPreToolGate(testSKey, agenthook.AgentKindMain, message.FromUint64(123), func(string) {})
+	gate := p.buildPreToolGate(testSKey, agenthook.AgentKindMain, message.FromUint64(123), func(string) {}, nil)
 
 	done := make(chan struct{})
 	var blocked bool

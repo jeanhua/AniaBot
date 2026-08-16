@@ -143,7 +143,7 @@ type ConfigSetTool struct {
 
 func NewConfigSetTool(store ConfigStore) *ConfigSetTool {
 	return &ConfigSetTool{
-		BaseTool: llmtool.MakeBaseTool("config_set", "修改 Bot 框架配置（写入数据库，重启后生效）。只能修改已注册的配置键，先用 config_get 查看可用键与当前值。修改前请确认用户已明确要求。该操作需要管理员审批，系统会向管理员发起确认，管理员回复「允许」后才写入。修改完成后请提醒用户：需由管理员发送 /reboot 命令重启 Bot 使配置生效（/reboot 仅管理员可用，普通用户发送会提示无权限）", ConfigSetParams{}),
+		BaseTool: llmtool.MakeBaseTool("config_set", "修改 Bot 框架配置（写入数据库，重启后生效）。只能修改已注册的配置键，先用 config_get 查看可用键与当前值。修改前请确认用户已明确要求。该操作需要管理员审批：系统会直接私聊通知机器人管理员，管理员回复「允许」后才写入（超时未确认自动拒绝）。修改完成后请提醒用户：需由管理员发送 /reboot 命令重启 Bot 使配置生效（/reboot 仅管理员可用，普通用户发送会提示无权限）", ConfigSetParams{}),
 		store:    store,
 	}
 }

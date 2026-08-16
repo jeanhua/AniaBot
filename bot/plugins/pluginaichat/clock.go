@@ -726,7 +726,8 @@ func (m *clockManager) executeTask(ctx context.Context, task *ClockTask, rec *ta
 		chat.SetToolObserver(rec.observe)
 	}
 
-	// 钩子与工具门禁（AgentKind=clock；审批仅管理员可批，提示发送到任务目标）
+	// 钩子与工具门禁（AgentKind=clock；审批仅管理员可批，管理员审批提示私聊
+	// 发给管理员，回退时发送到任务目标会话）
 	if p.hookManager != nil {
 		chat.SetHookRunner(p.hookManager, sessionKey(targetQID, isGroup), agenthook.AgentKindClock)
 	}
@@ -734,7 +735,8 @@ func (m *clockManager) executeTask(ctx context.Context, task *ClockTask, rec *ta
 	cbs := m.makeClockCallback(ctx, task, extra.add)
 	chatOpts := p.buildChatOptions()
 	chatOpts.PreToolGate = p.buildPreToolGate(sessionKey(targetQID, isGroup), agenthook.AgentKindClock, message.FromUint64(0),
-		func(text string) { m.sendText(task, text) })
+		func(text string) { m.sendText(task, text) },
+		p.buildAdminPromptSender(m.bot))
 	resp, usage, err := chat.Chat(ctx, m.buildTriggerPrompt(task), cbs, chatOpts)
 	if err != nil {
 		// 失败路径同样并入已产生的派生用量（子代理可能已部分执行）

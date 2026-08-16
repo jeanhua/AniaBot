@@ -39,7 +39,7 @@ func TestPlanManagerOnOff(t *testing.T) {
 func TestPlanGateBlocking(t *testing.T) {
 	p := &AIChatPlugin{planManager: newPlanManager()}
 	const key = "g:1"
-	gate := p.buildPreToolGate(key, agenthook.AgentKindMain, message.FromUint64(1), func(string) {})
+	gate := p.buildPreToolGate(key, agenthook.AgentKindMain, message.FromUint64(1), func(string) {}, nil)
 	call := func(name string) (bool, string) {
 		return gate(context.Background(), llmtool.ToolCall{Name: name, Arguments: "{}"})
 	}

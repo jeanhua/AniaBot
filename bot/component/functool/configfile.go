@@ -103,7 +103,7 @@ type ConfigFileSetTool struct {
 
 func NewConfigFileSetTool(store ConfigStore) *ConfigFileSetTool {
 	return &ConfigFileSetTool{
-		BaseTool: llmtool.MakeBaseTool("config_file_set", "修改扩展配置（写入数据库，与面板「扩展配置」页保存等价）。只校验 JSON 语法，语义错误会导致对应功能加载失败——先用 config_file_get 查看当前内容与格式说明。该操作需要管理员审批，系统会向管理员发起确认，管理员回复「允许」后才写入。hooks/commands 保存后数秒内生效；mcp/prompt 重启后生效（重启需由管理员发送 /reboot 命令）", ConfigFileSetParams{}),
+		BaseTool: llmtool.MakeBaseTool("config_file_set", "修改扩展配置（写入数据库，与面板「扩展配置」页保存等价）。只校验 JSON 语法，语义错误会导致对应功能加载失败——先用 config_file_get 查看当前内容与格式说明。该操作需要管理员审批：系统会直接私聊通知机器人管理员，管理员回复「允许」后才写入（超时未确认自动拒绝）。hooks/commands 保存后数秒内生效；mcp/prompt 重启后生效（重启需由管理员发送 /reboot 命令）", ConfigFileSetParams{}),
 		store:    store,
 	}
 }

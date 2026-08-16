@@ -155,7 +155,11 @@ func (p *AIChatPlugin) OnGroupMsg(ctx context.Context, bot bot.Bot, cmd command.
 	// 工具审批回复必须最先拦截：审批等待期间会话锁被占用（回复走不到正常聊天
 	// 流程），且回复通常不带 @（mention 门会把它挡掉）
 	if p.approvalManager != nil {
-		if text, _ := utils.ExtraMessageStr(msg); p.approvalManager.tryHandleReply(msg.GroupId, true, msg.Sender.UserId, text) {
+		text, _ := utils.ExtraMessageStr(msg)
+		if consumed, hint := p.approvalManager.tryHandleReply(msg.GroupId, true, msg.Sender.UserId, text); consumed {
+			if hint != "" {
+				p.sendPlainText(bot, msg.GroupId, true, hint)
+			}
 			return false, nil
 		}
 	}
@@ -280,7 +284,11 @@ func (p *AIChatPlugin) OnGroupMsg(ctx context.Context, bot bot.Bot, cmd command.
 func (p *AIChatPlugin) OnFriendMsg(ctx context.Context, bot bot.Bot, cmd command.Command, msg message.Message) (bool, error) {
 	// 工具审批回复必须最先拦截：审批等待期间会话锁被占用，回复走不到正常聊天流程
 	if p.approvalManager != nil {
-		if text, _ := utils.ExtraMessageStr(msg); p.approvalManager.tryHandleReply(msg.Sender.UserId, false, msg.Sender.UserId, text) {
+		text, _ := utils.ExtraMessageStr(msg)
+		if consumed, hint := p.approvalManager.tryHandleReply(msg.Sender.UserId, false, msg.Sender.UserId, text); consumed {
+			if hint != "" {
+				p.sendPlainText(bot, msg.Sender.UserId, false, hint)
+			}
 			return false, nil
 		}
 	}
@@ -428,10 +436,11 @@ func (p *AIChatPlugin) processChatBatch(ctx context.Context, b bot.Bot, id messa
 	}
 
 	chatOpts := p.buildChatOptions()
-	// 请求级工具门禁：计划模式 → PreToolUse 钩子 → 工具审批（见 gate.go）。
+	// 请求级工具门禁：计划模式 → PreToolUse 钩子 → 管理员审批 → 工具审批（见 gate.go）。
 	// 审批提示走纯发送闭包，与进行中的流式消息互不干扰。
 	chatOpts.PreToolGate = p.buildPreToolGate(sessionKey(id, isGroup), agenthook.AgentKindMain, lastMsg.Sender.UserId,
-		func(text string) { p.sendPlainText(b, id, isGroup, text) })
+		func(text string) { p.sendPlainText(b, id, isGroup, text) },
+		p.buildAdminPromptSender(b))
 
 	// 流式回复：平台支持「先发后改」（如飞书卡片/Telegram/Discord 消息 Patch）时逐字展示；
 	// 平台不支持或流式创建失败时自动退化为一次性回复（下方原发送路径）。
@@ -652,6 +661,23 @@ func (p *AIChatPlugin) sendPlainText(b bot.Bot, id message.QID, isGroup bool, te
 		builder := msgchain.Builder().Friend()
 		builder.Text(text)
 		b.SendFriendMsg(id, builder.Build())
+	}
+}
+
+// buildAdminPromptSender 构造把管理员审批提示私聊发给管理员的闭包（配置修改类
+// 工具的管理员审批提示默认发到管理员私聊，管理员在私聊中回复「允许/拒绝」）。
+// 管理员 ID 未设置时返回 nil；发送失败（如管理员未加机器人好友）返回 false，
+// 审批管理器会回退到在发起会话内提示。
+func (p *AIChatPlugin) buildAdminPromptSender(b bot.Bot) func(text string) bool {
+	admin := p.SystemConfig.AdminId
+	if admin == message.FromUint64(0) {
+		return nil
+	}
+	return func(text string) bool {
+		builder := msgchain.Builder().Friend()
+		builder.Text(text)
+		_, ok := b.SendFriendMsg(admin, builder.Build())
+		return ok
 	}
 }
 
