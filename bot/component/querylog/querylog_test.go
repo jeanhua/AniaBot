@@ -129,6 +129,32 @@ func TestSeqPersistAcrossReload(t *testing.T) {
 	}
 }
 
+func TestMarkRunningInterrupted(t *testing.T) {
+	l := New(newFakeStore(), 10, nil)
+	now := time.Now()
+	l.Record(Entry{Query: "q1", Status: StatusRunning, Time: now.Add(-time.Minute)})
+	l.Record(Entry{Query: "q2", Status: StatusSuccess, Time: now.Add(-3 * time.Minute)})
+	l.Record(Entry{Query: "q3", Status: StatusRunning, Time: now.Add(-2 * time.Minute)})
+	l.Record(Entry{Query: "q4", Status: StatusError, Time: now.Add(-4 * time.Minute)})
+
+	if n := l.MarkRunningInterrupted(); n != 2 {
+		t.Fatalf("want 2 interrupted, got %d", n)
+	}
+	for _, x := range l.Recent(0) {
+		if x.Query == "q1" || x.Query == "q3" {
+			if x.Status != StatusInterrupted || x.Error == "" || x.DurationMs <= 0 {
+				t.Fatalf("running 记录未正确标记中断: %+v", x)
+			}
+		} else if x.Status == StatusRunning {
+			t.Fatalf("running 状态应全部被标记: %+v", x)
+		}
+	}
+	// 再次调用无新增更新
+	if n := l.MarkRunningInterrupted(); n != 0 {
+		t.Fatalf("二次调用应返回 0，实际 %d", n)
+	}
+}
+
 func TestTruncate(t *testing.T) {
 	if got := Truncate("你好世界", 10); got != "你好世界" {
 		t.Fatalf("未超长不应截断: %q", got)

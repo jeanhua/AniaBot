@@ -57,7 +57,7 @@ func TestBashCheckCommandThreeTier(t *testing.T) {
 		t.Errorf("黑名单应优先于白名单, got %v", v)
 	}
 
-	// 无名单：全部走审批（不再是「全部放行」）
+	// 无名单：全部走审批档（审批未启用时默认放行，只认黑名单）
 	tool3 := mustBash(t, BashConfig{})
 	if v, err := tool3.checkCommand("echo hi"); v != CmdAsk || err != nil {
 		t.Errorf("无名单时应进入审批档, got verdict=%v err=%v", v, err)
@@ -65,12 +65,12 @@ func TestBashCheckCommandThreeTier(t *testing.T) {
 }
 
 // TestBashAskWithoutApprovalChannel 审批档命令在无审批通道（RequestApproval=nil）
-// 时拒绝并说明配置方法，不执行命令。
+// 时默认放行（只认黑名单），命令正常执行。
 func TestBashAskWithoutApprovalChannel(t *testing.T) {
 	tool := mustBash(t, BashConfig{})
-	_, err := tool.Execute(context.Background(), &BashParams{Command: "echo hi"}, llmtool.CallBackFuncs{})
-	if err == nil || !strings.Contains(err.Error(), "未启用人工审批") {
-		t.Fatalf("期望审批未启用的拒绝说明, got %v", err)
+	out, err := tool.Execute(context.Background(), &BashParams{Command: "echo hi"}, llmtool.CallBackFuncs{})
+	if err != nil || !strings.Contains(out, "hi") {
+		t.Fatalf("审批未启用时应默认放行, got out=%q err=%v", out, err)
 	}
 }
 

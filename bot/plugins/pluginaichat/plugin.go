@@ -417,7 +417,7 @@ func (p *AIChatPlugin) processChatBatch(ctx context.Context, b bot.Bot, id messa
 	// 命令级人工审批（bash 三段式中不在黑白名单的命令在工具内部调用）：与门禁
 	// 审批腿共用 approvalManager；提示同样走纯发送闭包（与流式消息互不干扰）。
 	// 仅在工具审批开关开启时注入：审批关闭时 manager 可能仅为配置修改工具构造，
-	// bash 的未列名命令应维持「未启用人工审批」的拒绝语义。
+	// bash 的未列名命令维持「审批未启用则默认放行」语义（只认黑名单）。
 	if p.cfg.Approval.Enable && p.approvalManager != nil {
 		requester := lastMsg.Sender.UserId
 		sendPrompt := func(text string) { p.sendPlainText(b, id, isGroup, text) }

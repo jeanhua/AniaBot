@@ -213,10 +213,10 @@ type todoConfig struct {
 
 // approvalConfig 工具审批配置：列出的工具执行前向会话发送确认消息，由请求发送者或
 // 机器人管理员回复「允许/拒绝」授权，超时自动拒绝；bash 中既不在白名单也不在黑名单
-// 的命令同样走审批（命令级粒度，无需在此列出 bash）。配置修改类工具
-// （config_set/config_file_set）恒需管理员审批，无需在此列出。
+// 的命令同样走审批（命令级粒度，无需在此列出 bash；审批未启用时这些命令默认放行，
+// 只认黑名单）。配置修改类工具（config_set/config_file_set）恒需管理员审批，无需在此列出。
 type approvalConfig struct {
-	Enable     bool   `cfg:"enable" label:"启用工具审批" group:"AI 对话 · 安全" help:"危险工具执行前需人工确认（请求发送者或管理员回复「允许/拒绝」）；同时作为 bash 未列名命令的审批通道" default:"false"`
+	Enable     bool   `cfg:"enable" label:"启用工具审批" group:"AI 对话 · 安全" help:"危险工具执行前需人工确认（请求发送者或管理员回复「允许/拒绝」）；同时作为 bash 未列名命令的审批通道（关闭时未列名命令默认放行，只认黑名单）" default:"false"`
 	Tools      string `cfg:"tools" label:"需审批的工具" group:"AI 对话 · 安全" help:"逗号分隔的工具名；bash 有命令级黑白名单+审批三段式，无需列入；config_set/config_file_set 恒需管理员审批，无需列入" default:"file"`
 	TimeoutSec int    `cfg:"timeout_sec" label:"审批超时(秒)" group:"AI 对话 · 安全" help:"超时无回复自动拒绝；范围 10~240" default:"120"`
 }

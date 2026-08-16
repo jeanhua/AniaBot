@@ -6,6 +6,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/jeanhua/AniaBot/common/storage"
 )
@@ -74,6 +75,21 @@ func (b *kvBackend) evict(maxSeq uint64, maxEntries int) {
 	for _, n := range seqs[:len(seqs)-maxEntries] {
 		b.store.Del(ctx, entryKey(n))
 	}
+}
+
+func (b *kvBackend) markRunningInterrupted(now time.Time) int {
+	seqs := b.listSeqs() // 升序，新在后
+	count := 0
+	for _, n := range seqs {
+		e, ok := b.load(n)
+		if !ok || e.Status != StatusRunning {
+			continue
+		}
+		interruptEntry(&e, now)
+		b.overwrite(n, e)
+		count++
+	}
+	return count
 }
 
 func (b *kvBackend) recent(limit int) []Entry {

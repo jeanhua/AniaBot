@@ -23,7 +23,7 @@ type CallBackFuncs struct {
 	LoadLocalImage func(path string) (string, error)
 	// RequestApproval 请求人工批准一次危险操作（如 bash 三段式中既不在白名单也
 	// 不在黑名单的命令）。返回 allowed=false 时 reason 说明原因（拒绝/超时/取消）。
-	// nil 表示当前环境不支持审批。注意：本回调可能阻塞至审批超时（默认 120s），
-	// 调用方与包装层不得持锁调用/包装它。
+	// nil 表示当前环境不支持审批（此时 bash 未列名命令默认放行，只认黑名单）。
+	// 注意：本回调可能阻塞至审批超时（默认 120s），调用方与包装层不得持锁调用/包装它。
 	RequestApproval func(ctx context.Context, toolName, summary string) (allowed bool, reason string)
 }

@@ -68,7 +68,8 @@ const (
 	CmdAllow CmdVerdict = iota
 	// CmdDeny 命中黑名单，直接拒绝
 	CmdDeny
-	// CmdAsk 既不在黑名单也不在白名单：需人工审批（经 CallBackFuncs.RequestApproval）
+	// CmdAsk 既不在黑名单也不在白名单：需人工审批（经 CallBackFuncs.RequestApproval）；
+	// 审批未启用（RequestApproval 为 nil）时默认放行
 	CmdAsk
 )
 
@@ -96,7 +97,7 @@ func NewBashTool(config BashConfig) (*BashTool, error) {
 		return nil, err
 	}
 
-	desc := fmt.Sprintf("在宿主机上执行 shell 命令（由 %s 解释执行），超时2分钟，输出最大4096字符。权限分三档：命中黑名单直接拒绝；命中白名单直接放行；两者都不命中时会向用户发起审批，等用户回复「允许」后才执行（审批未启用则拒绝）。注意：不要假设环境存在 bash，运行 .sh 脚本优先用 `sh 脚本路径`；需要 python3 等其他解释器时先用 `command -v` 确认其存在", shell)
+	desc := fmt.Sprintf("在宿主机上执行 shell 命令（由 %s 解释执行），超时2分钟，输出最大4096字符。权限分三档：命中黑名单直接拒绝；命中白名单直接放行；两者都不命中时会向用户发起审批，等用户回复「允许」后才执行（审批未启用则默认放行）。注意：不要假设环境存在 bash，运行 .sh 脚本优先用 `sh 脚本路径`；需要 python3 等其他解释器时先用 `command -v` 确认其存在", shell)
 	return &BashTool{
 		BaseTool:  llmtool.MakeBaseTool("bash", desc, BashParams{}),
 		shell:     shell,
@@ -108,8 +109,7 @@ func NewBashTool(config BashConfig) (*BashTool, error) {
 }
 
 // checkCommand 三段式校验：黑名单优先（命中即拒绝）；白名单命中即放行；
-// 两者都不命中返回 CmdAsk 交由人工审批（含两份名单都为空的场景——此时所有命令
-// 都需要审批，避免「未配置名单=全部放行」的隐式风险）。
+// 两者都不命中返回 CmdAsk 交由人工审批（审批未启用时默认放行）。
 func (t *BashTool) checkCommand(cmd string) (CmdVerdict, error) {
 	for _, blocked := range t.blacklist {
 		if blocked.MatchString(cmd) {
@@ -151,15 +151,13 @@ func (t *BashTool) Execute(ctx context.Context, params any, cbs llmtool.CallBack
 	if err != nil {
 		return "", err
 	}
-	if verdict == CmdAsk {
-		if cbs.RequestApproval == nil {
-			return "", fmt.Errorf("bash: 命令 %q 不在白名单中且当前未启用人工审批，已拒绝。如需放行：请管理员把匹配该命令的正则加入白名单（plugin.ai_chat_bot.bash.whitelist），或启用工具审批（plugin.ai_chat_bot.approval.enable）", summarizeCommand(p.Command))
-		}
+	if verdict == CmdAsk && cbs.RequestApproval != nil {
 		allowed, reason := cbs.RequestApproval(ctx, "bash", "执行命令："+summarizeCommand(p.Command))
 		if !allowed {
 			return "", fmt.Errorf("bash: 命令未获批准：%s", reason)
 		}
 	}
+	// CmdAsk 且审批未启用（RequestApproval 为 nil）：默认放行，只认黑名单
 
 	// 基于调用方 ctx 派生超时：/stop 取消请求时命令随之终止，
 	// 不会因忽略 ctx 而让长命令继续占满会话锁与并发槽

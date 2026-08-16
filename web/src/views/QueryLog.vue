@@ -289,7 +289,7 @@ function elapsedMs(log) {
 }
 
 function statusText(s) {
-  return { running: '执行中', success: '成功', stopped: '已停止', timeout: '超时', error: '出错' }[s] || s
+  return { running: '执行中', success: '成功', stopped: '已停止', timeout: '超时', error: '出错', interrupted: '中断' }[s] || s
 }
 
 function statusClass(s) {
@@ -299,6 +299,7 @@ function statusClass(s) {
     stopped: 'bg-zinc-100 text-zinc-500 border border-zinc-200',
     timeout: 'bg-zinc-100 text-zinc-500 border border-zinc-200',
     error: 'bg-red-50 text-red-600 border border-red-200',
+    interrupted: 'bg-amber-50 text-amber-600 border border-amber-200',
   }[s] || 'bg-slate-100 text-slate-600'
 }
 

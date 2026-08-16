@@ -166,6 +166,45 @@ func TestSQLBackendQueryBeforeCursor(t *testing.T) {
 	}
 }
 
+// TestSQLBackendMarkRunningInterrupted SQL 后端的 running → interrupted 标记，
+// 并与 KV 后端做一致性对比。
+func TestSQLBackendMarkRunningInterrupted(t *testing.T) {
+	kv := New(newFakeStore(), 10, nil)
+	sqlm, _ := newSQLLogger(t, 10)
+
+	now := time.Now()
+	inputs := []Entry{
+		{Query: "q1", Status: StatusRunning, Time: now.Add(-time.Minute)},
+		{Query: "q2", Status: StatusSuccess, Time: now.Add(-3 * time.Minute)},
+		{Query: "q3", Status: StatusRunning, Time: now.Add(-2 * time.Minute)},
+	}
+	for _, e := range inputs {
+		kv.Record(e)
+		sqlm.Record(e)
+	}
+
+	kvN, sqlN := kv.MarkRunningInterrupted(), sqlm.MarkRunningInterrupted()
+	if kvN != 2 || sqlN != 2 {
+		t.Fatalf("want 2 interrupted, kv=%d sql=%d", kvN, sqlN)
+	}
+	kvAll, sqlAll := kv.Recent(0), sqlm.Recent(0)
+	if len(kvAll) != len(sqlAll) {
+		t.Fatalf("条数不一致 kv=%d sql=%d", len(kvAll), len(sqlAll))
+	}
+	for i := range kvAll {
+		if kvAll[i].Status != sqlAll[i].Status {
+			t.Fatalf("第 %d 条状态不一致: kv=%q sql=%q", i, kvAll[i].Status, sqlAll[i].Status)
+		}
+		if (kvAll[i].Query == "q1" || kvAll[i].Query == "q3") && kvAll[i].Status != StatusInterrupted {
+			t.Fatalf("running 记录未标记中断: %+v", kvAll[i])
+		}
+	}
+	// 二次调用无新增更新
+	if n := sqlm.MarkRunningInterrupted(); n != 0 {
+		t.Fatalf("二次调用应返回 0，实际 %d", n)
+	}
+}
+
 // TestBackendConformance 同一操作序列分别作用于 KV 与 SQL 后端，
 // Recent/Query 结果应一致（ID 序列与字段）。
 func TestBackendConformance(t *testing.T) {

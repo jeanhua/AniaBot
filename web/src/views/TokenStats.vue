@@ -396,6 +396,7 @@ const STATUS_META = [
   { key: 'stopped', label: '已停止', bar: 'bg-zinc-400', dot: 'bg-zinc-400' },
   { key: 'timeout', label: '超时', bar: 'bg-zinc-300', dot: 'bg-amber-500' },
   { key: 'error', label: '错误', bar: 'bg-zinc-200', dot: 'bg-red-500' },
+  { key: 'interrupted', label: '中断', bar: 'bg-zinc-200', dot: 'bg-amber-600' },
 ]
 
 const statusList = computed(() => STATUS_META.map(m => ({ ...m, count: byStatus.value[m.key] || 0 })))
