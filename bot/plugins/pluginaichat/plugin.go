@@ -408,7 +408,9 @@ func (p *AIChatPlugin) processChatBatch(ctx context.Context, b bot.Bot, id messa
 
 	// 命令级人工审批（bash 三段式中不在黑白名单的命令在工具内部调用）：与门禁
 	// 审批腿共用 approvalManager；提示同样走纯发送闭包（与流式消息互不干扰）。
-	if p.approvalManager != nil {
+	// 仅在工具审批开关开启时注入：审批关闭时 manager 可能仅为配置修改工具构造，
+	// bash 的未列名命令应维持「未启用人工审批」的拒绝语义。
+	if p.cfg.Approval.Enable && p.approvalManager != nil {
 		requester := lastMsg.Sender.UserId
 		sendPrompt := func(text string) { p.sendPlainText(b, id, isGroup, text) }
 		msgFuncs.RequestApproval = func(ctx context.Context, toolName, summary string) (bool, string) {
@@ -789,11 +791,20 @@ func (p *AIChatPlugin) Start(ctx context.Context, cfg *viper.Viper) error {
 	p.commandManager = newCommandManager(p.ConfigEditor, commandsConfigKey, p.Logger)
 
 	// 工具审批：默认关闭；启用后 approval.tools 列出的工具与 bash 未列名命令
-	// 需请求发送者或管理员回复确认
+	// 需请求发送者或管理员回复确认。配置修改类工具（config_set/config_file_set）
+	// 恒需管理员审批（见 approval.go adminApprovalTools），故启用配置管理工具时
+	// 也构造审批管理器（此时 tools 集合为空，仅管理员审批腿生效）。
+	var approvalToolNames []string
 	if p.cfg.Approval.Enable {
-		toolNames := strings.Split(p.cfg.Approval.Tools, ",")
-		p.approvalManager = newApprovalManager(toolNames, p.cfg.Approval.TimeoutSec, p.SystemConfig.AdminId, p.Logger)
-		p.Logger.Info("已启用工具审批", "tools", p.approvalManager.tools, "timeout_sec", p.cfg.Approval.TimeoutSec)
+		approvalToolNames = strings.Split(p.cfg.Approval.Tools, ",")
+	}
+	if p.cfg.Approval.Enable || p.cfg.ConfigTool.Enable {
+		p.approvalManager = newApprovalManager(approvalToolNames, p.cfg.Approval.TimeoutSec, p.SystemConfig.AdminId, p.Logger)
+		if p.cfg.Approval.Enable {
+			p.Logger.Info("已启用工具审批", "tools", p.approvalManager.tools, "timeout_sec", p.cfg.Approval.TimeoutSec)
+		} else {
+			p.Logger.Info("工具审批未启用，配置修改工具仍需要管理员审批")
+		}
 	} else {
 		p.Logger.Info("工具审批未启用（plugin.ai_chat_bot.approval.enable=false）")
 	}
@@ -850,7 +861,9 @@ func (p *AIChatPlugin) Start(ctx context.Context, cfg *viper.Viper) error {
 		if p.ConfigEditor != nil {
 			p.toolExecutor.Register(functool.NewConfigGetTool(p.ConfigEditor))
 			p.toolExecutor.Register(functool.NewConfigSetTool(p.ConfigEditor))
-			p.Logger.Info("已启用配置管理工具（AI 可查看/修改框架配置，敏感字段掩码，修改重启后生效）")
+			p.toolExecutor.Register(functool.NewConfigFileGetTool(p.ConfigEditor))
+			p.toolExecutor.Register(functool.NewConfigFileSetTool(p.ConfigEditor))
+			p.Logger.Info("已启用配置管理工具（AI 可查看/修改框架配置与扩展配置，敏感字段掩码，修改需管理员审批，重启后生效）")
 		} else {
 			p.Logger.Warn("配置管理工具不可用：配置中心未注入（持久化存储异常？）")
 		}

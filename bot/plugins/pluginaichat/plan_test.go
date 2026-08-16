@@ -88,6 +88,8 @@ func TestPlanBlockedToolsAreRealToolNames(t *testing.T) {
 	names[functool.NewSendFileTool().Name()] = true
 	names[functool.NewConfigSetTool(nil).Name()] = true
 	names[functool.NewConfigGetTool(nil).Name()] = true
+	names[functool.NewConfigFileSetTool(nil).Name()] = true
+	names[functool.NewConfigFileGetTool(nil).Name()] = true
 
 	// 会话级工具（与 getChat/registerScopedTools 的注册来源一致）
 	collect(newMemoryTools(newTestMemoryManager(0), "g:1", ""))

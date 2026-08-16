@@ -12,8 +12,10 @@ import (
 	"github.com/jeanhua/AniaBot/common/model/message"
 )
 
-// 工具审批：危险工具（默认 file/config_set，bash 另有命令级审批）执行前向会话
+// 工具审批：危险工具（默认 file，bash 另有命令级审批）执行前向会话
 // 发送确认消息，由请求发送者或机器人管理员回复「允许/拒绝」授权；超时自动拒绝。
+// 配置修改类工具（adminApprovalTools）为管理员审批：requester 强制为 0，
+// 仅管理员可批，且与 approval.enable 开关无关——启用配置管理工具即生效。
 
 // approvalVerdict 审批结论（含操作者，供审计）
 type approvalVerdict struct {
@@ -61,6 +63,19 @@ func newApprovalManager(tools []string, timeoutSec int, admin message.QID, logge
 
 func (m *approvalManager) needsApproval(tool string) bool {
 	_, ok := m.tools[tool]
+	return ok
+}
+
+// adminApprovalTools 配置修改类工具：始终需要管理员审批（仅管理员可批，
+// 请求者不能自己批准），与 approval.enable 开关无关。门禁中本集合优先于
+// approval.tools（命中后不再走「请求者或管理员」的普通审批腿）。
+var adminApprovalTools = map[string]struct{}{
+	"config_set":      {},
+	"config_file_set": {},
+}
+
+func (m *approvalManager) needsAdminApproval(tool string) bool {
+	_, ok := adminApprovalTools[tool]
 	return ok
 }
 

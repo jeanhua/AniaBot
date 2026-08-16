@@ -300,8 +300,8 @@ HTTP 模式下 NapCat 向 `localhost` 上报会失败，请将 NapCat 的 HTTP C
 
 | 配置键 | 默认值 | 说明 |
 | --- | --- | --- |
-| `plugin.ai_chat_bot.approval.enable` | `false` | 启用后下列工具执行前需人工确认（请求发送者或管理员回复「允许/拒绝」）；同时作为 bash 未列名命令的审批通道 |
-| `plugin.ai_chat_bot.approval.tools` | `file,config_set` | 需审批的工具名（逗号分隔）；bash 有命令级黑白名单 + 审批三段式，无需列入 |
+| `plugin.ai_chat_bot.approval.enable` | `false` | 启用后下列工具执行前需人工确认（请求发送者或管理员回复「允许/拒绝」）；同时作为 bash 未列名命令的审批通道。配置修改类工具（`config_set`/`config_file_set`）恒需管理员审批，与此开关无关 |
+| `plugin.ai_chat_bot.approval.tools` | `file` | 需审批的工具名（逗号分隔）；bash 有命令级黑白名单 + 审批三段式，无需列入；配置修改类工具恒需管理员审批，无需列入 |
 | `plugin.ai_chat_bot.approval.timeout_sec` | `120` | 审批超时（秒），超时无回复自动拒绝；范围 10~240 |
 
 ### AI 钩子（hooks）

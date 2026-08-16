@@ -298,3 +298,100 @@ type hookRecordFunc func(ev agenthook.Event, p agenthook.Payload) agenthook.Resu
 func (f hookRecordFunc) OnAgentHook(_ context.Context, ev agenthook.Event, p agenthook.Payload) agenthook.Result {
 	return f(ev, p)
 }
+
+// TestAdminApprovalOnlyAdminCanApprove 配置修改类工具恒走管理员审批腿：
+// requester 非 0 时请求者本人也不能批准，仅管理员可批。
+func TestAdminApprovalOnlyAdminCanApprove(t *testing.T) {
+	am := newTestApprovalManager(nil, time.Second*5)
+	p := &AIChatPlugin{approvalManager: am}
+	gate := p.buildPreToolGate(testSKey, agenthook.AgentKindMain, message.FromUint64(123), func(string) {})
+
+	done := make(chan struct{})
+	var blocked bool
+	var result string
+	go func() {
+		blocked, result = gate(context.Background(), llmtool.ToolCall{Name: "config_set", Arguments: `{"key":"a","value":"b"}`})
+		close(done)
+	}()
+	// 等 pending 注册
+	for i := 0; i < 100; i++ {
+		am.mu.Lock()
+		_, ok := am.pending[testSKey]
+		am.mu.Unlock()
+		if ok {
+			break
+		}
+		time.Sleep(time.Millisecond)
+	}
+
+	// 请求者本人不能批准（管理员审批语义）
+	if am.tryHandleReply(message.FromUint64(1), true, message.FromUint64(123), "允许") {
+		t.Fatal("配置修改需管理员审批，请求者本人不应能批准")
+	}
+	// 管理员批准后放行
+	if !am.tryHandleReply(message.FromUint64(1), true, message.FromUint64(999), "允许") {
+		t.Fatal("管理员应可审批")
+	}
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("审批未结束")
+	}
+	if blocked {
+		t.Fatalf("管理员批准后应放行, result=%q", result)
+	}
+}
+
+// TestAdminApprovalRefusedBlocks 管理员拒绝时配置修改工具被阻断。
+func TestAdminApprovalRefusedBlocks(t *testing.T) {
+	am := newTestApprovalManager(nil, time.Second*5)
+	p := &AIChatPlugin{approvalManager: am}
+	gate := p.buildPreToolGate(testSKey, agenthook.AgentKindMain, message.FromUint64(123), func(string) {})
+
+	done := make(chan struct{})
+	var blocked bool
+	var result string
+	go func() {
+		blocked, result = gate(context.Background(), llmtool.ToolCall{Name: "config_file_set", Arguments: `{"name":"hooks","content":"{}"}`})
+		close(done)
+	}()
+	for i := 0; i < 100; i++ {
+		am.mu.Lock()
+		_, ok := am.pending[testSKey]
+		am.mu.Unlock()
+		if ok {
+			break
+		}
+		time.Sleep(time.Millisecond)
+	}
+	am.tryHandleReply(message.FromUint64(1), true, message.FromUint64(999), "拒绝")
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("审批未结束")
+	}
+	if !blocked || !strings.Contains(result, "未获管理员批准") {
+		t.Fatalf("管理员拒绝后应阻断, blocked=%v result=%q", blocked, result)
+	}
+}
+
+// TestSummarizeApprovalArgs 审批摘要：config_file_set 展示完整内容（压缩空白），
+// 其他工具走通用截断摘要。
+func TestSummarizeApprovalArgs(t *testing.T) {
+	args := `{"name":  "hooks",  "content":   "{\"a\":1}"}`
+	got := summarizeApprovalArgs(llmtool.ToolCall{Name: "config_file_set", Arguments: args})
+	if got != `{"name": "hooks", "content": "{\"a\":1}"}` {
+		t.Fatalf("config_file_set 摘要应展示完整内容, got %q", got)
+	}
+	// 超长内容截断并提示
+	long := strings.Repeat("x", 5000)
+	got = summarizeApprovalArgs(llmtool.ToolCall{Name: "config_file_set", Arguments: `"` + long + `"`})
+	if !strings.Contains(got, "已截断") || len([]rune(got)) > 4200 {
+		t.Fatalf("超长内容应截断, len=%d", len([]rune(got)))
+	}
+	// 其他工具沿用 300 符文通用摘要
+	short := summarizeApprovalArgs(llmtool.ToolCall{Name: "file", Arguments: args})
+	if short == got || !strings.Contains(short, "hooks") {
+		t.Fatalf("普通工具摘要异常: %q", short)
+	}
+}

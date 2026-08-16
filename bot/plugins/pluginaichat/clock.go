@@ -863,12 +863,13 @@ func (m *clockManager) makeClockCallback(ctx context.Context, task *ClockTask, u
 		}
 	}
 	// 命令级人工审批（bash 三段式）：定时任务无人值守，requester=0 即仅管理员可批；
-	// 审批提示发到任务目标会话
-	if am := m.plugin.approvalManager; am != nil {
+	// 审批提示发到任务目标会话。仅在工具审批开关开启时注入：审批关闭时
+	// approvalManager 可能仅为配置修改工具构造，bash 未列名命令应维持拒绝语义。
+	if p := m.plugin; p.cfg.Approval.Enable && p.approvalManager != nil {
 		targetQID := qid
 		targetIsGroup := isGroup
 		cbs.RequestApproval = func(ctx context.Context, toolName, summary string) (bool, string) {
-			return am.request(ctx, sessionKey(targetQID, targetIsGroup), toolName, summary, message.FromUint64(0),
+			return p.approvalManager.request(ctx, sessionKey(targetQID, targetIsGroup), toolName, summary, message.FromUint64(0),
 				func(text string) { m.sendText(task, text) })
 		}
 	}

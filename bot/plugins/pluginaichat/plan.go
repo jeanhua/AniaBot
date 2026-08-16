@@ -36,7 +36,7 @@ func (m *planManager) Set(key string, on bool) {
 // local_image/meme/config_get/memory_search/kb_search/skill_*/mcp_list/clock_list/
 // clock_get/clock_log/subagent_list/subagent_cancel/team_list）不受影响。
 var planBlockedTools = map[string]struct{}{
-	"bash": {}, "file": {}, "config_set": {},
+	"bash": {}, "file": {}, "config_set": {}, "config_file_set": {},
 	"memory_save": {}, "memory_forget": {}, "kb_add": {},
 	"clock_create": {}, "clock_update": {}, "clock_delete": {},
 	"skill_install": {}, "skill_remove": {},
