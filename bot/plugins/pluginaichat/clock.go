@@ -847,7 +847,7 @@ func (m *clockManager) makeClockCallback(ctx context.Context, task *ClockTask, u
 			}
 			return url, nil
 		},
-		LoadImages: func() (string, error) {
+		LoadImages: func(_ []string) (string, error) {
 			return "当前为定时任务触发，无消息图片可加载", nil
 		},
 		TakeLoadedImages: func() []string {

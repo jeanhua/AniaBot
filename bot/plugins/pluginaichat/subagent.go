@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 	"unicode/utf8"
 
@@ -246,9 +247,9 @@ func truncateSubagentResult(s string, maxRunes int) (string, bool) {
 // （记日志）：子代理的结论通过最终结果返回，不直接打扰用户。
 //
 // 图片加载三回调（LoadImages/TakeLoadedImages/LoadLocalImage）不透传：它们闭包捕获的
-// 是主请求级的 loadedImages/loaded 状态（见 utils.go configureImageCallbacks），透传
-// 会让主/子两个工具循环排干同一图片队列（主 AI 加载的图片被偷进子代理上下文，或
-// 子代理毒化 loaded 标志导致主 AI 无法再加载用户图片）。参照 clock 的
+// 是主请求级的 loadedImages/loadedHashes 状态（见 utils.go configureImageCallbacks），
+// 透传会让主/子两个工具循环排干同一图片队列（主 AI 加载的图片被偷进子代理上下文，
+// 或子代理毒化已加载标志导致主 AI 无法再加载用户图片）。参照 clock 的
 // makeClockCallback 模式，为子代理建立独立的图片状态。
 //
 // usageSink 接收工具回调派生的 LLM 用量（备用图片识别），由调用方并入子代理总用量。
@@ -268,8 +269,11 @@ func (p *AIChatPlugin) makeSubagentCallbacks(ctx context.Context, parent llmtool
 		// 子代理其父回调 requester=0，天然仅管理员可批）
 		RequestApproval: parent.RequestApproval,
 		// 用户消息图片的加载状态属于主请求；子代理确需查看时在结果中说明，由主 AI 自行加载
-		LoadImages: func() (string, error) {
-			return "子代理无法直接加载用户消息中的图片；如确需查看，请在最终结果中说明，由主 AI 自行调用 load_images", nil
+		LoadImages: func(hashes []string) (string, error) {
+			if len(hashes) > 0 {
+				return "子代理无法直接加载图片（" + strings.Join(hashes, "、") + "）；如确需查看，请在最终结果中说明，由主 AI 自行调用 load_images 并传入对应图片哈希", nil
+			}
+			return "子代理无法直接加载图片；如确需查看，请在最终结果中说明，由主 AI 自行调用 load_images 并传入对应图片哈希", nil
 		},
 		TakeLoadedImages: func() []string {
 			imgs := loadedImages

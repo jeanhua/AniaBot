@@ -38,15 +38,15 @@ func TestFriendlyTextImageHashMark(t *testing.T) {
 	}
 
 	text := raw.FriendlyText(true, WithNoSenderPrefix())
-	want := "[图片 " + ImageHash(url) + "]"
+	want := "[图片 " + ImageHash(url) + " url:" + url + "]"
 	if !strings.Contains(text, want) {
-		t.Fatalf("FriendlyText 应包含 %q, got %q", want, text)
-	}
-	if strings.Contains(text, url) {
-		t.Fatalf("FriendlyText 不应包含原始 URL, got %q", text)
+		t.Fatalf("FriendlyText 应同时包含哈希与 URL, got %q", text)
 	}
 
 	// showUrl=false 时保持无哈希的简式标记
+	raw.Message = []OB11Segment{
+		{Type: SegmentImage, Data: map[string]any{"url": url, "file": "a.png"}},
+	}
 	text = raw.FriendlyText(false, WithNoSenderPrefix())
 	if !strings.Contains(text, "[图片]") {
 		t.Fatalf("showUrl=false 应为 [图片], got %q", text)

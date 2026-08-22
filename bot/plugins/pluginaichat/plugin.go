@@ -402,13 +402,16 @@ func (p *AIChatPlugin) processChatBatch(ctx context.Context, b bot.Bot, id messa
 		}
 	}
 
+	// 请求级图片哈希→URL 注册表：当前消息、历史记录、合并转发中的图片都会登记，
+	// load_images 按哈希查找并只加载指定的图片
+	imageReg := newImageRegistry()
 	var msgFuncs llmtool.CallBackFuncs
 	if isGroup {
-		msgFuncs = MakeGroupCallback(b, id, lastMsg.Sender.UserId, p.Logger)
+		msgFuncs = MakeGroupCallback(b, id, lastMsg.Sender.UserId, p.Logger, imageReg)
 	} else {
-		msgFuncs = MakeFriendCallback(b, id, p.Logger)
+		msgFuncs = MakeFriendCallback(b, id, p.Logger, imageReg)
 	}
-	p.configureImageCallbacks(ctx, b, &msgFuncs, func(u aichat.TokenUsage) {
+	p.configureImageCallbacks(ctx, b, &msgFuncs, imageReg, func(u aichat.TokenUsage) {
 		// 备用图片识别（OCR）消耗：并入会话统计（finishQuery 取走）与配额
 		p.addExtraUsage(sessionKey(id, isGroup), u)
 		p.quotaManager.Add(sessionKey(id, isGroup), u)

@@ -118,9 +118,9 @@ go test -v -race ./...
 
 ## 部署
 
-### 交叉编译报错 CGO？
+### 怎么交叉编译？
 
-AniaBot 全部存储后端均为纯 Go 驱动（`modernc.org/sqlite`、`go-sql-driver/mysql`），默认无 CGO 依赖。直接用 Makefile：
+建议使用 Makefile：
 
 ```bash
 make linux     # GOOS=linux GOARCH=amd64

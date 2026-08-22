@@ -82,9 +82,13 @@ func (raw Message) FriendlyText(showUrl bool, opts ...MsgOptFunc) string {
 					result.WriteString(fmt.Sprintf("\n</图片消息 %s>\n", msg.Hash()))
 				} else {
 					if showUrl {
-						// 输出短哈希而非原始 URL：URL 是冗长的临时签名链接，
-						// 哈希足以让 AI 区分图片（与 load_images 加载结果的标识一致）
-						result.WriteString(fmt.Sprintf("[图片 %s]", msg.Hash()))
+						// 同时输出短哈希与 URL：哈希用于 load_images 按需加载，
+						// URL 供 AI 下载图片到本地（如 bash/file 工具）
+						if msg.Url != "" {
+							result.WriteString(fmt.Sprintf("[图片 %s url:%s]", msg.Hash(), msg.Url))
+						} else {
+							result.WriteString(fmt.Sprintf("[图片 %s]", msg.Hash()))
+						}
 					} else {
 						result.WriteString("[图片]")
 					}

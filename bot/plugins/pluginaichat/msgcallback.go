@@ -11,7 +11,7 @@ import (
 	"github.com/jeanhua/AniaBot/common/msgchain"
 )
 
-func MakeGroupCallback(bot bot.Bot, groupId, userId message.QID, logger *slog.Logger) llmtool.CallBackFuncs {
+func MakeGroupCallback(bot bot.Bot, groupId, userId message.QID, logger *slog.Logger, registry *imageRegistry) llmtool.CallBackFuncs {
 	msgFuncs := llmtool.CallBackFuncs{
 		SendText: func(s string) (string, error) {
 			builder := msgchain.Builder().Group()
@@ -49,6 +49,8 @@ func MakeGroupCallback(bot bot.Bot, groupId, userId message.QID, logger *slog.Lo
 			if !ok || msgs == nil {
 				return "", fmt.Errorf("获取群聊历史消息失败")
 			}
+			// 登记历史消息中的图片，使 load_images 能按哈希加载其中的图片
+			registerMessageImages(registry, bot, *msgs...)
 			opts := []message.MsgOptFunc{message.WithGetMsgFunc(bot.GetMsgDetail)}
 			if qb := botQQ(bot); qb != nil {
 				opts = append(opts, message.WithGetForwardMsgFunc(qb.GetForwardMsg))
@@ -77,7 +79,7 @@ func MakeGroupCallback(bot bot.Bot, groupId, userId message.QID, logger *slog.Lo
 	return msgFuncs
 }
 
-func MakeFriendCallback(bot bot.Bot, userId message.QID, logger *slog.Logger) llmtool.CallBackFuncs {
+func MakeFriendCallback(bot bot.Bot, userId message.QID, logger *slog.Logger, registry *imageRegistry) llmtool.CallBackFuncs {
 	msgFuncs := llmtool.CallBackFuncs{
 		SendText: func(s string) (string, error) {
 			builder := msgchain.Builder().Friend()
@@ -115,6 +117,8 @@ func MakeFriendCallback(bot bot.Bot, userId message.QID, logger *slog.Logger) ll
 			if !ok || msgs == nil {
 				return "", fmt.Errorf("获取好友历史消息失败")
 			}
+			// 登记历史消息中的图片，使 load_images 能按哈希加载其中的图片
+			registerMessageImages(registry, bot, *msgs...)
 			opts := []message.MsgOptFunc{message.WithGetMsgFunc(bot.GetMsgDetail)}
 			if qb := botQQ(bot); qb != nil {
 				opts = append(opts, message.WithGetForwardMsgFunc(qb.GetForwardMsg))

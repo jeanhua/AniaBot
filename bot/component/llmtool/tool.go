@@ -15,8 +15,11 @@ type CallBackFuncs struct {
 	SendFile          func(name, bs64content string) (string, error)
 	GetMsgHistory     func(count int, message_seq int) (string, error)
 	GetPrivateFileURL func(fileId string) (string, error)
-	LoadImages        func() (string, error)
-	TakeLoadedImages  func() []string
+	// LoadImages 按哈希加载指定图片（哈希取自消息文本中的 [图片 <hash> url:<url>]
+	// 标记，如当前消息、get_msg_history 历史记录或合并转发内容）。hashes 为空时
+	// 不加载任何图片，返回引导提示。nil 表示当前会话不支持加载图片。
+	LoadImages       func(hashes []string) (string, error)
+	TakeLoadedImages func() []string
 	// LoadLocalImage 读取本地图片文件供 LLM 查看：主模型支持多模态时把 data URI
 	// 推入待加载图片队列（下一轮上下文提供），否则交由备用识别模型描述。
 	// 回调返回给 LLM 的提示文本；nil 表示当前会话不支持读取本地图片。

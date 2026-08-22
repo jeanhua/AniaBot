@@ -164,7 +164,7 @@ func TestMakeSubagentCallbacks(t *testing.T) {
 		SendImage: func(bs64 string) (string, error) {
 			return "图片已发送:" + bs64, nil
 		},
-		LoadImages: func() (string, error) {
+		LoadImages: func(_ []string) (string, error) {
 			parentLoadImagesCalled = true
 			return "已加载 1 张图片", nil
 		},
@@ -196,7 +196,7 @@ func TestMakeSubagentCallbacks(t *testing.T) {
 	}
 
 	// LoadImages 不透传：子代理有独立图片状态，不与主会话互踩
-	res, err = cbs.LoadImages()
+	res, err = cbs.LoadImages([]string{"a1b2c3d4"})
 	if err != nil {
 		t.Fatalf("LoadImages err = %v", err)
 	}

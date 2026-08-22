@@ -301,7 +301,7 @@ func (o *ToolOrchestrator) lockedCallbacks(callbacks llmtool.CallBackFuncs) llmt
 		SendFile:          str2Wrap(callbacks.SendFile, &mu),
 		GetMsgHistory:     wrap2(callbacks.GetMsgHistory, &mu),
 		GetPrivateFileURL: strWrap(callbacks.GetPrivateFileURL),
-		LoadImages:        wrap0(callbacks.LoadImages, &mu),
+		LoadImages:        sliceWrap(callbacks.LoadImages, &mu),
 		TakeLoadedImages:  wrap0s(callbacks.TakeLoadedImages, &mu),
 		LoadLocalImage:    strWrap(callbacks.LoadLocalImage),
 		// RequestApproval 刻意透传不加锁：审批会阻塞等待真人回复（默认 120s），
@@ -354,5 +354,17 @@ func wrap0s(fn func() []string, mu *sync.Mutex) func() []string {
 		mu.Lock()
 		defer mu.Unlock()
 		return fn()
+	}
+}
+
+// sliceWrap 为 func([]string) (string, error) 签名的回调套互斥锁。
+func sliceWrap(fn func([]string) (string, error), mu *sync.Mutex) func([]string) (string, error) {
+	if fn == nil {
+		return nil
+	}
+	return func(hashes []string) (string, error) {
+		mu.Lock()
+		defer mu.Unlock()
+		return fn(hashes)
 	}
 }

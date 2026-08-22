@@ -44,8 +44,6 @@ func newCacheStorage(ctx context.Context, cfg *viper.Viper, logger *slog.Logger)
 //   - ANIABOT_STORE_DRIVER: sqlite（默认） | mysql
 //   - ANIABOT_SQLITE_PATH: sqlite 文件路径，默认 ./data/aniabot.db
 //   - ANIABOT_MYSQL_DSN:   mysql 标准 go-sql-driver DSN
-//
-// 均使用纯 Go 驱动，无需 CGO。
 func newPersistentStorage(ctx context.Context, logger *slog.Logger) (storage.PersistentStorage, error) {
 	driver := strings.ToLower(os.Getenv("ANIABOT_STORE_DRIVER"))
 	if driver == "" {

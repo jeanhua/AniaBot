@@ -9,20 +9,21 @@ import (
 
 func TestLoadImagesTool(t *testing.T) {
 	tool := NewLoadImagesTool()
-	called := false
+	var got []string
 	callbacks := llmtool.CallBackFuncs{
-		LoadImages: func() (string, error) {
-			called = true
+		LoadImages: func(hashes []string) (string, error) {
+			got = hashes
 			return "已加载 2 张图片", nil
 		},
 	}
 
-	result, err := tool.Execute(context.Background(), &LoadImagesParams{}, callbacks)
+	want := []string{"a1b2c3d4", "e5f6a7b8"}
+	result, err := tool.Execute(context.Background(), &LoadImagesParams{Hashes: want}, callbacks)
 	if err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}
-	if !called {
-		t.Fatal("LoadImages callback was not called")
+	if len(got) != 2 || got[0] != want[0] || got[1] != want[1] {
+		t.Fatalf("LoadImages callback got hashes = %v, want %v", got, want)
 	}
 	if result != "已加载 2 张图片" {
 		t.Fatalf("Execute() result = %q", result)
@@ -31,7 +32,7 @@ func TestLoadImagesTool(t *testing.T) {
 
 func TestLoadImagesToolWithoutCallback(t *testing.T) {
 	tool := NewLoadImagesTool()
-	result, err := tool.Execute(context.Background(), &LoadImagesParams{}, llmtool.CallBackFuncs{})
+	result, err := tool.Execute(context.Background(), &LoadImagesParams{Hashes: []string{"a1b2c3d4"}}, llmtool.CallBackFuncs{})
 	if err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}

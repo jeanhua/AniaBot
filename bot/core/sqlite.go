@@ -9,12 +9,11 @@ import (
 	"path/filepath"
 
 	"github.com/jeanhua/AniaBot/common/storage"
-	_ "modernc.org/sqlite" // 纯 Go SQLite 驱动，无 CGO，便于跨平台交叉编译
+	_ "modernc.org/sqlite"
 )
 
 // NewAniaSqliteStorage 创建一个基于 SQLite 的持久化存储实例。
 // path 为数据库文件路径（如 "./data/aniabot.db"）；传入 ":memory:" 使用内存库（主要用于测试）。
-// 使用纯 Go 驱动 modernc.org/sqlite，无需 CGO，交叉编译友好。
 func NewAniaSqliteStorage(ctx context.Context, path string, logger *slog.Logger) (storage.PersistentStorage, error) {
 	if path == "" {
 		path = "./data/aniabot.db"

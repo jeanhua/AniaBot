@@ -30,7 +30,7 @@ const features = [
   {
     icon: 'database',
     title: '双层存储',
-    desc: '缓存层（Redis / 内存）+ 持久化层（SQLite / MySQL），纯 Go 无 CGO，插件数据自动按命名空间隔离。',
+    desc: '缓存层（Redis / 内存）+ 持久化层（SQLite / MySQL），插件数据自动按命名空间隔离。',
   },
 ]
 
@@ -115,7 +115,7 @@ const steps = [
     <p class="ania-section-sub">从零到一个会聊天、会定时、会使用工具的多平台机器人</p>
     <div class="ania-steps">
       <div v-for="(s, i) in steps" :key="s.title" class="ania-step">
-        <span class="step-no">{{ i + 1 }}</span>
+        <span class="step-no">{{ number(i) + 1 }}</span>
         <div class="step-title">{{ s.title }}</div>
         <div class="step-desc">{{ s.desc }}</div>
       </div>

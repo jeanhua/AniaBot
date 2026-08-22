@@ -21,7 +21,6 @@ type MysqlPoolConfig struct {
 // NewAniaMysqlStorage 创建一个基于 MySQL 的持久化存储实例。
 // dsn 为标准 go-sql-driver/mysql DSN，如
 // "user:password@tcp(localhost:3306)/aniabot?charset=utf8mb4&parseTime=true&loc=Local"。
-// 使用纯 Go 驱动，无需 CGO。
 func NewAniaMysqlStorage(ctx context.Context, dsn string, pool MysqlPoolConfig, logger *slog.Logger) (storage.PersistentStorage, error) {
 	if dsn == "" {
 		return nil, fmt.Errorf("mysql dsn 不能为空")
