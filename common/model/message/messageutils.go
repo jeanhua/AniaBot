@@ -155,11 +155,7 @@ func (raw Message) FriendlyText(showUrl bool, opts ...MsgOptFunc) string {
 					if detail, ok := msgFuncs.getForwardMsgFunc(msg.Id); ok {
 						result.WriteString("\n<合并转发消息>")
 						for _, msg := range *detail {
-							nickname := msg.Sender.Card
-							if nickname == "" {
-								nickname = msg.Sender.Nickname
-							}
-							result.WriteString(fmt.Sprintf("\n[nickname: %s id: %s]: %s\n", nickname, msg.Sender.UserId, msg.FriendlyText(showUrl)))
+							result.WriteString(msg.FriendlyText(showUrl))
 						}
 						result.WriteString("</合并转发消息>\n")
 					} else {
