@@ -58,7 +58,7 @@ func MakeGroupCallback(bot bot.Bot, groupId, userId message.QID, logger *slog.Lo
 			var sb strings.Builder
 			for _, msg := range *msgs {
 				sb.WriteString(fmt.Sprintf("[message_seq:%d]\n", msg.MessageSeq))
-				sb.WriteString(msg.FriendlyText(true, opts...))
+				sb.WriteString(annotateEmbeddedImages(msg.FriendlyText(true, opts...)))
 				sb.WriteString("\n")
 			}
 			return sb.String(), nil
@@ -126,7 +126,7 @@ func MakeFriendCallback(bot bot.Bot, userId message.QID, logger *slog.Logger, re
 			var sb strings.Builder
 			for _, msg := range *msgs {
 				sb.WriteString(fmt.Sprintf("[message_seq:%d]\n", msg.MessageSeq))
-				sb.WriteString(msg.FriendlyText(true, opts...))
+				sb.WriteString(annotateEmbeddedImages(msg.FriendlyText(true, opts...)))
 				sb.WriteString("\n")
 			}
 			return sb.String(), nil

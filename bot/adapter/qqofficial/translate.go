@@ -2,6 +2,7 @@ package qqofficial
 
 import (
 	"encoding/json"
+	"regexp"
 	"strings"
 	"time"
 
@@ -258,11 +259,11 @@ func (a *qqOfficialAdapter) emitPlatformEvent(eventType string, data any) {
 // ---------- 内容翻译 ----------
 
 // contentToSegments 消息文本 → 通用段。
-// message_type=103（引用消息）且正文为空时，取 msg_elements 的拼接内容兜底；
-// ARK 卡片（message_type=3）的 content 已是平台拼好的文本摘要，直接使用。
+// message_type=102（聊天记录）/103（引用消息）且正文为空时，取 msg_elements 的
+// 拼接内容兜底；ARK 卡片（message_type=3）的 content 已是平台拼好的文本摘要，直接使用。
 func contentToSegments(content string, messageType int, elements []msgElement) []message.OB11Segment {
 	text := strings.TrimSpace(content)
-	if text == "" && messageType == 103 {
+	if text == "" && (messageType == 102 || messageType == 103) {
 		var sb strings.Builder
 		for _, e := range elements {
 			if e.Content != "" {
@@ -277,10 +278,88 @@ func contentToSegments(content string, messageType int, elements []msgElement) [
 	if text == "" {
 		return nil
 	}
+	// 聊天记录文本内嵌的 [附件N] 类型:图片 ... URL:... 描述拆为结构化段（图片带
+	// url 键），使 FriendlyText 输出 [图片 <hash> url:<url>]，AI 的 load_images 可加载
+	if segs := attachmentTextToSegments(text); len(segs) > 0 {
+		return segs
+	}
 	return []message.OB11Segment{{
 		Type: message.SegmentText,
 		Data: message.TextMessage{Text: text}.Marshal(),
 	}}
+}
+
+// attachmentLineRe 匹配聊天记录（message_type=102）等文本内嵌的附件描述行，例如：
+//
+//	[附件1] 类型:图片 文件名:a.jpg 尺寸:630x1142 大小:101.9KB URL:https://multimedia.nt.qq.com.cn/download?...
+//
+// URL 为行尾字段（QQ 多媒体链接不含空白），文件名/尺寸/大小对非图片附件可能缺失，均作可选。
+var attachmentLineRe = regexp.MustCompile(`\[附件\d+\]\s*类型:([^\s]+)\s+(?:文件名:(\S+)\s+)?(?:尺寸:\d+x\d+\s+)?(?:大小:\S+\s+)?URL:(\S+)`)
+
+// attachmentTextToSegments 把含 [附件N] 类型:... URL:... 描述行的文本拆成
+// 文本段 + 附件段（图片/视频/语音/文件），未命中任何附件描述时返回 nil。
+func attachmentTextToSegments(text string) []message.OB11Segment {
+	idx := attachmentLineRe.FindAllStringSubmatchIndex(text, -1)
+	if len(idx) == 0 {
+		return nil
+	}
+	segs := make([]message.OB11Segment, 0, len(idx)*2+1)
+	last := 0
+	for _, m := range idx {
+		if piece := strings.TrimSpace(text[last:m[0]]); piece != "" {
+			segs = append(segs, message.OB11Segment{
+				Type: message.SegmentText,
+				Data: message.TextMessage{Text: piece}.Marshal(),
+			})
+		}
+		kind := text[m[2]:m[3]]
+		url := text[m[6]:m[7]]
+		filename := ""
+		if m[4] >= 0 {
+			filename = text[m[4]:m[5]]
+		}
+		segs = append(segs, attachmentSegment(kind, filename, url))
+		last = m[1]
+	}
+	if rest := strings.TrimSpace(text[last:]); rest != "" {
+		segs = append(segs, message.OB11Segment{
+			Type: message.SegmentText,
+			Data: message.TextMessage{Text: rest}.Marshal(),
+		})
+	}
+	return segs
+}
+
+// attachmentSegment 按平台文本描述的类型生成附件段（与 attachmentsToSegments 同构）。
+// 聊天记录文本里的类型是中文标签（图片/视频/语音/文件），兼容英文 MIME 前缀。
+func attachmentSegment(kind, filename, url string) message.OB11Segment {
+	k := strings.ToLower(kind)
+	switch {
+	case k == "图片" || strings.HasPrefix(k, "image"):
+		file := url
+		if filename != "" {
+			file = filename
+		}
+		return message.OB11Segment{
+			Type: message.SegmentImage,
+			Data: message.ImageMessage{File: file, Url: url}.Marshal(),
+		}
+	case k == "视频" || strings.HasPrefix(k, "video"):
+		return message.OB11Segment{
+			Type: message.SegmentVideo,
+			Data: message.VideoMessage{URL: url}.Marshal(),
+		}
+	case k == "语音" || strings.HasPrefix(k, "voice"):
+		return message.OB11Segment{
+			Type: message.SegmentRecord,
+			Data: message.RecordMessage{URL: url}.Marshal(),
+		}
+	default:
+		return message.OB11Segment{
+			Type: message.SegmentFile,
+			Data: message.FileMessage{File: url, FileId: url, Name: filename}.Marshal(),
+		}
+	}
 }
 
 // attachmentsToSegments 附件 → 通用段：按 content_type 映射图片/语音/视频/文件。

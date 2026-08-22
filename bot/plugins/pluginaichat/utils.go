@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"sync"
@@ -49,7 +50,8 @@ func (p *AIChatPlugin) extraMsg(b bot.Bot, msg message.Message) string {
 	if msg.Sender.UserId == message.FromUint64(0) {
 		opts = append(opts, message.WithNoSenderPrefix())
 	}
-	return msg.FriendlyText(true, opts...)
+	// 文本内嵌附件描述（如 QQ 官方聊天记录）兜底补充 [图片 <hash> url:<url>] 标记
+	return annotateEmbeddedImages(msg.FriendlyText(true, opts...))
 }
 
 // imageRef 已解析到的图片引用：哈希用于与消息文本中的 [图片 <hash>] 标记对应，
@@ -63,12 +65,16 @@ type imageRef struct {
 // （当前消息、get_msg_history 历史记录、合并转发内容）都会登记，
 // load_images 按哈希查找并只加载指定的图片，避免一次全部塞进上下文。
 type imageRegistry struct {
-	mu     sync.Mutex
-	byHash map[string]string
+	mu      sync.Mutex
+	byHash  map[string]string
+	byAlias map[string]string // 非哈希别名（如聊天记录文本里的文件名）→ URL
 }
 
 func newImageRegistry() *imageRegistry {
-	return &imageRegistry{byHash: make(map[string]string)}
+	return &imageRegistry{
+		byHash:  make(map[string]string),
+		byAlias: make(map[string]string),
+	}
 }
 
 // register 登记图片哈希→URL 映射；同一哈希只保留首次登记（先到先得）。
@@ -83,13 +89,31 @@ func (r *imageRegistry) register(hash, url string) {
 	}
 }
 
+// registerAlias 登记图片的非哈希别名（如聊天记录文本中的文件名）→ URL，
+// 兼容 AI 把文件名当哈希传入 load_images 的情况；同一别名只保留首次登记。
+func (r *imageRegistry) registerAlias(alias, url string) {
+	if alias == "" {
+		return
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if _, ok := r.byAlias[alias]; !ok {
+		r.byAlias[alias] = url
+	}
+}
+
 // resolve 按哈希解析图片引用，返回找到的引用与未登记的哈希。
+// 未命中哈希时回退查文件名别名，命中后返回规范哈希（与消息文本 [图片 <hash>] 一致）。
 func (r *imageRegistry) resolve(hashes []string) (found []imageRef, missing []string) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	for _, hash := range hashes {
 		url, ok := r.byHash[hash]
 		if !ok {
+			if aliasURL, ok2 := r.byAlias[hash]; ok2 {
+				found = append(found, imageRef{Hash: message.ImageHash(aliasURL), URL: aliasURL})
+				continue
+			}
 			missing = append(missing, hash)
 			continue
 		}
@@ -134,6 +158,13 @@ func (r *imageRegistry) registerMessage(src imageMessageSource, current message.
 			if message.ParseImage(segment, &image) {
 				r.register(image.Hash(), image.Url)
 			}
+		case message.SegmentText:
+			// 平台文本内嵌的图片附件描述（如 QQ 官方聊天记录）兜底登记，
+			// 使 load_images 在适配器未拆段时也能按哈希/文件名加载
+			var txt message.TextMessage
+			if message.ParseText(segment, &txt) {
+				registerEmbeddedImages(r, txt.Text)
+			}
 		case message.SegmentReply:
 			var reply message.ReplyMessage
 			if message.ParseReply(segment, &reply) {
@@ -154,6 +185,60 @@ func (r *imageRegistry) registerMessage(src imageMessageSource, current message.
 			}
 		}
 	}
+}
+
+// embeddedImageRe 匹配平台文本内嵌的图片附件描述（如 QQ 官方聊天记录），与
+// qqofficial 适配器的拆段正则同源。适配器已拆段时这里只是兜底（如历史消息或
+// 未被适配器识别的场景），保证 load_images 仍能按哈希/文件名加载。
+var embeddedImageRe = regexp.MustCompile(`\[附件\d+\]\s*类型:([^\s]+)\s+(?:文件名:(\S+)\s+)?(?:尺寸:\d+x\d+\s+)?(?:大小:\S+\s+)?URL:(\S+)`)
+
+// isImageAttachmentType 判断文本附件描述的类型是否为图片（中文标签或英文 MIME）。
+func isImageAttachmentType(kind string) bool {
+	k := strings.ToLower(kind)
+	return k == "图片" || strings.HasPrefix(k, "image")
+}
+
+// registerEmbeddedImages 登记文本内嵌图片附件的哈希→URL，并登记文件名别名，
+// 使 load_images 能加载聊天记录等以文本描述携带的图片。
+func registerEmbeddedImages(r *imageRegistry, text string) {
+	for _, m := range embeddedImageRe.FindAllStringSubmatch(text, -1) {
+		if !isImageAttachmentType(m[1]) {
+			continue
+		}
+		url := m[3]
+		if url == "" {
+			continue
+		}
+		r.register(message.ImageHash(url), url)
+		if m[2] != "" {
+			r.registerAlias(m[2], url)
+		}
+	}
+}
+
+// annotateEmbeddedImages 在文本内嵌的图片附件描述后补充 [图片 <hash> url:<url>] 标记，
+// 使 AI 能看到与 load_images 对应的哈希（聊天记录等平台文本描述场景的兜底展示）。
+func annotateEmbeddedImages(text string) string {
+	idx := embeddedImageRe.FindAllStringSubmatchIndex(text, -1)
+	if len(idx) == 0 {
+		return text
+	}
+	var sb strings.Builder
+	last := 0
+	for _, m := range idx {
+		if !isImageAttachmentType(text[m[2]:m[3]]) {
+			continue
+		}
+		url := text[m[6]:m[7]]
+		if url == "" {
+			continue
+		}
+		sb.WriteString(text[last:m[1]])
+		sb.WriteString(fmt.Sprintf(" [图片 %s url:%s]", message.ImageHash(url), url))
+		last = m[1]
+	}
+	sb.WriteString(text[last:])
+	return sb.String()
 }
 
 // configureImageCallbacks 挂载消息图片的加载回调。registry 为本次请求的

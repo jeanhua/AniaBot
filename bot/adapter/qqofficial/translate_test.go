@@ -1,6 +1,7 @@
 package qqofficial
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/jeanhua/AniaBot/common/adapter"
@@ -311,5 +312,59 @@ func TestParseEventTime(t *testing.T) {
 	}
 	if ts := parseEventTime("bad"); ts <= 0 {
 		t.Error("非法时间应回退当前时间")
+	}
+}
+
+// TestContentToSegmentsChatRecord 聊天记录（message_type=102）文本内嵌的附件描述
+// 应拆为结构化段：图片带 url 键（FriendlyText 输出 [图片 <hash> url:<url>]，
+// AI 的 load_images 可按哈希加载），而不是停留在纯文本导致 AI 拿文件名当哈希。
+func TestContentToSegmentsChatRecord(t *testing.T) {
+	content := "[群聊的聊天记录]\n" +
+		"=== 消息 1 ===\n" +
+		"[发送者] Ice-Nick\n" +
+		"[附件1] 类型:图片 文件名:68C30E391DA0319548B734539FCC037E.jpg 尺寸:630x1142 大小:101.9KB URL:https://multimedia.nt.qq.com.cn/download?appid=1406&fileid=abc&rkey=xyz&spec=0\n" +
+		"\n" +
+		"=== 消息 2 ===\n" +
+		"[消息内容] 版本又更新了\n" +
+		"[发送者] I…"
+	segs := contentToSegments(content, 102, nil)
+	if len(segs) != 3 {
+		t.Fatalf("段数 = %d, want 3: %+v", len(segs), segs)
+	}
+	if segs[0].Type != message.SegmentText || !strings.Contains(segs[0].Data["text"].(string), "[群聊的聊天记录]") {
+		t.Errorf("首段应为聊天记录文本: %+v", segs[0])
+	}
+	if segs[1].Type != message.SegmentImage {
+		t.Fatalf("第二段应为图片段: %+v", segs[1])
+	}
+	var img message.ImageMessage
+	if !message.ParseImage(segs[1], &img) {
+		t.Fatalf("图片段解析失败: %+v", segs[1])
+	}
+	wantURL := "https://multimedia.nt.qq.com.cn/download?appid=1406&fileid=abc&rkey=xyz&spec=0"
+	if img.Url != wantURL {
+		t.Errorf("图片 url = %q, want %q", img.Url, wantURL)
+	}
+	if img.File != "68C30E391DA0319548B734539FCC037E.jpg" {
+		t.Errorf("图片 file = %q, want 文件名", img.File)
+	}
+	// 哈希应与 FriendlyText 展示的 [图片 <hash> url:<url>] 一致（可被 load_images 解析）
+	marker := " [图片 " + message.ImageHash(wantURL) + " url:" + wantURL + "]"
+	if text := segs[0].Data["text"].(string) + segs[2].Data["text"].(string); strings.Contains(text, marker) {
+		t.Log("哈希标记由 FriendlyText 输出")
+	}
+	if segs[2].Type != message.SegmentText || !strings.Contains(segs[2].Data["text"].(string), "版本又更新了") {
+		t.Errorf("末段应为剩余聊天记录文本: %+v", segs[2])
+	}
+
+	// 正文为空时走 msg_elements 拼接兜底（同 message_type=103）
+	segs = contentToSegments("", 102, []msgElement{{Content: "[群聊的聊天记录]\n[附件1] 类型:图片 URL:https://e.com/p.png"}})
+	if len(segs) != 2 || segs[1].Type != message.SegmentImage {
+		t.Fatalf("msg_elements 兜底拆段失败: %+v", segs)
+	}
+
+	// 普通文本（无附件描述）仍为单文本段
+	if segs := contentToSegments("普通消息", 0, nil); len(segs) != 1 || segs[0].Type != message.SegmentText {
+		t.Fatalf("普通文本应保持单文本段: %+v", segs)
 	}
 }

@@ -154,3 +154,53 @@ func TestConfigureImageCallbacksLoadByHash(t *testing.T) {
 		t.Fatalf("空哈希应提示传入 hashes, got %q", res)
 	}
 }
+
+// TestRegisterMessageImagesEmbeddedText 平台文本内嵌的图片附件描述（如 QQ 官方
+// 聊天记录）应登记哈希与文件名别名：load_images 传哈希或文件名都能加载，
+// 且别名命中后返回规范哈希（与 [图片 <hash>] 标记一致）。
+func TestRegisterMessageImagesEmbeddedText(t *testing.T) {
+	const urlA = "https://multimedia.nt.qq.com.cn/download?appid=1&fileid=a&rkey=x&spec=0"
+	const urlB = "https://multimedia.nt.qq.com.cn/download?appid=1&fileid=b&rkey=y&spec=0"
+	text := "[群聊的聊天记录]\n" +
+		"=== 消息 1 ===\n" +
+		"[发送者] Ice-Nick\n" +
+		"[附件1] 类型:图片 文件名:photoA.jpg 尺寸:630x1142 大小:101.9KB URL:" + urlA + "\n" +
+		"=== 消息 2 ===\n" +
+		"[附件1] 类型:视频 文件名:mv.mp4 尺寸:1920x1080 URL:" + urlB + "\n"
+	msg := message.Message{
+		Message: []message.OB11Segment{{Type: message.SegmentText, Data: map[string]any{"text": text}}},
+	}
+
+	reg := newImageRegistry()
+	registerMessageImages(reg, nil, msg)
+
+	// 按规范哈希加载
+	found, missing := reg.resolve([]string{message.ImageHash(urlA)})
+	if len(found) != 1 || found[0].URL != urlA || len(missing) != 0 {
+		t.Fatalf("按哈希解析失败: found=%+v missing=%v", found, missing)
+	}
+	// AI 拿文件名当哈希也能加载（回归：QQ 官方聊天记录此前只给文本，AI 乱用文件名）
+	found, missing = reg.resolve([]string{"photoA.jpg"})
+	if len(found) != 1 || found[0].URL != urlA || found[0].Hash != message.ImageHash(urlA) {
+		t.Fatalf("文件名别名解析失败: found=%+v missing=%v", found, missing)
+	}
+	// 非图片附件（视频）不登记为图片
+	found, missing = reg.resolve([]string{message.ImageHash(urlB)})
+	if len(found) != 0 || len(missing) != 1 {
+		t.Fatalf("视频不应登记为图片: found=%+v missing=%v", found, missing)
+	}
+}
+
+// TestAnnotateEmbeddedImages 文本内嵌图片附件描述应补充 [图片 <hash> url:<url>] 标记，
+// 使 AI 看到与 load_images 对应的哈希而不是文件名。
+func TestAnnotateEmbeddedImages(t *testing.T) {
+	const url = "https://multimedia.nt.qq.com.cn/download?appid=1&fileid=a&rkey=x&spec=0"
+	text := "[群聊的聊天记录]\n[发送者] A\n[附件1] 类型:图片 文件名:p.jpg 尺寸:1x1 大小:1KB URL:" + url + "\n[消息内容] hi"
+	out := annotateEmbeddedImages(text)
+	if !strings.Contains(out, "[图片 "+message.ImageHash(url)+" url:"+url+"]") {
+		t.Fatalf("应补充 [图片 <hash> url:<url>] 标记, got %q", out)
+	}
+	if !strings.Contains(out, "文件名:p.jpg") {
+		t.Fatalf("附件描述原文应保留（标记追加在描述后）, got %q", out)
+	}
+}
