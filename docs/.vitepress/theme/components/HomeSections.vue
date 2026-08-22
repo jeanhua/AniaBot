@@ -115,10 +115,11 @@ const steps = [
     <p class="ania-section-sub">从零到一个会聊天、会定时、会使用工具的多平台机器人</p>
     <div class="ania-steps">
       <div v-for="(s, i) in steps" :key="s.title" class="ania-step">
-        <span class="step-no">{{ number(i) + 1 }}</span>
+        <span class="step-no">{{ i + 1 }}</span>
         <div class="step-title">{{ s.title }}</div>
         <div class="step-desc">{{ s.desc }}</div>
       </div>
     </div>
   </div>
 </template>
+
