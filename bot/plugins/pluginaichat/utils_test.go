@@ -9,6 +9,12 @@ import (
 	"github.com/jeanhua/AniaBot/common/model/message"
 )
 
+// testPNGDataURI / testGIFDataURI 供本地加载测试使用（data URI 无需网络下载）。
+const (
+	testPNGDataURI = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="
+	testGIFDataURI = "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7"
+)
+
 // fakeMsgSource 测试用消息来源：实现 GetMsgDetail 与 GetForwardMsg 两个最小能力。
 type fakeMsgSource struct {
 	details  map[message.QID]*message.Message
@@ -31,8 +37,8 @@ func imageSegment(url string) message.OB11Segment {
 
 func TestImageRegistryResolve(t *testing.T) {
 	reg := newImageRegistry()
-	const urlA = "https://example.com/a.png"
-	const urlB = "https://example.com/b.png"
+	const urlA = testPNGDataURI
+	const urlB = testGIFDataURI
 	reg.register(message.ImageHash(urlA), urlA)
 	reg.register(message.ImageHash(urlA), "https://example.com/dup.png") // 先到先得
 	reg.register(message.ImageHash(urlB), urlB)
@@ -99,8 +105,8 @@ func TestConfigureImageCallbacksLoadByHash(t *testing.T) {
 	p := &AIChatPlugin{}
 	p.cfg.Multimodal = true
 
-	const urlA = "https://example.com/a.png"
-	const urlB = "https://example.com/b.png"
+	const urlA = testPNGDataURI
+	const urlB = testGIFDataURI
 	reg := newImageRegistry()
 
 	// 当前消息中的图片由 configureImageCallbacks 自动登记

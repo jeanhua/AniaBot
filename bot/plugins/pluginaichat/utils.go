@@ -248,7 +248,8 @@ func annotateEmbeddedImages(text string) string {
 func (p *AIChatPlugin) configureImageCallbacks(ctx context.Context, bot bot.Bot, callbacks *llmtool.CallBackFuncs, registry *imageRegistry, usageSink func(aichat.TokenUsage), msgs ...message.Message) {
 	registerMessageImages(registry, bot, msgs...)
 	var loadedImages []string
-	// loadedHashes 记录已加载过的图片哈希，避免同一张图片重复进入上下文/重复 OCR
+	// loadedHashes 记录已加载过的图片哈希，避免同一张图片重复进入上下文/重复 OCR；
+	// 仅在图片成功取回后登记，加载失败的哈希下次可重试
 	loadedHashes := make(map[string]struct{})
 
 	callbacks.LoadImages = func(hashes []string) (string, error) {
@@ -277,7 +278,6 @@ func (p *AIChatPlugin) configureImageCallbacks(ctx context.Context, bot bot.Bot,
 				missing = append(missing, ref.Hash+"（无可用链接）")
 				continue
 			}
-			loadedHashes[ref.Hash] = struct{}{}
 			toLoad = append(toLoad, ref)
 		}
 
@@ -290,19 +290,32 @@ func (p *AIChatPlugin) configureImageCallbacks(ctx context.Context, bot bot.Bot,
 		}
 
 		if p.cfg.Multimodal {
-			for _, ref := range toLoad {
-				loadedImages = append(loadedImages, ref.URL)
-			}
-			// 列出每张图片的哈希标识，与消息文本中的 [图片 <hash>] 标记对应
+			// 在本机下载并统一为 data URI：QQ 临时链接带 rkey、上游机房未必能访问，
+			// 直接透传 URL 会因上游拉取失败或格式不支持（如 QQ 截图常见的 BMP）导致整轮请求 400
 			labels := make([]string, 0, len(toLoad))
+			failed := make([]string, 0)
 			for _, ref := range toLoad {
+				dataURI, err := fetchImageDataURI(ctx, ref.URL)
+				if err != nil {
+					p.Logger.Warn("图片加载失败", "hash", ref.Hash, "error", err.Error())
+					failed = append(failed, "[图片 "+ref.Hash+"]："+err.Error())
+					continue
+				}
+				loadedHashes[ref.Hash] = struct{}{}
+				loadedImages = append(loadedImages, dataURI)
 				labels = append(labels, "[图片 "+ref.Hash+"]")
 			}
 			var extra string
 			if len(missing) > 0 {
-				extra = "；未找到：" + strings.Join(missing, "、")
+				extra += "；未找到：" + strings.Join(missing, "、")
 			}
-			return fmt.Sprintf("已加载 %d 张图片（%s），图片将在下一轮上下文中提供，请直接查看图片后回答%s", len(toLoad), strings.Join(labels, "、"), extra), nil
+			if len(failed) > 0 {
+				extra += "；加载失败：" + strings.Join(failed, "、")
+			}
+			if len(loadedImages) == 0 {
+				return "图片加载失败（" + strings.Join(failed, "、") + "）" + extra, nil
+			}
+			return fmt.Sprintf("已加载 %d 张图片（%s），图片将在下一轮上下文中提供，请直接查看图片后回答%s", len(labels), strings.Join(labels, "、"), extra), nil
 		}
 
 		if p.ocrModel == nil {
@@ -312,7 +325,15 @@ func (p *AIChatPlugin) configureImageCallbacks(ctx context.Context, bot bot.Bot,
 		var result strings.Builder
 		result.WriteString("主模型不支持多模态，以下是备用图片识别模型返回的图片描述：")
 		for _, ref := range toLoad {
-			description, usage, err := p.ocrModel.GetSingleImageDesc(ctx, "描述图片内容", ref.URL, p.buildOCRChatOptions())
+			// 与多模态路径一致：先在本机下载并转码为 data URI，避免备用模型拉不到 QQ 链接
+			dataURI, err := fetchImageDataURI(ctx, ref.URL)
+			if err != nil {
+				p.Logger.Warn("备用图片识别下载失败", "hash", ref.Hash, "error", err.Error())
+				result.WriteString(fmt.Sprintf("\n<图片 %s>识别失败：%s</图片 %s>", ref.Hash, err.Error(), ref.Hash))
+				continue
+			}
+			loadedHashes[ref.Hash] = struct{}{}
+			description, usage, err := p.ocrModel.GetSingleImageDesc(ctx, "描述图片内容", dataURI, p.buildOCRChatOptions())
 			if err != nil {
 				p.Logger.Error("备用图片识别请求失败", "hash", ref.Hash, "error", err.Error())
 				result.WriteString(fmt.Sprintf("\n<图片 %s>识别失败：%s</图片 %s>", ref.Hash, err.Error(), ref.Hash))
