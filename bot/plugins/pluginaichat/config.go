@@ -87,11 +87,11 @@ type localImageToolConfig struct {
 // 任何「返回一组图片 URL」的接口都能接入，接口失效时改配置即可切换。
 // 默认 GIPHY stickers（全球最大 GIF/表情包平台，需免费 API Key）
 type memeToolConfig struct {
-	URL      string `cfg:"url" label:"表情包接口地址" group:"AI 对话 · 工具" help:"请求地址模板，支持 ${msg}（搜索词）、${num}（数量）、${key}（API Key）占位符；默认 GIPHY，国内服务器访问需代理，也可换成任意返回图片数组的自定义接口" default:"https://api.giphy.com/v1/stickers/search?api_key=${key}&q=${msg}&limit=${num}"`
-	Key      string `cfg:"key" label:"表情包 API Key" type:"password" sensitive:"true" group:"AI 对话 · 工具" help:"替换地址中的 ${key}；默认接口为 GIPHY，免费 Key 在 developers.giphy.com 申请；接口地址不含 ${key} 时留空即可"`
-	ListPath string `cfg:"list_path" label:"结果数组路径" group:"AI 对话 · 工具" help:"gjson 路径，指向响应 JSON 中的图片数组" default:"data"`
-	ImgField string `cfg:"img_field" label:"图片字段路径" group:"AI 对话 · 工具" help:"数组元素中图片 URL 的 gjson 路径，如 img_url 或 images.fixed_width.url" default:"images.fixed_width.url"`
-	Num      int    `cfg:"num" label:"请求数量" group:"AI 对话 · 工具" help:"每次请求的结果数量，随机从中挑一张发送" default:"50"`
+	URL      string `cfg:"url" label:"表情包接口地址" group:"AI 对话 · 表情包" help:"请求地址模板，支持 ${msg}（搜索词）、${num}（数量）、${key}（API Key）占位符；默认 GIPHY，国内服务器访问需代理，也可换成任意返回图片数组的自定义接口" default:"https://api.giphy.com/v1/stickers/search?api_key=${key}&q=${msg}&limit=${num}"`
+	Key      string `cfg:"key" label:"表情包 API Key" type:"password" sensitive:"true" group:"AI 对话 · 表情包" help:"替换地址中的 ${key}；默认接口为 GIPHY，免费 Key 在 developers.giphy.com 申请；接口地址不含 ${key} 时留空即可"`
+	ListPath string `cfg:"list_path" label:"结果数组路径" group:"AI 对话 · 表情包" help:"gjson 路径，指向响应 JSON 中的图片数组" default:"data"`
+	ImgField string `cfg:"img_field" label:"图片字段路径" group:"AI 对话 · 表情包" help:"数组元素中图片 URL 的 gjson 路径，如 img_url 或 images.fixed_width.url" default:"images.fixed_width.url"`
+	Num      int    `cfg:"num" label:"请求数量" group:"AI 对话 · 表情包" help:"每次请求的结果数量，随机从中挑一张发送" default:"50"`
 }
 
 // configToolConfig AI 配置管理工具配置：允许 AI 查看与修改框架配置及扩展配置
@@ -134,9 +134,9 @@ type ocrConfig struct {
 }
 
 type clockConfig struct {
-	Enable            bool `cfg:"enable" label:"启用 AI 定时任务" group:"AI 对话 · 定时与记忆" default:"true"`
-	DefaultTimeoutSec int  `cfg:"default_timeout_sec" label:"默认超时(秒)" group:"AI 对话 · 定时与记忆" default:"120"`
-	MaxLogEntries     int  `cfg:"max_log_entries" label:"日志保留条数" group:"AI 对话 · 定时与记忆" default:"500"`
+	Enable            bool `cfg:"enable" label:"启用 AI 定时任务" group:"AI 对话 · 定时任务" default:"true"`
+	DefaultTimeoutSec int  `cfg:"default_timeout_sec" label:"默认超时(秒)" group:"AI 对话 · 定时任务" default:"120"`
+	MaxLogEntries     int  `cfg:"max_log_entries" label:"日志保留条数" group:"AI 对话 · 定时任务" default:"500"`
 }
 
 // promptCacheConfig 上游 prompt 缓存配置：仅 anthropic 格式需要显式声明
@@ -149,12 +149,12 @@ type promptCacheConfig struct {
 }
 
 type memoryConfig struct {
-	Enable     bool `cfg:"enable" label:"启用长期记忆" group:"AI 对话 · 定时与记忆" default:"true"`
-	MaxEntries int  `cfg:"max_entries" label:"单会话记忆上限" group:"AI 对话 · 定时与记忆" default:"200"`
+	Enable     bool `cfg:"enable" label:"启用长期记忆" group:"AI 对话 · 记忆" default:"true"`
+	MaxEntries int  `cfg:"max_entries" label:"单会话记忆上限" group:"AI 对话 · 记忆" default:"200"`
 	// AutoInject 每轮按用户消息纯关键词检索相关记忆并注入到用户消息前
 	// （尾部注入：system 不变，不影响上游前缀缓存；用户消息不落盘，历史无污染）
-	AutoInject bool `cfg:"auto_inject" label:"主动注入相关记忆" group:"AI 对话 · 定时与记忆" default:"false" help:"每轮按用户消息检索相关记忆并追加到用户消息前（system 保持不变，不影响上游前缀缓存；用户消息不落盘，历史无污染）。启用向量检索后按语义+关键词混合检索，否则纯关键词"`
-	InjectMax  int  `cfg:"inject_max" label:"每轮注入条数上限" group:"AI 对话 · 定时与记忆" default:"3" help:"主动注入的最大记忆条数，0 表示不限制"`
+	AutoInject bool `cfg:"auto_inject" label:"主动注入相关记忆" group:"AI 对话 · 记忆" default:"false" help:"每轮按用户消息检索相关记忆并追加到用户消息前（system 保持不变，不影响上游前缀缓存；用户消息不落盘，历史无污染）。启用向量检索后按语义+关键词混合检索，否则纯关键词"`
+	InjectMax  int  `cfg:"inject_max" label:"每轮注入条数上限" group:"AI 对话 · 记忆" default:"3" help:"主动注入的最大记忆条数，0 表示不限制"`
 }
 
 type kbEmbeddingConfig struct {
@@ -223,10 +223,10 @@ type approvalConfig struct {
 
 // compressorConfig 上下文压缩专用模型配置：留空回退主模型配置。
 type compressorConfig struct {
-	BaseURL   string `cfg:"base_url" label:"压缩器 Base URL" group:"AI 对话 · 模型" help:"留空使用主模型配置"`
-	APIKey    string `cfg:"api_key" label:"压缩器 API Key" type:"password" sensitive:"true" group:"AI 对话 · 模型" help:"留空使用主模型配置"`
-	Model     string `cfg:"model" label:"压缩器模型" group:"AI 对话 · 模型" help:"留空使用主模型；建议填更便宜的模型降低历史压缩成本"`
-	APIFormat string `cfg:"api_format" label:"压缩器 API 格式" type:"select" options:"chat_completions,responses,anthropic" group:"AI 对话 · 模型" help:"留空跟随主模型格式"`
+	BaseURL   string `cfg:"base_url" label:"压缩器 Base URL" group:"AI 对话 · 备用模型" help:"留空使用主模型配置"`
+	APIKey    string `cfg:"api_key" label:"压缩器 API Key" type:"password" sensitive:"true" group:"AI 对话 · 备用模型" help:"留空使用主模型配置"`
+	Model     string `cfg:"model" label:"压缩器模型" group:"AI 对话 · 备用模型" help:"留空使用主模型；建议填更便宜的模型降低历史压缩成本"`
+	APIFormat string `cfg:"api_format" label:"压缩器 API 格式" type:"select" options:"chat_completions,responses,anthropic" group:"AI 对话 · 备用模型" help:"留空跟随主模型格式"`
 }
 
 // retryConfig 应用层重试配置：429/5xx/网络错误时指数退避重试。
@@ -237,10 +237,10 @@ type retryConfig struct {
 
 // fallbackConfig 备用模型配置：主模型重试耗尽或遇到不可重试错误时自动切换重试一次。
 type fallbackConfig struct {
-	BaseURL   string `cfg:"base_url" label:"备用模型 Base URL" group:"AI 对话 · 模型" help:"留空使用主模型配置"`
-	APIKey    string `cfg:"api_key" label:"备用模型 API Key" type:"password" sensitive:"true" group:"AI 对话 · 模型" help:"留空使用主模型配置"`
-	Model     string `cfg:"model" label:"备用模型" group:"AI 对话 · 模型" help:"留空表示不启用备用模型；主模型重试耗尽后自动切换重试一次（仅主对话与上下文压缩）"`
-	APIFormat string `cfg:"api_format" label:"备用模型 API 格式" type:"select" options:"chat_completions,responses,anthropic" group:"AI 对话 · 模型" help:"留空跟随主模型格式"`
+	BaseURL   string `cfg:"base_url" label:"备用模型 Base URL" group:"AI 对话 · 备用模型" help:"留空使用主模型配置"`
+	APIKey    string `cfg:"api_key" label:"备用模型 API Key" type:"password" sensitive:"true" group:"AI 对话 · 备用模型" help:"留空使用主模型配置"`
+	Model     string `cfg:"model" label:"备用模型" group:"AI 对话 · 备用模型" help:"留空表示不启用备用模型；主模型重试耗尽后自动切换重试一次（仅主对话与上下文压缩）"`
+	APIFormat string `cfg:"api_format" label:"备用模型 API 格式" type:"select" options:"chat_completions,responses,anthropic" group:"AI 对话 · 备用模型" help:"留空跟随主模型格式"`
 }
 
 // streamConfig 流式回复配置：平台支持「先发后改」时逐字展示回复
@@ -283,35 +283,38 @@ type aiChatConfig struct {
 	Thinking thinkingConfig `cfg:"plugin.ai_chat_bot.thinking"`
 	Search   searchConfig   `cfg:"plugin.ai_chat_bot.search"`
 
+	PromptCache promptCacheConfig `cfg:"plugin.ai_chat_bot.prompt_cache"`
+	Retry       retryConfig       `cfg:"plugin.ai_chat_bot.retry"`
+	Fallback    fallbackConfig    `cfg:"plugin.ai_chat_bot.fallback"`
+	Compressor  compressorConfig  `cfg:"plugin.ai_chat_bot.compressor"`
+
 	SkillsDir  string               `cfg:"plugin.ai_chat_bot.skills_dir" label:"Skills 目录" group:"AI 对话 · 工具" default:"./skills"`
 	Skills     []string             `cfg:"plugin.ai_chat_bot.skills" label:"Skills 白名单" group:"AI 对话 · 工具" help:"为空则加载全部，每行一个"`
 	Bash       bashToolConfig       `cfg:"plugin.ai_chat_bot.bash"`
 	File       fileToolConfig       `cfg:"plugin.ai_chat_bot.file"`
 	LocalImage localImageToolConfig `cfg:"plugin.ai_chat_bot.local_image"`
-	Meme       memeToolConfig       `cfg:"plugin.ai_chat_bot.meme"`
 	ConfigTool configToolConfig     `cfg:"plugin.ai_chat_bot.config_tool"`
 	SkillTool  skillToolConfig      `cfg:"plugin.ai_chat_bot.skill_tool"`
 	Todo       todoConfig           `cfg:"plugin.ai_chat_bot.todo"`
 	MCP        mcpConfig            `cfg:"plugin.ai_chat_bot.mcp"`
 	MCPTool    mcpToolConfig        `cfg:"plugin.ai_chat_bot.mcp_tool"`
 
+	Meme memeToolConfig `cfg:"plugin.ai_chat_bot.meme"`
+
 	OCR ocrConfig `cfg:"plugin.ai_chat_bot.ocr"`
 
-	Clock       clockConfig       `cfg:"plugin.ai_chat_bot.clock"`
-	PromptCache promptCacheConfig `cfg:"plugin.ai_chat_bot.prompt_cache"`
-	Memory      memoryConfig      `cfg:"plugin.ai_chat_bot.memory"`
-	Kb          kbConfig          `cfg:"plugin.ai_chat_bot.kb"`
-	Subagent    subagentConfig    `cfg:"plugin.ai_chat_bot.subagent"`
-	Team        teamConfig        `cfg:"plugin.ai_chat_bot.team"`
-	QueryLog    queryLogConfig    `cfg:"plugin.ai_chat_bot.query_log"`
-	Compressor  compressorConfig  `cfg:"plugin.ai_chat_bot.compressor"`
-	Retry       retryConfig       `cfg:"plugin.ai_chat_bot.retry"`
-	Fallback    fallbackConfig    `cfg:"plugin.ai_chat_bot.fallback"`
-	Stream      streamConfig      `cfg:"plugin.ai_chat_bot.stream"`
-	Quota       quotaConfig       `cfg:"plugin.ai_chat_bot.quota"`
-	Session     sessionConfig     `cfg:"plugin.ai_chat_bot.session"`
-	Hooks       hooksConfig       `cfg:"plugin.ai_chat_bot.hooks"`
-	Approval    approvalConfig    `cfg:"plugin.ai_chat_bot.approval"`
+	Clock    clockConfig    `cfg:"plugin.ai_chat_bot.clock"`
+	Memory   memoryConfig   `cfg:"plugin.ai_chat_bot.memory"`
+	Kb       kbConfig       `cfg:"plugin.ai_chat_bot.kb"`
+	Subagent subagentConfig `cfg:"plugin.ai_chat_bot.subagent"`
+	Team     teamConfig     `cfg:"plugin.ai_chat_bot.team"`
+	QueryLog queryLogConfig `cfg:"plugin.ai_chat_bot.query_log"`
+
+	Stream   streamConfig   `cfg:"plugin.ai_chat_bot.stream"`
+	Quota    quotaConfig    `cfg:"plugin.ai_chat_bot.quota"`
+	Session  sessionConfig  `cfg:"plugin.ai_chat_bot.session"`
+	Hooks    hooksConfig    `cfg:"plugin.ai_chat_bot.hooks"`
+	Approval approvalConfig `cfg:"plugin.ai_chat_bot.approval"`
 }
 
 // ConfigSchema 实现 plugin.ConfigSchemaProvider：返回配置结构体指针，

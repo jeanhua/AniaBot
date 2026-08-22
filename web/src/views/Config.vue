@@ -292,8 +292,8 @@ const presetSaving = ref(false)
 // ---- 页面整理状态 ----
 const presetsOpen = ref(false) // 配置预设折叠面板（默认收起，避免抢占页面空间）
 const activeCategory = ref('框架基础') // 当前分类页签
-const openGroup = ref('') // 当前展开的分组（手风琴，一次一个）
-const allOpen = ref(false) // 是否展开全部分组
+const openGroups = ref(new Set()) // 已展开的分组（默认全部展开，方便一眼看全配置）
+const allOpen = computed(() => openGroups.value.size >= groups.value.length) // 是否展开全部分组
 
 const searching = computed(() => search.value.trim() !== '')
 
@@ -371,7 +371,7 @@ function sectionId(name) {
 }
 
 function isOpen(group) {
-  return searching.value || allOpen.value || openGroup.value === group.name
+  return searching.value || openGroups.value.has(group.name)
 }
 
 function groupChanged(group) {
@@ -379,14 +379,17 @@ function groupChanged(group) {
 }
 
 function toggleGroup(name) {
-  allOpen.value = false
-  openGroup.value = openGroup.value === name ? '' : name
-  activeGroup.value = openGroup.value
+  const s = new Set(openGroups.value)
+  if (s.has(name)) s.delete(name)
+  else s.add(name)
+  openGroups.value = s
+  activeGroup.value = name
 }
 
 function toggleAll() {
-  allOpen.value = !allOpen.value
-  if (allOpen.value) openGroup.value = ''
+  openGroups.value = allOpen.value
+    ? new Set()
+    : new Set(groups.value.map((g) => g.name))
 }
 
 function selectCategory(name) {
@@ -394,7 +397,6 @@ function selectCategory(name) {
   activeCategory.value = name
   const cat = categorized.value.find((c) => c.name === name)
   const first = cat && cat.groups.length ? cat.groups[0].name : ''
-  openGroup.value = first
   activeGroup.value = first
   window.scrollTo({ top: 0, behavior: 'smooth' })
 }
@@ -403,9 +405,10 @@ async function jumpTo(name) {
   const g = groups.value.find((x) => x.name === name)
   if (!g) return
   search.value = ''
-  allOpen.value = false
   activeCategory.value = categoryOf(g)
-  openGroup.value = name
+  const s = new Set(openGroups.value)
+  s.add(name)
+  openGroups.value = s
   activeGroup.value = name
   await nextTick()
   document.getElementById(sectionId(name))?.scrollIntoView({ behavior: 'smooth', block: 'start' })
@@ -484,7 +487,7 @@ onMounted(async () => {
     const first = groups.value[0]
     activeCategory.value = categoryOf(first)
     activeGroup.value = first.name
-    openGroup.value = first.name
+    openGroups.value = new Set(groups.value.map((g) => g.name)) // 默认全部展开，方便一眼看全配置
   }
 })
 

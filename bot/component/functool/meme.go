@@ -101,7 +101,7 @@ func (t *MemeTool) Execute(ctx context.Context, params any, callbacks llmtool.Ca
 	cfg := t.config
 	// 模板需要 API Key 但未配置时给出明确指引，而不是让上游返回 401 裸错误
 	if strings.Contains(cfg.URL, "${key}") && cfg.Key == "" {
-		return "", fmt.Errorf("meme 工具未配置 API Key：请在面板「AI 对话 · 工具」填写表情包 API Key（默认接口为 GIPHY，可在 developers.giphy.com 免费申请），或改用其他免 Key 接口地址")
+		return "", fmt.Errorf("meme 工具未配置 API Key：请在面板「AI 对话 · 表情包」填写表情包 API Key（默认接口为 GIPHY，可在 developers.giphy.com 免费申请），或改用其他免 Key 接口地址")
 	}
 
 	// 传入 ctx 并设置超时：否则接口挂起时请求永久阻塞，
