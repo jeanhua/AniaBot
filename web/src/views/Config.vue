@@ -13,7 +13,14 @@
       </div>
 
       <div v-for="cat in categorized" :key="cat.name">
-        <p class="px-3 mb-1.5 text-[11px] font-semibold uppercase tracking-wider text-slate-400">{{ cat.name }}</p>
+        <button
+          class="w-full flex items-center justify-between px-3 mb-1.5 text-[11px] font-semibold uppercase tracking-wider transition-colors"
+          :class="activeCategory === cat.name ? 'text-zinc-900' : 'text-slate-400 hover:text-zinc-600'"
+          @click="selectCategory(cat.name)"
+        >
+          <span>{{ cat.name }}</span>
+          <span class="text-[10px] font-normal normal-case tracking-normal">{{ catTotal(cat) }} 项</span>
+        </button>
         <nav class="space-y-0.5">
           <button
             v-for="g in cat.groups"
@@ -41,9 +48,12 @@
         </div>
       </Transition>
 
-      <div class="flex items-center justify-between">
-        <p class="text-sm text-slate-500">配置存储在数据库中，修改保存后重启生效。</p>
-        <div class="flex items-center gap-2">
+      <div class="flex items-center justify-between gap-4">
+        <div class="min-w-0">
+          <p class="text-sm text-slate-500">配置存储在数据库中，修改保存后重启生效。</p>
+          <p class="text-xs text-slate-400 mt-0.5">共 {{ schema.length }} 项配置</p>
+        </div>
+        <div class="flex items-center gap-2 shrink-0">
           <button
             class="px-3 py-1.5 text-sm rounded-lg border border-slate-300 text-slate-600 hover:bg-slate-50 transition-colors"
             title="导出完整配置为 JSON 文件（含密钥等敏感字段，请妥善保管）"
@@ -58,118 +68,163 @@
       </div>
 
       <!-- 配置预设 -->
-      <section class="bg-white rounded-xl shadow-sm border border-slate-200/60 overflow-hidden">
-        <h2 class="px-6 py-4 text-sm font-semibold text-slate-800 border-b border-slate-100 flex items-center gap-2.5">
-          <span class="w-7 h-7 rounded-lg flex items-center justify-center text-white text-xs bg-zinc-700 [&>svg]:w-4 [&>svg]:h-4" v-html="iconBookmark" />
-          配置预设
-          <span class="text-xs font-normal text-slate-400">{{ presets.length }} 个</span>
-        </h2>
-        <div class="p-6 space-y-4">
-          <p class="text-xs text-slate-500">把当前全部配置（含密钥、MCP / Prompt 覆盖）保存为一份快照，之后可一键切换。应用预设后重启生效。</p>
+      <section v-if="!rawMode" class="bg-white rounded-xl shadow-sm border border-slate-200/60 overflow-hidden">
+        <button
+          class="w-full flex items-center justify-between px-6 py-4 text-sm font-semibold text-slate-800 hover:bg-slate-50 transition-colors"
+          @click="presetsOpen = !presetsOpen"
+        >
+          <span class="flex items-center gap-2.5">
+            <span class="w-7 h-7 rounded-lg flex items-center justify-center text-white text-xs bg-zinc-700 [&>svg]:w-4 [&>svg]:h-4" v-html="iconBookmark" />
+            配置预设
+            <span class="text-xs font-normal text-slate-400">{{ presets.length }} 个</span>
+          </span>
+          <span class="flex items-center gap-1.5 text-xs font-normal text-slate-400">
+            {{ presetsOpen ? '收起' : '展开' }}
+            <svg class="w-4 h-4 transition-transform duration-200" :class="presetsOpen ? 'rotate-180' : ''" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="m19.5 8.25-7.5 7.5-7.5-7.5" /></svg>
+          </span>
+        </button>
+        <Transition name="fade">
+          <div v-show="presetsOpen" class="p-6 space-y-4 border-t border-slate-100">
+            <p class="text-xs text-slate-500">把当前全部配置（含密钥、MCP / Prompt 覆盖）保存为一份快照，之后可一键切换。应用预设后重启生效。</p>
 
-          <div class="flex gap-2">
-            <input
-              v-model="presetName"
-              type="text"
-              placeholder="预设名称，如：DeepSeek 日常"
-              class="flex-1 border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-400 focus:border-zinc-400 transition-shadow"
-              @keyup.enter="onSavePreset()"
-            />
-            <button
-              :disabled="presetSaving || !presetName.trim()"
-              class="px-4 py-2 text-sm rounded-lg bg-zinc-900 text-white hover:bg-zinc-800 disabled:opacity-40 transition-colors shrink-0"
-              @click="onSavePreset()"
-            >
-              {{ presetSaving ? '保存中...' : '保存当前配置' }}
-            </button>
+            <div class="flex gap-2">
+              <input
+                v-model="presetName"
+                type="text"
+                placeholder="预设名称，如：DeepSeek 日常"
+                class="flex-1 border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-400 focus:border-zinc-400 transition-shadow"
+                @keyup.enter="onSavePreset()"
+              />
+              <button
+                :disabled="presetSaving || !presetName.trim()"
+                class="px-4 py-2 text-sm rounded-lg bg-zinc-900 text-white hover:bg-zinc-800 disabled:opacity-40 transition-colors shrink-0"
+                @click="onSavePreset()"
+              >
+                {{ presetSaving ? '保存中...' : '保存当前配置' }}
+              </button>
+            </div>
+
+            <p v-if="presets.length === 0" class="text-sm text-slate-400">还没有预设。调整好配置后，在上方输入名称即可保存。</p>
+            <ul v-else class="divide-y divide-slate-100 border border-slate-200/70 rounded-lg">
+              <li v-for="p in presets" :key="p.name" class="flex items-center gap-3 px-4 py-3">
+                <div class="min-w-0 flex-1">
+                  <p class="text-sm font-medium text-slate-800 truncate">{{ p.name }}</p>
+                  <p class="text-xs text-slate-400 mt-0.5">{{ p.key_count }} 项配置 · 更新于 {{ formatPresetTime(p.updated_at) }}</p>
+                </div>
+                <button
+                  class="px-3 py-1.5 text-xs rounded-lg bg-zinc-900 text-white hover:bg-zinc-800 transition-colors shrink-0"
+                  @click="onApplyPreset(p)"
+                >
+                  应用
+                </button>
+                <button
+                  class="px-3 py-1.5 text-xs rounded-lg border border-slate-300 text-slate-600 hover:bg-slate-50 transition-colors shrink-0"
+                  title="用当前配置覆盖该预设"
+                  @click="onSavePreset(p.name)"
+                >
+                  更新
+                </button>
+                <button
+                  class="px-3 py-1.5 text-xs rounded-lg border border-slate-300 text-slate-500 hover:text-red-600 hover:border-red-300 transition-colors shrink-0"
+                  @click="onDeletePreset(p)"
+                >
+                  删除
+                </button>
+              </li>
+            </ul>
           </div>
-
-          <p v-if="presets.length === 0" class="text-sm text-slate-400">还没有预设。调整好配置后，在上方输入名称即可保存。</p>
-          <ul v-else class="divide-y divide-slate-100 border border-slate-200/70 rounded-lg">
-            <li v-for="p in presets" :key="p.name" class="flex items-center gap-3 px-4 py-3">
-              <div class="min-w-0 flex-1">
-                <p class="text-sm font-medium text-slate-800 truncate">{{ p.name }}</p>
-                <p class="text-xs text-slate-400 mt-0.5">{{ p.key_count }} 项配置 · 更新于 {{ formatPresetTime(p.updated_at) }}</p>
-              </div>
-              <button
-                class="px-3 py-1.5 text-xs rounded-lg bg-zinc-900 text-white hover:bg-zinc-800 transition-colors shrink-0"
-                @click="onApplyPreset(p)"
-              >
-                应用
-              </button>
-              <button
-                class="px-3 py-1.5 text-xs rounded-lg border border-slate-300 text-slate-600 hover:bg-slate-50 transition-colors shrink-0"
-                title="用当前配置覆盖该预设"
-                @click="onSavePreset(p.name)"
-              >
-                更新
-              </button>
-              <button
-                class="px-3 py-1.5 text-xs rounded-lg border border-slate-300 text-slate-500 hover:text-red-600 hover:border-red-300 transition-colors shrink-0"
-                @click="onDeletePreset(p)"
-              >
-                删除
-              </button>
-            </li>
-          </ul>
-        </div>
+        </Transition>
       </section>
 
       <!-- 表单模式 -->
       <template v-if="!rawMode">
+        <!-- 分类页签 -->
+        <div v-if="!searching" class="flex items-center gap-2 flex-wrap">
+          <button
+            v-for="cat in categories"
+            :key="cat"
+            class="px-4 py-2 rounded-lg text-sm transition-colors"
+            :class="activeCategory === cat
+              ? 'bg-zinc-900 text-white font-medium shadow-sm'
+              : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'"
+            @click="selectCategory(cat)"
+          >
+            {{ cat }}
+            <span class="ml-1.5 text-[11px]" :class="activeCategory === cat ? 'text-zinc-300' : 'text-slate-400'">{{ categoryCount(cat) }} 项</span>
+          </button>
+          <button
+            class="ml-auto px-3 py-2 text-xs rounded-lg border border-slate-200 text-slate-500 hover:bg-slate-50 transition-colors"
+            @click="toggleAll"
+          >
+            {{ allOpen ? '收起全部' : '展开全部' }}
+          </button>
+        </div>
+
         <section
-          v-for="group in filteredGroups"
+          v-for="group in displayGroups"
           :key="group.name"
           :id="sectionId(group.name)"
           class="bg-white rounded-xl shadow-sm border border-slate-200/60 scroll-mt-24 overflow-hidden"
         >
-          <h2 class="px-6 py-4 text-sm font-semibold text-slate-800 border-b border-slate-100 flex items-center gap-2.5">
-            <span class="w-7 h-7 rounded-lg flex items-center justify-center text-white text-xs [&>svg]:w-4 [&>svg]:h-4" :class="groupColor(group)" v-html="groupIcon(group)" />
-            {{ group.name }}
-            <span class="text-xs font-normal text-slate-400">{{ group.fields.length }} 项</span>
-          </h2>
-          <div class="p-6 grid grid-cols-1 lg:grid-cols-2 gap-x-8 gap-y-5">
-            <div v-for="field in group.fields" :key="field.key" :class="{ 'lg:col-span-2': ['text', 'strings', 'ints'].includes(field.type) }">
-              <label class="block text-xs font-medium text-slate-700 mb-1.5">
-                {{ field.label }}
-                <span class="text-slate-400 font-normal ml-1">{{ field.key }}</span>
-              </label>
+          <button
+            class="w-full flex items-center justify-between gap-3 px-6 py-4 text-left hover:bg-slate-50 transition-colors"
+            @click="toggleGroup(group.name)"
+          >
+            <span class="flex items-center gap-2.5 min-w-0">
+              <span class="w-7 h-7 rounded-lg flex items-center justify-center text-white text-xs shrink-0 [&>svg]:w-4 [&>svg]:h-4" :class="groupColor(group)" v-html="groupIcon(group)" />
+              <span class="text-sm font-semibold text-slate-800 truncate">{{ group.name }}</span>
+              <span class="text-xs font-normal text-slate-400 shrink-0">{{ group.fields.length }} 项</span>
+            </span>
+            <span class="flex items-center gap-3 shrink-0">
+              <span v-if="groupChanged(group)" class="text-[11px] text-amber-600">● 有修改</span>
+              <svg class="w-4 h-4 text-slate-400 transition-transform duration-200" :class="isOpen(group) ? 'rotate-180' : ''" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="m19.5 8.25-7.5 7.5-7.5-7.5" /></svg>
+            </span>
+          </button>
 
-              <input v-if="field.type === 'string'" v-model="form[field.key]" type="text" :placeholder="placeholderOf(field)" :class="inputClass" />
-              <input v-else-if="field.type === 'password'" v-model="form[field.key]" type="password" :placeholder="placeholderOf(field)" :class="inputClass" />
-              <input v-else-if="field.type === 'int'" v-model="form[field.key]" type="number" step="1" :placeholder="placeholderOf(field)" :class="inputClass" />
-              <input v-else-if="field.type === 'float'" v-model="form[field.key]" type="number" step="any" :placeholder="placeholderOf(field)" :class="inputClass" />
-              <select v-else-if="field.type === 'select'" v-model="form[field.key]" :class="inputClass">
-                <option v-for="opt in field.options || []" :key="opt" :value="opt">{{ opt }}</option>
-              </select>
+          <Transition name="fade">
+            <div v-show="isOpen(group)" class="p-6 grid grid-cols-1 lg:grid-cols-2 gap-x-8 gap-y-5 border-t border-slate-100">
+              <div v-for="field in group.fields" :key="field.key" :class="{ 'lg:col-span-2': ['text', 'strings', 'ints'].includes(field.type) }">
+                <label class="block text-xs font-medium text-slate-700 mb-1.5">
+                  {{ field.label }}
+                  <span class="text-slate-400 font-normal ml-1">{{ field.key }}</span>
+                </label>
 
-              <label v-else-if="field.type === 'bool'" class="inline-flex items-center gap-2.5 cursor-pointer select-none py-1" @click.prevent="form[field.key] = !form[field.key]">
-                <span
-                  class="relative inline-flex w-9 h-5 rounded-full transition-colors duration-200"
-                  :class="form[field.key] ? 'bg-zinc-900' : 'bg-slate-300'"
-                >
+                <input v-if="field.type === 'string'" v-model="form[field.key]" type="text" :placeholder="placeholderOf(field)" :class="inputClass" />
+                <input v-else-if="field.type === 'password'" v-model="form[field.key]" type="password" :placeholder="placeholderOf(field)" :class="inputClass" />
+                <input v-else-if="field.type === 'int'" v-model="form[field.key]" type="number" step="1" :placeholder="placeholderOf(field)" :class="inputClass" />
+                <input v-else-if="field.type === 'float'" v-model="form[field.key]" type="number" step="any" :placeholder="placeholderOf(field)" :class="inputClass" />
+                <select v-else-if="field.type === 'select'" v-model="form[field.key]" :class="inputClass">
+                  <option v-for="opt in field.options || []" :key="opt" :value="opt">{{ opt }}</option>
+                </select>
+
+                <label v-else-if="field.type === 'bool'" class="inline-flex items-center gap-2.5 cursor-pointer select-none py-1" @click.prevent="form[field.key] = !form[field.key]">
                   <span
-                    class="absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-all duration-200"
-                    :class="form[field.key] ? 'left-4.5' : 'left-0.5'"
-                  />
-                </span>
-                <span class="text-sm" :class="form[field.key] ? 'text-slate-700' : 'text-slate-400'">{{ form[field.key] ? '已启用' : '已关闭' }}</span>
-              </label>
+                    class="relative inline-flex w-9 h-5 rounded-full transition-colors duration-200"
+                    :class="form[field.key] ? 'bg-zinc-900' : 'bg-slate-300'"
+                  >
+                    <span
+                      class="absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-all duration-200"
+                      :class="form[field.key] ? 'left-4.5' : 'left-0.5'"
+                    />
+                  </span>
+                  <span class="text-sm" :class="form[field.key] ? 'text-slate-700' : 'text-slate-400'">{{ form[field.key] ? '已启用' : '已关闭' }}</span>
+                </label>
 
-              <textarea v-else-if="field.type === 'text'" v-model="form[field.key]" rows="4" :placeholder="placeholderOf(field)" :class="inputClass + ' font-mono'" />
-              <textarea v-else-if="field.type === 'strings' || field.type === 'ints'" v-model="form[field.key]" rows="3" placeholder="每行一个" :class="inputClass + ' font-mono'" />
+                <textarea v-else-if="field.type === 'text'" v-model="form[field.key]" rows="4" :placeholder="placeholderOf(field)" :class="inputClass + ' font-mono'" />
+                <textarea v-else-if="field.type === 'strings' || field.type === 'ints'" v-model="form[field.key]" rows="3" placeholder="每行一个" :class="inputClass + ' font-mono'" />
 
-              <p v-if="field.help" class="text-xs text-slate-400 mt-1.5">{{ field.help }}</p>
-              <p
-                v-if="field.key === 'bot.admin_panel.enable' && form[field.key] === false"
-                class="text-xs text-amber-600 mt-1.5"
-              >
-                关闭并重启后将无法访问本面板。如需重新开启，可设置环境变量
-                <code class="font-mono bg-amber-50 px-1 rounded">ANIA_BOT_ADMIN_PANEL_ENABLE=true</code>
-                覆盖配置后重启 Bot。
-              </p>
+                <p v-if="field.help" class="text-xs text-slate-400 mt-1.5">{{ field.help }}</p>
+                <p
+                  v-if="field.key === 'bot.admin_panel.enable' && form[field.key] === false"
+                  class="text-xs text-amber-600 mt-1.5"
+                >
+                  关闭并重启后将无法访问本面板。如需重新开启，可设置环境变量
+                  <code class="font-mono bg-amber-50 px-1 rounded">ANIA_BOT_ADMIN_PANEL_ENABLE=true</code>
+                  覆盖配置后重启 Bot。
+                </p>
+              </div>
             </div>
-          </div>
+          </Transition>
         </section>
       </template>
 
@@ -206,7 +261,7 @@
 </template>
 
 <script setup>
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, nextTick, onMounted, reactive, ref } from 'vue'
 import { api } from '../api.js'
 
 const MASK = '********'
@@ -233,6 +288,14 @@ const activeGroup = ref('')
 const presets = ref([])
 const presetName = ref('')
 const presetSaving = ref(false)
+
+// ---- 页面整理状态 ----
+const presetsOpen = ref(false) // 配置预设折叠面板（默认收起，避免抢占页面空间）
+const activeCategory = ref('框架基础') // 当前分类页签
+const openGroup = ref('') // 当前展开的分组（手风琴，一次一个）
+const allOpen = ref(false) // 是否展开全部分组
+
+const searching = computed(() => search.value.trim() !== '')
 
 const groups = computed(() => {
   const map = new Map()
@@ -280,6 +343,25 @@ const categorized = computed(() => {
   return CAT_ORDER.map((name) => ({ name, groups: map.get(name) })).filter((c) => c.groups.length > 0)
 })
 
+const categories = computed(() => categorized.value.map((c) => c.name))
+
+const activeCategoryGroups = computed(() => {
+  const cat = categorized.value.find((c) => c.name === activeCategory.value)
+  return cat ? cat.groups : []
+})
+
+// 展示的分组：搜索时展示所有匹配分组（方便扫读），否则只展示当前分类
+const displayGroups = computed(() => (searching.value ? filteredGroups.value : activeCategoryGroups.value))
+
+function categoryCount(name) {
+  const cat = categorized.value.find((c) => c.name === name)
+  return cat ? cat.groups.reduce((n, g) => n + g.fields.length, 0) : 0
+}
+
+function catTotal(cat) {
+  return cat.groups.reduce((n, g) => n + g.fields.length, 0)
+}
+
 function shortName(groupName) {
   return groupName.replace('AI 对话 · ', '')
 }
@@ -288,8 +370,44 @@ function sectionId(name) {
   return 'grp-' + name.replace(/[^\w一-龥]+/g, '-')
 }
 
-function jumpTo(name) {
+function isOpen(group) {
+  return searching.value || allOpen.value || openGroup.value === group.name
+}
+
+function groupChanged(group) {
+  return group.fields.some((f) => form[f.key] !== original[f.key])
+}
+
+function toggleGroup(name) {
+  allOpen.value = false
+  openGroup.value = openGroup.value === name ? '' : name
+  activeGroup.value = openGroup.value
+}
+
+function toggleAll() {
+  allOpen.value = !allOpen.value
+  if (allOpen.value) openGroup.value = ''
+}
+
+function selectCategory(name) {
+  search.value = ''
+  activeCategory.value = name
+  const cat = categorized.value.find((c) => c.name === name)
+  const first = cat && cat.groups.length ? cat.groups[0].name : ''
+  openGroup.value = first
+  activeGroup.value = first
+  window.scrollTo({ top: 0, behavior: 'smooth' })
+}
+
+async function jumpTo(name) {
+  const g = groups.value.find((x) => x.name === name)
+  if (!g) return
+  search.value = ''
+  allOpen.value = false
+  activeCategory.value = categoryOf(g)
+  openGroup.value = name
   activeGroup.value = name
+  await nextTick()
   document.getElementById(sectionId(name))?.scrollIntoView({ behavior: 'smooth', block: 'start' })
 }
 
@@ -362,7 +480,12 @@ onMounted(async () => {
     original[f.key] = form[f.key]
   }
   rawText.value = JSON.stringify(v, null, 2)
-  if (groups.value.length) activeGroup.value = groups.value[0].name
+  if (groups.value.length) {
+    const first = groups.value[0]
+    activeCategory.value = categoryOf(first)
+    activeGroup.value = first.name
+    openGroup.value = first.name
+  }
 })
 
 async function onSave() {
