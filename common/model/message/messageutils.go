@@ -120,6 +120,8 @@ func (raw Message) FriendlyText(showUrl bool, opts ...MsgOptFunc) string {
 				}
 				if msg.IsAll {
 					result.WriteString("[at:全体成员]")
+				} else if msg.QQ == raw.SelfId {
+					result.WriteString("[at我]")
 				} else {
 					// 无法解析被@用户在本群的真实昵称，仅输出其 id，避免误用发送者昵称造成张冠李戴
 					result.WriteString(fmt.Sprintf("[at:id:%s]", msg.QQ))

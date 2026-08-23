@@ -32,3 +32,24 @@ func TestFriendlyTextNicknameFallback(t *testing.T) {
 		t.Fatalf("群名片应优先, got %q", text)
 	}
 }
+
+// TestFriendlyTextSelfMention 艾特机器人自己时用 [at我] 占位（不暴露机器人自身 ID），
+// 使 AI 明确知道本条消息 @ 了自己；其他 @ 目标仍显示 [at:id:…]，发送者自 @ 跳过。
+func TestFriendlyTextSelfMention(t *testing.T) {
+	msg := Message{
+		SelfId: FromUint64(999),
+		Sender: MessageSender{UserId: FromUint64(123), Nickname: "小明"},
+		Message: []OB11Segment{
+			{Type: SegmentMention, Data: map[string]any{"qq": "999"}},
+			{Type: SegmentText, Data: map[string]any{"text": "你好"}},
+			{Type: SegmentMention, Data: map[string]any{"qq": "888"}},
+			{Type: SegmentMention, Data: map[string]any{"qq": "123"}},
+			{Type: SegmentMention, Data: map[string]any{"qq": "all"}},
+		},
+	}
+	text := msg.FriendlyText(true)
+	want := "[nickname:小明 id:qq:123]: [at我]你好[at:id:qq:888][at:全体成员]"
+	if text != want {
+		t.Fatalf("FriendlyText = %q, want %q", text, want)
+	}
+}
