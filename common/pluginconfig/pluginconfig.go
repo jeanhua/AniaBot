@@ -30,6 +30,7 @@ type Field struct {
 	Group     string   `json:"group"`               // 面板中的分组名
 	Help      string   `json:"help,omitempty"`      // 字段说明（可选）
 	Sensitive bool     `json:"sensitive,omitempty"` // 敏感字段：面板不回显，API 掩码处理
+	Optional  bool     `json:"optional,omitempty"`  // 可选字段（Go 指针标量）：留空/清空表示未配置，不向下游传参
 	Default   any      `json:"-"`                   // 默认值：注册时若配置中心无此键则写入；nil 表示无默认值
 }
 

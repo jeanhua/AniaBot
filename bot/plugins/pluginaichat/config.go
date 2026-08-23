@@ -122,15 +122,15 @@ type mcpToolConfig struct {
 }
 
 type ocrConfig struct {
-	Enable      bool     `cfg:"enable" label:"启用备用识图模型" group:"AI 对话 · OCR" help:"主模型不支持多模态时将图片转文字" default:"false"`
-	BaseURL     string   `cfg:"base_url" label:"Base URL" group:"AI 对话 · OCR" default:"https://api.siliconflow.cn/v1"`
-	APIKey      string   `cfg:"api_key" label:"API Key" type:"password" sensitive:"true" group:"AI 对话 · OCR"`
-	Model       string   `cfg:"model" label:"模型" group:"AI 对话 · OCR" default:"Qwen/Qwen3-VL-8B-Instruct"`
-	MaxToken    *int     `cfg:"max_token" label:"最大输出 Token" group:"AI 对话 · OCR" default:"600"`
-	Temperature *float64 `cfg:"temperature" label:"Temperature" group:"AI 对话 · OCR" default:"0.6"`
-	TopP        *float64 `cfg:"top_p" label:"Top P" group:"AI 对话 · OCR" default:"0.95"`
-	TopK        *int     `cfg:"top_k" label:"Top K" group:"AI 对话 · OCR" default:"20"`
-	Prompt      string   `cfg:"prompt" label:"识图提示词" type:"text" group:"AI 对话 · OCR" default:"你负责将看到的图片用markdown格式描述出来，不要有无关的其他对话"`
+	Enable      bool     `cfg:"enable" label:"启用备用识图模型" group:"AI 对话 · 备用识图模型" help:"主模型不支持多模态时将图片转文字" default:"false"`
+	BaseURL     string   `cfg:"base_url" label:"Base URL" group:"AI 对话 · 备用识图模型" default:"https://api.siliconflow.cn/v1"`
+	APIKey      string   `cfg:"api_key" label:"API Key" type:"password" sensitive:"true" group:"AI 对话 · 备用识图模型"`
+	Model       string   `cfg:"model" label:"模型" group:"AI 对话 · 备用识图模型" default:"Qwen/Qwen3-VL-8B-Instruct"`
+	MaxToken    *int     `cfg:"max_token" label:"最大输出 Token" group:"AI 对话 · 备用识图模型" default:"600"`
+	Temperature *float64 `cfg:"temperature" label:"Temperature" group:"AI 对话 · 备用识图模型" help:"留空则不传该参数，使用模型 API 默认值；已有值可清空保存恢复为不传"`
+	TopP        *float64 `cfg:"top_p" label:"Top P" group:"AI 对话 · 备用识图模型" help:"留空则不传该参数，使用模型 API 默认值；已有值可清空保存恢复为不传"`
+	TopK        *int     `cfg:"top_k" label:"Top K" group:"AI 对话 · 备用识图模型" help:"留空则不传该参数，使用模型 API 默认值；已有值可清空保存恢复为不传"`
+	Prompt      string   `cfg:"prompt" label:"识图提示词" type:"text" group:"AI 对话 · 备用识图模型" default:"你负责将看到的图片用markdown格式描述出来，不要有无关的其他对话"`
 }
 
 type clockConfig struct {
@@ -216,9 +216,9 @@ type todoConfig struct {
 // 的命令同样走审批（命令级粒度，无需在此列出 bash；审批未启用时这些命令默认放行，
 // 只认黑名单）。配置修改类工具（config_set/config_file_set）恒需管理员审批，无需在此列出。
 type approvalConfig struct {
-	Enable     bool   `cfg:"enable" label:"启用工具审批" group:"AI 对话 · 安全" help:"危险工具执行前需人工确认（请求发送者或管理员回复「允许/拒绝」）；同时作为 bash 未列名命令的审批通道（关闭时未列名命令默认放行，只认黑名单）" default:"false"`
-	Tools      string `cfg:"tools" label:"需审批的工具" group:"AI 对话 · 安全" help:"逗号分隔的工具名；bash 有命令级黑白名单+审批三段式，无需列入；config_set/config_file_set 恒需管理员审批，无需列入" default:"file"`
-	TimeoutSec int    `cfg:"timeout_sec" label:"审批超时(秒)" group:"AI 对话 · 安全" help:"超时无回复自动拒绝；范围 10~240" default:"120"`
+	Enable     bool   `cfg:"enable" label:"启用工具审批" group:"AI 对话 · 工具审批" help:"危险工具执行前需人工确认（请求发送者或管理员回复「允许/拒绝」）；同时作为 bash 未列名命令的审批通道（关闭时未列名命令默认放行，只认黑名单）" default:"false"`
+	Tools      string `cfg:"tools" label:"需审批的工具" group:"AI 对话 · 工具审批" help:"逗号分隔的工具名；bash 有命令级黑白名单+审批三段式，无需列入；config_set/config_file_set 恒需管理员审批，无需列入" default:"file"`
+	TimeoutSec int    `cfg:"timeout_sec" label:"审批超时(秒)" group:"AI 对话 · 工具审批" help:"超时无回复自动拒绝；范围 10~240" default:"120"`
 }
 
 // compressorConfig 上下文压缩专用模型配置：留空回退主模型配置。
@@ -260,8 +260,8 @@ type quotaConfig struct {
 // 防止活跃会话增多导致内存线性增长。淘汰只丢弃内存对象，对话历史已持久化，
 // 下次发言时自动重建会话并回放历史。
 type sessionConfig struct {
-	MaxIdleMinutes int `cfg:"max_idle_minutes" label:"闲置会话回收（分钟）" group:"AI 对话 · 会话" default:"120" help:"超过该时长无 AI 交互的会话从内存淘汰（历史在数据库，下次发言自动恢复；会话内 mcp_load 动态加载的工具会随淘汰失效，等同重启）；0 表示不按闲置淘汰"`
-	MaxSessions    int `cfg:"max_sessions" label:"最大驻留会话数" group:"AI 对话 · 会话" default:"128" help:"内存中最多驻留的会话数，超出时淘汰最久未活跃的；0 表示不限制"`
+	MaxIdleMinutes int `cfg:"max_idle_minutes" label:"闲置会话回收（分钟）" group:"AI 对话 · 会话驻留" default:"120" help:"超过该时长无 AI 交互的会话从内存淘汰（历史在数据库，下次发言自动恢复；会话内 mcp_load 动态加载的工具会随淘汰失效，等同重启）；0 表示不按闲置淘汰"`
+	MaxSessions    int `cfg:"max_sessions" label:"最大驻留会话数" group:"AI 对话 · 会话驻留" default:"128" help:"内存中最多驻留的会话数，超出时淘汰最久未活跃的；0 表示不限制"`
 }
 
 type aiChatConfig struct {
@@ -275,9 +275,9 @@ type aiChatConfig struct {
 	MaxIterations    int    `cfg:"plugin.ai_chat_bot.max_iterations" label:"最大工具调用轮数" group:"AI 对话 · 模型" help:"单次回复中 AI 最多连续调用工具的轮数，超出后强制结束" default:"20"`
 	// 指针字段：nil 表示不向下游 LLM 传该参数（保持未设置语义）
 	MaxToken    *int     `cfg:"plugin.ai_chat_bot.max_token" label:"最大输出 Token" group:"AI 对话 · 模型" default:"8192"`
-	Temperature *float64 `cfg:"plugin.ai_chat_bot.temperature" label:"Temperature" group:"AI 对话 · 模型" default:"1.2"`
-	TopP        *float64 `cfg:"plugin.ai_chat_bot.top_p" label:"Top P" group:"AI 对话 · 模型" default:"0.9"`
-	TopK        *int     `cfg:"plugin.ai_chat_bot.top_k" label:"Top K" group:"AI 对话 · 模型" default:"100"`
+	Temperature *float64 `cfg:"plugin.ai_chat_bot.temperature" label:"Temperature" group:"AI 对话 · 模型" help:"留空则不传该参数，使用模型 API 默认值；已有值可清空保存恢复为不传"`
+	TopP        *float64 `cfg:"plugin.ai_chat_bot.top_p" label:"Top P" group:"AI 对话 · 模型" help:"留空则不传该参数，使用模型 API 默认值；已有值可清空保存恢复为不传"`
+	TopK        *int     `cfg:"plugin.ai_chat_bot.top_k" label:"Top K" group:"AI 对话 · 模型" help:"留空则不传该参数，使用模型 API 默认值；已有值可清空保存恢复为不传"`
 	// 与 defaultPrompt 常量保持一致（标签内 \n 会被解析为换行）
 	Prompt   string         `cfg:"plugin.ai_chat_bot.prompt" label:"系统提示词" type:"text" group:"AI 对话 · 模型" default:"你是一个运行在即时通讯平台上的 AniaBot 助手，在群聊和私聊中帮用户解决实际问题。回答要准确、简洁、自然，不堆砌术语，不要长篇大论，也不要复述工具说明。只有当前问题确实需要查证、补上下文、看图、操作或调用能力时才使用工具；普通闲聊不要频繁调用。\n\n## 一般处理流程\n1. 先理解用户意图。上下文不清、指代不明或涉及过去的事时，先调用 get_msg_history 查看最近消息，再用 memory_search / kb_search 找已有背景；仍不足再问用户。\n2. 按“最小必要”原则选择工具：能直接回答的不查，能读不写，能一次完成的不反复调用。\n3. 工具结果不等于最终回复。拿到结果后提炼成用户能看懂的回答，不要原样堆工具输出。\n4. 工具失败时先检查参数和说法，换一种表达重试一次；仍失败就如实说明原因和建议，不要假装成功。\n5. 用户意图不明确时，先问一句简短问题，不要擅自执行删除、修改、重启等有副作用操作。\n6. 只使用本次会话实际注册的工具，不要编造不存在的工具；不要把 API Key、数据库、私密文件等敏感信息泄露给用户。\n\n## 工具场景选择\n- time：问当前时间、日期、星期，或回答需要以当前时间为准的问题。\n- get_msg_history：问题依赖前文、群聊上下文不完整、用户提到刚才说过或引用过，需要看更早消息时。\n- load_images：消息中的图片以 [图片 <hash> url:<url>] 标识（当前消息、get_msg_history 历史记录、合并转发里都有）；需要看图时用 hashes 参数传入要查看的图片哈希，只加载需要的图片，不要一次性全部加载。\n- get_private_file_url：私聊收到文件但消息里没有下载链接，需要读取或处理该文件时。\n- webSearch：查最新资讯、不确定的事实、外部资料或找资源链接时。\n- webExplore：已有明确 URL，需要打开网页读取正文/详情时；搜索信息不足时用搜索结果里的链接进一步确认。\n- meme：用户要求表情包/梗图，或当前语境适合配图时。\n- memory_search：涉及用户以前说过的事、偏好、本群或私聊的约定时，先检索记忆。\n- memory_save：用户透露了值得长期记住的称呼、偏好、重要事实，或群里形成约定时；保存成完整自洽的一句话事实。\n- memory_forget：用户明确要求忘记，或记忆明显错误或过时。\n- kb_search：用户问知识库/资料库内容，或问题可能已有存档资料时。\n- kb_add：用户明确要求保存教程、文章、资料，或给出了值得长期归档的完整知识内容时。\n- skill_read：当前任务匹配 available_skills 中的技能时，先读取完整指令再执行。\n- skill_reload：通过 bash 等工具直接改过本地 skill 文件后刷新缓存。\n- bash：需要在宿主机执行命令、运行脚本、检查或操作文件时（未注册表示未启用）。\n- file：用户明确要求读取宿主机文件并发送时（未注册表示未启用）。\n- local_image：用户明确要求查看宿主机某张本地图片并给出路径时（未注册表示未启用）。\n- clock_create/list/update/delete/log：用户要求定时提醒、周期任务、管理任务或查看执行记录时。\n- subagent_run/list/cancel：独立、耗时、多步骤且不依赖当前上下文的子任务（如深度调研、多轮搜索总结）适合委派子代理；简单问题不要委派。\n- team_run/create/list/delete：需要多视角并行处理、交叉验证或复杂分工时。\n- todo_write：需要 3 步以上的复杂任务开始时建立任务清单，逐项推进并及时更新状态（未注册表示未启用）。\n- config_get/config_set：仅当用户明确要求查看或修改 Bot 框架配置时；修改操作需要管理员审批（系统会私聊通知管理员确认），审批通过后才会写入；修改后提醒用户重启才能生效，重启需由管理员发送 /reboot 命令（普通用户无权限），你不要自己尝试重启。\n- config_file_get/config_file_set：查看或修改扩展配置（MCP 服务器、Prompt 覆盖、AI 钩子、自定义命令的 JSON 文件）时；config_file_set 同样需要管理员审批；hooks/commands 保存后数秒生效，mcp/prompt 重启后生效。\n- mcp_list/add/remove/reconnect：用户明确要求管理 MCP 服务器时。\n- skill_list/install/remove：用户明确要求查看、安装或卸载技能时。\n- MCP 懒加载工具：先 mcp_discover_<服务器> 看工具，再 mcp_load_<服务器> 加载需要的工具，最后调用具体工具。\n\n## 遇到这些情况怎么办\n- 普通闲聊或你已有可靠知识：直接回答，不调用工具。\n- 信息不足：先 get_msg_history / memory_search / kb_search 补齐；仍不足再问用户。\n- 需要最新资料或外部事实：先 webSearch，搜索结果不够再用 webExplore 打开具体链接，交叉确认后再回答。\n- 图片或文件：只有必须看图才 load_images，并通过 hashes 传入图片哈希（历史消息/合并转发里的图片哈希同样可加载）；私聊文件无链接用 get_private_file_url；本地文件/图片只在用户明确要求时用 file / local_image。\n- 定时任务：先确认 cron 含义、目标、内容、单次或重复，再 clock_create；完成后简短确认已生效。\n- 长期记忆/知识库：重要且明确的用户偏好或约定才保存；问过去的事先检索；删除必须用户明确要求。\n- 复杂任务：适合后台执行的用 subagent_run，完成后结果会回到当前会话；需要多视角/交叉验证时用 team_run。\n- 计划模式：用户开启 /plan 后只做分析与规划并输出实施计划，不调用会产生副作用的工具（修改文件、运行命令、改配置等会被系统阻止）；等用户退出计划模式再执行。\n- 执行命令：先确认命令含义和影响，不做删除数据、格式化、重启系统等危险操作。\n- 工具报错：调整参数或换说法重试一次；持续失败就如实回复，并说明可能的解决办法（如未启用、需要 token、参数不正确）。"`
 	Thinking thinkingConfig `cfg:"plugin.ai_chat_bot.thinking"`

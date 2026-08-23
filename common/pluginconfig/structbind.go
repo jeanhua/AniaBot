@@ -17,7 +17,9 @@
 //	help      字段说明
 //	sensitive "true" 时按敏感字段处理（面板不回显）
 //	default   默认值（字符串形式，按字段类型解析；切片逗号分隔；
-//	          string 类可用 \n 等转义表达多行文本）
+//	          string 类可用 \n 等转义表达多行文本；不声明则键不预填）
+//	指针标量且无默认值的字段（*int、*float64）注册为可选参数（schema 中
+//	optional=true），仅当配置键已设置时才下发；面板留空/清空该字段会删除对应键。
 //
 // 类型推断：string→string、bool→bool、int 系→int、float 系→float、
 // []string→strings、[]int→ints、指针标量同底层类型；其余类型报错。
@@ -171,6 +173,9 @@ func buildBinding(sf reflect.StructField, key string, idx []int) (fieldBinding, 
 		}
 		f.Default = def
 	}
+	// 指针标量且无默认值=可选参数：未配置/清空时不向下游传（有默认值的指针字段
+	// 如 max_token 仍按既有语义：缺失时补默认值，清空面板表现为置 0）
+	f.Optional = typ.Kind() == reflect.Pointer && f.Default == nil
 
 	return fieldBinding{field: f, index: idx, typ: typ}, nil
 }

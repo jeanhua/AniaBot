@@ -437,7 +437,7 @@ function valueOf(key) {
 function placeholderOf(field) {
   const v = valueOf(field.key)
   if (field.sensitive && v === MASK) return '已设置（留空保持不变）'
-  if (v === undefined || v === null || v === '') return '未设置'
+  if (v === undefined || v === null || v === '') return field.optional ? '未设置（不传该参数）' : '未设置'
   return ''
 }
 
@@ -453,8 +453,14 @@ function toFormValue(field) {
 function fromFormValue(field) {
   const raw = form[field.key]
   if (field.type === 'bool') return raw === true
-  if (field.type === 'int') { const n = parseInt(raw, 10); return Number.isNaN(n) ? 0 : n }
-  if (field.type === 'float') { const n = parseFloat(raw); return Number.isNaN(n) ? 0 : n }
+  if (field.type === 'int') {
+    if (field.optional && raw.trim() === '') return null // 可选参数：清空=删除该键，不向下游传
+    const n = parseInt(raw, 10); return Number.isNaN(n) ? 0 : n
+  }
+  if (field.type === 'float') {
+    if (field.optional && raw.trim() === '') return null // 可选参数：清空=删除该键，不向下游传
+    const n = parseFloat(raw); return Number.isNaN(n) ? 0 : n
+  }
   if (field.type === 'strings') return raw.split('\n').map((s) => s.trim()).filter(Boolean)
   if (field.type === 'ints') return raw.split('\n').map((s) => parseInt(s.trim(), 10)).filter((n) => !Number.isNaN(n))
   return raw

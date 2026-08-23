@@ -493,7 +493,16 @@ func (s *Server) handleConfigPut(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "请求格式错误（需要 JSON 对象）")
 		return
 	}
+	var deleted []string
 	for k, v := range updates {
+		// null 表示删除该键（可选参数清空=恢复未配置语义，不再向下游传）
+		if v == nil {
+			if s.opt.Config.Delete(k) {
+				deleted = append(deleted, k)
+			}
+			delete(updates, k)
+			continue
+		}
 		// 敏感字段传回掩码占位符表示未修改，跳过
 		if str, ok := v.(string); ok && str == maskPlaceholder {
 			delete(updates, k)
@@ -506,21 +515,29 @@ func (s *Server) handleConfigPut(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
-	if len(updates) == 0 {
+	if len(updates) == 0 && len(deleted) == 0 {
 		writeJSON(w, http.StatusOK, map[string]any{"ok": true, "need_restart": true})
 		return
 	}
-	if err := s.opt.Config.SetMany(updates); err != nil {
-		writeError(w, http.StatusInternalServerError, "配置保存失败: "+err.Error())
-		return
+	if len(updates) > 0 {
+		if err := s.opt.Config.SetMany(updates); err != nil {
+			writeError(w, http.StatusInternalServerError, "配置保存失败: "+err.Error())
+			return
+		}
 	}
-	s.opt.Logger.Info("配置已通过 Web 面板更新", "keys", len(updates))
-	keys := make([]string, 0, len(updates))
+	keys := make([]string, 0, len(updates)+len(deleted))
 	for k := range updates {
 		keys = append(keys, k)
 	}
+	keys = append(keys, deleted...)
 	sort.Strings(keys)
-	oplog.Record(oplog.CategoryConfig, "config_update", "面板更新配置（"+strconv.Itoa(len(keys))+" 项）: "+strings.Join(keys, ", "))
+	detail := "面板更新配置（" + strconv.Itoa(len(keys)) + " 项）"
+	if len(deleted) > 0 {
+		detail += "，清空 " + strconv.Itoa(len(deleted)) + " 项"
+	}
+	detail += ": " + strings.Join(keys, ", ")
+	s.opt.Logger.Info("配置已通过 Web 面板更新", "keys", len(keys), "deleted", len(deleted))
+	oplog.Record(oplog.CategoryConfig, "config_update", detail)
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "need_restart": true})
 }
 

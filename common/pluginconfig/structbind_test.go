@@ -86,6 +86,16 @@ func TestRegisterStruct(t *testing.T) {
 	if byKey["plugin.demo.no_tag"].Default != nil {
 		t.Error("无 default 标签时 Default 应为 nil")
 	}
+	// 可选参数标记：指针且无默认值=true；有默认值的指针与普通标量=false
+	if !byKey["plugin.demo.top_p"].Optional {
+		t.Error("top_p（指针、无默认值）应为可选参数")
+	}
+	if byKey["plugin.demo.max_token"].Optional {
+		t.Error("max_token（指针但有默认值）不应视为可选参数")
+	}
+	if byKey["plugin.demo.count"].Optional {
+		t.Error("count（普通标量）不应视为可选参数")
+	}
 	// Defaults() 只含声明了默认值的键
 	if _, ok := Defaults()["plugin.demo.no_tag"]; ok {
 		t.Error("Defaults() 不应包含无默认值的键")
