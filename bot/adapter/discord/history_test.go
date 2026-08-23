@@ -148,7 +148,7 @@ func TestGetGroupDetailRejectsDM(t *testing.T) {
 func TestHistoryCountClamp(t *testing.T) {
 	fake := &fakeDiscordAPI{err: errors.New("x")}
 	a := newSendAdapter(fake)
-	for i := 0; i < 5; i++ {
+	for i := range 5 {
 		a.msgCache.Push("c1", message.Message{MessageId: msgID("c1", itoa(i+1))})
 	}
 	// count<=0 默认 20（缓存只有 5 条，全量返回）

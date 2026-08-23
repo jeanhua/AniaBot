@@ -44,7 +44,7 @@ func TestPendingQueueEnqueueAndDrain(t *testing.T) {
 func TestPendingQueueFull(t *testing.T) {
 	p := &AIChatPlugin{}
 
-	for i := 0; i < maxPendingMessages; i++ {
+	for i := range maxPendingMessages {
 		if _, ok := p.enqueuePending("456", false, makePendingMsg(i)); !ok {
 			t.Fatalf("第 %d 条入队应成功", i+1)
 		}
@@ -79,7 +79,7 @@ func TestPendingQueueConcurrent(t *testing.T) {
 	const goroutines = 50
 
 	var wg sync.WaitGroup
-	for i := 0; i < goroutines; i++ {
+	for i := range goroutines {
 		wg.Add(1)
 		go func(i int) {
 			defer wg.Done()

@@ -8,6 +8,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 
@@ -287,10 +288,8 @@ func detectSkillRoot(zr *zip.Reader, filename string) (string, string, error) {
 			continue
 		}
 		parts := strings.Split(name, "/")
-		for _, part := range parts {
-			if part == ".." {
-				return "", "", fmt.Errorf("压缩包包含非法路径: %s", f.Name)
-			}
+		if slices.Contains(parts, "..") {
+			return "", "", fmt.Errorf("压缩包包含非法路径: %s", f.Name)
 		}
 		if len(parts) == 1 {
 			if strings.EqualFold(parts[0], "SKILL.md") {

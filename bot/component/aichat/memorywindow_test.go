@@ -226,7 +226,7 @@ func TestMaybeCompressRecordsUsage(t *testing.T) {
 			TokenUsage{PromptTokens: 500, CompletionTokens: 100, TotalTokens: 600}, nil
 	}
 	w := newMessageWindow(1000, &LLMClient{}, compressor, &fakeHistoryStore{})
-	for i := 0; i < 4; i++ {
+	for i := range 4 {
 		w.append(TextMessage(RoleUser, fmt.Sprintf("消息%d", i)))
 	}
 	w.RecordUsage(TokenUsage{LastPromptTokens: 900}) // 超阈值触发压缩
@@ -251,7 +251,7 @@ func TestMaybeCompressFailureDegradesToTruncation(t *testing.T) {
 		return nil, TokenUsage{}, fmt.Errorf("compress failed")
 	}
 	w := newMessageWindow(1000, &LLMClient{}, failCompressor, store)
-	for i := 0; i < 8; i++ {
+	for i := range 8 {
 		w.append(TextMessage(RoleUser, fmt.Sprintf("消息%d", i)))
 	}
 	w.RecordUsage(TokenUsage{LastPromptTokens: 900}) // 超阈值触发压缩
@@ -350,7 +350,7 @@ func TestMaybeCompressUsesCompressorClient(t *testing.T) {
 		return []Message{TextMessage(RoleUser, "[对话摘要]")}, TokenUsage{}, nil
 	}
 	makeWindow := func(w *messageWindow) {
-		for i := 0; i < 4; i++ {
+		for i := range 4 {
 			w.append(TextMessage(RoleUser, fmt.Sprintf("消息%d", i)))
 		}
 		w.RecordUsage(TokenUsage{LastPromptTokens: 900}) // 超阈值触发压缩

@@ -4,7 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"sort"
+	"slices"
 	"strings"
 
 	"github.com/jeanhua/AniaBot/bot/component/llmtool"
@@ -181,7 +181,7 @@ func (a *streamAccumulator) Result() GenerateResponse {
 	}
 	// 按 Index 升序输出（模型的规范顺序），与流到达顺序无关
 	order := append([]int64(nil), a.toolOrder...)
-	sort.Slice(order, func(i, j int) bool { return order[i] < order[j] })
+	slices.Sort(order)
 	for _, idx := range order {
 		resp.ToolCalls = append(resp.ToolCalls, *a.toolCalls[idx])
 	}

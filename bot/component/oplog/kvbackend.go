@@ -3,7 +3,7 @@ package oplog
 import (
 	"context"
 	"log/slog"
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -111,6 +111,6 @@ func (b *kvBackend) listSeqs() []uint64 {
 		}
 		seqs = append(seqs, n)
 	}
-	sort.Slice(seqs, func(i, j int) bool { return seqs[i] < seqs[j] })
+	slices.Sort(seqs)
 	return seqs
 }

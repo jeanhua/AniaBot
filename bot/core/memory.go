@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"log/slog"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -191,13 +192,7 @@ func (store *AniaMemoryStorage) ScanKeys(ctx context.Context, pattern string, co
 	for k := range store.lists {
 		if matched, _ := matchPattern(k, fullPattern); matched {
 			trimmed := strings.TrimPrefix(k, store.prefix)
-			found := false
-			for _, existing := range keys {
-				if existing == trimmed {
-					found = true
-					break
-				}
-			}
+			found := slices.Contains(keys, trimmed)
 			if !found {
 				keys = append(keys, trimmed)
 			}

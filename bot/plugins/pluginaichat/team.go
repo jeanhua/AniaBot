@@ -43,7 +43,7 @@ var teamNamePattern = regexp.MustCompile(`^[\p{L}\p{N}_-]{1,20}$`)
 type teamMember struct {
 	Name      string    `json:"name"`
 	Role      string    `json:"role,omitempty"` // 角色描述；空表示按普通子代理执行
-	CreatedAt time.Time `json:"created_at,omitempty"`
+	CreatedAt time.Time `json:"created_at"`
 }
 
 // teamDefinition 一个已保存的团队（对应一个持久化 key）。
@@ -51,7 +51,7 @@ type teamDefinition struct {
 	Name      string       `json:"name"`
 	Desc      string       `json:"desc,omitempty"`
 	Members   []teamMember `json:"members"`
-	CreatedAt time.Time    `json:"created_at,omitempty"`
+	CreatedAt time.Time    `json:"created_at"`
 }
 
 // teamManager 持久团队管理器：按会话 scope（g:会话ID / f:用户ID）隔离存取。

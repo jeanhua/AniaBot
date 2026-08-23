@@ -69,7 +69,7 @@ func TestSQLBackendRecordQuery(t *testing.T) {
 
 func TestSQLBackendEvict(t *testing.T) {
 	initSQL(t, 3)
-	for i := 0; i < 5; i++ {
+	for range 5 {
 		Record(CategorySystem, "start", "启动")
 	}
 	all := Query(Filter{})

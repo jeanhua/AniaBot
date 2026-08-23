@@ -19,7 +19,7 @@ func newTestGuard(maxFails int, window, lockDur time.Duration) *loginGuard {
 // TestLoginGuardLockout 连续失败达到阈值后锁定，锁定剩余时间有效。
 func TestLoginGuardLockout(t *testing.T) {
 	g := newTestGuard(3, time.Minute, 10*time.Minute)
-	for i := 0; i < 2; i++ {
+	for i := range 2 {
 		lockedNow, _ := g.recordFail("1.2.3.4")
 		if lockedNow {
 			t.Fatalf("第 %d 次失败不应触发锁定", i+1)
@@ -45,7 +45,7 @@ func TestLoginGuardSuccessResets(t *testing.T) {
 	g.recordFail("1.2.3.4")
 	g.recordSuccess("1.2.3.4")
 	// 重新计满 3 次才锁定
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		lockedNow, _ := g.recordFail("1.2.3.4")
 		if i < 2 && lockedNow {
 			t.Fatalf("成功清零后第 %d 次失败不应锁定", i+1)
@@ -88,7 +88,7 @@ func TestLoginGuardLockExpiry(t *testing.T) {
 func TestLoginGuardSweep(t *testing.T) {
 	g := newTestGuard(5, time.Minute, time.Minute)
 	now := time.Now()
-	for i := 0; i < loginGuardSweepThreshold+10; i++ {
+	for i := range loginGuardSweepThreshold + 10 {
 		g.attempts[string(rune('a'+i%26))+string(rune(i))] = &loginAttempt{fails: 1, firstFailAt: now.Add(-2 * time.Minute)}
 	}
 	g.attempts["locked"] = &loginAttempt{lockedUntil: now.Add(time.Minute)}

@@ -1266,7 +1266,7 @@ func (a *feishuAdapter) logSendFail(op string, err error, resp any, kv ...any) {
 		return
 	}
 	rv := reflect.ValueOf(resp)
-	if rv.Kind() == reflect.Ptr {
+	if rv.Kind() == reflect.Pointer {
 		if rv.IsNil() {
 			a.logger.Warn("飞书"+op+"失败（nil 响应）", args...)
 			return
@@ -1284,7 +1284,7 @@ func (a *feishuAdapter) logSendFail(op string, err error, resp any, kv ...any) {
 		}
 	}
 	api := rv.FieldByName("ApiResp")
-	if api.IsValid() && api.Kind() == reflect.Ptr && !api.IsNil() {
+	if api.IsValid() && api.Kind() == reflect.Pointer && !api.IsNil() {
 		if f := api.Elem().FieldByName("RawBody"); f.IsValid() && f.Kind() == reflect.Slice {
 			body = string(f.Bytes())
 		}
@@ -1377,8 +1377,8 @@ func (a *feishuAdapter) resolveSegmentBytes(ctx context.Context, seg message.OB1
 		b, err := os.ReadFile(strings.TrimPrefix(fileStr, "file://"))
 		return b, err == nil && len(b) > 0
 	case strings.HasPrefix(fileStr, "data:"):
-		if i := strings.Index(fileStr, ","); i >= 0 {
-			b, err := base64.StdEncoding.DecodeString(fileStr[i+1:])
+		if _, after, ok := strings.Cut(fileStr, ","); ok {
+			b, err := base64.StdEncoding.DecodeString(after)
 			return b, err == nil && len(b) > 0
 		}
 	case strings.HasPrefix(fileStr, "http://") || strings.HasPrefix(fileStr, "https://"):

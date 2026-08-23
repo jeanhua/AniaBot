@@ -28,7 +28,7 @@ func TestToolsDeterministicOrder(t *testing.T) {
 	}
 
 	want := []string{"bash", "file", "meme", "msg_history", "time", "web_search"}
-	for round := 0; round < 10; round++ {
+	for round := range 10 {
 		defs := e.Tools()
 		if len(defs) != len(want) {
 			t.Fatalf("round %d: got %d tools, want %d", round, len(defs), len(want))
@@ -52,7 +52,7 @@ func TestSessionToolsDeterministicOrder(t *testing.T) {
 	session.RegisterSession(&fakeTool{name: "clock_create"})
 
 	first := session.Tools()
-	for round := 0; round < 10; round++ {
+	for round := range 10 {
 		defs := session.Tools()
 		if len(defs) != len(first) {
 			t.Fatalf("round %d: tool count changed: %d != %d", round, len(defs), len(first))
@@ -82,7 +82,7 @@ func TestBuildAvailableSkillsPromptDeterministic(t *testing.T) {
 	}}
 
 	first := m.BuildAvailableSkillsPrompt()
-	for round := 0; round < 10; round++ {
+	for round := range 10 {
 		if got := m.BuildAvailableSkillsPrompt(); got != first {
 			t.Fatalf("round %d: skill prompt not deterministic:\n%s\n---\n%s", round, got, first)
 		}
@@ -144,25 +144,23 @@ func TestSessionExecutorConcurrentAccess(t *testing.T) {
 
 	var wg sync.WaitGroup
 	// 写方：模拟 mcp_load 动态加载工具
-	for i := 0; i < 8; i++ {
+	for i := range 8 {
 		wg.Add(1)
 		go func(i int) {
 			defer wg.Done()
-			for j := 0; j < 50; j++ {
+			for j := range 50 {
 				session.RegisterSession(&fakeTool{name: fmt.Sprintf("loaded_tool_%d_%d", i, j)})
 			}
 		}(i)
 	}
 	// 读方：模拟并行工具执行与定义列表刷新
-	for i := 0; i < 8; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			for j := 0; j < 50; j++ {
+	for range 8 {
+		wg.Go(func() {
+			for range 50 {
 				_ = session.Tools()
 				_, _ = session.Execute(context.Background(), ToolCall{ID: "1", Name: "time", Arguments: "{}"}, CallBackFuncs{})
 			}
-		}()
+		})
 	}
 	wg.Wait()
 

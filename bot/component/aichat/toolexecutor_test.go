@@ -172,7 +172,7 @@ func TestExecuteToolCallsObserverAndCallbacksRace(t *testing.T) {
 	})
 
 	calls := make([]llmtool.ToolCall, 0, n)
-	for i := 0; i < n; i++ {
+	for i := range n {
 		calls = append(calls, llmtool.ToolCall{ID: fmt.Sprintf("c%d", i), Name: fmt.Sprintf("t%d", i), Arguments: "{}"})
 	}
 	cbs := llmtool.CallBackFuncs{SendText: func(s string) (string, error) {

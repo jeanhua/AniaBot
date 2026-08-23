@@ -414,7 +414,7 @@ func TestMemoryAutoInject(t *testing.T) {
 func TestMemoryAutoInjectRuneBudget(t *testing.T) {
 	m := newTestMemoryManager(0)
 	long := strings.Repeat("长", 1500)
-	for i := 0; i < 3; i++ {
+	for range 3 {
 		if _, err := m.add("g:123", "", long, nil); err != nil {
 			t.Fatalf("add 失败: %v", err)
 		}

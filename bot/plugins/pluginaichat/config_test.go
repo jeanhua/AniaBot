@@ -7,7 +7,7 @@ import (
 )
 
 func TestDefaultPromptConfigTagMatchesConstant(t *testing.T) {
-	field, ok := reflect.TypeOf(aiChatConfig{}).FieldByName("Prompt")
+	field, ok := reflect.TypeFor[aiChatConfig]().FieldByName("Prompt")
 	if !ok {
 		t.Fatal("aiChatConfig.Prompt 字段不存在")
 	}

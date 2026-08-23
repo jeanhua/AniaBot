@@ -297,10 +297,7 @@ func chunkText(content string) []string {
 		if len(buf) > 0 && len(buf)+len(lr)+1 > kbChunkSize {
 			// 当前块已满，落盘并携带末尾 overlap 作为下一块前缀
 			chunks = append(chunks, string(buf))
-			keep := kbChunkOverlap
-			if len(buf) < keep {
-				keep = len(buf)
-			}
+			keep := min(len(buf), kbChunkOverlap)
 			buf = append(buf[:0], buf[len(buf)-keep:]...)
 			buf = append(buf, '\n')
 		} else if len(buf) > 0 {
@@ -310,10 +307,7 @@ func chunkText(content string) []string {
 		// 单行（超长段落）硬切
 		for len(buf) > kbChunkSize {
 			chunks = append(chunks, string(buf[:kbChunkSize]))
-			keep := kbChunkOverlap
-			if len(buf) < keep {
-				keep = len(buf)
-			}
+			keep := min(len(buf), kbChunkOverlap)
 			buf = append(buf[:0], buf[len(buf)-keep:]...)
 		}
 	}
@@ -353,7 +347,7 @@ func queryTerms(query string) []string {
 		seen[t] = struct{}{}
 		terms = append(terms, t)
 	}
-	for _, field := range strings.Fields(strings.ToLower(query)) {
+	for field := range strings.FieldsSeq(strings.ToLower(query)) {
 		runes := []rune(field)
 		if len(runes) == 0 {
 			continue

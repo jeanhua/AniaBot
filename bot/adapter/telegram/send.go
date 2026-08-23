@@ -353,8 +353,8 @@ func resolveSegmentBytes(ctx context.Context, rc *resty.Client, fileStr string) 
 		b, err := os.ReadFile(strings.TrimPrefix(fileStr, "file://"))
 		return b, err == nil && len(b) > 0
 	case strings.HasPrefix(fileStr, "data:"):
-		if i := strings.Index(fileStr, ","); i >= 0 {
-			b, err := base64.StdEncoding.DecodeString(fileStr[i+1:])
+		if _, after, ok := strings.Cut(fileStr, ","); ok {
+			b, err := base64.StdEncoding.DecodeString(after)
 			return b, err == nil && len(b) > 0
 		}
 	}

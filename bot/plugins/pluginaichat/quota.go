@@ -129,10 +129,7 @@ func (q *quotaManager) Summary() (plugininfo.QuotaSummaryInfo, error) {
 				si.Kind = "friend"
 			}
 		}
-		si.Remaining = si.Limit - si.Used
-		if si.Remaining < 0 {
-			si.Remaining = 0
-		}
+		si.Remaining = max(si.Limit-si.Used, 0)
 		info.Sessions = append(info.Sessions, si)
 	}
 	// 用量降序，面板优先展示消耗大户
@@ -141,10 +138,7 @@ func (q *quotaManager) Summary() (plugininfo.QuotaSummaryInfo, error) {
 	})
 
 	info.GlobalLimit = int64(q.globalLimit)
-	info.GlobalRemaining = info.GlobalLimit - info.GlobalUsed
-	if info.GlobalRemaining < 0 {
-		info.GlobalRemaining = 0
-	}
+	info.GlobalRemaining = max(info.GlobalLimit-info.GlobalUsed, 0)
 	info.GlobalReached = q.globalLimit > 0 && info.GlobalUsed >= int64(q.globalLimit)
 	return info, nil
 }

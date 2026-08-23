@@ -362,10 +362,7 @@ func splitText(text string, limit int) []string {
 	var parts []string
 	runes := []rune(text)
 	for start := 0; start < len(runes); start += limit {
-		end := start + limit
-		if end > len(runes) {
-			end = len(runes)
-		}
+		end := min(start+limit, len(runes))
 		parts = append(parts, string(runes[start:end]))
 	}
 	return parts

@@ -21,8 +21,8 @@ type ClockTaskInfo struct {
 	Creator    string    `json:"creator"`     // 创建人标识：用户 ID / ai / panel，空表示未知（早期数据）
 	Updater    string    `json:"updater"`     // 最近更新人标识：用户 ID / ai / panel，空表示创建后未被更新过
 	CreatedAt  time.Time `json:"created_at"`
-	LastRunAt  time.Time `json:"last_run_at,omitempty"`
-	NextRunAt  time.Time `json:"next_run_at,omitempty"`
+	LastRunAt  time.Time `json:"last_run_at"`
+	NextRunAt  time.Time `json:"next_run_at"`
 }
 
 // ClockTaskUpdate 定时任务可编辑字段，指针类型表示「仅当提供时才更新」。

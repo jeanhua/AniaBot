@@ -75,7 +75,7 @@ func TestApprovalRequestAndReply(t *testing.T) {
 	}()
 
 	// 等 pending 注册
-	for i := 0; i < 100; i++ {
+	for range 100 {
 		m.mu.Lock()
 		_, ok := m.pending[testSKey]
 		m.mu.Unlock()
@@ -123,7 +123,7 @@ func TestApprovalAdminOnlyForSyntheticRequester(t *testing.T) {
 		allowed, _ = m.request(context.Background(), testSKey, "bash", "执行命令：ls", message.FromUint64(0), func(string) {})
 		close(done)
 	}()
-	for i := 0; i < 100; i++ {
+	for range 100 {
 		m.mu.Lock()
 		_, ok := m.pending[testSKey]
 		m.mu.Unlock()
@@ -178,7 +178,7 @@ func TestApprovalSerializedPerSession(t *testing.T) {
 		close(done1)
 	}()
 	// 等第一个审批挂起
-	for i := 0; i < 100; i++ {
+	for range 100 {
 		m.mu.Lock()
 		_, ok := m.pending[testSKey]
 		m.mu.Unlock()
@@ -204,7 +204,7 @@ func TestApprovalSerializedPerSession(t *testing.T) {
 	m.tryHandleReply(message.FromUint64(1), true, requester, "拒绝")
 	<-done1
 	// 第一个了结后第二个提示发出
-	for i := 0; i < 100; i++ {
+	for range 100 {
 		mu.Lock()
 		n := len(prompts)
 		mu.Unlock()
@@ -316,7 +316,7 @@ func TestAdminApprovalOnlyAdminCanApprove(t *testing.T) {
 		close(done)
 	}()
 	// 等 pending 注册
-	for i := 0; i < 100; i++ {
+	for range 100 {
 		am.mu.Lock()
 		_, ok := am.pending[testSKey]
 		am.mu.Unlock()
@@ -373,7 +373,7 @@ func TestAdminApprovalViaPrivateChat(t *testing.T) {
 	}()
 	// 等管理员私聊索引登记
 	adminSKey := sessionKey(message.FromUint64(999), false)
-	for i := 0; i < 100; i++ {
+	for range 100 {
 		am.mu.Lock()
 		_, ok := am.adminPending[adminSKey]
 		am.mu.Unlock()
@@ -419,7 +419,7 @@ func TestAdminApprovalOriginReplyStillWorks(t *testing.T) {
 		blocked, _ = gate(context.Background(), llmtool.ToolCall{Name: "config_set", Arguments: `{}`})
 		close(done)
 	}()
-	for i := 0; i < 100; i++ {
+	for range 100 {
 		am.mu.Lock()
 		_, ok := am.pending[testSKey]
 		am.mu.Unlock()
@@ -466,7 +466,7 @@ func TestAdminApprovalFallbackToOrigin(t *testing.T) {
 		blocked, _ = gate(context.Background(), llmtool.ToolCall{Name: "config_set", Arguments: `{}`})
 		close(done)
 	}()
-	for i := 0; i < 100; i++ {
+	for range 100 {
 		am.mu.Lock()
 		_, ok := am.pending[testSKey]
 		am.mu.Unlock()
@@ -504,7 +504,7 @@ func TestAdminApprovalRefusedBlocks(t *testing.T) {
 		blocked, result = gate(context.Background(), llmtool.ToolCall{Name: "config_file_set", Arguments: `{"name":"hooks","content":"{}"}`})
 		close(done)
 	}()
-	for i := 0; i < 100; i++ {
+	for range 100 {
 		am.mu.Lock()
 		_, ok := am.pending[testSKey]
 		am.mu.Unlock()

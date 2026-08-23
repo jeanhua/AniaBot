@@ -10,6 +10,7 @@ package querylog
 import (
 	"context"
 	"log/slog"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -230,13 +231,7 @@ func (f Filter) match(e Entry) bool {
 		return false
 	}
 	if f.Sender != "" {
-		hit := false
-		for _, s := range e.Senders {
-			if s == f.Sender {
-				hit = true
-				break
-			}
-		}
+		hit := slices.Contains(e.Senders, f.Sender)
 		if !hit {
 			return false
 		}

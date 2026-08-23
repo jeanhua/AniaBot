@@ -48,10 +48,7 @@ func (t *kbSearchTool) Execute(_ context.Context, params any, _ llmtool.CallBack
 	p := params.(*kbSearchParams)
 	topK := 5
 	if p.TopK != nil {
-		topK = *p.TopK
-		if topK > 10 {
-			topK = 10
-		}
+		topK = min(*p.TopK, 10)
 	}
 	query := strings.TrimSpace(p.Query)
 	if query == "" {

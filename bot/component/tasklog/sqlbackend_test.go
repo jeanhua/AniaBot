@@ -77,7 +77,7 @@ func TestSQLBackendRecordRecent(t *testing.T) {
 
 func TestSQLBackendRollingCap(t *testing.T) {
 	l, db := newSQLLogger(t, 2)
-	for i := 0; i < 5; i++ {
+	for range 5 {
 		l.Record(Entry{TaskID: "t", Status: StatusSuccess})
 	}
 	if got := l.Recent(0); len(got) != 2 {

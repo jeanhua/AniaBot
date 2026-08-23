@@ -80,7 +80,7 @@ func TestHistoryFromCache(t *testing.T) {
 	if _, ok := a.GetGroupMsgHistory("qo:G1", 10, 0); ok {
 		t.Fatal("空缓存应返回 false")
 	}
-	for i := 0; i < 5; i++ {
+	for i := range 5 {
 		a.msgCache.Push("G1", message.Message{MessageId: message.QID(fmt.Sprintf("qo:M%d", i))})
 	}
 	msgs, ok := a.GetGroupMsgHistory("qo:G1", 3, 0)

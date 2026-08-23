@@ -207,10 +207,7 @@ func retryOnce[T any](ctx context.Context, fn func() (T, error)) (T, error) {
 	if !errors.As(err, &rl) {
 		return v, err
 	}
-	wait := time.Duration(rl.retryAfter) * time.Second
-	if wait > 30*time.Second {
-		wait = 30 * time.Second
-	}
+	wait := min(time.Duration(rl.retryAfter)*time.Second, 30*time.Second)
 	select {
 	case <-time.After(wait):
 	case <-ctx.Done():

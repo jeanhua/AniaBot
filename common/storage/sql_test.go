@@ -66,7 +66,7 @@ func TestEnsureTables(t *testing.T) {
 	}
 
 	// 幂等：重复执行不报错
-	for i := 0; i < 2; i++ {
+	for i := range 2 {
 		if err := EnsureTables(ctx, db, SQLDialectSQLite, ddl); err != nil {
 			t.Fatalf("EnsureTables 第 %d 次执行失败: %v", i+1, err)
 		}

@@ -57,8 +57,8 @@ type ClockTask struct {
 	Note       string      `json:"note,omitempty"`
 	CreatedAt  time.Time   `json:"created_at"`
 	UpdatedAt  time.Time   `json:"updated_at"`
-	LastRunAt  time.Time   `json:"last_run_at,omitempty"`
-	NextRunAt  time.Time   `json:"next_run_at,omitempty"`
+	LastRunAt  time.Time   `json:"last_run_at"`
+	NextRunAt  time.Time   `json:"next_run_at"`
 }
 
 // ClockUpdateFields 定时任务可更新字段，指针类型表示「仅当提供时才更新」。

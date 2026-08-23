@@ -125,7 +125,7 @@ func TestNoMentionResetDeletesPersisted(t *testing.T) {
 	store := newMemPersistent()
 	gid := message.FromUint64(456)
 	p := newNoMentionPlugin(store)
-	for i := 0; i < 30; i++ {
+	for range 30 {
 		p.incrNoMention(gid)
 	}
 	nmStore := store.Clone(noMentionKeyPrefix)
@@ -146,7 +146,7 @@ func TestNoMentionThresholdDisabled(t *testing.T) {
 	p := newNoMentionPlugin(store)
 	p.cfg.Session.NoMentionClear = 0
 	gid := message.FromUint64(789)
-	for i := 0; i < 100; i++ {
+	for range 100 {
 		p.incrNoMention(gid)
 	}
 	if got := p.noMentionValue(gid); got != 0 {
@@ -166,7 +166,7 @@ func TestNoMentionClearRetainedAndAppliedAtMentionAfterRestart(t *testing.T) {
 
 	// 第一段进程：会话未驻留，计数达阈值后 tryClear 无法清空，计数应保留并落盘
 	p1 := newNoMentionPlugin(store)
-	for i := 0; i < 30; i++ {
+	for range 30 {
 		p1.incrNoMention(gid)
 	}
 	if p1.tryClearNoMentionChat(context.Background(), gid) {
@@ -214,14 +214,12 @@ func TestNoMentionIncrConcurrentNoLostUpdate(t *testing.T) {
 	const goroutines = 16
 	const perGoroutine = 25
 	var wg sync.WaitGroup
-	for i := 0; i < goroutines; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			for j := 0; j < perGoroutine; j++ {
+	for range goroutines {
+		wg.Go(func() {
+			for range perGoroutine {
 				p.incrNoMention(gid)
 			}
-		}()
+		})
 	}
 	wg.Wait()
 	if got := p.noMentionValue(gid); got != goroutines*perGoroutine {
@@ -231,7 +229,7 @@ func TestNoMentionIncrConcurrentNoLostUpdate(t *testing.T) {
 
 // TestNoMentionClearConfigTag 校验阈值配置字段的默认值与面板键路径。
 func TestNoMentionClearConfigTag(t *testing.T) {
-	field, ok := reflect.TypeOf(sessionConfig{}).FieldByName("NoMentionClear")
+	field, ok := reflect.TypeFor[sessionConfig]().FieldByName("NoMentionClear")
 	if !ok {
 		t.Fatal("sessionConfig.NoMentionClear 字段不存在")
 	}

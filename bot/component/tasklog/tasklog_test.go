@@ -80,7 +80,7 @@ func TestRecordAndRecent(t *testing.T) {
 
 func TestRollingCap(t *testing.T) {
 	l := New(newFakeStore(), 2, nil)
-	for i := 0; i < 5; i++ {
+	for range 5 {
 		l.Record(Entry{TaskID: "t", Status: StatusSuccess})
 	}
 	got := l.Recent(0)

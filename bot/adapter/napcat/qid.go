@@ -1,6 +1,7 @@
 package napcat
 
 import (
+	"maps"
 	"strings"
 
 	"github.com/jeanhua/AniaBot/common/model/message"
@@ -26,9 +27,7 @@ func stripQQSegments(segs []message.OB11Segment) []message.OB11Segment {
 			continue
 		}
 		data := make(map[string]any, len(seg.Data))
-		for k, v := range seg.Data {
-			data[k] = v
-		}
+		maps.Copy(data, seg.Data)
 		switch seg.Type {
 		case message.SegmentMention:
 			if qq, ok := data["qq"].(string); ok && qq != "all" {

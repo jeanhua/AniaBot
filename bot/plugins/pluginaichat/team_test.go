@@ -168,7 +168,7 @@ func TestTeamManagerCaps(t *testing.T) {
 	m := newTestTeamManager(t)
 
 	// 单 scope 团队数上限（名字用序号区分，避免与 20 字符上限冲突）
-	for i := 0; i < teamMaxPerScope; i++ {
+	for i := range teamMaxPerScope {
 		if _, err := m.create("g:1", fmt.Sprintf("团队%d", i), "", []teamMember{{Name: "a"}}); err != nil {
 			t.Fatalf("创建第 %d 个团队失败: %v", i+1, err)
 		}

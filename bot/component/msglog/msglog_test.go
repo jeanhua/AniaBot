@@ -43,7 +43,7 @@ func TestAddAndRecent(t *testing.T) {
 
 func TestMaxEntries(t *testing.T) {
 	r := msglog.New(newStore(), 3)
-	for i := 0; i < 5; i++ {
+	for range 5 {
 		r.Add(msglog.Entry{Type: msglog.TypeGroup, Text: "msg"})
 	}
 	entries := r.Recent(0)

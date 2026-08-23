@@ -363,7 +363,7 @@ func TestHandleUpdateDispatch(t *testing.T) {
 	a.handleUpdate(&Update{UpdateID: 2, Message: textMsg(-100, "group", 222, "hi")})
 	a.handleUpdate(&Update{UpdateID: 3, ChannelPost: textMsg(-100, "channel", 222, "post")})
 
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		if !waitDeliver(t, delivered, 2*time.Second) {
 			t.Fatalf("第 %d 条消息应被分发", i+1)
 		}

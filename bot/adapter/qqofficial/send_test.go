@@ -80,7 +80,7 @@ func TestReplyToken(t *testing.T) {
 	}
 	// 单聊 4 次上限、60 分钟有效
 	a.storeReplyToken("U", "M3")
-	for i := 0; i < 4; i++ {
+	for i := range 4 {
 		if _, _, ok := a.nextReplySeq("U", false); !ok {
 			t.Fatalf("单聊第 %d 次回复应有效", i+1)
 		}

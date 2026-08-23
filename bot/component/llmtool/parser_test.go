@@ -24,7 +24,7 @@ func TestExtractRequiredFromPropertiesDeterministic(t *testing.T) {
 	if !reflect.DeepEqual(first, want) {
 		t.Fatalf("extractRequiredFromProperties = %v, want %v", first, want)
 	}
-	for round := 0; round < 10; round++ {
+	for round := range 10 {
 		if got := extractRequiredFromProperties(props); !reflect.DeepEqual(got, first) {
 			t.Fatalf("round %d: not deterministic: %v != %v", round, got, first)
 		}
@@ -43,7 +43,7 @@ func TestMCPToolToOpenAIToolRequiredSorted(t *testing.T) {
 		}
 	}`
 	var got []string
-	for round := 0; round < 10; round++ {
+	for round := range 10 {
 		td := mcpToolToOpenAITool("search", "搜索", json.RawMessage(schema))
 		data, err := json.Marshal(td)
 		if err != nil {

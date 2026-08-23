@@ -300,7 +300,7 @@ func TestSendTextGatewayRetry(t *testing.T) {
 	if n := f.count("sendMessage"); n != 2 {
 		t.Fatalf("sendMessage 调用 = %d, want 2（502 + 重试）", n)
 	}
-	for i := 0; i < 2; i++ {
+	for i := range 2 {
 		if f.req(i).json["parse_mode"] != "MarkdownV2" {
 			t.Fatalf("重试应保留 parse_mode（原样重试）, req%d = %+v", i, f.req(i).json)
 		}
@@ -322,7 +322,7 @@ func TestStreamEndGatewayRetry(t *testing.T) {
 	if n := f.count("editMessageText"); n != 2 {
 		t.Fatalf("editMessageText 调用 = %d, want 2（502 + 重试）", n)
 	}
-	for i := 0; i < 2; i++ {
+	for i := range 2 {
 		if f.req(i).json["parse_mode"] != "MarkdownV2" || f.req(i).json["text"] != "**最终内容**" {
 			t.Fatalf("重试应保留 parse_mode 与内容, req%d = %+v", i, f.req(i).json)
 		}

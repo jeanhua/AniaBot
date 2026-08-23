@@ -21,7 +21,7 @@ type TeamInfo struct {
 	Name      string           `json:"name"`
 	Desc      string           `json:"desc,omitempty"`
 	Members   []TeamMemberInfo `json:"members"`
-	CreatedAt time.Time        `json:"created_at,omitempty"`
+	CreatedAt time.Time        `json:"created_at"`
 }
 
 // TeamUpsert 是面板新增/编辑团队的请求体（团队名即持久化键，不可重命名）。

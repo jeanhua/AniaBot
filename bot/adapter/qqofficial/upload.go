@@ -83,10 +83,7 @@ func (a *qqOfficialAdapter) uploadByBytes(ctx context.Context, base string, file
 		if err != nil || blockSize <= 0 {
 			return "", fmt.Errorf("分片 %d 的 block_size 非法: %q", part.Index, part.BlockSize)
 		}
-		end := offset + blockSize
-		if end > len(data) {
-			end = len(data)
-		}
+		end := min(offset+blockSize, len(data))
 		chunk := data[offset:end]
 		if len(chunk) == 0 {
 			return "", fmt.Errorf("分片 %d 超出文件范围（offset=%d, size=%d）", part.Index, offset, len(data))
@@ -137,8 +134,8 @@ func resolveSegmentBytes(src string) ([]byte, bool) {
 		b, err := base64.StdEncoding.DecodeString(strings.TrimPrefix(src, "base64://"))
 		return b, err == nil && len(b) > 0
 	case strings.HasPrefix(src, "data:"):
-		if i := strings.Index(src, ","); i >= 0 {
-			b, err := base64.StdEncoding.DecodeString(src[i+1:])
+		if _, after, ok := strings.Cut(src, ","); ok {
+			b, err := base64.StdEncoding.DecodeString(after)
 			return b, err == nil && len(b) > 0
 		}
 	case strings.HasPrefix(src, "file://"):

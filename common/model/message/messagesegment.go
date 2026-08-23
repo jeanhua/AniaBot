@@ -1,5 +1,7 @@
 package message
 
+import "maps"
+
 const (
 	SegmentText    = "text"
 	SegmentFace    = "face"
@@ -94,9 +96,7 @@ func NormalizeQQSegments(segs []OB11Segment) []OB11Segment {
 			continue
 		}
 		data := make(map[string]any, len(seg.Data))
-		for k, v := range seg.Data {
-			data[k] = v
-		}
+		maps.Copy(data, seg.Data)
 		switch seg.Type {
 		case SegmentMention:
 			if qq, ok := data["qq"].(string); ok && qq != "all" {

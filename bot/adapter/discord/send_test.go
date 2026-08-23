@@ -311,7 +311,7 @@ func TestSendFileBatching(t *testing.T) {
 	fake := &fakeDiscordAPI{}
 	a := newSendAdapter(fake)
 	segs := segsChain{}
-	for i := 0; i < 12; i++ {
+	for i := range 12 {
 		segs = append(segs, message.OB11Segment{Type: message.SegmentImage, Data: message.ImageMessage{
 			File: "base64://" + base64.StdEncoding.EncodeToString([]byte{byte(i)}),
 			Url:  "base64://" + base64.StdEncoding.EncodeToString([]byte{byte(i)}),

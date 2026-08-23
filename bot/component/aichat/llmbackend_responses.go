@@ -3,7 +3,7 @@ package aichat
 import (
 	"context"
 	"fmt"
-	"sort"
+	"slices"
 	"strings"
 
 	"github.com/jeanhua/AniaBot/bot/component/llmtool"
@@ -285,7 +285,7 @@ func (a *responsesStreamAccumulator) Add(event responses.ResponseStreamEventUnio
 func (a *responsesStreamAccumulator) Result() GenerateResponse {
 	resp := GenerateResponse{Content: a.content.String()}
 	order := append([]int64(nil), a.toolOrder...)
-	sort.Slice(order, func(i, j int) bool { return order[i] < order[j] })
+	slices.Sort(order)
 	for _, idx := range order {
 		resp.ToolCalls = append(resp.ToolCalls, *a.toolCalls[idx])
 	}

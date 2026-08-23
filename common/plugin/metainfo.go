@@ -3,6 +3,7 @@ package plugin
 import (
 	"context"
 	"log/slog"
+	"slices"
 
 	"github.com/go-resty/resty/v2"
 	"github.com/jeanhua/AniaBot/common/bot"
@@ -47,12 +48,7 @@ func (p *Meta) SupportsPlatform(platform string) bool {
 	if len(p.Platforms) == 0 {
 		return true
 	}
-	for _, pl := range p.Platforms {
-		if pl == platform {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(p.Platforms, platform)
 }
 
 func (p *Meta) SetStorage(s storage.Storage) {

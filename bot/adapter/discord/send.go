@@ -262,8 +262,8 @@ func (a *discordAdapter) resolveBytes(src string) ([]byte, bool) {
 		b, err := os.ReadFile(strings.TrimPrefix(src, "file://"))
 		return b, err == nil && len(b) > 0
 	case strings.HasPrefix(src, "data:"):
-		if i := strings.Index(src, ","); i >= 0 {
-			b, err := base64.StdEncoding.DecodeString(src[i+1:])
+		if _, after, ok := strings.Cut(src, ","); ok {
+			b, err := base64.StdEncoding.DecodeString(after)
 			return b, err == nil && len(b) > 0
 		}
 		return nil, false
@@ -303,10 +303,7 @@ func splitText(text string, limit int) []string {
 	runes := []rune(text)
 	var parts []string
 	for start := 0; start < len(runes); start += limit {
-		end := start + limit
-		if end > len(runes) {
-			end = len(runes)
-		}
+		end := min(start+limit, len(runes))
 		parts = append(parts, string(runes[start:end]))
 	}
 	return parts

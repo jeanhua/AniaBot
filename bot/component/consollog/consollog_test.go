@@ -80,7 +80,7 @@ func TestCaptureAttrs(t *testing.T) {
 
 func TestPageCursor(t *testing.T) {
 	r := NewRing(10)
-	for i := 0; i < 6; i++ {
+	for range 6 {
 		r.Add(Entry{Message: "m"})
 	}
 	all := r.Page(0, 0)
@@ -101,7 +101,7 @@ func TestPageCursor(t *testing.T) {
 
 func TestRingOverflow(t *testing.T) {
 	r := NewRing(3)
-	for i := 0; i < 5; i++ {
+	for range 5 {
 		r.Add(Entry{Message: "m"})
 	}
 	es := r.Page(0, 0)

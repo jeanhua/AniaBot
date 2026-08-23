@@ -4,7 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"sort"
+	"slices"
 	"strings"
 
 	"github.com/anthropics/anthropic-sdk-go"
@@ -317,11 +317,11 @@ func parseImageDataURI(uri string) (mediaType, data string, ok bool) {
 		return "", "", false
 	}
 	rest := uri[len("data:"):]
-	idx := strings.Index(rest, ",")
-	if idx < 0 {
+	before, after, ok0 := strings.Cut(rest, ",")
+	if !ok0 {
 		return "", "", false
 	}
-	meta, data := rest[:idx], rest[idx+1:]
+	meta, data := before, after
 	mediaType = strings.SplitN(meta, ";", 2)[0]
 	if mediaType == "" || data == "" {
 		return "", "", false
@@ -457,13 +457,13 @@ func (a *anthropicStreamAccumulator) Result() GenerateResponse {
 	}
 	// 按 block index 升序输出（模型的规范顺序），与流到达顺序无关
 	order := append([]int64(nil), a.toolOrder...)
-	sort.Slice(order, func(i, j int) bool { return order[i] < order[j] })
+	slices.Sort(order)
 	for _, idx := range order {
 		resp.ToolCalls = append(resp.ToolCalls, *a.toolCalls[idx])
 	}
 	if len(a.thinkingOrder) > 0 {
 		tOrder := append([]int64(nil), a.thinkingOrder...)
-		sort.Slice(tOrder, func(i, j int) bool { return tOrder[i] < tOrder[j] })
+		slices.Sort(tOrder)
 		tbs := make([]thinkingBlock, 0, len(tOrder))
 		for _, idx := range tOrder {
 			tbs = append(tbs, *a.thinking[idx])

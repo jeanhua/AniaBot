@@ -273,7 +273,7 @@ func TestGenerateFallbackAlsoFails(t *testing.T) {
 
 // TestRetryDelayBounds 退避时间有上限且为正。
 func TestRetryDelayBounds(t *testing.T) {
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		d := retryDelay(time.Second, i)
 		if d <= 0 || d > 60*time.Second {
 			t.Fatalf("retryDelay(%d) = %v, out of bounds", i, d)

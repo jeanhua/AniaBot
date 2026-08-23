@@ -184,10 +184,10 @@ func (p *AIChatPlugin) KnowledgeImportURL(scope, targetURL string) (string, erro
 // Jina Reader 返回 Markdown，首个 `# ` 一级标题作为文档标题；
 // 无标题时标题为空（管理器允许），正文为抓取文本本身。
 func extractKbPageTitle(text string) (string, string) {
-	for _, line := range strings.Split(text, "\n") {
+	for line := range strings.SplitSeq(text, "\n") {
 		trimmed := strings.TrimSpace(line)
-		if strings.HasPrefix(trimmed, "# ") {
-			t := strings.TrimSpace(strings.TrimPrefix(trimmed, "# "))
+		if after, ok := strings.CutPrefix(trimmed, "# "); ok {
+			t := strings.TrimSpace(after)
 			if t != "" {
 				return t, text
 			}

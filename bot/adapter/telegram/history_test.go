@@ -49,7 +49,7 @@ func TestMsgCacheCap(t *testing.T) {
 		c.Push(chatIDRaw(chatID), cachedMsg(chatID, mid, text))
 		now = now.Add(time.Millisecond)
 	}
-	for i := 0; i < 5; i++ {
+	for i := range 5 {
 		push(-100, i+1, fmt.Sprintf("m%d", i+1))
 	}
 	if msgs := c.History("-100", 0); len(msgs) != 3 || msgs[0].RawMessage != "m5" {

@@ -234,10 +234,7 @@ func (w *messageWindow) takeCompressUsage() TokenUsage {
 // 此后每轮请求都会失败（sticky 400）。这里把切点后移越过所有孤立 tool 消息；
 // 极端情况下全部跳过即清空历史（等效新对话，请求合法）。
 func (w *messageWindow) truncateOldestHalf() {
-	keep := len(w.messages) / 2
-	if keep < 1 {
-		keep = 1
-	}
+	keep := max(len(w.messages)/2, 1)
 	start := len(w.messages) - keep
 	for start < len(w.messages) && w.messages[start].Role == RoleTool {
 		start++

@@ -52,7 +52,7 @@ func TestHelperProcess(t *testing.T) {
 		os.Exit(0)
 	}
 	code := 0
-	for _, part := range strings.Split(script, ":") {
+	for part := range strings.SplitSeq(script, ":") {
 		switch {
 		case strings.HasPrefix(part, "exit"):
 			code = atoiHelper(strings.TrimPrefix(part, "exit"))

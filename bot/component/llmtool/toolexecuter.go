@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"maps"
 	"reflect"
 	"sort"
 	"sync"
@@ -171,9 +172,7 @@ func (s *SessionToolExecutor) snapshotSessionTools() map[string]Tool {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	snapshot := make(map[string]Tool, len(s.sessionTools))
-	for name, tool := range s.sessionTools {
-		snapshot[name] = tool
-	}
+	maps.Copy(snapshot, s.sessionTools)
 	return snapshot
 }
 
