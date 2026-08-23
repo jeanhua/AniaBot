@@ -262,6 +262,7 @@ type quotaConfig struct {
 type sessionConfig struct {
 	MaxIdleMinutes int `cfg:"max_idle_minutes" label:"闲置会话回收（分钟）" group:"AI 对话 · 会话驻留" default:"120" help:"超过该时长无 AI 交互的会话从内存淘汰（历史在数据库，下次发言自动恢复；会话内 mcp_load 动态加载的工具会随淘汰失效，等同重启）；0 表示不按闲置淘汰"`
 	MaxSessions    int `cfg:"max_sessions" label:"最大驻留会话数" group:"AI 对话 · 会话驻留" default:"128" help:"内存中最多驻留的会话数，超出时淘汰最久未活跃的；0 表示不限制"`
+	NoMentionClear int `cfg:"no_mention_clear" label:"未@自动清空阈值（条）" group:"AI 对话 · 会话驻留" default:"30" help:"群聊连续未@消息达到该条数后自动清空该群对话历史并卸载动态加载的 MCP 工具，下次 @ 即开新对话；计数跨重启保留（每 10 条落盘一次，重启后继续累计），会话被闲置回收时计数不清零、在下次 @ 时补清；0 表示关闭自动清空"`
 }
 
 type aiChatConfig struct {

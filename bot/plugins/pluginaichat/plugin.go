@@ -49,9 +49,15 @@ type AIChatPlugin struct {
 	pendingMsgs sync.Map
 
 	// noMentionCount 未 @ 消息计数；noMentionMu 保护其读改写（sync.Map 的
-	// Load+Store 组合非原子，并发消息会丢计数）
+	// Load+Store 组合非原子，并发消息会丢计数）。计数跨重启持久化（见
+	// nomention.go），避免重启清零导致「30 条未@自动清空」永远无法触发
 	noMentionCount sync.Map
 	noMentionMu    sync.Mutex
+	// noMentionStore 未@消息计数的持久化存储（nomention: 子命名空间），
+	// 用于跨重启累计；为 nil 表示功能未启用或持久层不可用（退回纯内存计数）
+	noMentionStore storage.PersistentStorage
+	// noMentionLoaded 已从持久层恢复过未@计数的群（每个群只查一次 DB）
+	noMentionLoaded sync.Map
 
 	// 按群聊/好友独立的 prompt 覆盖配置
 	promptOverrides struct {
@@ -169,41 +175,15 @@ func (p *AIChatPlugin) OnGroupMsg(ctx context.Context, bot bot.Bot, cmd command.
 	}
 
 	if !cmd.Mention {
-		// 计数读改写整体加锁，避免并发消息丢计数
-		p.noMentionMu.Lock()
-		cnt := 0
-		if v, ok := p.noMentionCount.Load(msg.GroupId); ok {
-			if iv, ok2 := v.(int); ok2 {
-				cnt = iv
+		// 计数跨重启持久化；达到阈值后尝试清空该群对话历史（含持久化），
+		// 下次 @ 即开新对话。阈值可在面板「AI 对话 · 会话驻留」配置，0 关闭
+		threshold := p.cfg.Session.NoMentionClear
+		if threshold > 0 && p.incrNoMention(msg.GroupId) >= threshold {
+			// 会话未驻留（重启后尚未创建、被闲置回收淘汰）或 AI 正在响应拿不到锁时
+			// 返回 false：保留计数，由下次 @ 或会话重建后的 applyNoMentionClear 补清
+			if p.tryClearNoMentionChat(ctx, msg.GroupId) {
+				p.resetNoMention(msg.GroupId)
 			}
-		}
-		cnt++
-		p.noMentionCount.Store(msg.GroupId, cnt)
-		needCheck := cnt > 30
-		p.noMentionMu.Unlock()
-
-		if needCheck {
-			if v, ok := p.chats.Load(sessionKey(msg.GroupId, true)); ok && v != nil {
-				chat := v.(*chatEntry).chat
-				// 与 mention 路径的 chat.Chat 共用 per-group 锁，避免自动清理与进行中的对话
-				// 并发访问 messageWindow.messages 及 SessionToolExecutor.sessionTools
-				// （并发 map 读写会触发不可恢复的 fatal error 导致整个进程崩溃）
-				if p.tryLock(msg.GroupId, true) {
-					defer p.unLock(msg.GroupId, true)
-					chat.ClearHistory(ctx)
-					p.Logger.Info("自动清理AI对话信息", "group", msg.GroupId, "reason", "超过30条未@消息")
-					if cleared := chat.ClearDynamicTools(); cleared > 0 {
-						p.Logger.Info("清理动态加载的 MCP 工具", "count", cleared)
-					}
-				} else {
-					// AI 长响应中拿不到锁：保留计数，响应结束后继续累计直到成功清理，
-					// 否则长响应期间积累的 30+ 条消息永远不会触发历史清理
-					return true, nil
-				}
-			}
-			p.noMentionMu.Lock()
-			p.noMentionCount.Store(msg.GroupId, 0)
-			p.noMentionMu.Unlock()
 		}
 		return true, nil
 	}
@@ -256,7 +236,7 @@ func (p *AIChatPlugin) OnGroupMsg(ctx context.Context, bot bot.Bot, cmd command.
 	p.touchChat(sessionKey(msg.GroupId, true))
 	defer p.unLock(msg.GroupId, true)
 	defer p.clearActiveContext(msg.GroupId, true)
-	p.noMentionCount.Store(msg.GroupId, 0)
+
 	chat := p.getChat(bot, msg.GroupId, true, p.getPromptForID(msg.GroupId, true))
 	if chat == nil {
 		builder := msgchain.Builder().Group()
@@ -264,6 +244,11 @@ func (p *AIChatPlugin) OnGroupMsg(ctx context.Context, bot bot.Bot, cmd command.
 		bot.SendGroupMsg(msg.GroupId, builder.Build())
 		return true, nil
 	}
+
+	// 未@消息计数达到阈值时补清：会话重启/闲置淘汰后重建（历史从持久层回放），
+	// 若阈值是在会话未驻留期间达到的，这里清空让本轮对话从新上下文开始；
+	// 无论是否清空，@ 消息都会重置连续未@计数
+	p.applyNoMentionClear(ctx, msg.GroupId, chat)
 
 	chatCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
@@ -1000,6 +985,13 @@ func (p *AIChatPlugin) Start(ctx context.Context, cfg *viper.Viper) error {
 			p.historyDB = db
 			p.Logger.Info("对话历史使用行级存储", "dialect", dialect)
 		}
+	}
+
+	// 未@自动清空计数持久化：跨重启累计（每 10 条落盘一次，达阈值强制落盘），
+	// 避免重启清零导致「30 条未@自动清空」永远无法触发；持久层不可用时退回
+	// 纯内存计数（行为等同旧版，重启清零）
+	if p.cfg.Session.NoMentionClear > 0 && p.PersistentStorage != nil {
+		p.noMentionStore = p.PersistentStorage.Clone(noMentionKeyPrefix)
 	}
 
 	// 会话内存回收：闲置淘汰 + LRU 容量上限，防止活跃会话增多导致内存线性增长。
