@@ -183,9 +183,14 @@ func (c *LLMClient) Generate(ctx context.Context, messages []Message, opts ChatO
 	}
 }
 
-// GenerateStream 流式生成：与 Generate 相同的重试/备用模型语义，
-// 唯一差异——已输出首字节后失败不重试、不切换备用（避免重复输出），
-// 返回已积累的（部分）内容与错误。opts.OnStreamDelta 为 nil 时退化为一次性。
+// GenerateStream 流式生成：与 Generate 相同的重试/备用模型语义。
+// 已输出首字节后的失败是否重试取决于输出是否已展示给调用方：
+//   - opts.OnStreamDelta 为 nil（一次性生成，如 anthropic 内部聚合流式）时内容
+//     从未展示，失败可安全从头重试；
+//   - opts.OnStreamDelta 非空且提供 opts.OnStreamRestart 时，重试/切换备用前先
+//     调用 OnStreamRestart 让调用方重置已展示缓冲，打字机整体覆盖旧输出；
+//   - 两者都不满足时保留旧行为——首字节后失败不重试、不切备用，返回已积累的
+//     部分内容与错误，避免用户看到重复拼接的输出。
 func (c *LLMClient) GenerateStream(ctx context.Context, messages []Message, opts ChatOptions) (GenerateResponse, TokenUsage, error) {
 	for attempt := 0; ; attempt++ {
 		resp, usage, started, err := c.backend.generateStream(ctx, messages, opts)
@@ -198,13 +203,21 @@ func (c *LLMClient) GenerateStream(ctx context.Context, messages []Message, opts
 			return GenerateResponse{}, TokenUsage{}, ctx.Err()
 		}
 
-		// 已输出首字节：不重试不切换备用，避免用户看到重复输出
-		if started {
+		// 流式可见且未提供重启回调：首字节后不重试不切备用，避免重复拼接输出
+		if started && opts.OnStreamDelta != nil && opts.OnStreamRestart == nil {
 			return resp, usage, fmt.Errorf("LLM stream failed after partial output: %w", err)
+		}
+
+		// 重试/切换备用前通知调用方重置已展示缓冲（流式整体覆盖，非追加）
+		restart := func() {
+			if started && opts.OnStreamRestart != nil {
+				opts.OnStreamRestart()
+			}
 		}
 
 		if !retryableLLMError(err) || c.retry == nil || attempt+1 >= c.retry.maxAttempts {
 			if c.fallback != nil {
+				restart()
 				fbResp, fbUsage, fbErr := c.fallback.GenerateStream(ctx, messages, opts)
 				if fbErr == nil {
 					return fbResp, fbUsage, nil
@@ -217,6 +230,7 @@ func (c *LLMClient) GenerateStream(ctx context.Context, messages []Message, opts
 			return GenerateResponse{}, TokenUsage{}, fmt.Errorf("LLM generation failed: %w", err)
 		}
 
+		restart()
 		delay := retryDelay(c.retry.baseDelay, attempt)
 		select {
 		case <-ctx.Done():

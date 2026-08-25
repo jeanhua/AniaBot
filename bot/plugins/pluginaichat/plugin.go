@@ -493,6 +493,11 @@ func (p *AIChatPlugin) processChatBatch(ctx context.Context, b bot.Bot, id messa
 				// 否则会以「历史各轮全文 + 新文本」开头，重复发送中间内容
 				streamBuf.Reset()
 			}
+			// 流式中途失败后的重试/切备用：清空已展示缓冲，让重试从头生成的
+			// 内容整体覆盖旧输出（Patch 为覆盖语义，不会拼接重复文本）
+			chatOpts.OnStreamRestart = func() {
+				streamBuf.Reset()
+			}
 		}
 	}
 

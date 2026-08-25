@@ -86,6 +86,11 @@ type ChatOptions struct {
 	// OnStreamRoundEnd 工具调用轮结束回调（toolexecutor 在工具边界调用）：
 	// 调用方应 End 当前流式消息；下一轮首个增量创建新消息。
 	OnStreamRoundEnd func()
+	// OnStreamRestart 流式中途失败后重试/切换备用模型前的重启回调（可选）：
+	// 调用方应重置已展示的流式缓冲，让重试从头生成的内容整体覆盖旧输出
+	// （打字机效果是整体覆盖而非追加，不会拼接出重复文本）；仅 OnStreamDelta
+	// 非空时使用，nil 时保留旧行为——首字节后失败不重试。
+	OnStreamRestart func()
 
 	// PreToolGate 请求级工具门禁（可选）：每次工具调用前在该工具的 goroutine 内
 	// 调用，实现必须并发安全。block=true 时工具不执行，result 作为该工具的

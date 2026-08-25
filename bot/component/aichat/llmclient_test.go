@@ -424,8 +424,102 @@ func TestGenerateStreamRetryBeforeStart(t *testing.T) {
 	}
 }
 
-// TestGenerateStreamNoRetryAfterStart 首字节后失败不重试（避免重复输出）。
-func TestGenerateStreamNoRetryAfterStart(t *testing.T) {
+// TestGenerateStreamRetryAfterStartOneShot 一次性生成（无流式回调）时首字节后失败
+// 可从头重试：内容从未展示给调用方，不存在重复输出问题（覆盖 anthropic 内部
+// 聚合流式等非打字机场景）。
+func TestGenerateStreamRetryAfterStartOneShot(t *testing.T) {
+	var calls atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		if calls.Add(1) == 1 {
+			// 输出一段内容后直接断开 TCP，模拟流中途断网（unexpected EOF）
+			fmt.Fprint(w, sseChunk(streamEvent(`[{"index":0,"delta":{"content":"部分"}}]`)))
+			if f, ok := w.(http.Flusher); ok {
+				f.Flush() // 确保部分内容先到达客户端，再断开
+			}
+			if hj, ok := w.(http.Hijacker); ok {
+				if conn, _, err := hj.Hijack(); err == nil {
+					conn.Close()
+				}
+			}
+			return
+		}
+		fmt.Fprint(w, sseChunk(streamEvent(`[{"index":0,"delta":{"content":"完整"}}]`)))
+		fmt.Fprint(w, sseChunk(usageEvent()))
+		fmt.Fprint(w, "data: [DONE]\n\n")
+	}))
+	defer srv.Close()
+
+	c := newTestClient(srv.URL, WithRetry(3, time.Millisecond))
+	resp, _, err := c.GenerateStream(context.Background(),
+		[]Message{TextMessage(RoleUser, "hello")}, ChatOptions{})
+	if err != nil {
+		t.Fatalf("GenerateStream 失败: %v", err)
+	}
+	if resp.Content != "完整" {
+		t.Fatalf("内容不符: %q", resp.Content)
+	}
+	if calls.Load() != 2 {
+		t.Fatalf("一次性生成首字节后失败应重试（共 2 次请求）, got %d", calls.Load())
+	}
+}
+
+// TestGenerateStreamRetryAfterStartWithRestart 流式可见且提供 OnStreamRestart 时，
+// 首字节后失败从头重试；调用方在重启回调里重置缓冲，最终只展示新生成的完整内容。
+func TestGenerateStreamRetryAfterStartWithRestart(t *testing.T) {
+	var calls atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		if calls.Add(1) == 1 {
+			fmt.Fprint(w, sseChunk(streamEvent(`[{"index":0,"delta":{"content":"旧内容"}}]`)))
+			if f, ok := w.(http.Flusher); ok {
+				f.Flush() // 确保部分内容先到达客户端，再断开
+			}
+			if hj, ok := w.(http.Hijacker); ok {
+				if conn, _, err := hj.Hijack(); err == nil {
+					conn.Close() // 模拟流中途断网（unexpected EOF）
+				}
+			}
+			return
+		}
+		fmt.Fprint(w, sseChunk(streamEvent(`[{"index":0,"delta":{"content":"新内容"}}]`)))
+		fmt.Fprint(w, sseChunk(usageEvent()))
+		fmt.Fprint(w, "data: [DONE]\n\n")
+	}))
+	defer srv.Close()
+
+	var restarts atomic.Int32
+	var buf strings.Builder
+	c := newTestClient(srv.URL, WithRetry(3, time.Millisecond))
+	resp, _, err := c.GenerateStream(context.Background(),
+		[]Message{TextMessage(RoleUser, "hello")},
+		ChatOptions{
+			OnStreamDelta: func(d string) { buf.WriteString(d) },
+			OnStreamRestart: func() {
+				restarts.Add(1)
+				buf.Reset()
+			},
+		})
+	if err != nil {
+		t.Fatalf("GenerateStream 失败: %v", err)
+	}
+	if resp.Content != "新内容" {
+		t.Fatalf("内容不符: %q", resp.Content)
+	}
+	if calls.Load() != 2 {
+		t.Fatalf("提供重启回调时首字节后失败应重试（共 2 次请求）, got %d", calls.Load())
+	}
+	if restarts.Load() != 1 {
+		t.Fatalf("OnStreamRestart 应恰好调用 1 次, got %d", restarts.Load())
+	}
+	if buf.String() != "新内容" {
+		t.Fatalf("重置后缓冲应只含新内容: %q", buf.String())
+	}
+}
+
+// TestGenerateStreamNoRetryAfterStartNoRestart 流式可见但未提供 OnStreamRestart 时
+// 保留旧行为：首字节后失败不重试，避免用户看到重复拼接的输出。
+func TestGenerateStreamNoRetryAfterStartNoRestart(t *testing.T) {
 	var calls atomic.Int32
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		calls.Add(1)
@@ -438,12 +532,76 @@ func TestGenerateStreamNoRetryAfterStart(t *testing.T) {
 
 	c := newTestClient(srv.URL, WithRetry(3, time.Millisecond))
 	_, _, err := c.GenerateStream(context.Background(),
-		[]Message{TextMessage(RoleUser, "hello")}, ChatOptions{})
+		[]Message{TextMessage(RoleUser, "hello")},
+		ChatOptions{OnStreamDelta: func(string) {}})
 	if err == nil {
 		t.Fatal("流中出错应返回错误")
 	}
+	if !strings.Contains(err.Error(), "LLM stream failed after partial output") {
+		t.Fatalf("错误应包含 partial 标记: %v", err)
+	}
 	if calls.Load() != 1 {
-		t.Fatalf("首字节后失败不应重试, got %d 次请求", calls.Load())
+		t.Fatalf("无重启回调时首字节后失败不应重试, got %d 次请求", calls.Load())
+	}
+}
+
+// TestGenerateStreamFallbackAfterStartWithRestart 主模型流式输出中途失败且重试
+// 耗尽后，切换备用模型从头生成；切备用前同样先通知调用方重置缓冲。
+func TestGenerateStreamFallbackAfterStartWithRestart(t *testing.T) {
+	var mainCalls atomic.Int32
+	mainSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mainCalls.Add(1)
+		w.Header().Set("Content-Type", "text/event-stream")
+		fmt.Fprint(w, sseChunk(streamEvent(`[{"index":0,"delta":{"content":"主模型旧内容"}}]`)))
+		if f, ok := w.(http.Flusher); ok {
+			f.Flush()
+		}
+		if hj, ok := w.(http.Hijacker); ok {
+			if conn, _, err := hj.Hijack(); err == nil {
+				conn.Close() // 模拟流中途断网（unexpected EOF）
+			}
+		}
+	}))
+	defer mainSrv.Close()
+
+	var fbCalls atomic.Int32
+	fbSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fbCalls.Add(1)
+		w.Header().Set("Content-Type", "text/event-stream")
+		fmt.Fprint(w, sseChunk(streamEvent(`[{"index":0,"delta":{"content":"备用内容"}}]`)))
+		fmt.Fprint(w, sseChunk(usageEvent()))
+		fmt.Fprint(w, "data: [DONE]\n\n")
+	}))
+	defer fbSrv.Close()
+
+	var restarts atomic.Int32
+	var buf strings.Builder
+	c := newTestClient(mainSrv.URL,
+		WithRetry(2, time.Millisecond),
+		WithFallback(fbSrv.URL, "fb-key", "fb-model", ""))
+	resp, _, err := c.GenerateStream(context.Background(),
+		[]Message{TextMessage(RoleUser, "hello")},
+		ChatOptions{
+			OnStreamDelta: func(d string) { buf.WriteString(d) },
+			OnStreamRestart: func() {
+				restarts.Add(1)
+				buf.Reset()
+			},
+		})
+	if err != nil {
+		t.Fatalf("GenerateStream 失败: %v", err)
+	}
+	if resp.Content != "备用内容" {
+		t.Fatalf("内容不符: %q", resp.Content)
+	}
+	if mainCalls.Load() != 2 || fbCalls.Load() != 1 {
+		t.Fatalf("main=%d(2), fallback=%d(1)", mainCalls.Load(), fbCalls.Load())
+	}
+	if restarts.Load() != 2 {
+		t.Fatalf("每次失败重试/切备用前都应调用 OnStreamRestart, got %d", restarts.Load())
+	}
+	if buf.String() != "备用内容" {
+		t.Fatalf("重置后缓冲应只含备用内容: %q", buf.String())
 	}
 }
 
