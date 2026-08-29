@@ -7,12 +7,11 @@ import (
 )
 
 // CreateDefaultTools 创建默认的工具执行器并注册所有内置工具
-func CreateDefaultTools(searchToken string, memeConfig MemeConfig, bashConfig BashConfig, fileConfig FileConfig, localImageConfig LocalImageConfig) (*llmtool.ToolExecuter, error) {
+func CreateDefaultTools(searchToken string, bashConfig BashConfig, fileConfig FileConfig, localImageConfig LocalImageConfig) (*llmtool.ToolExecuter, error) {
 	executer := llmtool.NewToolExecuter()
 	executer.Register(NewTimeTool())
 	executer.Register(NewWebSearchTool(searchToken))
 	executer.Register(NewWebExploreTool(searchToken))
-	executer.Register(NewMemeTool(memeConfig))
 	if fileConfig.Enable {
 		executer.Register(NewSendFileTool())
 	}
@@ -36,8 +35,8 @@ func CreateDefaultTools(searchToken string, memeConfig MemeConfig, bashConfig Ba
 // mcpLazyLoad 为 true 时走工具发现模式（mcp_discover/mcp_load 按需加载，
 // 节省上下文）；为 false 时启动即全量注册所有 MCP 工具（工具列表恒定，
 // 上游 prompt 缓存命中率更高，但工具较多时上下文开销大）。
-func CreateToolsWithMCP(searchToken string, mcpConfigs []*llmtool.MCPConfig, bashConfig BashConfig, fileConfig FileConfig, localImageConfig LocalImageConfig, memeConfig MemeConfig, mcpLazyLoad bool) (*llmtool.ToolExecuter, error) {
-	executer, err := CreateDefaultTools(searchToken, memeConfig, bashConfig, fileConfig, localImageConfig)
+func CreateToolsWithMCP(searchToken string, mcpConfigs []*llmtool.MCPConfig, bashConfig BashConfig, fileConfig FileConfig, localImageConfig LocalImageConfig, mcpLazyLoad bool) (*llmtool.ToolExecuter, error) {
+	executer, err := CreateDefaultTools(searchToken, bashConfig, fileConfig, localImageConfig)
 	if err != nil {
 		return nil, err
 	}
@@ -61,8 +60,8 @@ func CreateToolsWithMCP(searchToken string, mcpConfigs []*llmtool.MCPConfig, bas
 // skillsDir 为空时跳过 skill 加载
 // skills 非空时只加载指定名称的 skill，为空时加载全部
 // mcpLazyLoad 见 CreateToolsWithMCP
-func CreateToolsWithSkill(searchToken string, mcpConfigs []*llmtool.MCPConfig, skillsDir string, bashConfig BashConfig, fileConfig FileConfig, localImageConfig LocalImageConfig, memeConfig MemeConfig, skills []string, mcpLazyLoad bool) (*llmtool.ToolExecuter, *llmtool.SkillManager, error) {
-	executer, err := CreateToolsWithMCP(searchToken, mcpConfigs, bashConfig, fileConfig, localImageConfig, memeConfig, mcpLazyLoad)
+func CreateToolsWithSkill(searchToken string, mcpConfigs []*llmtool.MCPConfig, skillsDir string, bashConfig BashConfig, fileConfig FileConfig, localImageConfig LocalImageConfig, skills []string, mcpLazyLoad bool) (*llmtool.ToolExecuter, *llmtool.SkillManager, error) {
+	executer, err := CreateToolsWithMCP(searchToken, mcpConfigs, bashConfig, fileConfig, localImageConfig, mcpLazyLoad)
 	if err != nil {
 		return nil, nil, err
 	}

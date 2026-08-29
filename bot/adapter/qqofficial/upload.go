@@ -21,7 +21,7 @@ const md510mWindow = 10002432
 // uploadMedia 上传媒体资源换取 file_info：
 //   - http(s) URL → URL 直传（平台下载转存），一次调用完成；
 //   - base64:// / data: / file:// → 分片上传（upload_prepare → 逐片 PUT 预签名 URL
-//     → upload_part_finish → /files 合并），覆盖本地图片/文件（meme、send_file 工具）。
+//     → upload_part_finish → /files 合并），覆盖本地图片/文件（send_file 工具）。
 func (a *qqOfficialAdapter) uploadMedia(ctx context.Context, openid string, isGroup bool, fileType int, src, fileName string) (string, error) {
 	base := scopePath(isGroup) + "/" + openid
 	if strings.HasPrefix(src, "http://") || strings.HasPrefix(src, "https://") {

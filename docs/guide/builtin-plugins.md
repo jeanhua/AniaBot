@@ -74,7 +74,6 @@ AI 可在对话中自主调用：
 | --- | --- |
 | `time` | 获取当前时间 |
 | `webSearch` / `webExplore` | 联网搜索 / 抓取网页（需配置 Jina token） |
-| `meme` | 发送梗图 |
 | `get_msg_history` | 读取群/私聊最近消息 |
 | `load_images` | 加载用户消息中的图片（多模态或 OCR 识别） |
 | `get_private_file_url` / `file` | 私聊文件链接获取与发送生成的文件（`file` 需配置开启） |

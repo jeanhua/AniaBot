@@ -852,13 +852,6 @@ func (p *AIChatPlugin) Start(ctx context.Context, cfg *viper.Viper) error {
 	if localImageConfig.Enable {
 		p.Logger.Info("已启用local_image工具（可读取宿主机本地图片供AI查看，请注意安全风险）")
 	}
-	memeConfig := functool.MemeConfig{
-		URL:      p.cfg.Meme.URL,
-		Key:      p.cfg.Meme.Key,
-		ListPath: p.cfg.Meme.ListPath,
-		ImgField: p.cfg.Meme.ImgField,
-		Num:      p.cfg.Meme.Num,
-	}
 	var err error
 	p.toolExecutor, p.skillManager, err = functool.CreateToolsWithSkill(
 		p.cfg.Search.Token,
@@ -867,7 +860,6 @@ func (p *AIChatPlugin) Start(ctx context.Context, cfg *viper.Viper) error {
 		bashConfig,
 		fileConfig,
 		localImageConfig,
-		memeConfig,
 		p.cfg.Skills,
 		p.cfg.MCP.LazyLoad,
 	)

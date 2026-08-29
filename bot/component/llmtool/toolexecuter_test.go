@@ -21,13 +21,13 @@ func (t *fakeTool) Execute(ctx context.Context, params any, callbacks CallBackFu
 // TestToolsDeterministicOrder 验证 Tools() 输出顺序完全确定（按名称排序）。
 // prompt 前缀缓存依赖请求序列化稳定，map 随机遍历会把缓存命中率打到 0。
 func TestToolsDeterministicOrder(t *testing.T) {
-	names := []string{"web_search", "time", "meme", "bash", "msg_history", "file"}
+	names := []string{"web_search", "time", "bash", "msg_history", "file"}
 	e := NewToolExecuter()
 	for _, n := range names {
 		e.Register(&fakeTool{name: n})
 	}
 
-	want := []string{"bash", "file", "meme", "msg_history", "time", "web_search"}
+	want := []string{"bash", "file", "msg_history", "time", "web_search"}
 	for round := range 10 {
 		defs := e.Tools()
 		if len(defs) != len(want) {

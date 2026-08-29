@@ -75,7 +75,7 @@ LevelLog(-1000)  →  LevelNormal(0)  →  LevelPostHandle(1000)
 
 ### 🤖 完整的 AI Agent 能力
 
-- **工具调用**：内置时间、联网搜索、网页浏览、梗图、消息历史、文件发送等工具，反射自动生成 JSON Schema，无需手写
+- **工具调用**：内置时间、联网搜索、网页浏览、消息历史、文件发送等工具，反射自动生成 JSON Schema，无需手写
 - **MCP 集成**：接入任意 MCP Server（stdio / SSE / Streamable HTTP），两阶段懒加载避免上下文爆炸
 - **Skill 系统**：把领域知识封装为 Skill，AI 按需阅读
 - **上下文管理**：按 token 预算管理对话窗口，超过 80% 自动让 LLM 总结压缩，历史持久化、重启不丢

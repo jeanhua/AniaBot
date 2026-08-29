@@ -257,7 +257,7 @@ func ExtraMessageStr(msg message.Message) (string, bool) {
 }
 ```
 
-- **只认 text / at 段**：图片、表情、视频等段不参与命令文本——`/meme 猫猫` 后面跟图片不会污染参数
+- **只认 text / at 段**：图片、表情、视频等段不参与命令文本——`/搜索 猫猫` 后面跟图片不会污染参数
 - **`strings.Fields` 按连续空白切分**：支持多空格 / Tab，`/cmd a  b` 与 `/cmd a b` 等价
 - **Mention 标记独立于命令**：`/clock list` 里 @ 机器人 与否不影响解析，AI 插件用 `Mention` 决定是否触发（未 @ 的群聊闲聊不触发）
 - **Data 用 comma-ok 断言**：消息段来自平台 JSON，`qq` 字段可能缺失或类型不对，直接类型断言会 panic——框架对此统一防御
