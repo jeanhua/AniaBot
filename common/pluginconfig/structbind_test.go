@@ -1,6 +1,8 @@
 package pluginconfig
 
 import (
+	"bytes"
+	"encoding/json"
 	"reflect"
 	"testing"
 
@@ -99,6 +101,35 @@ func TestRegisterStruct(t *testing.T) {
 	// Defaults() 只含声明了默认值的键
 	if _, ok := Defaults()["plugin.demo.no_tag"]; ok {
 		t.Error("Defaults() 不应包含无默认值的键")
+	}
+}
+
+// TestFieldJSONExposesDefault 面板表单依赖 schema 中的 default 字段判断
+// select 是否允许「留空」（无默认值=可选，如 subagent/备用模型的 api_format）。
+func TestFieldJSONExposesDefault(t *testing.T) {
+	var cfg sampleConfig
+	if err := RegisterStruct(&cfg); err != nil {
+		t.Fatalf("RegisterStruct: %v", err)
+	}
+	byKey := map[string]Field{}
+	for _, f := range Fields() {
+		byKey[f.Key] = f
+	}
+
+	data, err := json.Marshal(byKey["plugin.demo.name"])
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	if !bytes.Contains(data, []byte(`"default":"demo"`)) {
+		t.Errorf("有默认值的字段应暴露 default, got %s", data)
+	}
+
+	data, err = json.Marshal(byKey["plugin.demo.no_tag"])
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	if bytes.Contains(data, []byte(`"default"`)) {
+		t.Errorf("无默认值的字段不应暴露 default, got %s", data)
 	}
 }
 

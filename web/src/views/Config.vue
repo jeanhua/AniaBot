@@ -190,10 +190,19 @@
                 </label>
 
                 <input v-if="field.type === 'string'" v-model="form[field.key]" type="text" :placeholder="placeholderOf(field)" :class="inputClass" />
-                <input v-else-if="field.type === 'password'" v-model="form[field.key]" type="password" :placeholder="placeholderOf(field)" :class="inputClass" />
+                <div v-else-if="field.type === 'password'" class="flex gap-2">
+                  <input v-model="form[field.key]" type="password" :placeholder="placeholderOf(field)" :class="inputClass" @input="cleared[field.key] = false" />
+                  <button
+                    v-if="valueOf(field.key) === MASK"
+                    type="button"
+                    class="shrink-0 px-3 py-2 text-xs rounded-lg border border-slate-300 text-slate-600 hover:bg-slate-50 transition-colors"
+                    @click="clearField(field)"
+                  >清除</button>
+                </div>
                 <input v-else-if="field.type === 'int'" v-model="form[field.key]" type="number" step="1" :placeholder="placeholderOf(field)" :class="inputClass" />
                 <input v-else-if="field.type === 'float'" v-model="form[field.key]" type="number" step="any" :placeholder="placeholderOf(field)" :class="inputClass" />
                 <select v-else-if="field.type === 'select'" v-model="form[field.key]" :class="inputClass">
+                  <option v-if="!hasDefault(field)" value="">（留空）</option>
                   <option v-for="opt in field.options || []" :key="opt" :value="opt">{{ opt }}</option>
                 </select>
 
@@ -278,6 +287,7 @@ const schema = ref([])
 const values = ref({})
 const form = reactive({}) // field.key -> 编辑中的字符串/布尔值
 const original = reactive({})
+const cleared = reactive({}) // 用户显式点击「清除」的敏感字段：field.key -> true，保存时发送 null 删除该键（留空不修改与清空恢复未配置两种语义分离）
 const saved = ref(false)
 const saving = ref(false)
 const rawMode = ref(false)
@@ -375,7 +385,7 @@ function isOpen(group) {
 }
 
 function groupChanged(group) {
-  return group.fields.some((f) => form[f.key] !== original[f.key])
+  return group.fields.some((f) => cleared[f.key] || form[f.key] !== original[f.key])
 }
 
 function toggleGroup(name) {
@@ -428,7 +438,7 @@ function groupIcon(group) {
   return { '框架基础': iconCube, 'AI 对话': iconSpark, '插件': iconPuzzle }[cat]
 }
 
-const dirty = computed(() => schema.value.some((f) => form[f.key] !== original[f.key]))
+const dirty = computed(() => schema.value.some((f) => cleared[f.key] || form[f.key] !== original[f.key]))
 
 function valueOf(key) {
   return values.value[key.toLowerCase()]
@@ -436,7 +446,7 @@ function valueOf(key) {
 
 function placeholderOf(field) {
   const v = valueOf(field.key)
-  if (field.sensitive && v === MASK) return '已设置（留空保持不变）'
+  if (field.sensitive && v === MASK) return '已设置（留空保持不变，点「清除」删除该配置）'
   if (v === undefined || v === null || v === '') return field.optional ? '未设置（不传该参数）' : '未设置'
   return ''
 }
@@ -462,12 +472,24 @@ function fromFormValue(field) {
     const n = parseFloat(raw); return Number.isNaN(n) ? 0 : n
   }
   if (field.type === 'strings') return raw.split('\n').map((s) => s.trim()).filter(Boolean)
+  if (field.type === 'select') return raw === '' ? null : raw // 留空=删除该键，恢复「跟随主模型格式」等未配置语义
   if (field.type === 'ints') return raw.split('\n').map((s) => parseInt(s.trim(), 10)).filter((n) => !Number.isNaN(n))
   return raw
 }
 
+function hasDefault(field) {
+  return field.default !== undefined && field.default !== null && field.default !== ''
+}
+
+// 敏感字段显式清空：与「留空=不修改」分离，保存时发送 null 删除该键
+function clearField(field) {
+  if (!confirm(`清空「${field.label}」后将删除该配置项，重启后生效。确定清空？`)) return
+  form[field.key] = ''
+  cleared[field.key] = true
+}
+
 function resetForm() {
-  for (const f of schema.value) form[f.key] = original[f.key]
+  for (const f of schema.value) { form[f.key] = original[f.key]; cleared[f.key] = false }
 }
 
 async function reloadValues() {
@@ -475,6 +497,7 @@ async function reloadValues() {
   for (const f of schema.value) {
     form[f.key] = toFormValue(f)
     original[f.key] = form[f.key]
+    cleared[f.key] = false
   }
   rawText.value = JSON.stringify(values.value, null, 2)
 }
@@ -487,6 +510,7 @@ onMounted(async () => {
   for (const f of s) {
     form[f.key] = toFormValue(f)
     original[f.key] = form[f.key]
+    cleared[f.key] = false
   }
   rawText.value = JSON.stringify(v, null, 2)
   if (groups.value.length) {
@@ -500,6 +524,10 @@ onMounted(async () => {
 async function onSave() {
   const updates = {}
   for (const f of schema.value) {
+    if (cleared[f.key]) {
+      updates[f.key] = null // 显式清空敏感字段=删除该键，恢复「留空使用主模型」等未配置语义
+      continue
+    }
     if (form[f.key] === original[f.key]) continue
     if (f.sensitive && form[f.key] === '') continue // 未填写 = 不修改
     updates[f.key] = fromFormValue(f)
