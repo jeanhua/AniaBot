@@ -11,6 +11,7 @@ import (
 	"slices"
 	"sort"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/jeanhua/AniaBot/bot/component/llmtool"
 	"github.com/jeanhua/AniaBot/common/plugininfo"
@@ -27,6 +28,9 @@ const (
 
 	// skillContentMaxBytes AI 直接撰写 SKILL.md 内容的体积上限（防止撑爆磁盘/上下文）
 	skillContentMaxBytes = 256 << 10 // 256 KiB
+
+	// skillPreviewMaxBytes 面板预览单个附带文本文件的内容体积上限（防止超大文件撑爆面板）
+	skillPreviewMaxBytes = 512 << 10 // 512 KiB
 )
 
 // SkillList 返回当前已加载的 skill 列表、skills 目录与白名单（供 Web 面板展示）。
@@ -93,11 +97,35 @@ func (p *AIChatPlugin) SkillDetail(name string) (plugininfo.SkillDetail, error) 
 		}
 		if stat, err := os.Stat(absPath); err == nil {
 			info.Size = stat.Size()
+			if content, ok := readTextPreview(absPath, stat.Size()); ok {
+				info.Content = content
+			}
 		}
 		detail.Files = append(detail.Files, info)
 	}
 	sort.Slice(detail.Files, func(i, j int) bool { return detail.Files[i].Name < detail.Files[j].Name })
 	return detail, nil
+}
+
+// readTextPreview 读取附带文本文件供面板预览：体积超过上限或内容不是
+// 合法 UTF-8 文本（含 NUL 字节，如二进制文件）时不返回内容，面板仅展示文件信息。
+func readTextPreview(absPath string, size int64) (string, bool) {
+	if size <= 0 || size > skillPreviewMaxBytes {
+		return "", false
+	}
+	f, err := os.Open(absPath)
+	if err != nil {
+		return "", false
+	}
+	defer f.Close()
+	data, err := io.ReadAll(io.LimitReader(f, skillPreviewMaxBytes+1))
+	if err != nil || int64(len(data)) > skillPreviewMaxBytes {
+		return "", false
+	}
+	if bytes.IndexByte(data, 0) >= 0 || !utf8.Valid(data) {
+		return "", false
+	}
+	return string(data), true
 }
 
 // SkillDelete 按名称删除 skill：从磁盘移除对应目录/文件后热重载注册表。

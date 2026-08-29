@@ -167,9 +167,11 @@ func TestSkillUploadAndDelete(t *testing.T) {
 func TestSkillDetail(t *testing.T) {
 	p := newTestSkillPlugin(t)
 	data := makeZip(t, map[string]string{
-		"my-skill/SKILL.md":       testSkillMD,
-		"my-skill/reference.md":   "ref-content",
-		"my-skill/scripts/run.sh": "echo hi",
+		"my-skill/SKILL.md":        testSkillMD,
+		"my-skill/reference.md":    "ref-content",
+		"my-skill/scripts/run.sh":  "echo hi",
+		"my-skill/config.json":     "{\"enabled\": true}",
+		"my-skill/assets/logo.png": "PNG\x00\x00binary",
 	})
 	if err := p.SkillUpload("my-skill.zip", data); err != nil {
 		t.Fatalf("SkillUpload 失败: %v", err)
@@ -185,23 +187,28 @@ func TestSkillDetail(t *testing.T) {
 	if detail.Content != testSkillMD {
 		t.Fatalf("SKILL.md 内容不符: %+v", detail.Content)
 	}
-	if len(detail.Files) != 2 {
+	if len(detail.Files) != 4 {
 		t.Fatalf("附属文件数量不符: %+v", detail.Files)
 	}
-	var ref, extra *plugininfo.SkillFileInfo
-	for i := range detail.Files {
-		switch detail.Files[i].Kind {
-		case "reference":
-			ref = &detail.Files[i]
-		case "extra":
-			extra = &detail.Files[i]
-		}
+	byName := make(map[string]plugininfo.SkillFileInfo, len(detail.Files))
+	for _, f := range detail.Files {
+		byName[f.Name] = f
 	}
-	if ref == nil || ref.Name != "reference.md" || ref.Content != "ref-content" {
+	ref := byName["reference.md"]
+	if ref.Kind != "reference" || ref.Content != "ref-content" {
 		t.Fatalf("附属文档详情不符: %+v", detail.Files)
 	}
-	if extra == nil || extra.Name != "scripts/run.sh" || extra.Size == 0 {
-		t.Fatalf("附带文件详情不符: %+v", detail.Files)
+	// 二进制附带文件只展示文件信息，不返回正文
+	png := byName["assets/logo.png"]
+	if png.Kind != "extra" || png.Size == 0 || png.Content != "" {
+		t.Fatalf("二进制附带文件详情不符: %+v", detail.Files)
+	}
+	// 文本附带文件（sh/json 等）应可预览源码
+	if sh := byName["scripts/run.sh"]; sh.Content != "echo hi" {
+		t.Fatalf("sh 附带文件正文不符: %+v", sh)
+	}
+	if js := byName["config.json"]; js.Content != "{\"enabled\": true}" {
+		t.Fatalf("json 附带文件正文不符: %+v", js)
 	}
 
 	if _, err := p.SkillDetail("no-such"); err == nil {

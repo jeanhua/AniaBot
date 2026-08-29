@@ -14,7 +14,7 @@ type SkillFileInfo struct {
 	Name    string `json:"name"`
 	Kind    string `json:"kind"` // reference / extra
 	Size    int64  `json:"size"`
-	Content string `json:"content,omitempty"` // 仅 Markdown 附属文档返回正文
+	Content string `json:"content,omitempty"` // 文本类文件返回正文（Markdown 附属文档与可预览的文本附带文件）
 }
 
 // SkillDetail 是面板查看 SKILL 详情时返回的完整内容。

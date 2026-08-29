@@ -96,9 +96,23 @@
           <section class="space-y-2">
             <div class="flex items-center justify-between gap-3">
               <h3 class="text-[11px] tracking-[0.2em] uppercase text-zinc-400 font-medium">{{ currentFileName }}</h3>
-              <span v-if="detailLoading" class="text-[11px] text-slate-400">加载中...</span>
+              <div class="flex items-center gap-2 shrink-0">
+                <span v-if="detailLoading" class="text-[11px] text-slate-400">加载中...</span>
+                <button
+                  v-if="isMarkdownFile && currentContent"
+                  class="text-[11px] px-2 py-1 rounded-md border border-slate-200 text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900 font-medium transition-colors"
+                  @click="showSource = !showSource"
+                >
+                  {{ showSource ? '渲染视图' : '查看源码' }}
+                </button>
+              </div>
             </div>
-            <pre class="text-xs text-slate-700 font-mono whitespace-pre-wrap break-all leading-relaxed bg-slate-50 border border-slate-200/70 rounded-lg px-3 py-2 max-h-[52vh] overflow-y-auto">{{ currentContent }}</pre>
+            <div
+              v-if="isMarkdownFile && !showSource"
+              class="markdown-body bg-white border border-slate-200/70 rounded-lg px-4 py-3 max-h-[52vh] overflow-y-auto"
+              v-html="renderedContent"
+            />
+            <pre v-else class="text-xs text-slate-700 font-mono whitespace-pre-wrap break-all leading-relaxed bg-slate-50 border border-slate-200/70 rounded-lg px-3 py-2 max-h-[52vh] overflow-y-auto">{{ currentContent }}</pre>
           </section>
 
           <section v-if="detail.files?.length" class="space-y-2">
@@ -107,7 +121,7 @@
               <li
                 class="px-3 py-2 text-[11px] font-mono text-zinc-600 cursor-pointer transition-colors"
                 :class="selectedFile === 'SKILL.md' ? 'bg-zinc-900/5' : 'bg-white hover:bg-slate-50'"
-                @click="selectedFile = 'SKILL.md'"
+                @click="selectFile('SKILL.md')"
               >
                 SKILL.md
               </li>
@@ -116,10 +130,10 @@
                 :key="f.name"
                 class="px-3 py-2 flex items-center gap-2 text-[11px] cursor-pointer transition-colors"
                 :class="selectedFile === f.name ? 'bg-zinc-900/5' : 'bg-white hover:bg-slate-50'"
-                @click="selectedFile = f.name"
+                @click="selectFile(f.name)"
               >
                 <span class="font-mono text-zinc-700 truncate">{{ f.name }}</span>
-                <span class="ml-auto shrink-0 px-1.5 py-0.5 rounded-full bg-zinc-100 text-zinc-500">{{ fileKindLabel(f.kind) }}</span>
+                <span class="ml-auto shrink-0 px-1.5 py-0.5 rounded-full bg-zinc-100 text-zinc-500">{{ fileKindLabel(f) }}</span>
                 <span v-if="f.size" class="shrink-0 text-slate-400 font-mono">{{ fmtSize(f.size) }}</span>
               </li>
             </ul>
@@ -132,6 +146,8 @@
 
 <script setup>
 import { computed, onMounted, ref } from 'vue'
+import { marked } from 'marked'
+import DOMPurify from 'dompurify'
 import { api } from '../api.js'
 
 const skills = ref([])
@@ -144,15 +160,45 @@ const msgOk = ref(false)
 const detail = ref(null)
 const detailLoading = ref(false)
 const selectedFile = ref('SKILL.md')
+const showSource = ref(false)
 
 const currentFileName = computed(() => selectedFile.value || 'SKILL.md')
-const currentContent = computed(() => {
-  if (!detail.value) return ''
-  if (selectedFile.value === 'SKILL.md') return detail.value.content || ''
-  const file = detail.value.files?.find((f) => f.name === selectedFile.value)
-  if (!file) return ''
-  return file.kind === 'extra' ? '该文件为附带文件，无法在面板中预览' : file.content || ''
+
+// 是否为 Markdown 文件（SKILL.md 与附属 md 文档默认渲染展示，可切换源码）
+const isMarkdownFile = computed(() => /\.(md|markdown)$/i.test(currentFileName.value))
+
+// 当前选中的文件（SKILL.md 或附属文件）
+const currentFile = computed(() => {
+  if (!detail.value) return null
+  if (selectedFile.value === 'SKILL.md') {
+    return { name: 'SKILL.md', kind: 'reference', content: detail.value.content || '' }
+  }
+  return detail.value.files?.find((f) => f.name === selectedFile.value) || null
 })
+
+const currentContent = computed(() => {
+  const f = currentFile.value
+  if (!f) return ''
+  if (f.content) return f.content
+  return f.kind === 'reference' ? '' : '该文件为二进制/非文本文件，无法在面板中预览'
+})
+
+// 渲染 Markdown：去掉 YAML frontmatter 后转为 HTML，再经 DOMPurify 清洗
+const renderedContent = computed(() => {
+  const md = currentContent.value
+  if (!md) return ''
+  return DOMPurify.sanitize(marked.parse(stripFrontmatter(md), { gfm: true, breaks: true }))
+})
+
+function stripFrontmatter(md) {
+  const m = md.match(/^---\r?\n([\s\S]*?)\r?\n---[ \t]*\r?\n/)
+  return m ? md.slice(m[0].length) : md
+}
+
+function selectFile(name) {
+  selectedFile.value = name
+  showSource.value = false
+}
 
 async function load() {
   try {
@@ -207,6 +253,7 @@ async function onDelete(s) {
 async function onDetail(s) {
   msg.value = ''
   selectedFile.value = 'SKILL.md'
+  showSource.value = false
   detail.value = {
     name: s.name,
     description: s.description,
@@ -227,8 +274,9 @@ async function onDetail(s) {
   }
 }
 
-function fileKindLabel(kind) {
-  return kind === 'reference' ? '文档' : '附带'
+function fileKindLabel(f) {
+  if (f.kind === 'reference') return '文档'
+  return f.content ? '文本' : '附带'
 }
 
 function fmtSize(bytes) {
@@ -240,3 +288,107 @@ function fmtSize(bytes) {
 
 onMounted(load)
 </script>
+
+<style>
+/* Markdown 渲染视图（技能详情弹窗内），与面板等宽字体风格保持一致 */
+.markdown-body {
+  font-size: 13px;
+  line-height: 1.75;
+  color: #334155;
+  word-break: break-word;
+}
+.markdown-body > :first-child {
+  margin-top: 0;
+}
+.markdown-body > :last-child {
+  margin-bottom: 0;
+}
+.markdown-body h1,
+.markdown-body h2,
+.markdown-body h3,
+.markdown-body h4 {
+  font-weight: 600;
+  color: #1e293b;
+  line-height: 1.4;
+  margin: 1.25em 0 0.5em;
+}
+.markdown-body h1 { font-size: 1.25rem; }
+.markdown-body h2 { font-size: 1.125rem; }
+.markdown-body h3 { font-size: 1rem; }
+.markdown-body h4 { font-size: 0.9rem; }
+.markdown-body p {
+  margin: 0.5em 0;
+}
+.markdown-body ul,
+.markdown-body ol {
+  margin: 0.5em 0;
+  padding-left: 1.5em;
+}
+.markdown-body ul { list-style: disc; }
+.markdown-body ol { list-style: decimal; }
+.markdown-body li {
+  margin: 0.25em 0;
+}
+.markdown-body a {
+  color: #2563eb;
+  text-decoration: underline;
+}
+.markdown-body code {
+  font-family: var(--font-mono);
+  font-size: 0.85em;
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  border-radius: 4px;
+  padding: 0.1em 0.35em;
+  color: #be185d;
+}
+.markdown-body pre {
+  background: #0f172a;
+  color: #e2e8f0;
+  border-radius: 8px;
+  padding: 12px;
+  overflow-x: auto;
+  margin: 0.75em 0;
+}
+.markdown-body pre code {
+  background: transparent;
+  border: 0;
+  padding: 0;
+  color: inherit;
+  font-size: 12px;
+}
+.markdown-body blockquote {
+  border-left: 3px solid #cbd5e1;
+  padding-left: 12px;
+  color: #64748b;
+  margin: 0.75em 0;
+}
+.markdown-body table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 0.75em 0;
+  font-size: 12px;
+}
+.markdown-body th,
+.markdown-body td {
+  border: 1px solid #e2e8f0;
+  padding: 6px 10px;
+  text-align: left;
+}
+.markdown-body th {
+  background: #f8fafc;
+  font-weight: 600;
+}
+.markdown-body hr {
+  border: 0;
+  border-top: 1px solid #e2e8f0;
+  margin: 1em 0;
+}
+.markdown-body img {
+  max-width: 100%;
+  border-radius: 6px;
+}
+.markdown-body strong {
+  font-weight: 600;
+}
+</style>
