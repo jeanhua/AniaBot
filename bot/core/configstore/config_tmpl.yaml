@@ -95,4 +95,14 @@ plugin:
     # 用户 ID 名单（每行一个；QQ 为 qq:QQ号，其他平台带前缀，如 fs:ou_xxx；对私聊及群聊消息发送者均生效）
     friends: []
 
+  # 白名单管理插件：用 /wl 命令管理上面 interceptor 的名单，改动立即生效（无需重启）
+  whitelist:
+    # 是否启用 /wl 命令管理
+    enable: true
+    # 拦住全部插件：开启后非白名单会话的消息不会传给任何功能插件（复读机、防撤回、AI 等）
+    # 关闭则只拦 AI 对话（与 interceptor 原行为一致）
+    block_all: false
+    # 被拦截时是否回一句提示。默认关闭——白名单场景通常希望对未授权会话完全沉默
+    notify_denied: false
+
 
