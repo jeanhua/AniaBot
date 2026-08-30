@@ -86,7 +86,7 @@
               {{ log.chat_type === 'group' ? '群聊' : '私聊' }} · {{ log.target_id }}
             </span>
             <span v-if="log.tool_calls?.length" class="text-xs px-2 py-0.5 rounded-full whitespace-nowrap bg-zinc-100 text-zinc-600 border border-zinc-200">
-              {{ log.tool_calls.length }} 次工具调用
+              {{ log.tool_calls_total || log.tool_calls.length }} 次工具调用
             </span>
             <span class="ml-auto text-xs text-slate-400 font-mono whitespace-nowrap">{{ fmtTime(log.time) }}</span>
           </div>
@@ -165,7 +165,12 @@
 
           <!-- 工具调用明细 -->
           <div v-if="detail.tool_calls?.length" class="space-y-2">
-            <h3 class="text-[11px] tracking-[0.2em] uppercase text-zinc-400 font-medium">工具调用</h3>
+            <h3 class="text-[11px] tracking-[0.2em] uppercase text-zinc-400 font-medium">
+              工具调用
+              <span v-if="detail.tool_calls_total > detail.tool_calls.length" class="normal-case tracking-normal text-zinc-300">
+                （共 {{ detail.tool_calls_total }} 次，仅保留前 {{ detail.tool_calls.length }} 条）
+              </span>
+            </h3>
             <div
               v-for="(tc, i) in detail.tool_calls"
               :key="i"

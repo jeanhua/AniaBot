@@ -41,7 +41,7 @@ const (
 
 // MaxToolCallRecords 单条日志最多保留的工具调用明细条数。
 // 超出部分丢弃，实际总数见 Entry.ToolCallsTotal。
-const MaxToolCallRecords = 20
+const MaxToolCallRecords = 200
 
 // ToolCallRecord 一次工具调用的执行记录（如 bash 命令的执行详情）
 type ToolCallRecord struct {
@@ -65,7 +65,7 @@ type Entry struct {
 	DurationMs       int64            `json:"duration_ms"`
 	Iterations       int              `json:"iterations,omitempty"` // LLM 调用轮数
 	ToolCalls        []ToolCallRecord `json:"tool_calls,omitempty"`
-	ToolCallsTotal   int              `json:"tool_calls_total,omitempty"` // 工具调用总数（超过 MaxToolCallRecords 时大于 len(ToolCalls)）
+	ToolCallsTotal   int              `json:"tool_calls_total,omitempty"` // 工具调用总数（明细被截断时大于 len(ToolCalls)）
 	Error            string           `json:"error,omitempty"`
 	Reply            string           `json:"reply,omitempty"` // 最终回复（截断）
 	PromptTokens     int              `json:"prompt_tokens,omitempty"`

@@ -31,6 +31,15 @@ func (p *AIChatPlugin) initQueryLogger() {
 	}
 }
 
+// queryLogMaxToolRecords 单条 Query 日志保留的工具调用明细条数；0 表示不限制
+// （实际条数受工具轮数上限 max_iterations 约束）。
+func (p *AIChatPlugin) queryLogMaxToolRecords() int {
+	if p.cfg.QueryLog.MaxToolRecords <= 0 {
+		return 0
+	}
+	return p.cfg.QueryLog.MaxToolRecords
+}
+
 // QueryLogRecent 按条件查询 Query 日志（新在前），实现 adminpanel.QueryLogSource。
 func (p *AIChatPlugin) QueryLogRecent(f querylog.Filter) []querylog.Entry {
 	if p.queryLogger == nil {
@@ -45,6 +54,7 @@ type queryRecorder struct {
 	entry          querylog.Entry
 	toolCalls      []querylog.ToolCallRecord
 	toolCallsTotal int // 工具调用总数（含超出上限被丢弃的）
+	maxRecords     int // 明细保留条数上限，0 表示不限制
 	start          time.Time
 	key            string // 会话 key（takeExtraUsage 用）
 }
@@ -70,7 +80,7 @@ func (p *AIChatPlugin) beginQuery(chat *aichat.ChatBot, id message.QID, isGroup 
 		seen[uid] = struct{}{}
 		senders = append(senders, uid.String())
 	}
-	r := &queryRecorder{start: time.Now(), key: sessionKey(id, isGroup)}
+	r := &queryRecorder{start: time.Now(), key: sessionKey(id, isGroup), maxRecords: p.queryLogMaxToolRecords()}
 	r.entry = p.queryLogger.Record(querylog.Entry{
 		ChatType: chatType,
 		TargetID: id.String(),
@@ -98,8 +108,8 @@ func (p *AIChatPlugin) onToolCall(r *queryRecorder, info aichat.ToolCallInfo) {
 	if info.Err != nil {
 		rec.Error = info.Err.Error()
 	}
-	if len(r.toolCalls) < querylog.MaxToolCallRecords {
-		r.toolCalls = append(r.toolCalls, rec) // 明细最多保留 MaxToolCallRecords 条，总数仍计入 ToolCallsTotal
+	if r.maxRecords <= 0 || len(r.toolCalls) < r.maxRecords {
+		r.toolCalls = append(r.toolCalls, rec) // 明细按配置上限保留，总数始终计入 ToolCallsTotal
 	}
 	p.queryLogger.Update(r.entry.ID, func(e *querylog.Entry) {
 		// 复制 slice 再存入，避免与后续 append 共享底层数组
