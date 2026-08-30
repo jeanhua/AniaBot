@@ -18,28 +18,34 @@ const (
 	modeWhitelist = "whitelist" // 白名单：仅名单内的会话放行
 )
 
+// SharedStore 名单的进程内共享实例：拦截判定与白名单管理插件读写同一份状态，
+// 管理插件改完调用 Load 即时生效，无需 /reboot。
+// 在 NewPlugin 中赋值；白名单管理插件通过 Store() 获取。
+var sharedStore = NewListStore()
+
+// Store 返回共享的名单存储，供白名单管理插件读写。
+func Store() *ListStore { return sharedStore }
+
 // InterceptorPlugin 请求拦截插件：位于日志插件与 AI 对话插件之间，
 // 按白名单/黑名单模式放行或屏蔽某些群聊、好友的消息（返回 false
 // 终止传播，后续插件——主要是 AI 对话插件——不再收到该消息）。
+//
+// 名单状态存放在共享的 ListStore 中：面板改完由白名单管理插件热重载，
+// 也可由 /wl 命令即时增删。
 type InterceptorPlugin struct {
 	plugin.Meta
 	// cfg 插件配置，由框架在 Start 前自动填充（见 ConfigSchema）
-	cfg interceptorConfig
-
-	groups  map[message.QID]struct{}
-	friends map[message.QID]struct{}
-	// groupUsers 群内屏蔽成员：groupID -> 被屏蔽的 userID 集合。
-	// 硬性拦截（不区分名单模式，优先级最高），仅作用于群聊。
-	groupUsers map[message.QID]map[message.QID]struct{}
+	cfg   interceptorConfig
+	store *ListStore
 }
 
 func NewPlugin() *InterceptorPlugin {
-	p := &InterceptorPlugin{}
+	p := &InterceptorPlugin{store: sharedStore}
 	p.Name = "请求拦截插件"
 	p.HelpWords = "按白名单/黑名单模式放行或屏蔽指定群聊、好友的 AI 请求，支持屏蔽群内指定成员，请在 Web 控制面板配置"
 	p.AdminOnly = true
 	p.Author = "jeanhua"
-	p.Version = "1.1.0"
+	p.Version = "1.2.0"
 	// 在普通插件（复读机、防撤回等）之后、AI 对话插件之前执行：
 	// 被拦截的会话仍可使用其他功能插件，仅 AI 请求被屏蔽
 	p.Order = plugin.LevelLog + 100
@@ -48,88 +54,44 @@ func NewPlugin() *InterceptorPlugin {
 }
 
 func (p *InterceptorPlugin) Start(ctx context.Context, cfg *viper.Viper) error {
+	p.store.Load(p.cfg.Enable, p.cfg.Mode, p.cfg.Groups, p.cfg.Friends, p.cfg.GroupUsers,
+		func(rule string) { p.Logger.Warn("忽略非法的群内屏蔽成员规则", "rule", rule) })
+
 	if !p.cfg.Enable {
 		p.Logger.Info("请求拦截插件已加载（未启用拦截，放行全部消息）")
 		return nil
 	}
-
-	p.groups = make(map[message.QID]struct{}, len(p.cfg.Groups))
-	for _, id := range p.cfg.Groups {
-		p.groups[message.FromString(strings.TrimSpace(id))] = struct{}{}
-	}
-	p.friends = make(map[message.QID]struct{}, len(p.cfg.Friends))
-	for _, id := range p.cfg.Friends {
-		p.friends[message.FromString(strings.TrimSpace(id))] = struct{}{}
-	}
-	p.groupUsers = make(map[message.QID]map[message.QID]struct{}, len(p.cfg.GroupUsers))
-	for _, line := range p.cfg.GroupUsers {
-		group, user, ok := splitGroupUser(line)
-		if !ok {
-			p.Logger.Warn("忽略非法的群内屏蔽成员规则", "rule", line)
-			continue
-		}
-		if p.groupUsers[group] == nil {
-			p.groupUsers[group] = make(map[message.QID]struct{})
-		}
-		p.groupUsers[group][user] = struct{}{}
-	}
-
-	if p.cfg.Mode != modeBlacklist && p.cfg.Mode != modeWhitelist {
-		p.Logger.Warn("未知的名单模式，按黑名单模式处理", "mode", p.cfg.Mode)
-		p.cfg.Mode = modeBlacklist
-	}
-
+	groups, friends, groupUsers := p.store.Counts()
 	p.Logger.Info("请求拦截插件初始化完成",
-		"mode", p.cfg.Mode,
-		"groups", len(p.groups),
-		"friends", len(p.friends),
-		"groupUsers", len(p.groupUsers))
+		"mode", p.store.Mode(),
+		"groups", groups,
+		"friends", friends,
+		"groupUsers", groupUsers)
 	return nil
 }
 
-// allow 判断指定会话是否放行。whitelist 模式下仅名单内放行，
-// blacklist 模式下名单内拦截。
-func (p *InterceptorPlugin) allow(id message.QID, list map[message.QID]struct{}) bool {
-	_, inList := list[id]
-	if p.cfg.Mode == modeWhitelist {
-		return inList
-	}
-	return !inList
-}
-
 func (p *InterceptorPlugin) OnGroupMsg(ctx context.Context, bot bot.Bot, cmd command.Command, msg message.Message) (bool, error) {
-	if !p.cfg.Enable {
+	if !p.store.Enabled() {
 		return true, nil
 	}
-	if !p.allow(msg.GroupId, p.groups) {
-		p.Logger.Info("拦截群聊消息", "mode", p.cfg.Mode, "groupId", msg.GroupId, "userId", msg.Sender.UserId)
+	if !p.store.AllowGroup(msg.GroupId) {
+		p.Logger.Info("拦截群聊消息", "mode", p.store.Mode(), "groupId", msg.GroupId, "userId", msg.Sender.UserId)
 		return false, nil
 	}
-	if p.blockedInGroup(msg.GroupId, msg.Sender.UserId) {
+	if p.store.BlockedInGroup(msg.GroupId, msg.Sender.UserId) {
 		p.Logger.Info("拦截群内屏蔽成员消息", "groupId", msg.GroupId, "userId", msg.Sender.UserId)
 		return false, nil
 	}
-	if p.cfg.Mode == modeWhitelist {
+	if p.store.IsWhitelist() {
 		// 白名单模式下，被放行的群对全体成员开放（群内屏蔽成员规则除外），
 		// 无需逐成员加入用户名单；用户名单此时仅作用于私聊
 		return true, nil
 	}
-	if !p.allow(msg.Sender.UserId, p.friends) {
-		p.Logger.Info("拦截群内成员消息", "mode", p.cfg.Mode, "groupId", msg.GroupId, "userId", msg.Sender.UserId)
+	if !p.store.AllowFriend(msg.Sender.UserId) {
+		p.Logger.Info("拦截群内成员消息", "mode", p.store.Mode(), "groupId", msg.GroupId, "userId", msg.Sender.UserId)
 		return false, nil
 	}
 	return true, nil
-}
-
-// blockedInGroup 判断用户是否被"群内屏蔽成员"规则命中。
-// 该规则为硬性拦截：不区分名单模式，仅作用于群聊（私聊不受影响）。
-func (p *InterceptorPlugin) blockedInGroup(group, user message.QID) bool {
-	users, ok := p.groupUsers[group]
-	if !ok {
-		return false
-	}
-	_, hit := users[user]
-	return hit
 }
 
 // idPrefixes 已知的平台 ID 前缀（QQ 为 qq:，其余平台为各自前缀）。
@@ -164,11 +126,11 @@ func splitGroupUser(line string) (group, user message.QID, ok bool) {
 }
 
 func (p *InterceptorPlugin) OnFriendMsg(ctx context.Context, bot bot.Bot, cmd command.Command, msg message.Message) (bool, error) {
-	if !p.cfg.Enable {
+	if !p.store.Enabled() {
 		return true, nil
 	}
-	if !p.allow(msg.Sender.UserId, p.friends) {
-		p.Logger.Info("拦截好友消息", "mode", p.cfg.Mode, "userId", msg.Sender.UserId)
+	if !p.store.AllowFriend(msg.Sender.UserId) {
+		p.Logger.Info("拦截好友消息", "mode", p.store.Mode(), "userId", msg.Sender.UserId)
 		return false, nil
 	}
 	return true, nil
