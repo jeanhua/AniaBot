@@ -103,8 +103,22 @@
         </div>
 
         <div class="border-t border-dotted border-zinc-300 pt-3">
-          <div class="tlabel">Next run</div>
-          <div class="text-sm font-medium text-zinc-800 mt-1 truncate">{{ nextRunText }}</div>
+          <div class="tlabel">Upcoming runs</div>
+          <div v-if="!upcomingRuns.length" class="text-sm font-medium text-zinc-800 mt-1">—</div>
+          <ul v-else class="mt-1.5 space-y-1">
+            <li
+              v-for="(r, i) in upcomingRuns"
+              :key="r.id"
+              class="flex items-baseline justify-between gap-3"
+              :class="i === 0 ? 'text-sm font-semibold text-zinc-900' : 'text-xs text-zinc-600'"
+              :title="r.title || r.text"
+            >
+              <span class="truncate">{{ r.title || r.text }}</span>
+              <span class="shrink-0 tabular-nums whitespace-nowrap">
+                <template v-if="r.rel">{{ r.rel }} · </template>{{ r.text }}
+              </span>
+            </li>
+          </ul>
         </div>
       </section>
     </div>
@@ -498,16 +512,40 @@ function fmtBytes(b) {
   return Math.round(b / 1048576) + 'M'
 }
 
-const nextRunText = computed(() => {
-  const next = clocks.value
+// 即将执行的定时任务（启用且下次触发时间有效，按时间升序，最多 5 条）。
+// 历史数据可能残留上次触发时间（如昨天），读取时过滤过期时间并依赖服务端刷新。
+const UPCOMING_RUNS_LIMIT = 5
+
+const upcomingRuns = computed(() => {
+  const nowTs = Date.now()
+  return clocks.value
     .filter(t => t.enabled && t.next_run_at)
-    .map(t => new Date(t.next_run_at))
-    .filter(d => !isNaN(d) && d.getFullYear() >= 2000)
-    .sort((a, b) => a - b)[0]
-  if (!next) return '—'
-  const title = clocks.value.find(t => t.enabled && t.next_run_at && +new Date(t.next_run_at) === +next)?.title
-  return `${next.toLocaleString('zh-CN', { hour12: false })}${title ? ' · ' + title : ''}`
+    .map(t => {
+      const d = new Date(t.next_run_at)
+      return { id: t.id, title: t.title || '', raw: d, ts: d.getTime() }
+    })
+    .filter(x => !isNaN(x.ts) && x.raw.getFullYear() >= 2000 && x.ts > nowTs - 60_000)
+    .sort((a, b) => a.ts - b.ts)
+    .slice(0, UPCOMING_RUNS_LIMIT)
+    .map(x => ({ ...x, text: fmtRunTime(x.raw), rel: fmtRunRelative(x.raw) }))
 })
+
+function fmtRunTime(d) {
+  const pad = n => String(n).padStart(2, '0')
+  const base = `${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`
+  return d.getFullYear() === new Date().getFullYear() ? base : `${d.getFullYear()}-${base}`
+}
+
+function fmtRunRelative(d) {
+  const min = Math.round((d.getTime() - Date.now()) / 60000)
+  if (min <= 0) return '即将触发'
+  if (min < 60) return `${min} 分钟后`
+  const hour = Math.round(min / 60)
+  if (hour < 24) return `${hour} 小时后`
+  const day = Math.round(hour / 24)
+  if (day < 7) return `${day} 天后`
+  return ''
+}
 
 async function loadStatus() {
   try { status.value = await api.getStatus() } catch { /* 忽略轮询错误 */ }

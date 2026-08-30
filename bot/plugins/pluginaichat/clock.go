@@ -408,7 +408,7 @@ func (m *clockManager) Delete(id string) bool {
 	return true
 }
 
-// Get 返回任务的副本。
+// Get 返回任务的副本（NextRunAt 会先从 cron 调度器刷新，避免显示上次触发时间）。
 func (m *clockManager) Get(id string) (*ClockTask, bool) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -416,16 +416,18 @@ func (m *clockManager) Get(id string) (*ClockTask, bool) {
 	if !ok {
 		return nil, false
 	}
+	m.refreshNextLocked(t)
 	cp := *t
 	return &cp, true
 }
 
-// List 返回所有任务的副本，按创建时间升序。
+// List 返回所有任务的副本，按创建时间升序（同时刷新各任务 NextRunAt）。
 func (m *clockManager) List() []*ClockTask {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	out := make([]*ClockTask, 0, len(m.tasks))
 	for _, t := range m.tasks {
+		m.refreshNextLocked(t)
 		cp := *t
 		out = append(out, &cp)
 	}
@@ -433,6 +435,28 @@ func (m *clockManager) List() []*ClockTask {
 		return out[i].CreatedAt.Before(out[j].CreatedAt)
 	})
 	return out
+}
+
+// refreshNextLocked 用 cron 调度器的最新状态刷新任务的 NextRunAt。
+// robfig/cron 每次触发后会自动推进 entry.Next，但任务结构体只在调度/新增/更新时
+// 同步过一次；若不刷新，面板与命令展示的「下次触发」会停留在上一次触发时间
+// （例如显示成昨天的任务）。调用方需持有 m.mu。
+func (m *clockManager) refreshNextLocked(t *ClockTask) {
+	if t == nil || !t.Enabled {
+		return
+	}
+	entryID, ok := m.entries[t.ID]
+	if !ok {
+		return
+	}
+	entry := m.cron.Entry(entryID)
+	if !entry.Valid() || entry.Next.IsZero() {
+		return
+	}
+	if !t.NextRunAt.Equal(entry.Next) {
+		t.NextRunAt = entry.Next
+		m.persistTaskLocked(t)
+	}
 }
 
 // ListByTarget 返回指定触发对象的任务列表。

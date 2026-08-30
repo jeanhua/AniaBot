@@ -443,3 +443,46 @@ func TestClockToolsScopeIsolation(t *testing.T) {
 		t.Fatalf("本会话创建应成功: %v", err)
 	}
 }
+
+// TestClockNextRunRefreshedOnRead 验证「下次触发时间」读取时从 cron 调度器刷新：
+// 任务触发后 cron 会自动推进 entry.Next，若任务结构体未同步，面板会一直显示
+// 上一次触发时间（如昨天），读取时刷新可避免该问题。
+func TestClockNextRunRefreshedOnRead(t *testing.T) {
+	p := &AIChatPlugin{}
+	p.Logger = slog.Default()
+	p.PersistentStorage = newPFake()
+
+	m := newClockManager(p, 30*time.Second, 100)
+	id, err := m.Add(&ClockTask{Cron: "@every 1h", Title: "喝水", Content: "提醒喝水", TargetType: "group", TargetID: "123", Enabled: true})
+	if err != nil {
+		t.Fatalf("Add failed: %v", err)
+	}
+
+	// 调度器未启动时没有下次触发时间
+	if g, _ := m.Get(id); !g.NextRunAt.IsZero() {
+		t.Fatalf("expected zero NextRunAt before start, got %v", g.NextRunAt)
+	}
+
+	// 启动调度器后应能算出未来的下次触发时间
+	m.Start(nil)
+	if g, _ := m.Get(id); g.NextRunAt.IsZero() || !g.NextRunAt.After(time.Now()) {
+		t.Fatalf("expected future NextRunAt after start, got %v", g.NextRunAt)
+	}
+
+	// 模拟历史 bug：任务已触发但任务结构体的 NextRunAt 停留在昨天
+	m.mu.Lock()
+	stale := time.Now().Add(-24 * time.Hour)
+	m.tasks[id].NextRunAt = stale
+	m.persistTaskLocked(m.tasks[id])
+	m.mu.Unlock()
+
+	// Get / List 读取时应自动刷新为 cron 的最新下次触发时间，不再显示昨天
+	if g, _ := m.Get(id); !g.NextRunAt.After(time.Now()) {
+		t.Fatalf("Get should refresh NextRunAt from cron, got %v", g.NextRunAt)
+	}
+	for _, g := range m.List() {
+		if g.ID == id && !g.NextRunAt.After(time.Now()) {
+			t.Fatalf("List should refresh NextRunAt from cron, got %v", g.NextRunAt)
+		}
+	}
+}
