@@ -31,6 +31,7 @@ Go 不支持跨平台热加载插件，因此 AniaBot 采用「**源码级安装
 GitHub API 未登录限流 60 次/小时，登录后可提升到 5000 次/小时。两种方式任选：
 
 **方式一：在线登录（推荐，OAuth 设备流）**
+> 开箱即用：默认已内置 AniaBot 官方 OAuth App 的 Client ID（`bot.marketplace.oauth_client_id` 默认值），面板直接点「使用 GitHub 登录」即可；多人共用官方 App 时可能触发 GitHub 设备流限流（每小时 50 次），如遇限流或想独立配额，再按下面步骤创建自己的 App 并覆盖配置。
 
 1. 在 GitHub 创建一个 OAuth App：<https://github.com/settings/developers> → OAuth Apps → New OAuth App（Authorization callback URL 可随便填，如 `http://localhost`，设备流不使用回调地址）
 2. 在应用设置中启用 **Device flow**（OAuth App → 应用设置 → Enable Device Flow）

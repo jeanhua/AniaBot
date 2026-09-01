@@ -44,5 +44,5 @@ var frameworkConfigFields = []pluginconfig.Field{
 	{Key: "bot.marketplace.plugin_dir", Label: "插件持久目录", Type: "string", Group: "插件市场", Help: "已安装插件的持久副本目录（建议放在 data 卷，容器重建后插件不丢）", Default: "./data/plugins"},
 	{Key: "bot.marketplace.cache_dir", Label: "索引缓存目录", Type: "string", Group: "插件市场", Help: "插件市场索引/下载缓存的存放目录", Default: "./data/marketplace"},
 	{Key: "bot.marketplace.token", Label: "GitHub Token", Type: "password", Group: "插件市场", Sensitive: true, Help: "可选；GitHub API 未登录限流 60 次/小时，配置 Token（无需任何权限）可提升到 5000 次/小时；也可在插件市场页一键设置"},
-	{Key: "bot.marketplace.oauth_client_id", Label: "GitHub OAuth Client ID", Type: "string", Group: "插件市场", Help: "可选；在线登录用。在 GitHub 创建 OAuth App 并在应用设置启用 Device flow 后填入 Client ID，插件市场页即可一键「使用 GitHub 登录」而无需手动粘贴 Token"},
+	{Key: "bot.marketplace.oauth_client_id", Label: "GitHub OAuth Client ID", Type: "string", Group: "插件市场", Help: "在线登录用；默认使用 AniaBot 官方 OAuth App，开箱即用。如需独立配额，可在 GitHub 创建 OAuth App 并启用 Device flow 后覆盖为自己的 Client ID（可不填 Client Secret）", Default: "Ov23li6fHYmQOGOmliT4"},
 }
