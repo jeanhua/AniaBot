@@ -52,5 +52,8 @@ func main() {
 
 	bot.AddPlugin(pluginaichat.NewAIChatPlugin())
 
+	// 插件市场安装的第三方插件（由 tools/plugingen 生成注册代码）
+	registerMarketplacePlugins(bot)
+
 	bot.Run()
 }

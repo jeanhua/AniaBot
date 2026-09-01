@@ -22,6 +22,7 @@ import (
 	"github.com/jeanhua/AniaBot/bot/component/querylog"
 	"github.com/jeanhua/AniaBot/bot/component/tasklog"
 	"github.com/jeanhua/AniaBot/bot/core/configstore"
+	"github.com/jeanhua/AniaBot/bot/marketplace"
 	"github.com/jeanhua/AniaBot/bot/utils"
 	"github.com/jeanhua/AniaBot/common/adapter"
 	"github.com/jeanhua/AniaBot/common/bot"
@@ -581,6 +582,7 @@ func (ania *AniaBot) startAdminPanel() {
 		Quota:           quotaSrc,
 		QueryLogs:       queryLogFn,
 		ConsoleLogs:     consollog.Page,
+		Marketplace:     marketplace.New(ania.configStore, Logger().WithGroup("Marketplace")),
 		Logger:          Logger().WithGroup("AdminPanel"),
 	})
 	go srv.Run()

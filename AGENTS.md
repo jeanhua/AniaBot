@@ -72,6 +72,7 @@ common/                  Shared interfaces and models (adapter, plugin, storage,
 bot/core/                AniaBot orchestrator: plugin lifecycle, event dispatch, multi-adapter container + ID-prefix routing, DI, storage impls
   configstore/             DB-backed config center (seed/migrate/ToViper)
 bot/adminpanel/          Web admin panel: config/status APIs + embedded SPA (dist/)
+bot/marketplace/         Plugin marketplace: GitHub API index/detail, online install/uninstall/rollback pipelines (rebuild + restart)
 bot/adapter/napcat/      NapCat protocol adapters (WebSocket and HTTP), QQ platform
 bot/adapter/qqofficial/  QQ Official adapter (QQ Open Platform API v2: WebSocket gateway + REST, hand-rolled)
 bot/adapter/feishu/      Feishu/Lark adapter (larksuite/oapi-sdk-go/v3), WebSocket long-connection + webhook
@@ -101,6 +102,7 @@ bot/adapter/feishu → common/adapter, common/bot, common/model/message, common/
 bot/adapter/telegram → common/adapter, common/bot, common/model/message, common/msgchain, external (resty, x/net/proxy)
 bot/adapter/discord → common/adapter, common/bot, common/model/message, common/msgchain, external (discordgo, gorilla/websocket, x/net/proxy)
 bot/plugins/* → common/plugin, common/bot, common/storage, bot/component/*
+bot/marketplace → common/pluginmeta, bot/component/oplog, bot/component/sysrestart, external (GitHub API)
 bot/component/aichat → bot/component/llmtool, external (openai-go, anthropic-sdk-go)
 bot/component/functool → bot/component/llmtool, bot/component/oplog, bot/component/sysrestart, common/pluginconfig, bot/utils
 bot/component/llmtool → external (openai-go, MCP SDK)

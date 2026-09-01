@@ -33,6 +33,7 @@ const (
 	CategoryKnowledge = "knowledge" // 知识库管理
 	CategoryQuota     = "quota"     // 配额管理
 	CategorySystem    = "system"    // 系统（启动 / 重启 / 设置向导）
+	CategoryPlugin    = "plugin"    // 插件市场（安装/卸载/回滚）
 	CategoryUpdate    = "update"    // 自动更新
 	CategoryAI        = "ai"        // AI 工具发起的操作
 )

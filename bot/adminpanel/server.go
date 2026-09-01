@@ -33,6 +33,7 @@ import (
 	"github.com/jeanhua/AniaBot/bot/component/sysrestart"
 	"github.com/jeanhua/AniaBot/bot/component/tasklog"
 	"github.com/jeanhua/AniaBot/bot/core/configstore"
+	"github.com/jeanhua/AniaBot/bot/marketplace"
 	"github.com/jeanhua/AniaBot/common/adapter"
 	"github.com/jeanhua/AniaBot/common/pluginconfig"
 	"github.com/jeanhua/AniaBot/common/plugininfo"
@@ -188,6 +189,7 @@ type Options struct {
 	Knowledge       KnowledgeBaseSource                                // AI 知识库管理（可为 nil）
 	Teams           TeamSource                                         // Agent 团队管理（可为 nil）
 	Quota           QuotaSource                                        // 每日 Token 配额管理（可为 nil）
+	Marketplace     *marketplace.Service                               // 插件市场服务（可为 nil）
 	QueryLogs       func(f querylog.Filter) []querylog.Entry           // AI Query 日志（可为 nil）
 	ConsoleLogs     func(limit int, beforeID uint64) []consollog.Entry // 控制台日志（slog + log 输出，可为 nil）
 	Logger          *slog.Logger
@@ -291,6 +293,14 @@ func (s *Server) routes() {
 	s.mux.Handle("GET /api/update/info", s.requireAuth(http.HandlerFunc(s.handleUpdateInfo)))
 	s.mux.Handle("POST /api/update/start", s.requireAuth(http.HandlerFunc(s.handleUpdateStart)))
 	s.mux.Handle("GET /api/update/status", s.requireAuth(http.HandlerFunc(s.handleUpdateStatus)))
+	s.mux.Handle("GET /api/marketplace/info", s.requireAuth(http.HandlerFunc(s.handleMarketplaceInfo)))
+	s.mux.Handle("GET /api/marketplace/plugins", s.requireAuth(http.HandlerFunc(s.handleMarketplaceList)))
+	s.mux.Handle("GET /api/marketplace/plugins/{id}", s.requireAuth(http.HandlerFunc(s.handleMarketplaceDetail)))
+	s.mux.Handle("POST /api/marketplace/token", s.requireAuth(http.HandlerFunc(s.handleMarketplaceToken)))
+	s.mux.Handle("POST /api/marketplace/install", s.requireAuth(http.HandlerFunc(s.handleMarketplaceInstall)))
+	s.mux.Handle("POST /api/marketplace/uninstall", s.requireAuth(http.HandlerFunc(s.handleMarketplaceUninstall)))
+	s.mux.Handle("POST /api/marketplace/rollback", s.requireAuth(http.HandlerFunc(s.handleMarketplaceRollback)))
+	s.mux.Handle("GET /api/marketplace/status", s.requireAuth(http.HandlerFunc(s.handleMarketplaceStatus)))
 	s.mux.Handle("/", s.spaHandler())
 }
 

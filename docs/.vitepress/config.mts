@@ -54,6 +54,7 @@ export default withMermaid(defineConfig({
           text: '插件生态',
           items: [
             { text: '内置插件', link: '/guide/builtin-plugins' },
+            { text: '插件市场', link: '/guide/plugin-marketplace' },
             { text: '常见问题', link: '/guide/faq' },
           ],
         },

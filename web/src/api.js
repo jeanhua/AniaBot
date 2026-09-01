@@ -228,6 +228,15 @@ export const api = {
 
   restart: () => request('/api/restart', { method: 'POST' }),
 
+  // 插件市场
+  getMarketplaceInfo: () => request('/api/marketplace/info'),
+  getMarketplacePlugins: (refresh = false) => request('/api/marketplace/plugins' + (refresh ? '?refresh=1' : '')),
+  getMarketplaceDetail: (id) => request(`/api/marketplace/plugins/${encodeURIComponent(id)}`),
+  setMarketplaceToken: (token) => request('/api/marketplace/token', { method: 'POST', body: JSON.stringify({ token }) }),
+  installMarketplacePlugin: (id, commit = '') => request('/api/marketplace/install', { method: 'POST', body: JSON.stringify({ id, commit }) }),
+  uninstallMarketplacePlugin: (id) => request('/api/marketplace/uninstall', { method: 'POST', body: JSON.stringify({ id }) }),
+  rollbackMarketplace: () => request('/api/marketplace/rollback', { method: 'POST' }),
+  getMarketplaceStatus: () => request('/api/marketplace/status'),
   getUpdateInfo: () => request('/api/update/info'),
   startUpdate: () => request('/api/update/start', { method: 'POST' }),
   getUpdateStatus: () => request('/api/update/status'),

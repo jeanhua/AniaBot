@@ -21,6 +21,7 @@ import (
 
 	"github.com/jeanhua/AniaBot/bot/component/oplog"
 	"github.com/jeanhua/AniaBot/bot/component/sysrestart"
+	"github.com/jeanhua/AniaBot/bot/marketplace"
 )
 
 // 更新流水线阶段
@@ -409,6 +410,18 @@ func (s *Server) runUpdate(srcDir, gitURL, branch string) {
 		return
 	}
 
+	// 2.5 重放已安装的市场插件（git reset 会清掉源码树中的 custom/plugins
+	// 与生成的注册文件，这里从持久插件目录恢复，保证更新后插件不丢失）
+	upd.setPhase(upPhaseDeps)
+	upd.appendLog("== 重放已安装插件 ==")
+	pluginDir := s.cfgStr("bot.marketplace.plugin_dir")
+	if pluginDir == "" {
+		pluginDir = "./data/plugins"
+	}
+	if err := marketplace.ApplyInstalled(ctx, srcDir, pluginDir, s.opt.Logger); err != nil {
+		fail("插件错误", fmt.Errorf("重放已安装插件失败: %w", err))
+		return
+	}
 	// 3. 拉取 Go 依赖（新代码可能新增了依赖）
 	upd.setPhase(upPhaseDeps)
 	upd.appendLog("== 拉取 Go 依赖 ==")

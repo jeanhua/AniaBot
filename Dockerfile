@@ -19,6 +19,7 @@ WORKDIR /build
 COPY go.mod go.sum ./
 RUN go mod download
 COPY cmd/ ./cmd/
+COPY custom/ ./custom/
 COPY bot/ ./bot/
 COPY common/ ./common/
 # 前端产物（.dockerignore 已排除仓库内 dist，此处用阶段 1 的新鲜产物）

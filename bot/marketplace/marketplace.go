@@ -1,0 +1,332 @@
+// Package marketplace 实现插件市场：从 GitHub 插件仓库拉取插件列表/详情，
+// 在本地源码树中安装/卸载/升级第三方插件（custom/plugins），重新编译并重启 Bot。
+//
+// 安全模型：安装插件 = 在 Bot 所在机器上编译并执行插件代码（与 Bot 同进程）。
+// 功能默认关闭（bot.marketplace.enable=false），面板安装前会再次提示风险。
+// 插件来源是独立仓库（默认 jeanhua/AniaBot-Plugins），由维护者人工审查后合并。
+package marketplace
+
+import (
+	"context"
+	"fmt"
+	"log/slog"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"strings"
+	"sync"
+	"time"
+
+	"github.com/jeanhua/AniaBot/common/pluginmeta"
+)
+
+// Config 市场依赖的配置中心能力（configstore.Store 满足）。
+type Config interface {
+	Get(key string) (any, bool)
+	Set(key string, val any) error
+}
+
+// Service 插件市场服务。
+type Service struct {
+	cfg    Config
+	logger *slog.Logger
+	state  *taskState
+	mu     sync.Mutex
+	gh     *githubClient // 按最新配置懒重建
+	man    *manifestStore
+}
+
+// New 创建插件市场服务。
+func New(cfg Config, logger *slog.Logger) *Service {
+	if logger == nil {
+		logger = slog.Default()
+	}
+	return &Service{
+		cfg:    cfg,
+		logger: logger,
+		state:  newTaskState(),
+		man:    nil, // 首次使用时按 pluginDir 创建
+	}
+}
+
+// ---------- 配置读取 ----------
+
+func (s *Service) cfgStr(key string) string {
+	if s.cfg == nil {
+		return ""
+	}
+	v, ok := s.cfg.Get(key)
+	if !ok {
+		return ""
+	}
+	str, _ := v.(string)
+	return strings.TrimSpace(str)
+}
+
+func (s *Service) cfgBool(key string) bool {
+	v, ok := s.cfg.Get(key)
+	if !ok {
+		return false
+	}
+	b, _ := v.(bool)
+	return b
+}
+
+// Enabled 插件市场功能是否开启。
+func (s *Service) Enabled() bool { return s.cfgBool("bot.marketplace.enable") }
+
+func (s *Service) repo() string {
+	if r := s.cfgStr("bot.marketplace.repo"); r != "" {
+		return r
+	}
+	return defaultRepo
+}
+
+func (s *Service) branch() string {
+	if b := s.cfgStr("bot.marketplace.branch"); b != "" {
+		return b
+	}
+	return defaultBranch
+}
+
+func (s *Service) token() string { return s.cfgStr("bot.marketplace.token") }
+
+// sourceDir 编译用源码目录：优先市场专属配置，回退到自动更新目录。
+func (s *Service) sourceDir() string {
+	if d := s.cfgStr("bot.marketplace.source_dir"); d != "" {
+		return d
+	}
+	return s.cfgStr("bot.update.source_dir")
+}
+
+func (s *Service) pluginDir() string {
+	if d := s.cfgStr("bot.marketplace.plugin_dir"); d != "" {
+		return d
+	}
+	return "./data/plugins"
+}
+
+func (s *Service) cacheDir() string {
+	if d := s.cfgStr("bot.marketplace.cache_dir"); d != "" {
+		return d
+	}
+	return "./data/marketplace"
+}
+
+func (s *Service) manifest() *manifestStore {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.man == nil {
+		s.man = newManifestStore(s.pluginDir())
+	}
+	return s.man
+}
+
+func (s *Service) client() *githubClient {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.gh == nil || s.gh.owner != parseOwner(s.repo()) || s.gh.repo != parseName(s.repo()) || s.gh.token != s.token() {
+		s.gh = newGitHubClient(s.repo(), s.token())
+	}
+	return s.gh
+}
+
+func parseOwner(repo string) string {
+	o, _ := parseRepo(repo)
+	return o
+}
+
+func parseName(repo string) string {
+	_, n := parseRepo(repo)
+	return n
+}
+
+// ---------- 开发模式检测 ----------
+
+// isDevRun 检测是否为 go run 开发模式（可执行文件在临时编译目录中）。
+func isDevRun() bool {
+	exe, err := os.Executable()
+	if err != nil || exe == "" {
+		return false
+	}
+	tmp := os.TempDir()
+	if rel, err := filepath.Rel(tmp, exe); err == nil && !strings.HasPrefix(rel, "..") {
+		return true
+	}
+	return strings.Contains(exe, "go-build")
+}
+
+// toolVersion 返回工具版本首行，不可用返回空串。
+func toolVersion(ctx context.Context, name string, args ...string) string {
+	if _, err := exec.LookPath(name); err != nil {
+		return ""
+	}
+	cctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	out, err := exec.CommandContext(cctx, name, args...).CombinedOutput()
+	if err != nil {
+		return ""
+	}
+	first, _, _ := strings.Cut(string(out), "\n")
+	return strings.TrimSpace(first)
+}
+
+// ---------- 对外能力 ----------
+
+// Info 返回面板「插件市场」页所需的环境与配置信息。
+func (s *Service) Info() map[string]any {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	env := map[string]string{}
+	for _, t := range []string{"git", "go"} {
+		env[t] = toolVersion(ctx, t, "--version")
+	}
+	srcDir := s.sourceDir()
+	configured := srcDir != "" && s.repo() != ""
+	rate := -1
+	if c := s.client(); c != nil {
+		rate = c.rateRemaining
+	}
+	return map[string]any{
+		"enabled":        s.Enabled(),
+		"mode":           map[bool]string{true: "dev", false: "binary"}[isDevRun()],
+		"configured":     configured,
+		"repo":           s.repo(),
+		"branch":         s.branch(),
+		"token_set":      s.token() != "",
+		"rate_remaining": rate,
+		"source_dir":     srcDir,
+		"plugin_dir":     s.pluginDir(),
+		"cache_dir":      s.cacheDir(),
+		"env":            env,
+		"installed":      len(s.manifest().all()),
+	}
+}
+
+// SaveToken 保存/清除 GitHub Token（登录功能），立即生效。
+func (s *Service) SaveToken(token string) error {
+	if s.cfg == nil {
+		return fmt.Errorf("配置中心不可用")
+	}
+	token = strings.TrimSpace(token)
+	if token == "" {
+		return s.cfg.Set("bot.marketplace.token", "")
+	}
+	return s.cfg.Set("bot.marketplace.token", token)
+}
+
+// ---------- 列表与详情 ----------
+
+// PluginDTO 市场插件条目（叠加本地安装状态）。
+type PluginDTO struct {
+	ID               string   `json:"id"`
+	Name             string   `json:"name"`
+	Description      string   `json:"description"`
+	Author           string   `json:"author"`
+	Version          string   `json:"version"`
+	Platforms        []string `json:"platforms"`
+	Tags             []string `json:"tags"`
+	MinFramework     string   `json:"min_framework"`
+	Installed        bool     `json:"installed"`
+	InstalledVersion string   `json:"installed_version,omitempty"`
+	InstalledCommit  string   `json:"installed_commit,omitempty"`
+	UpdateAvailable  bool     `json:"update_available"`
+}
+
+// List 返回市场插件列表。refresh=true 时强制重新拉取索引；否则优先用本地缓存。
+func (s *Service) List(ctx context.Context, refresh bool) ([]PluginDTO, error) {
+	idx, err := s.loadIndex(ctx, refresh)
+	if err != nil {
+		return nil, err
+	}
+	installed := s.manifest().all()
+	byID := map[string]InstalledPlugin{}
+	for _, p := range installed {
+		byID[p.ID] = p
+	}
+	out := make([]PluginDTO, 0, len(idx.Plugins))
+	for _, m := range idx.Plugins {
+		dto := PluginDTO{
+			ID: m.ID, Name: m.Name, Description: m.Description,
+			Author: m.Author, Version: m.Version,
+			Platforms: m.Platforms, Tags: m.Tags, MinFramework: m.MinFramework,
+		}
+		if ip, ok := byID[m.ID]; ok {
+			dto.Installed = true
+			dto.InstalledVersion = ip.Version
+			dto.InstalledCommit = ip.Commit
+			dto.UpdateAvailable = ip.Version != m.Version
+		}
+		out = append(out, dto)
+	}
+	return out, nil
+}
+
+// DetailDTO 插件详情（元信息 + README + 安装状态）。
+type DetailDTO struct {
+	Manifest         pluginmeta.Manifest `json:"manifest"`
+	Readme           string              `json:"readme"`
+	Installed        bool                `json:"installed"`
+	InstalledVersion string              `json:"installed_version,omitempty"`
+	InstalledCommit  string              `json:"installed_commit,omitempty"`
+}
+
+// Detail 返回单个插件详情。
+func (s *Service) Detail(ctx context.Context, id string) (*DetailDTO, error) {
+	idx, err := s.loadIndex(ctx, false)
+	if err != nil {
+		return nil, err
+	}
+	var m *pluginmeta.Manifest
+	for i := range idx.Plugins {
+		if idx.Plugins[i].ID == id {
+			m = &idx.Plugins[i]
+			break
+		}
+	}
+	if m == nil {
+		return nil, fmt.Errorf("插件 %s 不存在", id)
+	}
+	readme, err := s.client().fetchReadme(ctx, id, m.ReadmeName(), s.branch())
+	if err != nil {
+		return nil, err
+	}
+	dto := &DetailDTO{Manifest: *m, Readme: readme}
+	if ip, ok := s.manifest().find(id); ok {
+		dto.Installed = true
+		dto.InstalledVersion = ip.Version
+		dto.InstalledCommit = ip.Commit
+	}
+	return dto, nil
+}
+
+// loadIndex 读取索引：refresh 或缓存不存在时走 GitHub API 并落盘缓存。
+func (s *Service) loadIndex(ctx context.Context, refresh bool) (*pluginmeta.Index, error) {
+	cachePath := filepath.Join(s.cacheDir(), "index.json")
+	if !refresh {
+		if data, err := os.ReadFile(cachePath); err == nil {
+			var idx pluginmeta.Index
+			if jsonUnmarshal(data, &idx) == nil {
+				return &idx, nil
+			}
+		}
+	}
+	idx, err := s.client().fetchIndex(ctx, s.branch())
+	if err != nil {
+		// 拉取失败时回退到缓存（如有），避免限流导致市场完全不可用
+		if data, rerr := os.ReadFile(cachePath); rerr == nil {
+			var cached pluginmeta.Index
+			if jsonUnmarshal(data, &cached) == nil {
+				return &cached, nil
+			}
+		}
+		return nil, err
+	}
+	if err := os.MkdirAll(s.cacheDir(), 0o755); err == nil {
+		_ = os.WriteFile(cachePath, mustJSON(idx), 0o644)
+	}
+	return idx, nil
+}
+
+// Status 返回当前任务状态快照（面板轮询）。
+func (s *Service) Status() map[string]any { return s.state.snapshot() }
