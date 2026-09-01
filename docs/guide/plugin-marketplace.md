@@ -26,9 +26,18 @@ Go 不支持跨平台热加载插件，因此 AniaBot 采用「**源码级安装
 
 ## 使用
 
-### 配置 GitHub Token（可选登录）
+### 登录 GitHub（推荐在线登录）
 
-GitHub API 未登录限流 60 次/小时，配置 Token（无需任何权限）可提升到 5000 次/小时：
+GitHub API 未登录限流 60 次/小时，登录后可提升到 5000 次/小时。两种方式任选：
+
+**方式一：在线登录（推荐，OAuth 设备流）**
+
+1. 在 GitHub 创建一个 OAuth App：<https://github.com/settings/developers> → OAuth Apps → New OAuth App（Authorization callback URL 可随便填，如 `http://localhost`，设备流不使用回调地址）
+2. 在应用设置中启用 **Device flow**（OAuth App → 应用设置 → Enable Device Flow）
+3. 把应用的 **Client ID** 填入面板「配置管理 → 插件市场」的 `bot.marketplace.oauth_client_id`，重启后生效
+4. 在插件市场页点击「使用 GitHub 登录」→ 弹出授权码与链接 → 浏览器打开 <https://github.com/login/device> 输入授权码 → 自动完成登录
+
+**方式二：手动粘贴 Token**
 
 1. 打开 <https://github.com/settings/tokens> 生成一个 Token（无需勾选任何权限）
 2. 在面板「插件市场」页的 Token 输入框粘贴保存，立即生效

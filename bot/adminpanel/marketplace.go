@@ -131,3 +131,37 @@ func (s *Server) handleMarketplaceStatus(w http.ResponseWriter, _ *http.Request)
 	}
 	writeJSON(w, http.StatusOK, s.opt.Marketplace.Status())
 }
+
+// handleMarketplaceOAuthStart 开始 GitHub 设备授权流（在线登录）。
+func (s *Server) handleMarketplaceOAuthStart(w http.ResponseWriter, r *http.Request) {
+	if s.opt.Marketplace == nil {
+		writeError(w, http.StatusBadRequest, "插件市场服务不可用")
+		return
+	}
+	out, err := s.opt.Marketplace.StartOAuth(r.Context())
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	oplog.Record(oplog.CategoryPlugin, "marketplace_oauth_start", "面板发起 GitHub 在线登录（IP: "+clientIP(r)+"）")
+	writeJSON(w, http.StatusOK, out)
+}
+
+// handleMarketplaceOAuthStatus 返回设备授权流程状态（前端轮询）。
+func (s *Server) handleMarketplaceOAuthStatus(w http.ResponseWriter, _ *http.Request) {
+	if s.opt.Marketplace == nil {
+		writeError(w, http.StatusBadRequest, "插件市场服务不可用")
+		return
+	}
+	writeJSON(w, http.StatusOK, s.opt.Marketplace.OAuthStatus())
+}
+
+// handleMarketplaceOAuthCancel 取消进行中的设备授权流程。
+func (s *Server) handleMarketplaceOAuthCancel(w http.ResponseWriter, _ *http.Request) {
+	if s.opt.Marketplace == nil {
+		writeError(w, http.StatusBadRequest, "插件市场服务不可用")
+		return
+	}
+	s.opt.Marketplace.CancelOAuth()
+	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
+}

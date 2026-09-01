@@ -31,6 +31,7 @@ type Service struct {
 	cfg    Config
 	logger *slog.Logger
 	state  *taskState
+	oauth  *oauthFlow
 	mu     sync.Mutex
 	gh     *githubClient // 按最新配置懒重建
 	man    *manifestStore
@@ -45,6 +46,7 @@ func New(cfg Config, logger *slog.Logger) *Service {
 		cfg:    cfg,
 		logger: logger,
 		state:  newTaskState(),
+		oauth:  newOAuthFlow(),
 		man:    nil, // 首次使用时按 pluginDir 创建
 	}
 }
@@ -188,18 +190,20 @@ func (s *Service) Info() map[string]any {
 		rate = c.rateRemaining
 	}
 	return map[string]any{
-		"enabled":        s.Enabled(),
-		"mode":           map[bool]string{true: "dev", false: "binary"}[isDevRun()],
-		"configured":     configured,
-		"repo":           s.repo(),
-		"branch":         s.branch(),
-		"token_set":      s.token() != "",
-		"rate_remaining": rate,
-		"source_dir":     srcDir,
-		"plugin_dir":     s.pluginDir(),
-		"cache_dir":      s.cacheDir(),
-		"env":            env,
-		"installed":      len(s.manifest().all()),
+		"enabled":          s.Enabled(),
+		"mode":             map[bool]string{true: "dev", false: "binary"}[isDevRun()],
+		"configured":       configured,
+		"repo":             s.repo(),
+		"branch":           s.branch(),
+		"token_set":        s.token() != "",
+		"rate_remaining":   rate,
+		"source_dir":       srcDir,
+		"plugin_dir":       s.pluginDir(),
+		"cache_dir":        s.cacheDir(),
+		"env":              env,
+		"installed":        len(s.manifest().all()),
+		"oauth_configured": s.oauthConfigured(),
+		"oauth_user":       s.oauthUser(),
 	}
 }
 

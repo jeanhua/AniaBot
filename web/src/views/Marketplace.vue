@@ -31,7 +31,7 @@
       <div class="flex items-center justify-between mb-4 flex-wrap gap-2">
         <span class="tlabel">Marketplace / 插件市场</span>
         <div class="flex items-center gap-2">
-          <span v-if="info" class="tpill"><span class="tdot" :class="info.token_set ? 'bg-emerald-500' : 'bg-zinc-300'" />{{ info.token_set ? '已登录 GitHub' : '未登录（限流 60 次/小时）' }}</span>
+          <span v-if="info" class="tpill"><span class="tdot" :class="info.token_set ? 'bg-emerald-500' : 'bg-zinc-300'" />{{ info.token_set ? (info.oauth_user ? '已登录 GitHub（' + info.oauth_user + '）' : '已登录 GitHub') : '未登录（限流 60 次/小时）' }}</span>
           <span v-if="info && info.rate_remaining >= 0" class="tpill"><span class="tdot bg-zinc-300" />剩余配额 {{ info.rate_remaining }}</span>
           <button class="text-[10px] tracking-[0.15em] uppercase text-zinc-500 hover:text-zinc-900 font-medium transition-colors" :disabled="!canBrowse || loading" @click="load(true)">{{ loading ? '刷新中...' : '刷新' }}</button>
         </div>
@@ -64,10 +64,12 @@
           <div class="tlabel mb-1">GitHub Token（可选登录，提升限流到 5000 次/小时）</div>
           <input v-model="tokenInput" type="password" placeholder="ghp_... 或留空清除" :class="inputClass" @keydown.enter="onSaveToken" />
         </div>
+        <button v-if="info?.oauth_configured" class="text-[10px] tracking-[0.15em] uppercase px-3 py-2 rounded-md font-medium transition-colors border border-zinc-300 text-zinc-700 hover:bg-zinc-50" :disabled="status.running || status.restarting" @click="onOAuthStart">使用 GitHub 登录</button>
         <button class="text-[10px] tracking-[0.15em] uppercase bg-zinc-900 text-white px-3 py-2 rounded-md hover:bg-zinc-700 font-medium transition-colors" @click="onSaveToken">保存 Token</button>
         <button v-if="info?.enabled" class="text-[10px] tracking-[0.15em] uppercase text-zinc-500 hover:text-zinc-900 font-medium transition-colors" :disabled="status.running || status.restarting" @click="onRollback">回滚上次安装</button>
       </div>
       <p v-if="tokenMsg" class="text-xs mt-2" :class="tokenOk ? 'text-emerald-600' : 'text-red-600'">{{ tokenMsg }}</p>
+      <p v-if="info?.enabled && !info.oauth_configured" class="text-[10px] text-zinc-400 mt-2">在线登录需先在「配置管理 → 插件市场」设置 GitHub OAuth App 的 Client ID（并在 GitHub 应用设置中启用 Device flow），否则只能手动粘贴 Token。</p>
     </div>
 
     <!-- 错误 -->
@@ -131,6 +133,32 @@
               >{{ p.installed ? '升级' : '安装' }}</button>
             </div>
           </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- GitHub 在线登录弹窗 -->
+    <div v-if="oauthOpen" class="fixed inset-0 bg-zinc-950/50 backdrop-blur-sm flex items-center justify-center z-50" @click.self="oauthOpen = false">
+      <div class="tcard p-6 w-96 text-center space-y-4">
+        <h2 class="text-[11px] tracking-[0.22em] uppercase text-zinc-500 font-medium">GitHub 登录</h2>
+        <template v-if="oauth.status === 'pending'">
+          <p class="text-xs text-zinc-500 leading-relaxed">请在浏览器打开下面的链接，输入授权码完成登录（15 分钟内有效）</p>
+          <a :href="oauth.verification_uri" target="_blank" rel="noopener noreferrer" class="text-sm font-semibold text-zinc-900 underline underline-offset-2 break-all">{{ oauth.verification_uri }}</a>
+          <div class="flex items-center justify-center gap-2">
+            <span class="text-2xl font-mono font-bold tracking-[0.3em] text-zinc-900 bg-zinc-100 rounded-lg px-4 py-2">{{ oauth.user_code }}</span>
+            <button class="text-[10px] uppercase text-zinc-500 hover:text-zinc-900" @click="copyOAuthCode">复制</button>
+          </div>
+          <p class="text-[10px] text-zinc-400">等待授权中，请勿关闭本窗口...</p>
+        </template>
+        <template v-else-if="oauth.status === 'authorized'">
+          <p class="text-sm text-emerald-600 font-semibold">登录成功{{ oauth.user ? '：' + oauth.user : '' }}</p>
+        </template>
+        <template v-else>
+          <p class="text-sm text-red-600">{{ oauth.error || '登录流程已结束' }}</p>
+        </template>
+        <div class="flex justify-center gap-2 pt-1">
+          <button v-if="oauth.status === 'pending'" class="text-[10px] tracking-widest uppercase text-zinc-500 hover:text-zinc-900" @click="onOAuthCancel">取消</button>
+          <button v-else class="text-[10px] tracking-widest uppercase bg-zinc-900 text-white px-4 py-2 rounded-md hover:bg-zinc-700" @click="oauthOpen = false">关闭</button>
         </div>
       </div>
     </div>
@@ -246,6 +274,62 @@ const started = ref(false)
 const rebooting = ref(false)
 const logEl = ref(null)
 const status = reactive({ running: false, restarting: false, action: '', plugin_id: '', phase: '', logs: [], error: '', errKind: '' })
+const oauthOpen = ref(false)
+const oauth = reactive({ status: '', user_code: '', verification_uri: '', expires_at: '', error: '', user: '' })
+let oauthTimer = null
+
+async function onOAuthStart() {
+  tokenMsg.value = ''
+  try {
+    const d = await api.startMarketplaceOAuth()
+    Object.assign(oauth, { status: 'pending', user_code: d.user_code, verification_uri: d.verification_uri, expires_at: d.expires_at, error: '', user: '' })
+    oauthOpen.value = true
+    startOAuthPoll()
+  } catch (e) {
+    tokenOk.value = false
+    tokenMsg.value = e.message
+  }
+}
+
+function startOAuthPoll() {
+  stopOAuthPoll()
+  oauthTimer = setInterval(pollOAuthStatus, 2000)
+}
+
+function stopOAuthPoll() {
+  if (oauthTimer) {
+    clearInterval(oauthTimer)
+    oauthTimer = null
+  }
+}
+
+async function pollOAuthStatus() {
+  try {
+    const s = await api.getMarketplaceOAuthStatus()
+    oauth.status = s.status || ''
+    oauth.user = s.user || ''
+    oauth.error = s.error || ''
+    if (s.status === 'authorized') {
+      stopOAuthPoll()
+      info.value = await api.getMarketplaceInfo()
+      setTimeout(() => { oauthOpen.value = false }, 1200)
+    } else if (s.status === 'expired' || s.status === 'failed') {
+      stopOAuthPoll()
+    }
+  } catch { /* 忽略 */ }
+}
+
+async function onOAuthCancel() {
+  try { await api.cancelMarketplaceOAuth() } catch { /* 忽略 */ }
+  stopOAuthPoll()
+  oauthOpen.value = false
+}
+
+function copyOAuthCode() {
+  if (navigator.clipboard) navigator.clipboard.writeText(oauth.user_code)
+}
+
+
 
 const inputClass = 'w-full border border-zinc-300 rounded-md px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-zinc-400 focus:border-zinc-400 transition-shadow bg-white'
 const canBrowse = computed(() => info.value?.enabled && info.value?.mode === 'binary' && info.value?.configured && !status.running && !status.restarting && !rebooting.value)
@@ -275,6 +359,7 @@ onMounted(() => {
   }, 1500)
 })
 onUnmounted(() => clearInterval(timer))
+onUnmounted(() => stopOAuthPoll())
 
 async function load(refresh = false) {
   loading.value = true
