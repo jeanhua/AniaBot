@@ -77,7 +77,7 @@
       <div class="flex items-center justify-between mb-4 gap-3 flex-wrap">
         <span class="tlabel">Plugins / 插件列表</span>
         <div class="flex items-center gap-2">
-          <input v-model="keyword" placeholder="搜索名称 / 描述 / 作者 / 标签" :class="[inputClass, '!w-64']" />
+          <input v-model="keyword" placeholder="搜索名称 / 描述 / 作者 / 标签" :class="[inputClass, 'w-64!']" />
           <button
             v-for="t in tabs" :key="t.key"
             class="text-[10px] tracking-[0.15em] uppercase px-3 py-1.5 rounded-md border transition-colors"

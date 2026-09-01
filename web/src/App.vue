@@ -144,8 +144,8 @@ const navItems = [
   { to: '/config', label: '配置管理', icon: icons.config },
   { to: '/files', label: '扩展配置', icon: icons.files },
   { to: '/contacts', label: '通讯录', icon: icons.contacts },
-  { to: '/update', label: '自动更新', icon: icons.update },
   { to: '/marketplace', label: '插件市场', icon: icons.store },
+  { to: '/update', label: '自动更新', icon: icons.update },
 ]
 
 const inputClass = 'w-full border border-zinc-300 rounded-md px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-zinc-400 focus:border-zinc-400 transition-shadow bg-white'
