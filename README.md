@@ -70,6 +70,14 @@ docker run -d --name aniabot \
 
 详细配置和插件开发教程请查阅 **[文档站点](https://jeanhua.github.io/AniaBot/)**。
 
+## 插件市场
+
+AniaBot 内置插件市场：面板「插件市场」页可浏览、在线安装 / 升级 / 卸载第三方插件（自动下载源码 → 编译 → 重启，容器内开箱即用）。
+
+- **插件仓库**：[github.com/jeanhua/AniaBot-Plugins](https://github.com/jeanhua/AniaBot-Plugins) —— 官方插件市场，通过 PR 提交自己的插件（插件代码 + plugin.json 元信息 + README 介绍）
+- **使用指南**：[插件市场使用文档](https://jeanhua.github.io/AniaBot/guide/plugin-marketplace)
+- **开发自己的插件**：[插件开发文档](https://jeanhua.github.io/AniaBot/plugin/overview)，写好后到插件仓库提交 PR 即可发布
+
 ## 许可证
 
 本项目采用 MIT 许可证，详见 [LICENSE](./LICENSE) 文件。

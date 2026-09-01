@@ -76,3 +76,11 @@ GitHub API 未登录限流 60 次/小时，登录后可提升到 5000 次/小时
 3. 提交 PR，CI 会校验元信息并编译；维护者人工审查（重点：网络请求、文件读写、进程执行、凭据访问、第三方依赖）后合并
 
 插件开发方式与内置插件完全一致，见 [插件开发指南](../plugin/overview)。
+
+## 相关链接
+
+- [插件仓库 jeanhua/AniaBot-Plugins](https://github.com/jeanhua/AniaBot-Plugins) —— 浏览插件源码、提交 PR 发布自己的插件
+- [插件规范（plugin.json）](https://github.com/jeanhua/AniaBot-Plugins/blob/main/docs/plugin-spec.md)
+- [贡献指南（CONTRIBUTING）](https://github.com/jeanhua/AniaBot-Plugins/blob/main/CONTRIBUTING.md)
+- [插件系统概览](/plugin/overview) —— 插件开发入门
+

@@ -169,3 +169,12 @@ func main() {
 - [从零开发完整插件](/plugin/tutorial) —— 配置、存储、定时任务与面板服务全流程
 - [面板服务注册](/plugin/panel-services) —— 让你的插件成为面板页面数据源
 - [完整示例](/plugin/examples) —— 看几个真实插件的完整实现
+
+## 发布到插件市场
+
+想把自己写的插件分享给所有用户？AniaBot 提供独立插件市场仓库 [AniaBot-Plugins](https://github.com/jeanhua/AniaBot-Plugins)：
+
+- 把插件源码 + `plugin.json` 元信息 + `README.md` 放进 `plugins/<id>/` 目录，提交 Pull Request 即可
+- 规范见[插件规范](https://github.com/jeanhua/AniaBot-Plugins/blob/main/docs/plugin-spec.md)，提交要求见[贡献指南](https://github.com/jeanhua/AniaBot-Plugins/blob/main/CONTRIBUTING.md)
+- 合并后即可在面板「插件市场」被所有用户在线安装；CI 会自动同步插件索引，无需手动维护
+
