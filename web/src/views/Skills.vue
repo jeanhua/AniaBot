@@ -109,10 +109,10 @@
             </div>
             <div
               v-if="isMarkdownFile && !showSource"
-              class="markdown-body bg-white border border-slate-200/70 rounded-lg px-4 py-3 max-h-[52vh] overflow-y-auto"
+              class="markdown-body bg-white border border-slate-200/70 rounded-lg px-4 py-3"
               v-html="renderedContent"
             />
-            <pre v-else class="text-xs text-slate-700 font-mono whitespace-pre-wrap break-all leading-relaxed bg-slate-50 border border-slate-200/70 rounded-lg px-3 py-2 max-h-[52vh] overflow-y-auto">{{ currentContent }}</pre>
+            <pre v-else class="text-xs text-slate-700 font-mono whitespace-pre-wrap break-all leading-relaxed bg-slate-50 border border-slate-200/70 rounded-lg px-3 py-2">{{ currentContent }}</pre>
           </section>
 
           <section v-if="detail.files?.length" class="space-y-2">

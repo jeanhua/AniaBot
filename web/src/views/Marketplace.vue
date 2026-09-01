@@ -159,7 +159,7 @@
 
     <!-- 详情抽屉 -->
     <div v-if="detail" class="fixed inset-0 bg-zinc-950/50 backdrop-blur-sm z-40 flex justify-end" @click.self="detail = null">
-      <div class="w-full max-w-2xl bg-white h-full overflow-y-auto p-6 space-y-4">
+      <div class="w-full max-w-2xl bg-white h-full flex flex-col p-6 space-y-4 overflow-hidden">
         <div class="flex items-start justify-between gap-3">
           <div>
             <div class="flex items-center gap-2">
@@ -191,7 +191,7 @@
             @click="onUninstall(detail.manifest)"
           >卸载</button>
         </div>
-        <div class="markdown-body bg-white border border-slate-200/70 rounded-lg px-4 py-3 max-h-[55vh] overflow-y-auto">
+        <div class="markdown-body bg-white border border-slate-200/70 rounded-lg px-4 py-3 flex-1 min-h-0 overflow-y-auto">
           <div v-if="!detail.readme" class="text-xs text-zinc-400">该插件未提供 README。</div>
           <div v-else v-html="renderedReadme" />
         </div>
