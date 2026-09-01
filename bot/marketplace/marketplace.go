@@ -232,8 +232,30 @@ func (s *Service) Info() map[string]any {
 	srcDir := s.sourceDir()
 	configured := srcDir != "" && s.repo() != ""
 	rate := -1
-	if c := s.client(); c != nil {
-		rate = c.rateRemaining
+	tokenSet := s.token() != ""
+	tokenValid := false
+	oauthUser := s.oauthUser()
+	if tokenSet {
+		// 实际调用一次 /user 校验 Token 是否仍有效，避免显示过期的「已登录」；
+		// 网络异常无法确认时保守按有效显示，避免误报「登录已失效」
+		if c := s.client(); c != nil {
+			user, ok, invalid := c.verifyToken(ctx)
+			switch {
+			case ok:
+				tokenValid = true
+				if user != "" && user != oauthUser {
+					oauthUser = user
+					if s.cfg != nil {
+						_ = s.cfg.Set("bot.marketplace.oauth_user", user)
+					}
+				}
+			case invalid:
+				tokenValid = false
+			default:
+				tokenValid = true
+			}
+			rate = c.rateRemaining
+		}
 	}
 	return map[string]any{
 		"enabled":          s.Enabled(),
@@ -241,7 +263,8 @@ func (s *Service) Info() map[string]any {
 		"configured":       configured,
 		"repo":             s.repo(),
 		"branch":           s.branch(),
-		"token_set":        s.token() != "",
+		"token_set":        tokenSet,
+		"token_valid":      tokenValid,
 		"rate_remaining":   rate,
 		"source_dir":       srcDir,
 		"plugin_dir":       s.pluginDir(),
@@ -249,7 +272,7 @@ func (s *Service) Info() map[string]any {
 		"env":              env,
 		"installed":        len(s.manifest().all()),
 		"oauth_configured": s.oauthConfigured(),
-		"oauth_user":       s.oauthUser(),
+		"oauth_user":       oauthUser,
 	}
 }
 
@@ -316,6 +339,7 @@ func (s *Service) List(ctx context.Context, refresh bool) ([]PluginDTO, error) {
 type DetailDTO struct {
 	Manifest         pluginmeta.Manifest `json:"manifest"`
 	Readme           string              `json:"readme"`
+	ReadmeError      string              `json:"readme_error,omitempty"`
 	Installed        bool                `json:"installed"`
 	InstalledVersion string              `json:"installed_version,omitempty"`
 	InstalledCommit  string              `json:"installed_commit,omitempty"`
@@ -338,15 +362,19 @@ func (s *Service) Detail(ctx context.Context, id string) (*DetailDTO, error) {
 		return nil, fmt.Errorf("插件 %s 不存在", id)
 	}
 	readme, err := s.client().fetchReadme(ctx, id, m.ReadmeName(), s.branch())
-	if err != nil {
-		return nil, err
-	}
-	dto := &DetailDTO{Manifest: *m, Readme: readme}
+	dto := &DetailDTO{Manifest: *m}
 	if ip, ok := s.manifest().find(id); ok {
 		dto.Installed = true
 		dto.InstalledVersion = ip.Version
 		dto.InstalledCommit = ip.Commit
 	}
+	if err != nil {
+		// README 拉取失败不阻塞详情：把真实原因带回面板，避免误显示「未提供 README」
+		s.logger.Warn("读取插件 README 失败", "id", id, "error", err)
+		dto.ReadmeError = err.Error()
+		return dto, nil
+	}
+	dto.Readme = readme
 	return dto, nil
 }
 

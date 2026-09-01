@@ -31,7 +31,7 @@
       <div class="flex items-center justify-between mb-4 flex-wrap gap-2">
         <span class="tlabel">Marketplace / 插件市场</span>
         <div class="flex items-center gap-2">
-          <span v-if="info" class="tpill"><span class="tdot" :class="info.token_set ? 'bg-emerald-500' : 'bg-zinc-300'" />{{ info.token_set ? (info.oauth_user ? '已登录 GitHub（' + info.oauth_user + '）' : '已登录 GitHub') : '未登录（限流 60 次/小时）' }}</span>
+          <span v-if="info" class="tpill"><span class="tdot" :class="info.token_valid ? 'bg-emerald-500' : (info.token_set ? 'bg-red-400' : 'bg-zinc-300')" />{{ info.token_valid ? (info.oauth_user ? '已登录 GitHub（' + info.oauth_user + '）' : '已登录 GitHub') : (info.token_set ? '登录已失效，请重新登录' : '未登录（限流 60 次/小时）') }}</span>
           <span v-if="info && info.rate_remaining >= 0" class="tpill"><span class="tdot bg-zinc-300" />剩余配额 {{ info.rate_remaining }}</span>
           <button class="text-[10px] tracking-[0.15em] uppercase text-zinc-500 hover:text-zinc-900 font-medium transition-colors" :disabled="!canBrowse || loading" @click="load(true)">{{ loading ? '刷新中...' : '刷新' }}</button>
         </div>
@@ -192,7 +192,8 @@
           >卸载</button>
         </div>
         <div class="markdown-body bg-white border border-slate-200/70 rounded-lg px-4 py-3 flex-1 min-h-0 overflow-y-auto">
-          <div v-if="!detail.readme" class="text-xs text-zinc-400">该插件未提供 README。</div>
+          <div v-if="detail.readme_error" class="text-xs text-red-500">README 加载失败：{{ detail.readme_error }}</div>
+          <div v-else-if="!detail.readme" class="text-xs text-zinc-400">该插件未提供 README。</div>
           <div v-else v-html="renderedReadme" />
         </div>
       </div>

@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -147,13 +148,38 @@ func (c *githubClient) fetchIndex(ctx context.Context, ref string) (*pluginmeta.
 	return &idx, nil
 }
 
-// fetchReadme 读取插件 README（不存在时返回空串，不视为错误）。
+// fetchReadme 读取插件 README：文件不存在（404）时返回空串，不视为错误；
+// 其余失败（Token 失效/限流/网络）原样返回，避免被误判为「未提供 README」。
 func (c *githubClient) fetchReadme(ctx context.Context, id, readmeName, ref string) (string, error) {
 	data, err := c.fetchContent(ctx, "plugins/"+id+"/"+readmeName, ref)
 	if err != nil {
-		return "", nil
+		var ae *apiErr
+		if errors.As(err, &ae) && ae.Status == http.StatusNotFound {
+			return "", nil
+		}
+		return "", err
 	}
 	return string(data), nil
+}
+
+// verifyToken 校验已保存的 GitHub Token 是否仍有效，返回真实登录用户名。
+// ok=true 表示 Token 有效；invalid=true 表示 Token 已失效（401）；
+// 两者都为 false 表示网络/其他异常无法确认（不应据此误报「登录已失效」）。
+func (c *githubClient) verifyToken(ctx context.Context) (user string, ok bool, invalid bool) {
+	if c.token == "" {
+		return "", false, false
+	}
+	var out struct {
+		Login string `json:"login"`
+	}
+	if err := c.do(ctx, "GET", "/user", nil, &out); err != nil {
+		var ae *apiErr
+		if errors.As(err, &ae) && ae.Status == http.StatusUnauthorized {
+			return "", false, true
+		}
+		return "", false, false
+	}
+	return out.Login, true, false
 }
 
 // downloadPlugin 下载仓库 tar 包并只解压 plugins/<id>/ 到 dstDir。
