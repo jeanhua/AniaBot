@@ -25,7 +25,7 @@ var configFileKeys = map[string]string{
 // configFileDescs 各扩展配置文件的格式说明（供 AI 查看/编写内容）。
 var configFileDescs = map[string]string{
 	"mcp":      `MCP 服务器列表。格式: {"servers": [{"name": 名称, "transport": "stdio|streamable|sse", "command": 启动命令(stdio), "args": [参数], "env": {"K": "V"}, "endpoint": HTTP地址(streamable/sse), "headers": {"K": "V"}, "timeout": 秒, "description": 说明}]}。修改后重启生效`,
-	"prompt":   `按群聊/好友覆盖 AI 系统提示词。格式: {"groups": {"群ID": "prompt"}, "friends": {"用户ID": "prompt"}}（QQ 为 qq: 前缀，其他平台带各自前缀）。修改后重启生效`,
+	"prompt":   `按群聊/好友覆盖 AI 系统提示词。格式: {"groups": {"群ID": "prompt"}, "friends": {"用户ID": "prompt"}}（QQ 为 qq: 前缀，其他平台带各自前缀）。修改后立即生效`,
 	"hooks":    `AI 钩子（会话事件上执行 shell 命令）。格式: {"hooks": {"事件名": [{"matcher": 工具名正则(可空), "command": shell命令, "timeout_sec": 秒(可空)}]}}。事件: SessionStart/UserPromptSubmit/PreToolUse/PostToolUse/Stop/SubagentStop/PreCompact；stdin 接收 JSON 载荷；退出码 0=通过(stdout 注入上下文)/2=阻断(stderr 为原因)/其他=仅记日志。保存后数秒内生效`,
 	"commands": `自定义斜杠命令。格式: {"commands": {"命令名": "提示词模板"}}。模板中 $args 为用户参数占位符（无占位符时参数追加到末尾）；命令名字母开头、最长 32 字符，不得与内置命令撞名。保存后数秒内生效`,
 }
@@ -103,7 +103,7 @@ type ConfigFileSetTool struct {
 
 func NewConfigFileSetTool(store ConfigStore) *ConfigFileSetTool {
 	return &ConfigFileSetTool{
-		BaseTool: llmtool.MakeBaseTool("config_file_set", "修改扩展配置（写入数据库，与面板「扩展配置」页保存等价）。只校验 JSON 语法，语义错误会导致对应功能加载失败——先用 config_file_get 查看当前内容与格式说明。该操作需要管理员审批：系统会直接私聊通知机器人管理员，管理员回复「允许」后才写入（超时未确认自动拒绝）。hooks/commands 保存后数秒内生效；mcp/prompt 重启后生效（重启需由管理员发送 /reboot 命令）", ConfigFileSetParams{}),
+		BaseTool: llmtool.MakeBaseTool("config_file_set", "修改扩展配置（写入数据库，与面板「扩展配置」页保存等价）。只校验 JSON 语法，语义错误会导致对应功能加载失败——先用 config_file_get 查看当前内容与格式说明。该操作需要管理员审批：系统会直接私聊通知机器人管理员，管理员回复「允许」后才写入（超时未确认自动拒绝）。hooks/commands/prompt 保存后数秒内生效；mcp 重启后生效（重启需由管理员发送 /reboot 命令）", ConfigFileSetParams{}),
 		store:    store,
 	}
 }

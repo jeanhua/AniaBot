@@ -74,6 +74,11 @@ func (b *ChatBot) LoadHistory(ctx context.Context) {
 	b.window.load(ctx)
 }
 
+// SetSystemPrompt 运行时更新系统提示词（面板修改 Prompt 覆盖后，驻留会话下一轮立即生效）。
+func (b *ChatBot) SetSystemPrompt(prompt string) {
+	b.msgBuilder.SetPrompt(prompt)
+}
+
 func (b *ChatBot) Chat(ctx context.Context, userInput string, callbacks llmtool.CallBackFuncs, opts ChatOptions) (string, TokenUsage, error) {
 	// 压缩检查：在构建消息之前，确保上下文不超限
 	if err := b.window.MaybeCompress(ctx); err != nil {

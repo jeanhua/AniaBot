@@ -54,7 +54,7 @@ func newEvictTestPlugin() *AIChatPlugin {
 }
 
 func storeIdleEntry(p *AIChatPlugin, key string, id message.QID, isGroup bool, idle time.Duration) {
-	e := newChatEntry(nil, id, isGroup)
+	e := newChatEntry(nil, id, isGroup, "")
 	e.lastActive.Store(time.Now().Add(-idle).Unix())
 	p.chats.Store(key, e)
 }

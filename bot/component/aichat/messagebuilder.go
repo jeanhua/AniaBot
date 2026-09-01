@@ -26,6 +26,11 @@ func (b *MessageBuilder) WithSkillManager(manager *llmtool.SkillManager) {
 	b.skillManager = manager
 }
 
+// SetPrompt 运行时更新系统提示词（面板修改 Prompt 覆盖后，驻留会话下一轮立即生效）。
+func (b *MessageBuilder) SetPrompt(prompt string) {
+	b.prompt = prompt
+}
+
 func (b *MessageBuilder) buildSystemPrompt() string {
 	if b.skillManager == nil {
 		return b.prompt

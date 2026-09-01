@@ -20,7 +20,7 @@
         <button v-if="hasForm" class="px-3 py-1.5 text-sm rounded-lg border border-slate-300 text-slate-600 hover:bg-slate-50 transition-colors" @click="toggleRaw">
           {{ rawMode ? '表单模式' : '源码模式 (JSON)' }}
         </button>
-        <button v-if="!rawMode && hasForm" :disabled="saving" class="px-4 py-1.5 text-sm rounded-lg bg-zinc-900 text-white hover:bg-zinc-800 disabled:opacity-40 transition-colors" @click="onSave">
+        <button v-if="!rawMode && hasForm && current !== 'prompt'" :disabled="saving" class="px-4 py-1.5 text-sm rounded-lg bg-zinc-900 text-white hover:bg-zinc-800 disabled:opacity-40 transition-colors" @click="onSave">
           {{ saving ? '保存中...' : '保存' }}
         </button>
       </div>
@@ -116,7 +116,7 @@
 
     <!-- Prompt 覆盖：列表 + 弹窗编辑 -->
     <template v-else-if="current === 'prompt'">
-      <p class="text-xs text-slate-500">按群聊 / 好友覆盖 AI 的系统提示词，点击条目可弹出编辑框。修改保存后重启生效。</p>
+      <p class="text-xs text-slate-500">按群聊 / 好友覆盖 AI 的系统提示词，点击条目弹出编辑框，保存后立即生效（无需重启）。</p>
 
       <template v-for="section in promptSections" :key="section.kind">
         <section class="bg-white rounded-xl shadow-sm border border-slate-200/60 overflow-hidden">
@@ -171,14 +171,14 @@
         @click.self="closePromptEditor"
       >
         <form
-          class="bg-white rounded-xl shadow-2xl border border-zinc-200 w-full max-w-lg max-h-[90vh] overflow-y-auto"
+          class="bg-white rounded-xl shadow-2xl border border-zinc-200 w-full max-w-4xl flex flex-col max-h-[92vh]"
           @submit.prevent="savePromptEditor"
         >
           <div class="px-6 py-4 border-b border-zinc-100 flex items-center justify-between">
             <h3 class="text-sm font-semibold text-slate-800">{{ promptDraft.id ? '编辑覆盖' : '新增覆盖' }}</h3>
             <button type="button" class="text-slate-400 hover:text-slate-700 transition-colors" @click="closePromptEditor">✕</button>
           </div>
-          <div class="px-6 py-5 space-y-4">
+          <div class="px-6 py-5 space-y-4 overflow-y-auto flex-1">
             <div>
               <label class="block text-xs font-medium text-slate-600 mb-1.5">
                 {{ promptDraft.kind === 'friends' ? '用户 ID' : '群 ID' }} <span class="text-red-500">*</span>
@@ -194,16 +194,16 @@
               <label class="block text-xs font-medium text-slate-600 mb-1.5">系统提示词 <span class="text-red-500">*</span></label>
               <textarea
                 v-model.trim="promptDraft.prompt"
-                rows="10"
+                rows="16"
                 placeholder="该会话使用的系统提示词"
-                :class="inputClass + ' font-mono leading-relaxed resize-y'"
+                :class="inputClass + ' font-mono leading-relaxed resize-y min-h-[55vh]'"
               />
               <p class="text-[11px] text-slate-400 mt-1.5">{{ promptDraft.prompt.length }} 字</p>
             </div>
             <p v-if="promptEditorError" class="text-sm text-red-600">{{ promptEditorError }}</p>
             <div class="flex justify-end gap-2 pt-1">
               <button type="button" class="px-4 py-2 text-sm text-slate-600 hover:bg-slate-100 rounded-lg transition-colors" @click="closePromptEditor">取消</button>
-              <button type="submit" class="px-4 py-2 text-sm bg-zinc-900 text-white rounded-lg hover:bg-zinc-800 transition-colors">保存</button>
+              <button type="submit" :disabled="saving" class="px-4 py-2 text-sm bg-zinc-900 text-white rounded-lg hover:bg-zinc-800 disabled:opacity-40 transition-colors">{{ saving ? '保存中...' : '保存并生效' }}</button>
             </div>
           </div>
         </form>
@@ -266,7 +266,7 @@ const KvEditor = defineComponent({
 
 const tabs = [
   { name: 'mcp', label: 'MCP 服务器', desc: '格式: {"servers": [{name, transport(stdio/streamable/sse), command/endpoint, args, env, headers, timeout, description}]}' },
-  { name: 'prompt', label: 'Prompt 覆盖', desc: '格式: {"groups": {"群ID": "prompt"}, "friends": {"用户ID": "prompt"}}（QQ 为 qq: 前缀，其他平台带各自前缀）' },
+  { name: 'prompt', label: 'Prompt 覆盖', desc: '格式: {"groups": {"群ID": "prompt"}, "friends": {"用户ID": "prompt"}}（QQ 为 qq: 前缀，其他平台带各自前缀）', hot: true },
   { name: 'hooks', label: 'AI 钩子', desc: '格式: {"hooks": {"事件名": [{matcher(工具名正则,可空), command, timeout_sec(可空)}]}}。事件: SessionStart/UserPromptSubmit/PreToolUse/PostToolUse/Stop/SubagentStop/PreCompact。stdin 接收 JSON 载荷；退出码 0=通过(stdout 注入上下文) / 2=阻断(stderr 为原因) / 其他=仅记日志。保存后数秒内生效', hot: true },
   { name: 'commands', label: '自定义命令', desc: '格式: {"commands": {"命令名": "提示词模板"}}。模板中 $args 为用户参数占位符（无占位符时参数追加到末尾）；命令名字母开头、最长 32 字符，不得与内置命令撞名。保存后数秒内生效', hot: true },
 ]
@@ -352,7 +352,7 @@ function closePromptEditor() {
   promptEditorError.value = ''
 }
 
-function savePromptEditor() {
+async function savePromptEditor() {
   const id = promptDraft.id.trim()
   const prompt = promptDraft.prompt.trim()
   if (!id) {
@@ -379,16 +379,27 @@ function savePromptEditor() {
     }
     list.value.push({ id, prompt })
   }
-  closePromptEditor()
+  // 弹窗保存即持久化：写回配置中心并热生效，无需再点页面顶部的保存按钮
+  try {
+    await persistPrompt()
+    closePromptEditor()
+  } catch (e) {
+    // 保存失败保留弹窗与草稿，方便修正后重试
+    promptEditorError.value = e.message || '保存失败'
+  }
 }
 
-function deletePrompt(kind, index) {
+async function deletePrompt(kind, index) {
   const list = kind === 'friends' ? promptFriends : promptGroups
   const item = list.value[index]
   if (!item) return
   if (!confirm(`确定删除「${item.id || '未填写 ID'}」的覆盖吗？`)) return
   list.value.splice(index, 1)
   if (promptDraft.kind === kind && promptEditingIndex.value === index) closePromptEditor()
+  // 删除同样立即落库生效
+  try {
+    await persistPrompt()
+  } catch { /* error 已设置 */ }
 }
 
 // ---- 序列化：表单模型 -> JSON ----
@@ -437,6 +448,15 @@ function serializePrompt() {
     if (id.trim() && prompt.trim()) friends[id.trim()] = prompt
   }
   return JSON.stringify({ groups, friends }, null, 2)
+}
+
+// persistPrompt 把 Prompt 覆盖表单整体写回配置中心（弹窗保存/删除都走这里），
+// 保存即热生效；同步 rawText，切到源码模式时看到的是最新内容。
+async function persistPrompt() {
+  error.value = ''
+  const content = serializePrompt()
+  await save(content)
+  rawText.value = content
 }
 
 // ---- 加载 / 切换 / 保存 ----

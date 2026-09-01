@@ -583,8 +583,11 @@ func (s *Server) handleFilePut(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "保存失败")
 		return
 	}
+	// prompt/hooks/commands 由 AI 插件按 TTL 热重读，保存后数秒内生效无需重启；
+	// mcp 仍需要重启 Bot 后生效
+	needRestart := key != configstore.KeyPromptJSON && key != configstore.KeyHooksJSON && key != configstore.KeyCommandsJSON
 	oplog.Record(oplog.CategoryConfig, "file_update", "面板修改扩展配置文件: "+r.PathValue("name"))
-	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "need_restart": true})
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "need_restart": needRestart})
 }
 
 // ---- status / list handlers ----

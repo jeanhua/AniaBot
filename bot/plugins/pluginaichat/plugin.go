@@ -3,7 +3,6 @@ package pluginaichat
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -59,11 +58,9 @@ type AIChatPlugin struct {
 	// noMentionLoaded 已从持久层恢复过未@计数的群（每个群只查一次 DB）
 	noMentionLoaded sync.Map
 
-	// 按群聊/好友独立的 prompt 覆盖配置
-	promptOverrides struct {
-		groups  map[message.QID]string
-		friends map[message.QID]string
-	}
+	// promptManager 群聊/好友 Prompt 覆盖管理器（files.prompt_json，面板修改后
+	// TTL 热重读，数秒内生效）；Start 时始终构造（配置中心不可用时仅内存快照）
+	promptManager *promptOverrideManager
 
 	// ocrModel 备用图片识别模型；为 nil 表示未启用或初始化失败
 	ocrModel *aichat.ChatBot
@@ -138,11 +135,6 @@ const (
 	hooksConfigKey    = "files.hooks_json"
 	commandsConfigKey = "files.commands_json"
 )
-
-type promptOverrideConfig struct {
-	Groups  map[string]string `json:"groups"`
-	Friends map[string]string `json:"friends"`
-}
 
 func NewAIChatPlugin() *AIChatPlugin {
 	return &AIChatPlugin{
@@ -1023,42 +1015,22 @@ func (p *AIChatPlugin) SetGoHookHandlers(handlers []agenthook.Handler) {
 	p.goHookHandlers = handlers
 }
 
+// loadPromptOverrides 初始化 Prompt 覆盖管理器：先用 Start 的 viper 快照填充
+// 内存，之后由管理器按 TTL 重读配置中心（面板修改后热生效，无需重启）。
 func (p *AIChatPlugin) loadPromptOverrides(cfg *viper.Viper) {
-	p.promptOverrides.groups = make(map[message.QID]string)
-	p.promptOverrides.friends = make(map[message.QID]string)
-
-	raw := cfg.GetString(promptConfigKey)
-	if strings.TrimSpace(raw) == "" {
-		p.Logger.Info("未配置 Prompt 覆盖，跳过加载", "key", promptConfigKey)
-		return
-	}
-
-	var overrideCfg promptOverrideConfig
-	if err := json.Unmarshal([]byte(raw), &overrideCfg); err != nil {
-		p.Logger.Warn("解析 Prompt 覆盖配置失败", "error", err.Error())
-		return
-	}
-
-	for k, v := range overrideCfg.Groups {
-		p.promptOverrides.groups[message.FromString(k)] = v
-	}
-	for k, v := range overrideCfg.Friends {
-		p.promptOverrides.friends[message.FromString(k)] = v
-	}
-
-	count := len(p.promptOverrides.groups) + len(p.promptOverrides.friends)
-	if count > 0 {
-		p.Logger.Info("已加载 Prompt 覆盖配置", "groups", len(p.promptOverrides.groups), "friends", len(p.promptOverrides.friends))
+	p.promptManager = newPromptOverrideManager(p.ConfigEditor, promptConfigKey, p.Logger.WithGroup("prompt"))
+	p.promptManager.loadRaw(cfg.GetString(promptConfigKey))
+	groups, friends := p.promptManager.count()
+	if groups+friends > 0 {
+		p.Logger.Info("已加载 Prompt 覆盖配置", "groups", groups, "friends", friends)
+	} else {
+		p.Logger.Info("未配置 Prompt 覆盖", "key", promptConfigKey)
 	}
 }
 
 func (p *AIChatPlugin) getPromptForID(id message.QID, isGroup bool) string {
-	if isGroup {
-		if prompt, ok := p.promptOverrides.groups[id]; ok {
-			return prompt
-		}
-	} else {
-		if prompt, ok := p.promptOverrides.friends[id]; ok {
+	if p.promptManager != nil {
+		if prompt, ok := p.promptManager.get(id, isGroup); ok {
 			return prompt
 		}
 	}

@@ -25,12 +25,15 @@ type chatEntry struct {
 	chat    *aichat.ChatBot
 	id      message.QID
 	isGroup bool
+	// prompt 创建/最近一次更新时应用的覆盖基础提示词（不含场景描述），
+	// 用于检测面板修改 Prompt 覆盖后同步驻留会话（见 getChat）
+	prompt string
 	// lastActive 最近一次 AI 交互（收到指向 AI 的消息 / 创建会话）的 unix 秒
 	lastActive atomic.Int64
 }
 
-func newChatEntry(chat *aichat.ChatBot, id message.QID, isGroup bool) *chatEntry {
-	e := &chatEntry{chat: chat, id: id, isGroup: isGroup}
+func newChatEntry(chat *aichat.ChatBot, id message.QID, isGroup bool, prompt string) *chatEntry {
+	e := &chatEntry{chat: chat, id: id, isGroup: isGroup, prompt: prompt}
 	e.lastActive.Store(time.Now().Unix())
 	return e
 }

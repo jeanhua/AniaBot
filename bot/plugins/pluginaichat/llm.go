@@ -206,6 +206,12 @@ func (p *AIChatPlugin) getChat(b bot.Bot, id message.QID, isGroup bool, prompt s
 	if v, ok := p.chats.Load(key); ok {
 		e := v.(*chatEntry)
 		e.lastActive.Store(time.Now().Unix())
+		// Prompt 覆盖热生效：面板修改 files.prompt_json 后，驻留会话在下一轮
+		// 对话时同步新的系统提示词（覆盖词 + 场景描述），无需重启或等会话回收
+		if e.prompt != prompt {
+			e.prompt = prompt
+			e.chat.SetSystemPrompt(prompt + p.buildScenePrompt(b, id, isGroup))
+		}
 		return e.chat
 	}
 	// 会话未驻留（首次发言或被淘汰后）：重新创建并从持久层回放历史
@@ -231,7 +237,8 @@ func (p *AIChatPlugin) getChat(b bot.Bot, id message.QID, isGroup bool, prompt s
 			}
 		}
 		// 在 system prompt 末尾注入当前对话场景（群聊/私聊、群信息、消息 id 前缀含义）
-		prompt += p.buildScenePrompt(b, id, isGroup)
+		scene := p.buildScenePrompt(b, id, isGroup)
+		fullPrompt := prompt + scene
 		// 每个会话独立的历史持久化存储；g:/f: 前缀避免群聊与好友 id 相同导致历史串扰。
 		// SQL 后端走行级存储（ania_chat_session/ania_chat_message），否则回退 KV 整段 JSON
 		var historyStore aichat.HistoryStore
@@ -245,7 +252,7 @@ func (p *AIChatPlugin) getChat(b bot.Bot, id message.QID, isGroup bool, prompt s
 			p.cfg.BaseURL,
 			p.cfg.APIKey,
 			p.cfg.Model,
-			prompt,
+			fullPrompt,
 			p.cfg.MaxContextTokens,
 			sessionExecutor,
 			historyStore,
@@ -267,7 +274,7 @@ func (p *AIChatPlugin) getChat(b bot.Bot, id message.QID, isGroup bool, prompt s
 		}
 		// 回放持久化的历史，使对话跨重启延续
 		c.LoadHistory(context.Background())
-		p.chats.Store(key, newChatEntry(c, id, isGroup))
+		p.chats.Store(key, newChatEntry(c, id, isGroup, prompt))
 		// SessionStart 钩子：会话（重）创建（首次发言或被淘汰后重建）；
 		// 产出的上下文暂存，由下一轮对话消费一次（见 processChatBatch）
 		if p.hookManager != nil {
