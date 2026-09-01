@@ -186,7 +186,7 @@
               <input
                 v-model.trim="promptDraft.id"
                 type="text"
-                :placeholder="promptDraft.kind === 'friends' ? '用户 ID（如 123456 或 fs:ou_xxx）' : '群 ID（如 123456 或 fs:oc_xxx）'"
+                :placeholder="promptDraft.kind === 'friends' ? '用户 ID（统一带前缀，如 qq:123456 或 fs:ou_xxx）' : '群 ID（统一带前缀，如 qq:123456 或 fs:oc_xxx）'"
                 :class="inputClass"
               />
             </div>
@@ -266,7 +266,7 @@ const KvEditor = defineComponent({
 
 const tabs = [
   { name: 'mcp', label: 'MCP 服务器', desc: '格式: {"servers": [{name, transport(stdio/streamable/sse), command/endpoint, args, env, headers, timeout, description}]}' },
-  { name: 'prompt', label: 'Prompt 覆盖', desc: '格式: {"groups": {"群ID": "prompt"}, "friends": {"用户ID": "prompt"}}（QQ 为 qq: 前缀，其他平台带各自前缀）', hot: true },
+  { name: 'prompt', label: 'Prompt 覆盖', desc: '格式: {"groups": {"群ID": "prompt"}, "friends": {"用户ID": "prompt"}}（统一带平台前缀，如 qq:123456 或 fs:oc_xxx）', hot: true },
   { name: 'hooks', label: 'AI 钩子', desc: '格式: {"hooks": {"事件名": [{matcher(工具名正则,可空), command, timeout_sec(可空)}]}}。事件: SessionStart/UserPromptSubmit/PreToolUse/PostToolUse/Stop/SubagentStop/PreCompact。stdin 接收 JSON 载荷；退出码 0=通过(stdout 注入上下文) / 2=阻断(stderr 为原因) / 其他=仅记日志。保存后数秒内生效', hot: true },
   { name: 'commands', label: '自定义命令', desc: '格式: {"commands": {"命令名": "提示词模板"}}。模板中 $args 为用户参数占位符（无占位符时参数追加到末尾）；命令名字母开头、最长 32 字符，不得与内置命令撞名。保存后数秒内生效', hot: true },
 ]
@@ -329,9 +329,72 @@ function parsePrompt(content) {
   if (!content.trim()) return { groups: [], friends: [] }
   const data = JSON.parse(content)
   return {
-    groups: Object.entries(data.groups || {}).map(([id, prompt]) => ({ id, prompt })),
-    friends: Object.entries(data.friends || {}).map(([id, prompt]) => ({ id, prompt })),
+    groups: Object.entries(data.groups || {}).map(([id, prompt]) => ({ id: normalizePromptID(id), prompt })),
+    friends: Object.entries(data.friends || {}).map(([id, prompt]) => ({ id: normalizePromptID(id), prompt })),
   }
+}
+
+// Prompt 覆盖 ID 统一带平台前缀（qq:/qo:/fs:/tg:/dc:）：纯数字自动补 qq: 前缀，
+// 其他 ID 手动带各自前缀；返回规范化后的 ID。
+function normalizePromptID(id) {
+  id = id.trim()
+  if (/^\d+$/.test(id)) return 'qq:' + id
+  const m = id.match(/^([^:]+):(.*)$/)
+  if (m) return m[1].toLowerCase() + ':' + m[2]
+  return id
+}
+
+// validatePromptID 校验前缀与各平台 ID 格式；kind 为 groups/friends（飞书群 oc_/用户 ou_）。
+function validatePromptID(id, kind) {
+  const m = id.match(/^([^:]+):(.+)$/)
+  if (!m) return '请带上平台前缀（如 qq:123456、fs:oc_xxx）'
+  const prefix = m[1].toLowerCase()
+  const rest = m[2]
+  switch (prefix) {
+    case 'qq':
+      if (!/^\d+$/.test(rest)) return 'QQ ID 应为纯数字，如 qq:123456'
+      break
+    case 'tg':
+      if (!/^-?\d+$/.test(rest)) return 'Telegram ID 应为数字，如 tg:123456 或 tg:-1001234567'
+      break
+    case 'dc':
+      if (!/^\d+$/.test(rest)) return 'Discord ID 应为数字，如 dc:123456789'
+      break
+    case 'qo':
+      if (!/^[A-Za-z0-9_-]+$/.test(rest)) return 'QQ 官方 openid 格式不合法，如 qo:xxxxxxxx'
+      break
+    case 'fs':
+      if (kind === 'friends') {
+        if (!/^ou_/.test(rest)) return '飞书用户 ID 应以 ou_ 开头，如 fs:ou_xxx'
+      } else if (!/^oc_/.test(rest)) {
+        return '飞书群 ID 应以 oc_ 开头，如 fs:oc_xxx'
+      }
+      break
+    default:
+      return '未知平台前缀「' + prefix + '」（支持 qq: / qo: / fs: / tg: / dc:）'
+  }
+  return ''
+}
+
+// normalizePromptContent 源码模式保存前整体规范化并逐条校验（群/好友都校验），
+// 保证落库的 files.prompt_json 统一带平台前缀。
+function normalizePromptContent(content) {
+  if (!content.trim()) return content
+  const data = JSON.parse(content)
+  const out = { groups: {}, friends: {} }
+  for (const [id, prompt] of Object.entries(data.groups || {})) {
+    const nid = normalizePromptID(id)
+    const err = validatePromptID(nid, 'groups')
+    if (err) throw new Error('群 ID「' + id + '」' + err)
+    out.groups[nid] = prompt
+  }
+  for (const [id, prompt] of Object.entries(data.friends || {})) {
+    const nid = normalizePromptID(id)
+    const err = validatePromptID(nid, 'friends')
+    if (err) throw new Error('用户 ID「' + id + '」' + err)
+    out.friends[nid] = prompt
+  }
+  return JSON.stringify(out, null, 2)
 }
 
 function previewPrompt(prompt) {
@@ -353,14 +416,20 @@ function closePromptEditor() {
 }
 
 async function savePromptEditor() {
-  const id = promptDraft.id.trim()
   const prompt = promptDraft.prompt.trim()
-  if (!id) {
+  if (!promptDraft.id.trim()) {
     promptEditorError.value = '请填写 ID'
     return
   }
   if (!prompt) {
     promptEditorError.value = '请填写系统提示词'
+    return
+  }
+  // 统一带平台前缀：QQ 纯数字自动补 qq:，其余逐条校验格式
+  const id = normalizePromptID(promptDraft.id)
+  const idError = validatePromptID(id, promptDraft.kind)
+  if (idError) {
+    promptEditorError.value = idError
     return
   }
 
@@ -537,14 +606,23 @@ async function onSave() {
 
 async function onSaveRaw() {
   error.value = ''
-  try {
-    if (rawText.value.trim() !== '') JSON.parse(rawText.value)
-  } catch {
-    error.value = 'JSON 格式错误'
-    return
+  let content = rawText.value
+  if (rawText.value.trim() !== '') {
+    try {
+      // Prompt 覆盖在源码模式下同样统一带前缀并逐条校验（群/好友都是）
+      if (current.value === 'prompt') {
+        content = normalizePromptContent(rawText.value)
+      } else {
+        JSON.parse(rawText.value)
+      }
+    } catch (e) {
+      error.value = e instanceof SyntaxError ? 'JSON 格式错误' : (e.message || '保存失败')
+      return
+    }
   }
   try {
-    await save(rawText.value)
+    await save(content)
+    rawText.value = content
   } catch { /* error 已设置 */ }
 }
 
