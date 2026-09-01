@@ -26,22 +26,16 @@ Go 不支持跨平台热加载插件，因此 AniaBot 采用「**源码级安装
 
 ## 使用
 
-### 登录 GitHub（推荐在线登录）
+### 登录 GitHub（在线登录，OAuth 设备流）
 
-GitHub API 未登录限流 60 次/小时，登录后可提升到 5000 次/小时。两种方式任选：
+GitHub API 未登录限流 60 次/小时，登录后可提升到 5000 次/小时。插件市场只支持在线登录（不再提供手动 Token 输入）。
 
-**方式一：在线登录（推荐，OAuth 设备流）**
 > 开箱即用：默认已内置 AniaBot 官方 OAuth App 的 Client ID（`bot.marketplace.oauth_client_id` 默认值），面板直接点「使用 GitHub 登录」即可；多人共用官方 App 时可能触发 GitHub 设备流限流（每小时 50 次），如遇限流或想独立配额，再按下面步骤创建自己的 App 并覆盖配置。
 
 1. 在 GitHub 创建一个 OAuth App：<https://github.com/settings/developers> → OAuth Apps → New OAuth App（Authorization callback URL 可随便填，如 `http://localhost`，设备流不使用回调地址）
 2. 在应用设置中启用 **Device flow**（OAuth App → 应用设置 → Enable Device Flow）
 3. 把应用的 **Client ID** 填入面板「配置管理 → 插件市场」的 `bot.marketplace.oauth_client_id`，重启后生效
 4. 在插件市场页点击「使用 GitHub 登录」→ 弹出授权码与链接 → 浏览器打开 <https://github.com/login/device> 输入授权码 → 自动完成登录
-
-**方式二：手动粘贴 Token**
-
-1. 打开 <https://github.com/settings/tokens> 生成一个 Token（无需勾选任何权限）
-2. 在面板「插件市场」页的 Token 输入框粘贴保存，立即生效
 
 ### 浏览与安装
 
@@ -71,7 +65,7 @@ GitHub API 未登录限流 60 次/小时，登录后可提升到 5000 次/小时
 | `bot.marketplace.source_dir` | 空 | 编译用源码目录，留空回退 `bot.update.source_dir` |
 | `bot.marketplace.plugin_dir` | `./data/plugins` | 已安装插件持久副本目录 |
 | `bot.marketplace.cache_dir` | `./data/marketplace` | 市场索引/下载缓存目录 |
-| `bot.marketplace.token` | 空 | GitHub Token（登录，提升限流） |
+| `bot.marketplace.oauth_client_id` | `Ov23li6fHYmQOGOmliT4` | GitHub OAuth App Client ID（在线登录用，默认官方 App，可覆盖） |
 
 ## 提交自己的插件
 

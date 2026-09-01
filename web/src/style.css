@@ -127,3 +127,81 @@ html {
 .blink {
   animation: blink 1s steps(1) infinite;
 }
+
+/* Markdown 渲染（插件市场 README / Skill 详情等）：marked 生成 HTML 后需要这套样式
+   否则表格/代码块/引用等没有任何视觉效果 */
+.markdown-body {
+  font-size: 13px;
+  line-height: 1.75;
+  color: #3f3f46;
+  word-break: break-word;
+}
+.markdown-body h1,
+.markdown-body h2,
+.markdown-body h3,
+.markdown-body h4 {
+  color: #18181b;
+  font-weight: 600;
+  margin: 1.25em 0 0.5em;
+  line-height: 1.4;
+}
+.markdown-body h1 { font-size: 1.35em; }
+.markdown-body h2 { font-size: 1.2em; }
+.markdown-body h3 { font-size: 1.05em; }
+.markdown-body p { margin: 0.6em 0; }
+.markdown-body ul,
+.markdown-body ol { padding-left: 1.4em; margin: 0.6em 0; }
+.markdown-body li { margin: 0.2em 0; }
+.markdown-body a { color: #2563eb; text-decoration: underline; text-underline-offset: 2px; }
+.markdown-body blockquote {
+  margin: 0.8em 0;
+  padding: 0.25em 1em;
+  border-left: 3px solid #d4d4d8;
+  color: #71717a;
+  background: #fafafa;
+}
+.markdown-body code {
+  background: #f4f4f5;
+  border-radius: 4px;
+  padding: 0.15em 0.4em;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.9em;
+  color: #be185d;
+}
+.markdown-body pre {
+  background: #18181b;
+  color: #e4e4e7;
+  border-radius: 8px;
+  padding: 12px;
+  overflow-x: auto;
+  margin: 0.8em 0;
+}
+.markdown-body pre code {
+  background: transparent;
+  color: inherit;
+  padding: 0;
+  font-size: 12px;
+}
+.markdown-body img { max-width: 100%; border-radius: 6px; }
+.markdown-body hr { border: none; border-top: 1px solid #e4e4e7; margin: 1.2em 0; }
+/* 表格：默认浏览器样式没有边框，补上后 README 表格才"像"表格 */
+.markdown-body table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 0.8em 0;
+  display: block;
+  overflow-x: auto;
+  font-size: 12.5px;
+}
+.markdown-body th,
+.markdown-body td {
+  border: 1px solid #e4e4e7;
+  padding: 6px 10px;
+  text-align: left;
+}
+.markdown-body th {
+  background: #fafafa;
+  font-weight: 600;
+  color: #18181b;
+}
+.markdown-body tr:nth-child(even) { background: #fafafa; }

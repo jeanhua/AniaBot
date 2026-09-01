@@ -48,27 +48,6 @@ func (s *Server) handleMarketplaceDetail(w http.ResponseWriter, r *http.Request)
 	writeJSON(w, http.StatusOK, dto)
 }
 
-// handleMarketplaceToken 保存/清除 GitHub Token（登录功能），立即生效。
-func (s *Server) handleMarketplaceToken(w http.ResponseWriter, r *http.Request) {
-	if s.opt.Marketplace == nil {
-		writeError(w, http.StatusBadRequest, "插件市场服务不可用")
-		return
-	}
-	var req struct {
-		Token string `json:"token"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, "请求体格式错误")
-		return
-	}
-	if err := s.opt.Marketplace.SaveToken(req.Token); err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
-		return
-	}
-	oplog.Record(oplog.CategoryPlugin, "marketplace_token", "面板更新 GitHub Token（IP: "+clientIP(r)+"）")
-	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
-}
-
 // handleMarketplaceInstall 开始安装/升级插件。
 func (s *Server) handleMarketplaceInstall(w http.ResponseWriter, r *http.Request) {
 	if s.opt.Marketplace == nil {

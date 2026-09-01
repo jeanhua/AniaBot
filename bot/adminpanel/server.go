@@ -296,7 +296,6 @@ func (s *Server) routes() {
 	s.mux.Handle("GET /api/marketplace/info", s.requireAuth(http.HandlerFunc(s.handleMarketplaceInfo)))
 	s.mux.Handle("GET /api/marketplace/plugins", s.requireAuth(http.HandlerFunc(s.handleMarketplaceList)))
 	s.mux.Handle("GET /api/marketplace/plugins/{id}", s.requireAuth(http.HandlerFunc(s.handleMarketplaceDetail)))
-	s.mux.Handle("POST /api/marketplace/token", s.requireAuth(http.HandlerFunc(s.handleMarketplaceToken)))
 	s.mux.Handle("POST /api/marketplace/install", s.requireAuth(http.HandlerFunc(s.handleMarketplaceInstall)))
 	s.mux.Handle("POST /api/marketplace/uninstall", s.requireAuth(http.HandlerFunc(s.handleMarketplaceUninstall)))
 	s.mux.Handle("POST /api/marketplace/rollback", s.requireAuth(http.HandlerFunc(s.handleMarketplaceRollback)))

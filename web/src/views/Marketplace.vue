@@ -60,22 +60,16 @@
         </div>
       </div>
       <div class="pt-4 border-t border-zinc-100 flex items-end gap-3 flex-wrap">
-        <div class="flex-1 min-w-64">
-          <div class="tlabel mb-1">GitHub Token（可选登录，提升限流到 5000 次/小时）</div>
-          <input v-model="tokenInput" type="password" placeholder="ghp_... 或留空清除" :class="inputClass" @keydown.enter="onSaveToken" />
-        </div>
         <button v-if="info?.oauth_configured" class="text-[10px] tracking-[0.15em] uppercase px-3 py-2 rounded-md font-medium transition-colors border border-zinc-300 text-zinc-700 hover:bg-zinc-50" :disabled="status.running || status.restarting" @click="onOAuthStart">使用 GitHub 登录</button>
-        <button class="text-[10px] tracking-[0.15em] uppercase bg-zinc-900 text-white px-3 py-2 rounded-md hover:bg-zinc-700 font-medium transition-colors" @click="onSaveToken">保存 Token</button>
         <button v-if="info?.enabled" class="text-[10px] tracking-[0.15em] uppercase text-zinc-500 hover:text-zinc-900 font-medium transition-colors" :disabled="status.running || status.restarting" @click="onRollback">回滚上次安装</button>
       </div>
-      <p v-if="tokenMsg" class="text-xs mt-2" :class="tokenOk ? 'text-emerald-600' : 'text-red-600'">{{ tokenMsg }}</p>
-      <p v-if="info?.enabled && !info.oauth_configured" class="text-[10px] text-zinc-400 mt-2">在线登录需先在「配置管理 → 插件市场」设置 GitHub OAuth App 的 Client ID（并在 GitHub 应用设置中启用 Device flow），否则只能手动粘贴 Token。</p>
+      <p v-if="info?.enabled && !info.oauth_configured" class="text-[10px] text-zinc-400 mt-2">在线登录需先在「配置管理 → 插件市场」设置 GitHub OAuth App 的 Client ID（并在 GitHub 应用设置中启用 Device flow），重启后生效。</p>
     </div>
 
     <!-- 错误 -->
     <div v-if="listError" class="tcard p-4 border-l-2 border-l-red-400">
       <p class="text-xs text-red-600 font-mono break-all leading-relaxed">{{ listError }}</p>
-      <p class="text-[10px] text-zinc-400 mt-2">可能是网络不通或触发 GitHub API 限流，可配置 Token 后重试。</p>
+      <p class="text-[10px] text-zinc-400 mt-2">可能是网络不通或触发 GitHub API 限流，请先使用 GitHub 登录后再试。</p>
     </div>
 
     <!-- 列表 -->
@@ -266,9 +260,6 @@ const tabs = [
   { key: 'installed', label: '已安装' },
   { key: 'updatable', label: '可更新' },
 ]
-const tokenInput = ref('')
-const tokenMsg = ref('')
-const tokenOk = ref(false)
 const detail = ref(null)
 const started = ref(false)
 const rebooting = ref(false)
@@ -279,15 +270,15 @@ const oauth = reactive({ status: '', user_code: '', verification_uri: '', expire
 let oauthTimer = null
 
 async function onOAuthStart() {
-  tokenMsg.value = ''
+  listError.value = ''
   try {
     const d = await api.startMarketplaceOAuth()
     Object.assign(oauth, { status: 'pending', user_code: d.user_code, verification_uri: d.verification_uri, expires_at: d.expires_at, error: '', user: '' })
     oauthOpen.value = true
     startOAuthPoll()
   } catch (e) {
-    tokenOk.value = false
-    tokenMsg.value = e.message
+
+    listError.value = e.message
   }
 }
 
@@ -382,20 +373,6 @@ async function openDetail(id) {
     detail.value = await api.getMarketplaceDetail(id)
   } catch (e) {
     listError.value = e.message
-  }
-}
-
-async function onSaveToken() {
-  tokenMsg.value = ''
-  try {
-    await api.setMarketplaceToken(tokenInput.value)
-    tokenOk.value = true
-    tokenMsg.value = tokenInput.value ? 'Token 已保存，立即生效' : 'Token 已清除'
-    tokenInput.value = ''
-    info.value = await api.getMarketplaceInfo()
-  } catch (e) {
-    tokenOk.value = false
-    tokenMsg.value = e.message
   }
 }
 

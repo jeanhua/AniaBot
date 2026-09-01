@@ -14,8 +14,7 @@
 ### 新增
 
 - 新增插件市场：面板新增「插件市场」栏目，可从官方插件仓库（jeanhua/AniaBot-Plugins，支持 PR 提交插件）浏览插件介绍、在线安装/升级/卸载第三方插件，安装会重新编译并重启 Bot（需开启 bot.marketplace.enable，推荐容器内使用）。
-- 插件市场支持 GitHub Token 登录：面板一键保存 Token 后可把 GitHub API 限流从 60 次/小时提升到 5000 次/小时，避免频繁刷新被限流。
-- 插件市场支持 GitHub 在线登录（OAuth 设备流）：默认内置官方 OAuth App Client ID，开箱即用；面板一键「使用 GitHub 登录」并显示登录账号，无需手动粘贴 Token（手动粘贴仍保留作兜底，也可覆盖为自己的 OAuth App 避免共用限流）。
+- 插件市场支持 GitHub 在线登录（OAuth 设备流）：默认内置官方 OAuth App Client ID，开箱即用；面板一键「使用 GitHub 登录」并显示登录账号。
 - 插件市场操作（安装/卸载/回滚）自动备份旧二进制，面板可一键回滚到插件操作前的版本；自动更新后已安装插件会自动重放，容器重建不丢插件。
 - 新增 tools/plugingen 代码生成器：扫描 custom/plugins/*/plugin.json 自动生成插件注册代码，第三方插件统一安装到 custom/plugins 目录，与框架内置插件（bot/plugins）完全隔离。
 
@@ -27,6 +26,7 @@
 
 ### 修复
 
+- 修复插件市场与技能详情中 Markdown 表格/代码块没有样式、看起来像未渲染的问题：补全 markdown-body 排版样式。
 - 面板「扩展配置 · Prompt 覆盖」的群/用户 ID 统一带平台前缀保存并校验格式：QQ 纯数字自动补 qq: 前缀，其他平台需带各自前缀（如 fs:oc_xxx），群与好友覆盖均适用。
 
 ## [v4.6.2] - 2026-09-01
