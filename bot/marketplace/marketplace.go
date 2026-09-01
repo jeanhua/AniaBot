@@ -13,6 +13,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"time"
@@ -158,19 +159,63 @@ func isDevRun() bool {
 	return strings.Contains(exe, "go-build")
 }
 
-// toolVersion 返回工具版本首行，不可用返回空串。
-func toolVersion(ctx context.Context, name string, args ...string) string {
-	if _, err := exec.LookPath(name); err != nil {
-		return ""
+// toolDirs 常见工具安装目录兜底：进程 PATH 未包含时依次探测，命中后补进进程 PATH。
+var toolDirs = map[string][]string{
+	"go": {
+		"/usr/local/go/bin",
+		"/usr/lib/go/bin",
+		"/opt/go/bin",
+		"C:\\Go\\bin",
+		filepath.Join(os.Getenv("ProgramFiles"), "Go", "bin"),
+		filepath.Join(os.Getenv("LocalAppData"), "Programs", "Go", "bin"),
+	},
+	"git": {
+		"/usr/bin",
+		"/usr/local/bin",
+		"C:\\Program Files\\Git\\cmd",
+		filepath.Join(os.Getenv("LocalAppData"), "Programs", "Git", "cmd"),
+	},
+}
+
+// ensureTool 确认工具可用：优先按 PATH 查找；未命中时探测常见安装目录并把目录
+// 补进进程 PATH（后续 stepCmd 的 exec 也能找到），仍失败则返回带 PATH 的错误。
+func ensureTool(ctx context.Context, name string, args ...string) error {
+	if _, err := exec.LookPath(name); err == nil {
+		if _, verr := toolVersion(ctx, name, args...); verr != nil {
+			return fmt.Errorf("%s 已安装但执行失败: %w", name, verr)
+		}
+		return nil
 	}
+	for _, dir := range toolDirs[name] {
+		if dir == "" {
+			continue
+		}
+		candidate := filepath.Join(dir, name)
+		if runtime.GOOS == "windows" {
+			candidate += ".exe"
+		}
+		if _, err := os.Stat(candidate); err != nil {
+			continue
+		}
+		_ = os.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+		if _, verr := toolVersion(ctx, name, args...); verr != nil {
+			return fmt.Errorf("%s 位于 %s 但执行失败: %w", name, candidate, verr)
+		}
+		return nil
+	}
+	return fmt.Errorf("未找到 %s（进程 PATH=%q，且常见安装目录 %v 均未命中）", name, os.Getenv("PATH"), toolDirs[name])
+}
+
+// toolVersion 执行工具版本命令，返回首行版本；失败返回错误。
+func toolVersion(ctx context.Context, name string, args ...string) (string, error) {
 	cctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 	out, err := exec.CommandContext(cctx, name, args...).CombinedOutput()
 	if err != nil {
-		return ""
+		return "", fmt.Errorf("%s: %w", strings.TrimSpace(string(out)), err)
 	}
 	first, _, _ := strings.Cut(string(out), "\n")
-	return strings.TrimSpace(first)
+	return strings.TrimSpace(first), nil
 }
 
 // ---------- 对外能力 ----------
@@ -181,7 +226,8 @@ func (s *Service) Info() map[string]any {
 	defer cancel()
 	env := map[string]string{}
 	for _, t := range []string{"git", "go"} {
-		env[t] = toolVersion(ctx, t, "--version")
+		v, _ := toolVersion(ctx, t, "--version")
+		env[t] = v
 	}
 	srcDir := s.sourceDir()
 	configured := srcDir != "" && s.repo() != ""

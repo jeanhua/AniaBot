@@ -167,9 +167,18 @@ func (s *Service) preflight(ctx context.Context) (string, bool) {
 	if isDevRun() {
 		return "当前为 go run 开发模式运行，插件市场不可用，请以编译后的二进制部署", false
 	}
-	for _, tool := range []string{"git", "go"} {
-		if toolVersion(ctx, tool, "--version") == "" {
-			return fmt.Sprintf("未找到 %s，请安装并加入 PATH", tool), false
+	// 与自动更新页一致的检测：git --version / go version；PATH 找不到时自动探测
+	// 常见安装目录（/usr/local/go/bin、C:\Go\bin 等）并补进进程 PATH。
+	for _, tool := range []struct {
+		name string
+		args []string
+	}{
+		{"git", []string{"--version"}},
+		{"go", []string{"version"}},
+	} {
+		if err := ensureTool(ctx, tool.name, tool.args...); err != nil {
+			s.logger.Warn("插件市场环境检查失败", "tool", tool.name, "path", os.Getenv("PATH"), "error", err)
+			return err.Error(), false
 		}
 	}
 	srcDir := s.sourceDir()
