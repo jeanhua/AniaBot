@@ -18,6 +18,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/jeanhua/AniaBot/bot/component/sysrestart"
 	"github.com/jeanhua/AniaBot/common/pluginmeta"
 )
 
@@ -232,6 +233,12 @@ func (s *Service) Info() map[string]any {
 	srcDir := s.sourceDir()
 	configured := srcDir != "" && s.repo() != ""
 	rate := -1
+	rollbackAvailable := false
+	if exe := sysrestart.Exe(); exe != "" {
+		if _, err := os.Stat(exe + ".old"); err == nil {
+			rollbackAvailable = true
+		}
+	}
 	tokenSet := s.token() != ""
 	tokenValid := false
 	oauthUser := s.oauthUser()
@@ -258,22 +265,32 @@ func (s *Service) Info() map[string]any {
 		}
 	}
 	return map[string]any{
-		"enabled":          s.Enabled(),
-		"mode":             map[bool]string{true: "dev", false: "binary"}[isDevRun()],
-		"configured":       configured,
-		"repo":             s.repo(),
-		"branch":           s.branch(),
-		"token_set":        tokenSet,
-		"token_valid":      tokenValid,
-		"rate_remaining":   rate,
-		"source_dir":       srcDir,
-		"plugin_dir":       s.pluginDir(),
-		"cache_dir":        s.cacheDir(),
-		"env":              env,
-		"installed":        len(s.manifest().all()),
-		"oauth_configured": s.oauthConfigured(),
-		"oauth_user":       oauthUser,
+		"enabled":            s.Enabled(),
+		"mode":               map[bool]string{true: "dev", false: "binary"}[isDevRun()],
+		"configured":         configured,
+		"repo":               s.repo(),
+		"branch":             s.branch(),
+		"token_set":          tokenSet,
+		"token_valid":        tokenValid,
+		"rate_remaining":     rate,
+		"index_synced_at":    s.indexSyncedAt(),
+		"rollback_available": rollbackAvailable,
+		"source_dir":         srcDir,
+		"plugin_dir":         s.pluginDir(),
+		"cache_dir":          s.cacheDir(),
+		"env":                env,
+		"installed":          len(s.manifest().all()),
+		"oauth_configured":   s.oauthConfigured(),
+		"oauth_user":         oauthUser,
 	}
+}
+
+// indexSyncedAt 返回市场索引本地缓存的最后同步时间（Unix 秒，0 表示尚未拉取过）。
+func (s *Service) indexSyncedAt() int64 {
+	if st, err := os.Stat(s.indexCachePath()); err == nil {
+		return st.ModTime().Unix()
+	}
+	return 0
 }
 
 // SaveToken 保存/清除 GitHub Token（登录功能），立即生效。
@@ -361,13 +378,18 @@ func (s *Service) Detail(ctx context.Context, id string) (*DetailDTO, error) {
 	if m == nil {
 		return nil, fmt.Errorf("插件 %s 不存在", id)
 	}
-	readme, err := s.client().fetchReadme(ctx, id, m.ReadmeName(), s.branch())
 	dto := &DetailDTO{Manifest: *m}
 	if ip, ok := s.manifest().find(id); ok {
 		dto.Installed = true
 		dto.InstalledVersion = ip.Version
 		dto.InstalledCommit = ip.Commit
 	}
+	// README 有 10 分钟短期缓存：反复点开同一插件详情直接命中，不再每次请求 GitHub
+	if content, ok := s.loadCachedReadme(id); ok {
+		dto.Readme = content
+		return dto, nil
+	}
+	readme, err := s.client().fetchReadme(ctx, id, m.ReadmeName(), s.branch())
 	if err != nil {
 		// README 拉取失败不阻塞详情：把真实原因带回面板，避免误显示「未提供 README」
 		s.logger.Warn("读取插件 README 失败", "id", id, "error", err)
@@ -375,12 +397,13 @@ func (s *Service) Detail(ctx context.Context, id string) (*DetailDTO, error) {
 		return dto, nil
 	}
 	dto.Readme = readme
+	s.saveCachedReadme(id, readme)
 	return dto, nil
 }
 
 // loadIndex 读取索引：refresh 或缓存不存在时走 GitHub API 并落盘缓存。
 func (s *Service) loadIndex(ctx context.Context, refresh bool) (*pluginmeta.Index, error) {
-	cachePath := filepath.Join(s.cacheDir(), "index.json")
+	cachePath := s.indexCachePath()
 	if !refresh {
 		if data, err := os.ReadFile(cachePath); err == nil {
 			var idx pluginmeta.Index
@@ -402,6 +425,7 @@ func (s *Service) loadIndex(ctx context.Context, refresh bool) (*pluginmeta.Inde
 	}
 	if err := os.MkdirAll(s.cacheDir(), 0o755); err == nil {
 		_ = os.WriteFile(cachePath, mustJSON(idx), 0o644)
+		s.clearReadmeCache() // 索引已更新，旧 README 缓存作废，下次详情重新拉取
 	}
 	return idx, nil
 }

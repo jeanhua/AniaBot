@@ -26,123 +26,238 @@
       </div>
     </div>
 
-    <!-- 市场信息 + 登录 -->
-    <div class="tcard p-5">
-      <div class="flex items-center justify-between mb-4 flex-wrap gap-2">
-        <span class="tlabel">Marketplace / 插件市场</span>
-        <div class="flex items-center gap-2">
-          <span v-if="info" class="tpill"><span class="tdot" :class="info.token_valid ? 'bg-emerald-500' : (info.token_set ? 'bg-red-400' : 'bg-zinc-300')" />{{ info.token_valid ? (info.oauth_user ? '已登录 GitHub（' + info.oauth_user + '）' : '已登录 GitHub') : (info.token_set ? '登录已失效，请重新登录' : '未登录（限流 60 次/小时）') }}</span>
-          <span v-if="info && info.rate_remaining >= 0" class="tpill"><span class="tdot bg-zinc-300" />剩余配额 {{ info.rate_remaining }}</span>
-          <button class="text-[10px] tracking-[0.15em] uppercase text-zinc-500 hover:text-zinc-900 font-medium transition-colors" :disabled="!canBrowse || loading" @click="load(true)">{{ loading ? '刷新中...' : '刷新' }}</button>
-        </div>
-      </div>
-      <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
-        <div>
-          <div class="tlabel mb-1">插件仓库</div>
-          <div class="font-mono text-sm text-zinc-900">{{ info?.repo || '—' }}</div>
-        </div>
-        <div>
-          <div class="tlabel mb-1">分支</div>
-          <div class="font-mono text-sm text-zinc-900">{{ info?.branch || '—' }}</div>
-        </div>
-        <div>
-          <div class="tlabel mb-1">已安装</div>
-          <div class="font-mono text-sm text-zinc-900">{{ info?.installed ?? '—' }} 个</div>
-        </div>
-        <div>
-          <div class="tlabel mb-1">环境</div>
-          <div class="flex items-center gap-3 text-[11px]">
-            <span v-for="t in ['git', 'go']" :key="t" class="flex items-center gap-1.5">
-              <span class="tdot" :class="info?.env?.[t] ? 'bg-emerald-500' : 'bg-red-400'" />
-              <span class="text-zinc-500 uppercase tracking-wider">{{ t }}</span>
-            </span>
-          </div>
-        </div>
-      </div>
-      <div class="pt-4 border-t border-zinc-100 flex items-end gap-3 flex-wrap">
-        <button v-if="info?.oauth_configured" class="text-[10px] tracking-[0.15em] uppercase px-3 py-2 rounded-md font-medium transition-colors border border-zinc-300 text-zinc-700 hover:bg-zinc-50" :disabled="status.running || status.restarting" @click="onOAuthStart">使用 GitHub 登录</button>
-        <button v-if="info?.enabled" class="text-[10px] tracking-[0.15em] uppercase text-zinc-500 hover:text-zinc-900 font-medium transition-colors" :disabled="status.running || status.restarting" @click="onRollback">回滚上次安装</button>
-      </div>
-      <p v-if="info?.enabled && !info.oauth_configured" class="text-[10px] text-zinc-400 mt-2">在线登录需先在「配置管理 → 插件市场」设置 GitHub OAuth App 的 Client ID（并在 GitHub 应用设置中启用 Device flow），重启后生效。</p>
+    <div v-else-if="!info && !listError" class="tcard p-8 flex items-center justify-center gap-2.5 text-xs text-zinc-400">
+      <span class="w-4 h-4 border-2 border-zinc-300 border-t-zinc-600 rounded-full animate-spin" />
+      正在加载插件市场...
     </div>
 
-    <!-- 错误 -->
+    <!-- 错误提示 -->
     <div v-if="listError" class="tcard p-4 border-l-2 border-l-red-400">
       <p class="text-xs text-red-600 font-mono break-all leading-relaxed">{{ listError }}</p>
-      <p class="text-[10px] text-zinc-400 mt-2">可能是网络不通或触发 GitHub API 限流，请先使用 GitHub 登录后再试。</p>
+      <p class="text-[11px] text-zinc-400 mt-2">可能是网络不通或触发 GitHub API 限流，可稍后重试或登录 GitHub 后再试。</p>
     </div>
 
-    <!-- 列表 -->
-    <div class="tcard p-5">
-      <div class="flex items-center justify-between mb-4 gap-3 flex-wrap">
-        <span class="tlabel">Plugins / 插件列表</span>
+    <template v-if="info && areaReady">
+      <!-- 顶部操作栏 -->
+      <div class="flex items-center justify-between gap-3 flex-wrap">
+        <p class="text-xs text-zinc-500 leading-relaxed">
+          <span v-if="plugins.length">共 {{ plugins.length }} 个插件</span>
+          <span v-else>插件列表</span>
+          <span v-if="syncedAt" class="text-zinc-400">
+            · 索引同步于 {{ relTime(syncedAt) }}（{{ fmtTime(syncedAt) }}）
+          </span>
+          <span v-else class="text-zinc-400">· 尚未同步索引，点击右上角「刷新列表」获取插件</span>
+        </p>
         <div class="flex items-center gap-2">
-          <input v-model="keyword" placeholder="搜索名称 / 描述 / 作者 / 标签" :class="[inputClass, 'w-64!']" />
           <button
-            v-for="t in tabs" :key="t.key"
-            class="text-[10px] tracking-[0.15em] uppercase px-3 py-1.5 rounded-md border transition-colors"
-            :class="tab === t.key ? 'bg-zinc-900 text-white border-zinc-900' : 'text-zinc-500 border-zinc-200 hover:bg-zinc-50'"
-            @click="tab = t.key"
-          >{{ t.label }}</button>
+            v-if="showLogin"
+            class="inline-flex items-center gap-2 text-xs bg-zinc-900 text-white px-3.5 py-2 rounded-lg hover:bg-zinc-700 font-medium shadow-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            :disabled="busy || loading || refreshing"
+            @click="onOAuthStart"
+          >
+            <svg class="w-4 h-4" viewBox="0 0 24 24" fill="currentColor"><path d="M12 .5C5.65.5.5 5.65.5 12c0 5.08 3.29 9.39 7.86 10.91.58.11.79-.25.79-.55 0-.27-.01-1.17-.02-2.12-3.2.7-3.88-1.36-3.88-1.36-.52-1.33-1.28-1.68-1.28-1.68-1.04-.71.08-.7.08-.7 1.15.08 1.76 1.18 1.76 1.18 1.03 1.75 2.69 1.25 3.34.95.1-.74.4-1.25.72-1.54-2.55-.29-5.24-1.28-5.24-5.69 0-1.26.45-2.28 1.18-3.09-.12-.29-.51-1.46.11-3.05 0 0 .96-.31 3.16 1.18a11 11 0 0 1 5.76 0c2.2-1.49 3.16-1.18 3.16-1.18.62 1.59.23 2.76.11 3.05.73.81 1.18 1.83 1.18 3.09 0 4.42-2.7 5.39-5.27 5.67.41.36.78 1.06.78 2.14 0 1.54-.01 2.78-.01 3.16 0 .31.21.67.8.55A11.51 11.51 0 0 0 23.5 12C23.5 5.65 18.35.5 12 .5Z"/></svg>
+            {{ info.token_set ? '重新登录 GitHub' : '登录 GitHub' }}
+          </button>
+          <button
+            class="inline-flex items-center gap-2 text-xs bg-white text-zinc-700 px-3.5 py-2 rounded-lg border border-zinc-300 hover:bg-zinc-50 hover:text-zinc-900 font-medium shadow-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            :disabled="!canBrowse || loading || refreshing"
+            @click="refreshList"
+          >
+            <svg v-if="refreshing" class="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182m0-4.991v4.99" /></svg>
+            <svg v-else class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182m0-4.991v4.99" /></svg>
+            {{ refreshing ? '同步中...' : '刷新列表' }}
+          </button>
         </div>
       </div>
-      <div v-if="filtered.length === 0" class="text-xs text-zinc-400 py-10 text-center">暂无插件{{ loading ? '（加载中...）' : '' }}</div>
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-        <div
-          v-for="p in filtered" :key="p.id"
-          class="border border-slate-200/70 rounded-lg p-4 hover:shadow-sm transition-shadow cursor-pointer bg-white"
-          @click="openDetail(p.id)"
-        >
-          <div class="flex items-start justify-between gap-2">
-            <div class="min-w-0">
-              <div class="flex items-center gap-2">
-                <span class="text-sm font-semibold text-zinc-900 truncate">{{ p.name }}</span>
-                <span v-if="p.installed" class="tpill"><span class="tdot bg-emerald-500" />已安装 {{ p.installed_version }}</span>
-                <span v-else-if="p.update_available" class="tpill"><span class="tdot bg-amber-400" />可更新</span>
-              </div>
-              <p class="text-xs text-zinc-500 mt-1 line-clamp-2">{{ p.description }}</p>
-            </div>
+
+      <!-- 市场信息 -->
+      <section class="tcard p-5">
+        <div class="flex items-center justify-between gap-3 flex-wrap mb-5">
+          <span class="tlabel">Marketplace / 仓库信息</span>
+          <div class="flex items-center gap-2 flex-wrap">
+            <span v-if="info.token_valid" class="tpill"><span class="tdot bg-emerald-500" />已登录 GitHub</span>
+            <span v-else-if="info.token_set" class="tpill"><span class="tdot bg-red-400" />登录已失效</span>
+            <span v-else class="tpill"><span class="tdot bg-zinc-300" />未登录</span>
+            <span v-if="info.rate_remaining >= 0" class="tpill"><span class="tdot bg-zinc-300" />配额 {{ info.rate_remaining }}</span>
           </div>
-          <div class="flex items-center justify-between mt-3">
-            <div class="flex items-center gap-2 text-[10px] text-zinc-400">
-              <span>{{ p.author }}</span>
-              <span>v{{ p.version }}</span>
-              <span v-if="p.tags?.length" class="flex gap-1">
-                <span v-for="t in p.tags.slice(0, 3)" :key="t" class="px-1.5 py-0.5 rounded bg-zinc-100 text-zinc-500">{{ t }}</span>
+        </div>
+
+        <dl class="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-x-4 gap-y-5">
+          <div class="min-w-0">
+            <dt class="tlabel mb-1.5">插件仓库</dt>
+            <dd class="font-mono text-sm text-zinc-900 truncate" :title="info.repo">{{ info.repo }}</dd>
+          </div>
+          <div class="min-w-0">
+            <dt class="tlabel mb-1.5">分支</dt>
+            <dd class="font-mono text-sm text-zinc-900 truncate">{{ info.branch }}</dd>
+          </div>
+          <div>
+            <dt class="tlabel mb-1.5">已安装</dt>
+            <dd class="text-sm text-zinc-900">{{ info.installed ?? '—' }} 个插件</dd>
+          </div>
+          <div class="min-w-0">
+            <dt class="tlabel mb-1.5">运行环境</dt>
+            <dd class="flex flex-col gap-1.5">
+              <span v-for="t in ['git', 'go']" :key="t" class="flex items-center gap-2 text-xs min-w-0">
+                <span class="tdot" :class="info.env?.[t] ? 'bg-emerald-500' : 'bg-red-400'" />
+                <span class="uppercase tracking-wider text-zinc-400 w-8 shrink-0">{{ t }}</span>
+                <span class="font-mono text-zinc-700 truncate" :title="info.env?.[t]">{{ info.env?.[t] || '未安装' }}</span>
               </span>
+            </dd>
+          </div>
+          <div>
+            <dt class="tlabel mb-1.5">索引同步</dt>
+            <dd>
+              <template v-if="syncedAt">
+                <div class="text-sm text-zinc-900">{{ relTime(syncedAt) }}</div>
+                <div class="text-[10px] text-zinc-400 mt-0.5 font-mono">{{ fmtTime(syncedAt) }}</div>
+              </template>
+              <div v-else class="text-sm text-zinc-400">尚未同步</div>
+            </dd>
+          </div>
+        </dl>
+
+        <!-- GitHub 账号状态 -->
+        <div class="mt-5 pt-4 border-t border-zinc-100 flex items-center justify-between gap-3 flex-wrap">
+          <div class="flex items-center gap-2 flex-wrap text-xs">
+            <span class="tdot" :class="accountDotClass" />
+            <span class="font-medium" :class="accountTextClass">{{ accountText }}</span>
+            <span v-if="info.rate_remaining >= 0" class="text-[11px] text-zinc-400">剩余 API 配额 {{ info.rate_remaining }}</span>
+          </div>
+          <p v-if="!info.oauth_configured && !info.token_valid" class="text-[11px] text-zinc-400 leading-relaxed">
+            在线登录需先在「配置管理 → 插件市场」设置 GitHub OAuth App 的 Client ID（启用 Device flow）后重启；
+            也可直接填写 <code class="font-mono">bot.marketplace.token</code>。
+          </p>
+          <p v-else-if="info.token_set && !info.token_valid" class="text-[11px] text-red-400 leading-relaxed">
+            登录已失效，点击右上角「重新登录 GitHub」重新授权即可恢复高配额。
+          </p>
+        </div>
+
+        <!-- 回滚（仅存在备份时展示） -->
+        <div v-if="info.rollback_available" class="mt-4 pt-4 border-t border-zinc-100 flex items-center justify-between gap-3 flex-wrap">
+          <p class="text-xs text-zinc-500 leading-relaxed">上次安装保留了旧版本备份；如安装后出现异常，可回滚到操作前的状态（将重启 Bot）。</p>
+          <button
+            class="inline-flex items-center gap-1.5 text-xs text-red-600 bg-red-50 border border-red-200 hover:bg-red-100 px-3 py-1.5 rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            :disabled="busy"
+            @click="onRollback"
+          >
+            <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M9 15 3 9m0 0 6-6M3 9h12a6 6 0 0 1 0 12h-3" /></svg>
+            回滚上次安装
+          </button>
+        </div>
+      </section>
+
+      <!-- 插件列表 -->
+      <section class="tcard overflow-hidden">
+        <div class="px-5 pt-5 pb-4 border-b border-zinc-100">
+          <div class="flex items-center justify-between gap-3 flex-wrap">
+            <div class="flex items-center gap-1 bg-zinc-100 rounded-lg p-1">
+              <button
+                v-for="t in tabs" :key="t.key"
+                class="px-3.5 py-1.5 text-xs rounded-md transition-colors"
+                :class="tab === t.key ? 'bg-zinc-900 text-white font-medium shadow-sm' : 'text-zinc-500 hover:text-zinc-800'"
+                @click="tab = t.key"
+              >{{ t.label }}</button>
             </div>
-            <div class="flex items-center gap-2" @click.stop>
-              <button
-                v-if="p.installed && !p.update_available"
-                class="text-[10px] tracking-[0.15em] uppercase text-zinc-400 hover:text-red-600 font-medium transition-colors"
-                :disabled="status.running || status.restarting"
-                @click="onUninstall(p)"
-              >卸载</button>
-              <button
-                v-if="!p.installed || p.update_available"
-                class="text-[10px] tracking-[0.15em] uppercase px-3 py-1.5 rounded-md font-medium transition-colors disabled:opacity-50"
-                :class="p.installed ? 'bg-amber-500/10 text-amber-700 border border-amber-300 hover:bg-amber-500/20' : 'bg-zinc-900 text-white hover:bg-zinc-700'"
-                :disabled="!canOperate || status.running || status.restarting"
-                @click="onInstall(p)"
-              >{{ p.installed ? '升级' : '安装' }}</button>
+            <input v-model="keyword" placeholder="搜索名称 / 描述 / 作者 / 标签" class="w-full sm:w-72 text-xs bg-white border border-zinc-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-zinc-400 focus:border-zinc-400 transition-shadow" />
+          </div>
+          <p class="mt-3 text-[11px] text-zinc-400">显示 {{ filtered.length }} / {{ plugins.length }} 个插件</p>
+        </div>
+
+        <div v-if="filtered.length === 0" class="py-14 text-center text-xs text-zinc-400">
+          <template v-if="loading">正在加载插件...</template>
+          <template v-else-if="keyword">没有匹配「{{ keyword }}」的插件</template>
+          <template v-else-if="tab === 'installed'">还没有安装任何插件，点击插件卡片「安装」试试</template>
+          <template v-else-if="tab === 'updatable'">所有插件都已是最新版本</template>
+          <template v-else>暂无插件</template>
+        </div>
+        <div v-else class="p-4 grid grid-cols-1 md:grid-cols-2 gap-3">
+          <div
+            v-for="p in filtered" :key="p.id"
+            class="border border-slate-200/70 rounded-xl p-4 hover:border-zinc-300 hover:shadow-md hover:shadow-zinc-200/50 transition-all cursor-pointer bg-white"
+            @click="openDetail(p.id)"
+          >
+            <div class="flex items-start justify-between gap-3">
+              <div class="min-w-0">
+                <div class="flex items-center gap-2 flex-wrap">
+                  <span class="text-sm font-semibold text-zinc-900 truncate">{{ p.name }}</span>
+                  <span v-if="p.installed" class="text-[10px] px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 font-medium">已安装 {{ p.installed_version }}</span>
+                  <span v-else-if="p.update_available" class="text-[10px] px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200 font-medium">可更新</span>
+                </div>
+                <p class="text-xs text-zinc-500 mt-1.5 line-clamp-2 leading-relaxed">{{ p.description }}</p>
+              </div>
+            </div>
+            <div class="flex items-center justify-between gap-3 mt-3.5">
+              <div class="min-w-0 flex items-center gap-2 text-[11px] text-zinc-400 flex-wrap">
+                <span class="font-medium text-zinc-600 truncate">{{ p.author }}</span>
+                <span class="font-mono shrink-0">v{{ p.version }}</span>
+                <span v-if="p.tags?.length" class="flex gap-1 min-w-0">
+                  <span v-for="t in p.tags.slice(0, 3)" :key="t" class="px-1.5 py-0.5 rounded bg-zinc-100 text-zinc-500 whitespace-nowrap">{{ t }}</span>
+                </span>
+              </div>
+              <div class="flex items-center gap-1.5 shrink-0" @click.stop>
+                <button
+                  v-if="p.installed && !p.update_available"
+                  class="text-xs text-zinc-500 hover:text-red-600 hover:bg-red-50 px-2.5 py-1.5 rounded-lg font-medium transition-colors disabled:opacity-50"
+                  :disabled="busy"
+                  @click="onUninstall(p)"
+                >卸载</button>
+                <button
+                  v-if="!p.installed || p.update_available"
+                  class="text-xs px-3 py-1.5 rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  :class="p.installed
+                    ? 'bg-amber-50 text-amber-700 border border-amber-200 hover:bg-amber-100'
+                    : 'bg-zinc-900 text-white hover:bg-zinc-700'"
+                  :disabled="!canOperate || busy"
+                  @click="onInstall(p)"
+                >{{ p.installed ? '升级' : '安装' }}</button>
+              </div>
             </div>
           </div>
         </div>
-      </div>
-    </div>
+      </section>
+
+      <!-- 任务进度 -->
+      <section v-if="started" class="tcard p-5">
+        <div class="flex items-center justify-between gap-3 mb-4">
+          <span class="tlabel">Progress / 任务进度</span>
+          <span v-if="status.error" class="tpill"><span class="tdot bg-red-400" />{{ status.errKind || '操作失败' }}</span>
+        </div>
+        <div v-if="status.restarting" class="mb-3 text-xs text-zinc-500">操作完成，等待 Bot 重启...</div>
+        <div class="flex flex-wrap items-center gap-y-2 mb-5">
+          <template v-for="(p, i) in phases" :key="p.key">
+            <div class="flex items-center gap-1.5">
+              <span class="w-5 h-5 rounded-full border flex items-center justify-center text-[10px] font-mono" :class="phaseClass(p.key)">{{ phaseDone(p.key) ? '✓' : i + 1 }}</span>
+              <span class="text-[11px]" :class="phaseTextClass(p.key)">{{ p.label }}</span>
+            </div>
+            <span v-if="i < phases.length - 1" class="mx-2 h-px w-5 bg-zinc-200" />
+          </template>
+        </div>
+        <div ref="logEl" class="bg-zinc-950 rounded-lg p-3.5 h-64 overflow-y-auto font-mono text-[11px] leading-relaxed text-zinc-300">
+          <div v-for="(l, i) in status.logs" :key="i" :class="logLineClass(l)">{{ l }}</div>
+          <div v-if="status.running" class="flex items-center gap-2 text-zinc-500 mt-1">
+            <span class="w-3 h-3 border-2 border-zinc-700 border-t-zinc-300 rounded-full animate-spin" />
+            执行中...
+          </div>
+        </div>
+      </section>
+    </template>
 
     <!-- GitHub 在线登录弹窗 -->
-    <div v-if="oauthOpen" class="fixed inset-0 bg-zinc-950/50 backdrop-blur-sm flex items-center justify-center z-50" @click.self="oauthOpen = false">
-      <div class="tcard p-6 w-96 text-center space-y-4">
-        <h2 class="text-[11px] tracking-[0.22em] uppercase text-zinc-500 font-medium">GitHub 登录</h2>
+    <div v-if="oauthOpen" class="fixed inset-0 bg-zinc-950/50 backdrop-blur-sm flex items-center justify-center z-50 p-4" @click.self="oauthOpen = false">
+      <div class="tcard p-6 w-[26rem] max-w-full text-center space-y-4">
+        <h2 class="text-sm font-semibold text-zinc-900">GitHub 登录</h2>
         <template v-if="oauth.status === 'pending'">
           <p class="text-xs text-zinc-500 leading-relaxed">请在浏览器打开下面的链接，输入授权码完成登录（15 分钟内有效）</p>
           <a :href="oauth.verification_uri" target="_blank" rel="noopener noreferrer" class="text-sm font-semibold text-zinc-900 underline underline-offset-2 break-all">{{ oauth.verification_uri }}</a>
-          <div class="flex items-center justify-center gap-2">
+          <div class="flex items-center justify-center gap-3">
             <span class="text-2xl font-mono font-bold tracking-[0.3em] text-zinc-900 bg-zinc-100 rounded-lg px-4 py-2">{{ oauth.user_code }}</span>
-            <button class="text-[10px] uppercase text-zinc-500 hover:text-zinc-900" @click="copyOAuthCode">复制</button>
+            <button class="text-xs text-zinc-500 hover:text-zinc-900" @click="copyOAuthCode">复制</button>
           </div>
-          <p class="text-[10px] text-zinc-400">等待授权中，请勿关闭本窗口...</p>
+          <p class="text-[11px] text-zinc-400 flex items-center justify-center gap-2">
+            <span class="w-3 h-3 border-2 border-zinc-300 border-t-zinc-600 rounded-full animate-spin" />
+            等待授权中，请勿关闭本窗口...
+          </p>
         </template>
         <template v-else-if="oauth.status === 'authorized'">
           <p class="text-sm text-emerald-600 font-semibold">登录成功{{ oauth.user ? '：' + oauth.user : '' }}</p>
@@ -151,72 +266,76 @@
           <p class="text-sm text-red-600">{{ oauth.error || '登录流程已结束' }}</p>
         </template>
         <div class="flex justify-center gap-2 pt-1">
-          <button v-if="oauth.status === 'pending'" class="text-[10px] tracking-widest uppercase text-zinc-500 hover:text-zinc-900" @click="onOAuthCancel">取消</button>
-          <button v-else class="text-[10px] tracking-widest uppercase bg-zinc-900 text-white px-4 py-2 rounded-md hover:bg-zinc-700" @click="oauthOpen = false">关闭</button>
+          <button v-if="oauth.status === 'pending'" class="text-xs text-zinc-500 hover:text-zinc-900 px-4 py-2 rounded-lg hover:bg-zinc-100" @click="onOAuthCancel">取消</button>
+          <button v-else class="text-xs bg-zinc-900 text-white px-5 py-2 rounded-lg hover:bg-zinc-700" @click="oauthOpen = false">关闭</button>
         </div>
       </div>
     </div>
 
-    <!-- 详情抽屉 -->
-    <div v-if="detail" class="fixed inset-0 bg-zinc-950/50 backdrop-blur-sm z-40 flex justify-end" @click.self="detail = null">
-      <div class="w-full max-w-2xl bg-white h-full flex flex-col p-6 space-y-4 overflow-hidden">
-        <div class="flex items-start justify-between gap-3">
-          <div>
-            <div class="flex items-center gap-2">
-              <h2 class="text-lg font-semibold text-zinc-900">{{ detail.manifest.name }}</h2>
-              <span v-if="detail.installed" class="tpill"><span class="tdot bg-emerald-500" />已安装 {{ detail.installed_version }}</span>
+    <!-- 详情弹窗 -->
+    <div v-if="showDetail" class="fixed inset-0 bg-zinc-950/50 backdrop-blur-sm flex items-center justify-center z-50 p-4 sm:p-6" @click.self="closeDetail">
+      <div class="bg-white rounded-xl shadow-2xl border border-zinc-200 w-full max-w-3xl max-h-[88vh] flex flex-col overflow-hidden">
+        <!-- 头部 -->
+        <div class="px-6 py-4 border-b border-zinc-100 flex items-start justify-between gap-4 shrink-0">
+          <div class="min-w-0 flex-1">
+            <template v-if="detailLoading">
+              <div class="h-5 w-44 bg-zinc-100 rounded animate-pulse" />
+              <div class="h-3.5 w-72 max-w-full bg-zinc-100 rounded mt-2.5 animate-pulse" />
+            </template>
+            <template v-else-if="detail">
+              <div class="flex items-center gap-2 flex-wrap">
+                <h2 class="text-lg font-semibold text-zinc-900 truncate">{{ detail.manifest.name }}</h2>
+                <span v-if="detail.installed" class="text-[10px] px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 font-medium">已安装 {{ detail.installed_version }}</span>
+              </div>
+              <p class="text-xs text-zinc-500 mt-1 leading-relaxed">{{ detail.manifest.description }}</p>
+            </template>
+          </div>
+          <button class="text-zinc-400 hover:text-zinc-800 text-xl leading-none shrink-0" @click="closeDetail">✕</button>
+        </div>
+
+        <!-- 元信息 + 操作 -->
+        <div v-if="detail && !detailLoading" class="px-6 py-3 border-b border-zinc-100 flex items-center justify-between gap-3 flex-wrap shrink-0">
+          <div class="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-[11px] text-zinc-500">
+            <span>作者：<span class="font-medium text-zinc-700">{{ detail.manifest.author }}</span></span>
+            <span>版本：<span class="font-mono">v{{ detail.manifest.version }}</span></span>
+            <span v-if="detail.manifest.platforms?.length">平台：{{ detail.manifest.platforms.join(' / ') }}</span>
+            <span v-if="detail.manifest.min_framework">最低框架：{{ detail.manifest.min_framework }}</span>
+          </div>
+          <div class="flex items-center gap-2">
+            <button
+              v-if="!detail.installed || detail.installed_version !== detail.manifest.version"
+              class="text-xs px-4 py-1.5 rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              :class="detail.installed ? 'bg-amber-50 text-amber-700 border border-amber-200 hover:bg-amber-100' : 'bg-zinc-900 text-white hover:bg-zinc-700'"
+              :disabled="!canOperate || busy"
+              @click="onInstallDetail"
+            >{{ detail.installed ? '升级到 v' + detail.manifest.version : '安装' }}</button>
+            <button
+              v-if="detail.installed"
+              class="text-xs text-zinc-500 hover:text-red-600 hover:bg-red-50 px-3 py-1.5 rounded-lg font-medium transition-colors disabled:opacity-50"
+              :disabled="busy"
+              @click="onUninstallDetail"
+            >卸载</button>
+          </div>
+        </div>
+
+        <!-- README -->
+        <div class="px-6 py-4 flex-1 min-h-0 overflow-y-auto bg-white">
+          <p v-if="detailFromCache && detail && !detailLoading" class="text-[10px] text-zinc-400 mb-2">已展示短期缓存内容，10 分钟内的再次查看不会重复请求</p>
+          <template v-if="detailLoading">
+            <div class="space-y-2.5">
+              <div class="h-3.5 w-3/4 bg-zinc-100 rounded animate-pulse" />
+              <div class="h-3.5 w-full bg-zinc-100 rounded animate-pulse" />
+              <div class="h-3.5 w-5/6 bg-zinc-100 rounded animate-pulse" />
+              <div class="h-3.5 w-2/3 bg-zinc-100 rounded animate-pulse" />
             </div>
-            <p class="text-xs text-zinc-500 mt-1">{{ detail.manifest.description }}</p>
-          </div>
-          <button class="text-zinc-400 hover:text-zinc-800 text-lg leading-none" @click="detail = null">✕</button>
-        </div>
-        <div class="flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-zinc-500">
-          <span>作者：{{ detail.manifest.author }}</span>
-          <span>版本：v{{ detail.manifest.version }}</span>
-          <span v-if="detail.manifest.platforms?.length">平台：{{ detail.manifest.platforms.join(' / ') }}</span>
-          <span v-if="detail.manifest.min_framework">最低框架：{{ detail.manifest.min_framework }}</span>
-        </div>
-        <div class="flex items-center gap-2">
-          <button
-            v-if="!detail.installed || detail.installed_version !== detail.manifest.version"
-            class="text-[10px] tracking-[0.15em] uppercase px-4 py-2 rounded-md font-medium transition-colors disabled:opacity-50"
-            :class="detail.installed ? 'bg-amber-500/10 text-amber-700 border border-amber-300 hover:bg-amber-500/20' : 'bg-zinc-900 text-white hover:bg-zinc-700'"
-            :disabled="!canOperate || status.running || status.restarting"
-            @click="onInstall(detail.manifest)"
-          >{{ detail.installed ? '升级' : '安装' }}</button>
-          <button
-            v-if="detail.installed"
-            class="text-[10px] tracking-[0.15em] uppercase text-zinc-400 hover:text-red-600 font-medium transition-colors"
-            :disabled="status.running || status.restarting"
-            @click="onUninstall(detail.manifest)"
-          >卸载</button>
-        </div>
-        <div class="markdown-body bg-white border border-slate-200/70 rounded-lg px-4 py-3 flex-1 min-h-0 overflow-y-auto">
-          <div v-if="detail.readme_error" class="text-xs text-red-500">README 加载失败：{{ detail.readme_error }}</div>
-          <div v-else-if="!detail.readme" class="text-xs text-zinc-400">该插件未提供 README。</div>
-          <div v-else v-html="renderedReadme" />
-        </div>
-      </div>
-    </div>
-
-    <!-- 进度 -->
-    <div v-if="started" class="tcard p-5">
-      <div class="tlabel mb-4">Progress / 任务进度</div>
-      <div v-if="status.restarting" class="mb-3 text-xs text-zinc-500">操作完成，等待 Bot 重启...</div>
-      <div class="flex flex-wrap items-center gap-y-2 mb-5">
-        <template v-for="(p, i) in phases" :key="p.key">
-          <div class="flex items-center gap-1.5">
-            <span class="w-4 h-4 rounded-full border flex items-center justify-center text-[9px] font-mono" :class="phaseClass(p.key)">{{ phaseDone(p.key) ? '✓' : i + 1 }}</span>
-            <span class="text-[10px] tracking-widest uppercase" :class="phaseTextClass(p.key)">{{ p.label }}</span>
-          </div>
-          <span v-if="i < phases.length - 1" class="mx-2 h-px w-5 bg-zinc-200" />
-        </template>
-      </div>
-      <div ref="logEl" class="bg-zinc-950 rounded-md p-3 h-64 overflow-y-auto font-mono text-[11px] leading-relaxed text-zinc-300">
-        <div v-for="(l, i) in status.logs" :key="i" :class="logLineClass(l)">{{ l }}</div>
-        <div v-if="status.running" class="flex items-center gap-2 text-zinc-500 mt-1">
-          <span class="w-3 h-3 border-2 border-zinc-700 border-t-zinc-300 rounded-full animate-spin" />
-          执行中...
+          </template>
+          <template v-else-if="detail && detail.readme_error">
+            <p class="text-xs text-red-500">README 加载失败：{{ detail.readme_error }}</p>
+          </template>
+          <template v-else-if="detail && !detail.readme">
+            <p class="text-xs text-zinc-400 py-6 text-center">该插件未提供 README。</p>
+          </template>
+          <div v-else-if="detail" class="markdown-body" v-html="renderedReadme" />
         </div>
       </div>
     </div>
@@ -250,8 +369,12 @@ const phases = [
 ]
 const phaseOrder = phases.map((p) => p.key)
 
+const AUTO_REFRESH_MS = 10 * 60 * 1000 // 索引缓存超过 10 分钟时进入页面自动检查一次
+const DETAIL_CACHE_TTL = 10 * 60 * 1000 // 与后端 README 缓存一致
+
 const info = ref(null)
 const loading = ref(false)
+const refreshing = ref(false)
 const listError = ref('')
 const plugins = ref([])
 const keyword = ref('')
@@ -261,7 +384,14 @@ const tabs = [
   { key: 'installed', label: '已安装' },
   { key: 'updatable', label: '可更新' },
 ]
+const syncedAt = ref(0)
+
+const showDetail = ref(false)
 const detail = ref(null)
+const detailLoading = ref(false)
+const detailFromCache = ref(false)
+const detailCache = new Map()
+
 const started = ref(false)
 const rebooting = ref(false)
 const logEl = ref(null)
@@ -270,62 +400,29 @@ const oauthOpen = ref(false)
 const oauth = reactive({ status: '', user_code: '', verification_uri: '', expires_at: '', error: '', user: '' })
 let oauthTimer = null
 
-async function onOAuthStart() {
-  listError.value = ''
-  try {
-    const d = await api.startMarketplaceOAuth()
-    Object.assign(oauth, { status: 'pending', user_code: d.user_code, verification_uri: d.verification_uri, expires_at: d.expires_at, error: '', user: '' })
-    oauthOpen.value = true
-    startOAuthPoll()
-  } catch (e) {
+const areaReady = computed(() => !!info.value && info.value.enabled && info.value.mode === 'binary' && info.value.configured)
+const busy = computed(() => status.running || status.restarting || rebooting.value)
+const canBrowse = computed(() => areaReady.value && !busy.value)
+const canOperate = computed(() => areaReady.value && !busy.value)
+const showLogin = computed(() => info.value?.oauth_configured && !info.value?.token_valid && areaReady.value)
 
-    listError.value = e.message
-  }
-}
-
-function startOAuthPoll() {
-  stopOAuthPoll()
-  oauthTimer = setInterval(pollOAuthStatus, 2000)
-}
-
-function stopOAuthPoll() {
-  if (oauthTimer) {
-    clearInterval(oauthTimer)
-    oauthTimer = null
-  }
-}
-
-async function pollOAuthStatus() {
-  try {
-    const s = await api.getMarketplaceOAuthStatus()
-    oauth.status = s.status || ''
-    oauth.user = s.user || ''
-    oauth.error = s.error || ''
-    if (s.status === 'authorized') {
-      stopOAuthPoll()
-      info.value = await api.getMarketplaceInfo()
-      setTimeout(() => { oauthOpen.value = false }, 1200)
-    } else if (s.status === 'expired' || s.status === 'failed') {
-      stopOAuthPoll()
-    }
-  } catch { /* 忽略 */ }
-}
-
-async function onOAuthCancel() {
-  try { await api.cancelMarketplaceOAuth() } catch { /* 忽略 */ }
-  stopOAuthPoll()
-  oauthOpen.value = false
-}
-
-function copyOAuthCode() {
-  if (navigator.clipboard) navigator.clipboard.writeText(oauth.user_code)
-}
-
-
-
-const inputClass = 'w-full border border-zinc-300 rounded-md px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-zinc-400 focus:border-zinc-400 transition-shadow bg-white'
-const canBrowse = computed(() => info.value?.enabled && info.value?.mode === 'binary' && info.value?.configured && !status.running && !status.restarting && !rebooting.value)
-const canOperate = computed(() => info.value?.enabled && info.value?.mode === 'binary' && info.value?.configured && !status.running && !status.restarting && !rebooting.value)
+const accountDotClass = computed(() => {
+  if (info.value?.token_valid) return 'bg-emerald-500'
+  if (info.value?.token_set) return 'bg-red-400'
+  return 'bg-zinc-300'
+})
+const accountTextClass = computed(() => {
+  if (info.value?.token_valid) return 'text-emerald-600'
+  if (info.value?.token_set) return 'text-red-500'
+  return 'text-zinc-500'
+})
+const accountText = computed(() => {
+  const i = info.value
+  if (!i) return ''
+  if (i.token_valid) return i.oauth_user ? `已登录 GitHub（${i.oauth_user}）` : '已登录 GitHub'
+  if (i.token_set) return 'GitHub 登录已失效，请重新登录'
+  return '未登录，匿名访问受限（60 次/小时）'
+})
 
 const filtered = computed(() => {
   const kw = keyword.value.trim().toLowerCase()
@@ -342,25 +439,48 @@ const renderedReadme = computed(() => {
   return DOMPurify.sanitize(marked.parse(detail.value.readme, { gfm: true, breaks: true }))
 })
 
+function fmtTime(unix) {
+  if (!unix) return ''
+  const d = new Date(unix * 1000)
+  if (Number.isNaN(d.getTime())) return ''
+  const pad = (n) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`
+}
+
+function relTime(unix) {
+  if (!unix) return ''
+  const diff = Math.max(0, Date.now() - unix * 1000)
+  if (diff < 60 * 1000) return '刚刚'
+  if (diff < 60 * 60 * 1000) return `${Math.floor(diff / 60000)} 分钟前`
+  if (diff < 24 * 60 * 60 * 1000) return `${Math.floor(diff / 3600000)} 小时前`
+  return `${Math.floor(diff / 86400000)} 天前`
+}
+
 let timer = null
-onMounted(() => {
-  load()
+let lastAutoCheck = 0
+onMounted(async () => {
+  await load()
   pollStatus()
   timer = setInterval(() => {
-    if (!document.hidden) pollStatus()
+    if (!document.hidden) {
+      pollStatus()
+      maybePeriodicRefresh()
+    }
   }, 1500)
+  maybePeriodicRefresh()
 })
 onUnmounted(() => clearInterval(timer))
 onUnmounted(() => stopOAuthPoll())
 
-async function load(refresh = false) {
+async function load() {
   loading.value = true
   listError.value = ''
   try {
-    info.value = await api.getMarketplaceInfo()
-    if (info.value.enabled && info.value.mode === 'binary' && info.value.configured) {
-      const data = await api.getMarketplacePlugins(refresh)
+    await loadInfo()
+    if (areaReady.value) {
+      const data = await api.getMarketplacePlugins(false)
       plugins.value = data.plugins || []
+      if (!syncedAt.value) syncedAt.value = Math.floor(Date.now() / 1000) // 首次拉取已写缓存
     }
   } catch (e) {
     listError.value = e.message
@@ -369,12 +489,93 @@ async function load(refresh = false) {
   }
 }
 
-async function openDetail(id) {
+async function loadInfo() {
   try {
-    detail.value = await api.getMarketplaceDetail(id)
+    info.value = await api.getMarketplaceInfo()
+    syncedAt.value = info.value?.index_synced_at || 0
   } catch (e) {
     listError.value = e.message
   }
+}
+
+async function refreshList(manual = true) {
+  if (!areaReady.value || loading.value || refreshing.value || busy.value) return
+  refreshing.value = true
+  listError.value = ''
+  try {
+    const data = await api.getMarketplacePlugins(true)
+    plugins.value = data.plugins || []
+    syncedAt.value = Math.floor(Date.now() / 1000)
+    detailCache.clear() // 索引已更新，旧详情缓存作废
+    if (manual) await loadInfo() // 手动刷新时同步账号/配额/回滚状态
+  } catch (e) {
+    listError.value = e.message
+  } finally {
+    refreshing.value = false
+  }
+}
+
+// 缓存索引较旧时（进入页面或停留中每隔一段时间）自动检查一次，
+// 避免不点刷新就一直看不到新插件；手动刷新按钮仍然保留
+function maybePeriodicRefresh() {
+  if (Date.now() - lastAutoCheck < AUTO_REFRESH_MS) return
+  if (!areaReady.value || loading.value || refreshing.value || busy.value) return
+  if (syncedAt.value > 0 && Date.now() - syncedAt.value * 1000 > AUTO_REFRESH_MS) {
+    lastAutoCheck = Date.now()
+    refreshList(false)
+  }
+}
+
+function closeDetail() {
+  showDetail.value = false
+  detail.value = null
+  detailLoading.value = false
+  detailFromCache.value = false
+}
+
+async function openDetail(id) {
+  if (showDetail.value && detailLoading.value) return
+  showDetail.value = true
+  detail.value = null
+  detailLoading.value = true
+  detailFromCache.value = false
+  // 前端短期缓存：同一会话内反复点开直接展示，不再重复请求
+  const cached = detailCache.get(id)
+  if (cached && Date.now() - cached.ts < DETAIL_CACHE_TTL) {
+    detail.value = cached.data
+    detailFromCache.value = true
+    detailLoading.value = false
+    return
+  }
+  try {
+    const data = await api.getMarketplaceDetail(id)
+    detailCache.set(id, { data, ts: Date.now() })
+    detail.value = data
+  } catch (e) {
+    listError.value = e.message
+    closeDetail()
+  } finally {
+    detailLoading.value = false
+  }
+}
+
+function detailAction() {
+  if (!detail.value) return null
+  return {
+    id: detail.value.manifest.id,
+    name: detail.value.manifest.name,
+    installed: detail.value.installed,
+  }
+}
+
+async function onInstallDetail() {
+  const p = detailAction()
+  if (p) await onInstall(p)
+}
+
+async function onUninstallDetail() {
+  const p = detailAction()
+  if (p) await onUninstall(p)
 }
 
 async function onInstall(p) {
@@ -437,6 +638,56 @@ async function waitReboot() {
 
 function scrollLog() {
   if (logEl.value) logEl.value.scrollTop = logEl.value.scrollHeight
+}
+
+async function onOAuthStart() {
+  listError.value = ''
+  try {
+    const d = await api.startMarketplaceOAuth()
+    Object.assign(oauth, { status: 'pending', user_code: d.user_code, verification_uri: d.verification_uri, expires_at: d.expires_at, error: '', user: '' })
+    oauthOpen.value = true
+    startOAuthPoll()
+  } catch (e) {
+    listError.value = e.message
+  }
+}
+
+function startOAuthPoll() {
+  stopOAuthPoll()
+  oauthTimer = setInterval(pollOAuthStatus, 2000)
+}
+
+function stopOAuthPoll() {
+  if (oauthTimer) {
+    clearInterval(oauthTimer)
+    oauthTimer = null
+  }
+}
+
+async function pollOAuthStatus() {
+  try {
+    const s = await api.getMarketplaceOAuthStatus()
+    oauth.status = s.status || ''
+    oauth.user = s.user || ''
+    oauth.error = s.error || ''
+    if (s.status === 'authorized') {
+      stopOAuthPoll()
+      await loadInfo()
+      setTimeout(() => { oauthOpen.value = false }, 1200)
+    } else if (s.status === 'expired' || s.status === 'failed') {
+      stopOAuthPoll()
+    }
+  } catch { /* 忽略 */ }
+}
+
+async function onOAuthCancel() {
+  try { await api.cancelMarketplaceOAuth() } catch { /* 忽略 */ }
+  stopOAuthPoll()
+  oauthOpen.value = false
+}
+
+function copyOAuthCode() {
+  if (navigator.clipboard) navigator.clipboard.writeText(oauth.user_code)
 }
 
 function phaseIndex(key) {
