@@ -1,6 +1,6 @@
 # 常见模式
 
-插件开发中反复出现的实用模式，摘自内置插件的真实做法。
+插件开发中反复出现的实用模式，摘自内置插件与官方插件仓库插件的真实做法。
 
 ## 权限控制：仅管理员
 
@@ -43,7 +43,7 @@ if p.enable.Load() { /* ... */ }
 
 ## 按群隔离的缓存队列
 
-防撤回插件的模式 —— `sync.Map` + `LoadOrStore` 惰性初始化：
+防撤回插件（源码见官方插件仓库 `plugins/antiwithdrawal`）的模式 —— `sync.Map` + `LoadOrStore` 惰性初始化：
 
 ```go
 queueI, _ := p.msg.LoadOrStore(msg.GroupId, NewMessageQueue[*message.Message](100))
@@ -159,7 +159,7 @@ default:
 
 ## 资源过期处理
 
-QQ 的图片/文件链接约 3 分钟过期。防撤回插件的两种应对：
+QQ 的图片/文件链接约 3 分钟过期。防撤回插件（源码见官方插件仓库 `plugins/antiwithdrawal`）的两种应对：
 
 1. 通过 QQ 平台专属能力 `bot.(bot.QQ).GetNCrkey()` 获取 rkey 改写 URL 续期（`utils.NewURLModifier`）——合并转发与 rkey 均属 QQ 能力，防撤回插件声明 `Meta.Platforms = []string{"qq"}` 并类型断言 `bot.QQ`
 2. 无法续期时降级为文字占位：`[图片消息，已经超过3分钟过期时间]`

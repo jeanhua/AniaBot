@@ -1,13 +1,12 @@
 # 内置插件
 
-AniaBot 自带八个插件，在 `cmd/main.go` 中注册。它们既是开箱即用的功能，也是插件开发的最佳参考实现。
+AniaBot 自带七个插件，在 `cmd/main.go` 中注册。它们既是开箱即用的功能，也是插件开发的最佳参考实现。
 
 ```go
 bot.AddPlugin(pluginsys.NewPluginSys())          // 系统插件
 bot.AddPlugin(pluginlog.NewPlugin())             // 日志插件
 bot.AddPlugin(pluginwhitelist.NewPlugin())       // 白名单管理
 bot.AddPlugin(pluginrepeat.NewPlugin())          // 复读机
-bot.AddPlugin(pluginantiwithdrawal.NewPlugin())  // 防撤回
 bot.AddPlugin(plugininterceptor.NewPlugin())     // 请求拦截
 bot.AddPlugin(pluginaichat.NewAIChatPlugin())    // AI 对话
 bot.AddPlugin(pluginnews.NewNewsPlugin())        // 每日新闻
@@ -16,7 +15,6 @@ bot.AddPlugin(pluginnews.NewNewsPlugin())        // 每日新闻
 <PluginCards :plugins="[
   { icon: 'gear', name: '系统插件', desc: '帮助、远程退出、panic 告警', cmds: ['/help', '/exit'] },
   { icon: 'chat', name: 'AI 对话', desc: '大模型对话 · 工具调用 · 定时任务', cmds: ['#新对话', '/stop', '/clock'] },
-  { icon: 'shield', name: '防撤回', desc: '消息缓存与合并转发回顾', cmds: ['/explore [n]'] },
   { icon: 'ban', name: '请求拦截', desc: '黑白名单放行或屏蔽 AI 请求', cmds: [] },
   { icon: 'gear', name: '白名单管理', desc: '命令管理名单，改动立即生效', cmds: ['/wl list', '/wl add', '/wl mode'] },
   { icon: 'repeat', name: '复读机', desc: '三连同样消息自动跟读', cmds: ['/close repeat', '/enable repeat'] },
@@ -187,31 +185,11 @@ bash 工具使用独立的命令级三段式权限（无需列入 `approval.tool
 
 把常用提示词固化为斜杠命令。管理员发送 `/cmd add translate 把以下内容翻译成英文：$args` 后，任何人发送 `/translate 你好` 即等同于向 AI 发送「把以下内容翻译成英文：你好」（`$args` 为参数占位符；无占位符时参数追加到模板末尾）。`/cmd` 列出全部自定义命令，`/cmd del <名>` 删除（增删仅管理员）。命令名不得与内置命令（clock/stop/plan/cmd/help 等）撞名。自定义命令存于面板「扩展配置」页的 `files.commands_json`，多行模板可直接在面板编辑 JSON，保存后数秒内热生效。
 
-## 防撤回插件
-
-`pluginantiwithdrawal` · 群聊为主 · **仅 QQ 平台**（`Meta.Platforms = ["qq"]`）
-
-::: warning 平台限制
-防撤回依赖 **QQ 专属能力**：合并转发（把缓存消息打包成聊天记录）与 **rkey**（图片/文件 URL 续期）。飞书没有合并转发与 rkey 机制，因此本插件只在 QQ 平台启用，飞书消息不会缓存。
-:::
-
-缓存每个群最近 **100 条** 消息，即使对方撤回也能回顾。
-
-| 命令 | 场景 | 说明 |
-| --- | --- | --- |
-| `@机器人 /explore [n]` | 群聊 | 以合并转发形式发送最近 n 条缓存消息（n ≤ 100，默认 50） |
-| `/explore <群号> [n]` | 私聊 | **仅管理员**，查看指定群的缓存消息 |
-
-细节：
-
-- 图片/文件消息通过 NapCat rkey 自动续期；无法续期时超过 3 分钟显示「已过期」占位
-- 语音消息显示 `[语音消息]`，转发消息显示 `[转发消息，暂不支持查看]`
-
 ## 请求拦截插件
 
 `plugininterceptor` · Order = 900（普通插件之后、AI 对话插件之前）· 群聊 + 私聊
 
-按**白名单 / 黑名单**模式放行或屏蔽指定群聊、好友的消息：被拦截的消息不再向后续插件传播（AI 对话插件收不到，也就不会产生 AI 请求），而排在其前面的复读机、防撤回等插件不受影响。
+按**白名单 / 黑名单**模式放行或屏蔽指定群聊、好友的消息：被拦截的消息不再向后续插件传播（AI 对话插件收不到，也就不会产生 AI 请求），而排在其前面的复读机等插件不受影响。
 
 无命令，全部在 Web 控制面板配置：
 
@@ -247,7 +225,7 @@ bash 工具使用独立的命令级三段式权限（无需列入 `approval.tool
 | 配置 | 说明 |
 | --- | --- |
 | 启用白名单管理 | 默认开启；关闭后 `/wl` 命令不再响应 |
-| 拦住全部插件 | 默认**关闭**（只拦 AI 对话，与请求拦截插件原行为一致）。开启后未授权会话的消息不会传给任何功能插件（复读机、防撤回、AI 全部拦住） |
+| 拦住全部插件 | 默认**关闭**（只拦 AI 对话，与请求拦截插件原行为一致）。开启后未授权会话的消息不会传给任何功能插件（复读机、AI 等全部拦住） |
 | 拦截时回提示 | 默认关闭。白名单场景通常希望机器人对未授权会话完全沉默，回提示反而暴露存在 |
 
 ::: tip 管理员恒放行

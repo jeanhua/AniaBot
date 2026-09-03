@@ -96,7 +96,7 @@ AniaBot/
 │   ├── adapter/telegram/  # Telegram 适配器（Bot API，长轮询）
 │   ├── adapter/discord/   # Discord 适配器（discordgo，Gateway WebSocket）
 │   ├── component/         # AI 引擎：aichat / llmtool / functool
-│   ├── plugins/           # 七个内置插件（系统/日志/复读/防撤回/请求拦截/AI/每日新闻）
+│   ├── plugins/           # 七个内置插件（系统/日志/白名单管理/复读/请求拦截/AI/每日新闻）
 │   └── utils/             # 命令解析、消息提取等工具
 └── custom/                # 自定义插件示例与模板
 ```

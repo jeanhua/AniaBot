@@ -84,7 +84,7 @@ bot/component/           AI chat engine
   functool/                Built-in tools (time, web search, file, msg history, image loading, config get/set)
   oplog/                   Operation audit log (panel + AI tool actions; SQL ania_op_log / KV dual backend, package-level singleton)
   sysrestart/              Process self-restart (panel restart/auto-update + /reboot command in pluginsys)
-bot/plugins/             Seven built-in plugins (sys, log, repeat, antiwithdrawal, interceptor, aichat, news)
+bot/plugins/             Seven built-in plugins (sys, log, whitelist, repeat, interceptor, aichat, news)
 bot/utils/               Command parsing, message extraction, URL helpers, time formatting
 custom/                  User-created plugin examples and templates
 web/                     Admin panel frontend (Vite + Vue 3 + Tailwind v4, builds into bot/adminpanel/dist)

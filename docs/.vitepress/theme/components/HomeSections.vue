@@ -42,12 +42,6 @@ const plugins = [
     cmds: ['@机器人 聊天', '#新对话', '/stop', '/clock'],
   },
   {
-    icon: 'shield',
-    name: '防撤回',
-    desc: '缓存群内最近 100 条消息，撤回也能通过合并转发回顾，图片/文件自动续期链接。',
-    cmds: ['/explore [n]'],
-  },
-  {
     icon: 'repeat',
     name: '复读机',
     desc: '群内 +1 文化守护者：同一消息出现 3 次自动跟读，管理员可随时开关。',
@@ -106,7 +100,7 @@ const steps = [
 
   <div class="ania-section">
     <h2 class="ania-section-title">内置插件，开箱即用</h2>
-    <p class="ania-section-sub">六个内置插件覆盖常见场景，注册即用，也可以作为你开发插件的参考实现</p>
+    <p class="ania-section-sub">内置插件覆盖常见场景，注册即用，也可以作为你开发插件的参考实现</p>
     <PluginCards :plugins="plugins" />
   </div>
 

@@ -13,7 +13,6 @@ import (
 	_ "github.com/jeanhua/AniaBot/bot/adapter/telegram"
 	"github.com/jeanhua/AniaBot/bot/core"
 	"github.com/jeanhua/AniaBot/bot/plugins/pluginaichat"
-	"github.com/jeanhua/AniaBot/bot/plugins/pluginantiwithdrawal"
 	"github.com/jeanhua/AniaBot/bot/plugins/plugininterceptor"
 	"github.com/jeanhua/AniaBot/bot/plugins/pluginlog"
 	"github.com/jeanhua/AniaBot/bot/plugins/pluginnews"
@@ -47,7 +46,6 @@ func main() {
 	bot.AddPlugin(plugininterceptor.NewPlugin())
 
 	bot.AddPlugin(pluginrepeat.NewPlugin())
-	bot.AddPlugin(pluginantiwithdrawal.NewPlugin())
 	bot.AddPlugin(pluginnews.NewNewsPlugin())
 
 	bot.AddPlugin(pluginaichat.NewAIChatPlugin())

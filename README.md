@@ -13,7 +13,7 @@
 - **高性能**：基于 Go 语言，充分利用并发特性
 - **插件驱动**：功能模块化，易于扩展和维护
 - **多平台**：QQ（NapCat WebSocket/HTTP，OneBot v11）+ 飞书（官方 SDK 长连接/Webhook）+ Telegram（Bot API 长轮询，无需公网地址）+ Discord（discordgo，Gateway WebSocket，无需公网地址）等；新增平台只需实现一个适配器并注册，框架核心零改动
-- **开箱即用**：内置 AI 对话（含 MCP/Skills/Tool Use）、防撤回、复读机等插件
+- **开箱即用**：内置 AI 对话（含 MCP/Skills/Tool Use）、复读机、每日新闻等插件
 - **插件市场**：独立插件仓库（AniaBot-Plugins）支持 PR 提交插件，面板「插件市场」可浏览插件介绍、在线安装/升级/卸载并自动编译重启（容器内开箱即用）
 
 ![framework](./README/framework.png)

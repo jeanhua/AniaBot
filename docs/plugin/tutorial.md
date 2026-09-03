@@ -306,7 +306,7 @@ go run cmd/main.go
 
 最终 `custom/plugins/plugindailybrief/plugin.go` 就是把上面各步骤的代码拼在一起（去掉重复的 import 与结构体定义）。项目内的完整参考实现：
 
-- 内置插件：`bot/plugins/` 下七个插件（AI 对话、防撤回、新闻……）
+- 内置插件：`bot/plugins/` 下七个插件（AI 对话、复读机、新闻……）
 - 简单示例与模板：`custom/mvp/example.go`、`custom/plugins/pluginexample/plugin.go`
 
 ## 下一步
