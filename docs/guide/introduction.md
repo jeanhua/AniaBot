@@ -39,7 +39,6 @@ flowchart TB
     subgraph BuiltIn[内置插件]
         Sys[系统插件]
         Log[日志插件]
-        Whitelist[白名单管理]
         Repeat[复读机]
         Interceptor[请求拦截]
         AI[AI 对话]
@@ -94,7 +93,7 @@ LevelLog(-1000)  →  LevelNormal(0)  →  LevelPostHandle(1000)
 
 - 🤖 **智能群助手**：接入 DeepSeek / GPT / Qwen 等模型，@机器人 即可对话，还能联网搜索、识别图片
 - 📰 **定时推送**：新闻、天气、提醒事项，cron 表达式精确控制
-- 🛡️ **群管理**：消息回顾、入群欢迎（需自行扩展）；防撤回可从插件市场安装
+- 🛡️ **群管理**：消息回顾、入群欢迎（需自行扩展）；白名单管理与防撤回可从插件市场安装
 - 🛠️ **自动化 Agent**：开启 bash / file 工具后，AI 可以直接操作宿主机完成任务（默认关闭，按需开启）
 
 ## 深入理解

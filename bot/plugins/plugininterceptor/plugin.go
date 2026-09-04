@@ -18,19 +18,19 @@ const (
 	modeWhitelist = "whitelist" // 白名单：仅名单内的会话放行
 )
 
-// SharedStore 名单的进程内共享实例：拦截判定与白名单管理插件读写同一份状态，
+// SharedStore 名单的进程内共享实例：拦截判定与白名单管理插件（插件市场 whitelist）读写同一份状态，
 // 管理插件改完调用 Load 即时生效，无需 /reboot。
 // 在 NewPlugin 中赋值；白名单管理插件通过 Store() 获取。
 var sharedStore = NewListStore()
 
-// Store 返回共享的名单存储，供白名单管理插件读写。
+// Store 返回共享的名单存储，供白名单管理插件（插件市场 whitelist）读写。
 func Store() *ListStore { return sharedStore }
 
 // InterceptorPlugin 请求拦截插件：位于日志插件与 AI 对话插件之间，
 // 按白名单/黑名单模式放行或屏蔽某些群聊、好友的消息（返回 false
 // 终止传播，后续插件——主要是 AI 对话插件——不再收到该消息）。
 //
-// 名单状态存放在共享的 ListStore 中：面板改完由白名单管理插件热重载，
+// 名单状态存放在共享的 ListStore 中：面板改完由白名单管理插件热重载（需已安装该市场插件），
 // 也可由 /wl 命令即时增删。
 type InterceptorPlugin struct {
 	plugin.Meta

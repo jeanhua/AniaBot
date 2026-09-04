@@ -32,7 +32,7 @@ for _, p := range ania.plugins {
 关键语义：
 
 - **单提供者**：每个接口只有一个插件接线，后遍历到的插件会**覆盖**前面的（同样 `break` 发生在集齐全部接口时）
-- **内置插件已占用全部接口**：默认 `cmd/main.go` 里，AI 对话插件实现了 8 个接口、日志插件实现了 `MsgLogSource`，在第 7 个插件（AI 对话）处就集齐并 `break` —— **之后注册的自定义插件不会成为面板数据源**
+- **内置插件已占用全部接口**：默认 `cmd/main.go` 里，AI 对话插件实现了 8 个接口、日志插件实现了 `MsgLogSource`，在第 6 个插件（AI 对话）处就集齐并 `break` —— **之后注册的自定义插件不会成为面板数据源**
 - **要让自定义插件接管某个页面**：从 `cmd/main.go` 移除占用该接口的内置插件（典型做法是移除 `pluginaichat.NewAIChatPlugin()`），或完全按自己的插件组合构建（见下文示例）
 
 ::: warning 单提供者的实际影响
@@ -238,7 +238,7 @@ func (p *PollPlugin) OnGroupMsg(ctx context.Context, b bot.Bot, cmd command.Comm
 
 ## 如何让自定义实现生效
 
-默认 `cmd/main.go` 注册了全部内置插件，其中 `pluginaichat` 会在第 7 个插件处集齐全部接口并终止发现。要让上面的插件成为「消息日志」页提供者，需要**移除内置日志插件**（它与 `MsgLogSource` 冲突）：
+默认 `cmd/main.go` 注册了全部内置插件，其中 `pluginaichat` 会在第 6 个插件处集齐全部接口并终止发现。要让上面的插件成为「消息日志」页提供者，需要**移除内置日志插件**（它与 `MsgLogSource` 冲突）：
 
 ```go
 func main() {
