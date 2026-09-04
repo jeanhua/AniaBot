@@ -97,3 +97,42 @@ func TestFriendlyTextNestedForward(t *testing.T) {
 		t.Fatalf("内层转发不应退化为占位符, got %q", text)
 	}
 }
+
+// TestFriendlyTextForwardInlineContent 合并转发段内联携带 content（NapCat 展开
+// 转发内容时的格式，嵌套层 id 仅供查看、无法再拉取）时应直接展开内联内容，
+// 不再尝试按 id 拉取而显示「无法获取详情」（GitHub issue #11）。
+func TestFriendlyTextForwardInlineContent(t *testing.T) {
+	inner := Message{
+		Sender: MessageSender{UserId: FromUint64(303), Nickname: "最内层"},
+		Message: []OB11Segment{
+			{Type: SegmentText, Data: map[string]any{"text": "内层实际内容"}},
+			{Type: SegmentImage, Data: ImageMessage{Url: "https://example.com/nested.png"}.Marshal()},
+		},
+	}
+	middle := Message{
+		Sender: MessageSender{UserId: FromUint64(202), Nickname: "中间层"},
+		Message: []OB11Segment{{
+			Type: SegmentForward,
+			Data: map[string]any{"id": "view-only-id", "content": []Message{inner}},
+		}},
+	}
+	root := Message{
+		Sender: MessageSender{UserId: FromUint64(101), Nickname: "外层"},
+		Message: []OB11Segment{{
+			Type: SegmentForward,
+			Data: map[string]any{"id": "outer-view-id", "content": []Message{middle}},
+		}},
+	}
+	// 内层 id 无法拉取时也应正常展开内联内容（NapCat 嵌套转发的真实形态）
+	text := root.FriendlyText(true,
+		WithGetForwardMsgFunc(func(QID) (*[]Message, bool) { return nil, false }),
+		WithGetImageOCRFunc(func(url string) string { return "图片OCR识别内容" }))
+	for _, want := range []string{"外层", "中间层", "内层实际内容", "图片OCR识别内容"} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("内联 content 应被展开, 缺少 %q, got %q", want, text)
+		}
+	}
+	if strings.Contains(text, "[转发消息") {
+		t.Fatalf("内联 content 存在时不应出现转发占位, got %q", text)
+	}
+}

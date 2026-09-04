@@ -173,12 +173,20 @@ func (r *imageRegistry) registerMessage(src imageMessageSource, current message.
 				}
 			}
 		case message.SegmentForward:
-			var fwd message.ForwardMessage
-			if message.ParseForward(segment, &fwd) {
-				if fwdSrc, ok := src.(imageForwardSource); ok {
-					if detail, ok := fwdSrc.GetForwardMsg(fwd.Id); ok && detail != nil {
-						for i := range *detail {
-							r.registerMessage(src, (*detail)[i], seen)
+			// NapCat 会把（含嵌套的）转发内容内联在 forward 段 content 里且内层 id
+			// 无法再拉取，优先登记内联内容中的图片；无内联内容时再回退按 id 拉取
+			if inline, ok := message.ParseForwardContent(segment); ok {
+				for i := range inline {
+					r.registerMessage(src, inline[i], seen)
+				}
+			} else {
+				var fwd message.ForwardMessage
+				if message.ParseForward(segment, &fwd) {
+					if fwdSrc, ok := src.(imageForwardSource); ok {
+						if detail, ok := fwdSrc.GetForwardMsg(fwd.Id); ok && detail != nil {
+							for i := range *detail {
+								r.registerMessage(src, (*detail)[i], seen)
+							}
 						}
 					}
 				}

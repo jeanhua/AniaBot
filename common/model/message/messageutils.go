@@ -151,19 +151,16 @@ func (raw Message) FriendlyText(showUrl bool, opts ...MsgOptFunc) string {
 				}
 			}
 		case SegmentForward:
-			if msgFuncs.getForwardMsgFunc != nil {
+			// NapCat 解析转发内容时会把（含嵌套的）内容内联在 content 字段里，
+			// 内层转发 id 仅供查看、无法再通过 get_forward_msg 拉取，因此优先展开内联内容；
+			// 无内联内容时再回退为按 id 拉取详情
+			if inline, ok := ParseForwardContent(s); ok {
+				writeForwardMessages(&result, inline, showUrl, msgFuncs)
+			} else if msgFuncs.getForwardMsgFunc != nil {
 				var msg ForwardMessage
 				if ok := ParseForward(s, &msg); ok {
 					if detail, ok := msgFuncs.getForwardMsgFunc(msg.Id); ok {
-						result.WriteString("\n<合并转发消息>")
-						for _, msg := range *detail {
-							// 与回复段展开保持一致，透传 OCR/转发拉取回调：
-							// 合并转发里再嵌套合并转发时，内层转发也能继续递归拉取展开
-							result.WriteString(msg.FriendlyText(showUrl,
-								WithGetImageOCRFunc(msgFuncs.getImageOCRFunc),
-								WithGetForwardMsgFunc(msgFuncs.getForwardMsgFunc)))
-						}
-						result.WriteString("</合并转发消息>\n")
+						writeForwardMessages(&result, *detail, showUrl, msgFuncs)
 					} else {
 						result.WriteString("[转发消息, 无法获取详情]")
 					}
@@ -205,4 +202,16 @@ func (raw Message) FriendlyText(showUrl bool, opts ...MsgOptFunc) string {
 		}
 	}
 	return result.String()
+}
+
+// writeForwardMessages 输出合并转发消息内容：逐条调用 FriendlyText 并透传
+// OCR/转发拉取回调，使内层嵌套合并转发也能继续递归展开。
+func writeForwardMessages(w *strings.Builder, msgs []Message, showUrl bool, msgFuncs msgHandleOpt) {
+	w.WriteString("\n<合并转发消息>")
+	for _, msg := range msgs {
+		w.WriteString(msg.FriendlyText(showUrl,
+			WithGetImageOCRFunc(msgFuncs.getImageOCRFunc),
+			WithGetForwardMsgFunc(msgFuncs.getForwardMsgFunc)))
+	}
+	w.WriteString("</合并转发消息>\n")
 }

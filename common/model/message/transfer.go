@@ -197,3 +197,26 @@ func ParseForward(s OB11Segment, f *ForwardMessage) bool {
 	f.Id = qid
 	return true
 }
+
+// ParseForwardContent 解析合并转发段内联携带的消息内容（OB11Message 数组）。
+// NapCat 解析转发内容时会把（含嵌套的）合并转发消息一并放进 forward 段的
+// content 字段；内层转发 id 仅供查看、无法再通过 get_forward_msg 拉取，
+// 因此有内联内容时应直接解析而不是按 id 请求。
+func ParseForwardContent(s OB11Segment) ([]Message, bool) {
+	if s.Type != SegmentForward || s.Data == nil {
+		return nil, false
+	}
+	raw, ok := s.Data["content"]
+	if !ok {
+		return nil, false
+	}
+	b, err := json.Marshal(raw)
+	if err != nil {
+		return nil, false
+	}
+	var msgs []Message
+	if err := json.Unmarshal(b, &msgs); err != nil || len(msgs) == 0 {
+		return nil, false
+	}
+	return msgs, true
+}

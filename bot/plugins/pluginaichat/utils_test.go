@@ -210,3 +210,29 @@ func TestAnnotateEmbeddedImages(t *testing.T) {
 		t.Fatalf("附件描述原文应保留（标记追加在描述后）, got %q", out)
 	}
 }
+
+// TestRegisterMessageImagesInlineForward NapCat 嵌套转发以内联 content 形式存在
+// （内层 id 无法再拉取），其中的图片应直接登记，供 load_images 按哈希加载。
+func TestRegisterMessageImagesInlineForward(t *testing.T) {
+	const urlNested = "https://example.com/nested-forward.png"
+	inner := message.Message{
+		MessageId: message.FromString("inner-view-1"),
+		Message:   []message.OB11Segment{imageSegment(urlNested)},
+	}
+	main := message.Message{
+		MessageId: message.FromString("main-1"),
+		Message: []message.OB11Segment{{
+			Type: message.SegmentForward,
+			Data: map[string]any{"id": "view-only-fwd", "content": []message.Message{inner}},
+		}},
+	}
+
+	reg := newImageRegistry()
+	// 不提供任何可拉取的消息源（nil），内联 content 里的图片仍应登记
+	registerMessageImages(reg, nil, main)
+
+	found, missing := reg.resolve([]string{message.ImageHash(urlNested)})
+	if len(found) != 1 || found[0].URL != urlNested || len(missing) != 0 {
+		t.Fatalf("内联转发图片应被登记: found=%+v missing=%v", found, missing)
+	}
+}
