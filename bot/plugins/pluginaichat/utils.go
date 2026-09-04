@@ -140,11 +140,15 @@ func registerMessageImages(reg *imageRegistry, src imageMessageSource, msgs ...m
 	}
 	seen := make(map[message.QID]struct{})
 	for _, msg := range msgs {
-		reg.registerMessage(src, msg, seen)
+		reg.registerMessage(src, msg, seen, true)
 	}
 }
 
-func (r *imageRegistry) registerMessage(src imageMessageSource, current message.Message, seen map[message.QID]struct{}) {
+// registerMessage 递归登记单条消息中的图片。
+// resolveReplies=false 用于合并转发记录里的消息：其中的 reply 目标多为聊天记录
+// 内部的历史消息，无法再通过 get_msg 拉取，跳过可避免大量「消息不存在或已被
+// 撤回」的请求失败日志。
+func (r *imageRegistry) registerMessage(src imageMessageSource, current message.Message, seen map[message.QID]struct{}, resolveReplies bool) {
 	if current.MessageId != "" {
 		if _, ok := seen[current.MessageId]; ok {
 			return
@@ -166,10 +170,12 @@ func (r *imageRegistry) registerMessage(src imageMessageSource, current message.
 				registerEmbeddedImages(r, txt.Text)
 			}
 		case message.SegmentReply:
-			var reply message.ReplyMessage
-			if message.ParseReply(segment, &reply) {
-				if detail, ok := src.GetMsgDetail(reply.Id); ok && detail != nil {
-					r.registerMessage(src, *detail, seen)
+			if resolveReplies {
+				var reply message.ReplyMessage
+				if message.ParseReply(segment, &reply) {
+					if detail, ok := src.GetMsgDetail(reply.Id); ok && detail != nil {
+						r.registerMessage(src, *detail, seen, true)
+					}
 				}
 			}
 		case message.SegmentForward:
@@ -177,7 +183,8 @@ func (r *imageRegistry) registerMessage(src imageMessageSource, current message.
 			// 无法再拉取，优先登记内联内容中的图片；无内联内容时再回退按 id 拉取
 			if inline, ok := message.ParseForwardContent(segment); ok {
 				for i := range inline {
-					r.registerMessage(src, inline[i], seen)
+					// 转发记录内的消息不解析 reply（历史消息 ID 拉不到，只产生失败日志）
+					r.registerMessage(src, inline[i], seen, false)
 				}
 			} else {
 				var fwd message.ForwardMessage
@@ -185,7 +192,7 @@ func (r *imageRegistry) registerMessage(src imageMessageSource, current message.
 					if fwdSrc, ok := src.(imageForwardSource); ok {
 						if detail, ok := fwdSrc.GetForwardMsg(fwd.Id); ok && detail != nil {
 							for i := range *detail {
-								r.registerMessage(src, (*detail)[i], seen)
+								r.registerMessage(src, (*detail)[i], seen, false)
 							}
 						}
 					}

@@ -17,11 +17,13 @@ const (
 
 // fakeMsgSource 测试用消息来源：实现 GetMsgDetail 与 GetForwardMsg 两个最小能力。
 type fakeMsgSource struct {
-	details  map[message.QID]*message.Message
-	forwards map[message.QID]*[]message.Message
+	details     map[message.QID]*message.Message
+	forwards    map[message.QID]*[]message.Message
+	detailCalls int // GetMsgDetail 调用次数（用于断言不应发起无谓请求）
 }
 
 func (f *fakeMsgSource) GetMsgDetail(id message.QID) (*message.Message, bool) {
+	f.detailCalls++
 	d, ok := f.details[id]
 	return d, ok
 }
@@ -234,5 +236,52 @@ func TestRegisterMessageImagesInlineForward(t *testing.T) {
 	found, missing := reg.resolve([]string{message.ImageHash(urlNested)})
 	if len(found) != 1 || found[0].URL != urlNested || len(missing) != 0 {
 		t.Fatalf("内联转发图片应被登记: found=%+v missing=%v", found, missing)
+	}
+}
+
+// TestRegisterMessageImagesSkipsReplyInsideForward 合并转发记录内的 reply 目标多为
+// 聊天记录里的历史消息，NapCat 无法再通过 get_msg 拉取。登记图片时不应解析转发
+// 内的 reply，避免处理转发消息时刷出一堆「消息不存在或已被撤回」的请求失败日志。
+func TestRegisterMessageImagesSkipsReplyInsideForward(t *testing.T) {
+	const urlInner = "https://example.com/inner.png"
+	const urlReply = "https://example.com/reply-target.png"
+	replyTarget := &message.Message{
+		MessageId: message.FromString("reply-1"),
+		Message:   []message.OB11Segment{imageSegment(urlReply)},
+	}
+	inner := message.Message{
+		MessageId: message.FromString("inner-1"),
+		Message: []message.OB11Segment{
+			imageSegment(urlInner),
+			{Type: message.SegmentReply, Data: map[string]any{"id": message.FromString("r1").String()}},
+		},
+	}
+	src := &fakeMsgSource{
+		details: map[message.QID]*message.Message{
+			message.FromString("r1"): replyTarget,
+		},
+	}
+	main := message.Message{
+		MessageId: message.FromString("main-1"),
+		Message: []message.OB11Segment{{
+			Type: message.SegmentForward,
+			Data: map[string]any{"id": "view-only-fwd", "content": []message.Message{inner}},
+		}},
+	}
+
+	reg := newImageRegistry()
+	registerMessageImages(reg, src, main)
+	if src.detailCalls != 0 {
+		t.Fatalf("转发记录内的 reply 不应触发 GetMsgDetail, calls=%d", src.detailCalls)
+	}
+	// 转发记录自身的图片仍应登记
+	found, missing := reg.resolve([]string{message.ImageHash(urlInner)})
+	if len(found) != 1 || found[0].URL != urlInner || len(missing) != 0 {
+		t.Fatalf("转发记录内图片应被登记: found=%+v missing=%v", found, missing)
+	}
+	// reply 目标未被拉取，其图片不应登记
+	_, missing = reg.resolve([]string{message.ImageHash(urlReply)})
+	if len(missing) != 1 {
+		t.Fatalf("reply 目标图片不应被登记, missing=%v", missing)
 	}
 }
