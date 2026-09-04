@@ -226,9 +226,17 @@ func (s *Service) Info() map[string]any {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	env := map[string]string{}
-	for _, t := range []string{"git", "go"} {
-		v, _ := toolVersion(ctx, t, "--version")
-		env[t] = v
+	// 注意：go 的子命令是 `go version`（无 `--version`），与安装/自动更新路径保持一致，
+	// 否则 `go --version` 会以错误退出，导致面板误显示「Go 未安装」。
+	for _, t := range []struct {
+		name string
+		args []string
+	}{
+		{"git", []string{"--version"}},
+		{"go", []string{"version"}},
+	} {
+		v, _ := toolVersion(ctx, t.name, t.args...)
+		env[t.name] = v
 	}
 	srcDir := s.sourceDir()
 	configured := srcDir != "" && s.repo() != ""
