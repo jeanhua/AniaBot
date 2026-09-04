@@ -53,3 +53,47 @@ func TestFriendlyTextSelfMention(t *testing.T) {
 		t.Fatalf("FriendlyText = %q, want %q", text, want)
 	}
 }
+
+// TestFriendlyTextNestedForward 合并转发内再嵌套合并转发时应逐层透传回调并递归展开，
+// 内层转发不再退化为 [转发消息] 占位（GitHub issue #11）。
+func TestFriendlyTextNestedForward(t *testing.T) {
+	innerTextMsg := Message{
+		Sender: MessageSender{UserId: FromUint64(303), Nickname: "内层发送者"},
+		Message: []OB11Segment{
+			{Type: SegmentText, Data: map[string]any{"text": "内层实际内容"}},
+			{Type: SegmentImage, Data: ImageMessage{Url: "https://example.com/inner.png"}.Marshal()},
+		},
+	}
+	outerTextMsg := Message{
+		Sender: MessageSender{UserId: FromUint64(202), Nickname: "外层发送者"},
+		Message: []OB11Segment{
+			{Type: SegmentForward, Data: map[string]any{"id": "inner_fwd_1"}},
+		},
+	}
+	root := Message{
+		Sender: MessageSender{UserId: FromUint64(101), Nickname: "根发送者"},
+		Message: []OB11Segment{
+			{Type: SegmentForward, Data: map[string]any{"id": "outer_fwd_1"}},
+		},
+	}
+	getForward := func(id QID) (*[]Message, bool) {
+		switch id {
+		case QID("outer_fwd_1"):
+			return &[]Message{outerTextMsg}, true
+		case QID("inner_fwd_1"):
+			return &[]Message{innerTextMsg}, true
+		}
+		return nil, false
+	}
+	text := root.FriendlyText(true,
+		WithGetForwardMsgFunc(getForward),
+		WithGetImageOCRFunc(func(url string) string { return "图片OCR识别内容" }))
+	for _, want := range []string{"<合并转发消息>", "外层发送者", "内层实际内容", "图片OCR识别内容"} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("嵌套转发应递归展开, 缺少 %q, got %q", want, text)
+		}
+	}
+	if strings.Contains(text, "[转发消息]") {
+		t.Fatalf("内层转发不应退化为占位符, got %q", text)
+	}
+}

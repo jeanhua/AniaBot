@@ -157,7 +157,11 @@ func (raw Message) FriendlyText(showUrl bool, opts ...MsgOptFunc) string {
 					if detail, ok := msgFuncs.getForwardMsgFunc(msg.Id); ok {
 						result.WriteString("\n<合并转发消息>")
 						for _, msg := range *detail {
-							result.WriteString(msg.FriendlyText(showUrl))
+							// 与回复段展开保持一致，透传 OCR/转发拉取回调：
+							// 合并转发里再嵌套合并转发时，内层转发也能继续递归拉取展开
+							result.WriteString(msg.FriendlyText(showUrl,
+								WithGetImageOCRFunc(msgFuncs.getImageOCRFunc),
+								WithGetForwardMsgFunc(msgFuncs.getForwardMsgFunc)))
 						}
 						result.WriteString("</合并转发消息>\n")
 					} else {
