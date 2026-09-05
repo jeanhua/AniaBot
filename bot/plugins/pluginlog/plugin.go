@@ -80,7 +80,7 @@ func (p *LogPlugin) OnGroupMsg(ctx context.Context, b bot.Bot, cmd command.Comma
 		opts = append(opts, message.WithGetForwardMsgFunc(qb.GetForwardMsg))
 	}
 	text := msg.FriendlyText(false, opts...)
-	p.Logger.Info("[收<-群]", "groupId", msg.GroupId, "userId", msg.Sender.UserId, "message", text)
+	p.Logger.Info("[收<-群]: "+text, "groupId", msg.GroupId, "userId", msg.Sender.UserId)
 	p.add(msglog.Entry{
 		Type:     msglog.TypeGroup,
 		GroupId:  msg.GroupId.String(),
@@ -100,7 +100,7 @@ func (p *LogPlugin) OnFriendMsg(ctx context.Context, b bot.Bot, cmd command.Comm
 		opts = append(opts, message.WithGetForwardMsgFunc(qb.GetForwardMsg))
 	}
 	text := msg.FriendlyText(false, opts...)
-	p.Logger.Info("[收<-好友]", "userId", msg.Sender.UserId, "message", text)
+	p.Logger.Info("[收<-好友]: "+text, "userId", msg.Sender.UserId)
 	p.add(msglog.Entry{
 		Type:     msglog.TypeFriend,
 		UserId:   msg.Sender.UserId.String(),
