@@ -6,7 +6,18 @@ import (
 
 	"github.com/jeanhua/AniaBot/common/model/command"
 	"github.com/jeanhua/AniaBot/common/model/message"
+	"github.com/jeanhua/AniaBot/common/plugin"
 )
+
+// 拦截器必须排在普通插件（含市场插件，Order=0）之后、AI 对话插件
+// （Order=LevelPostHandle）之前：返回 false 会终止其后所有插件，
+// 只有这个位置才能实现"被拦截的会话仍可用其他功能插件，仅 AI 被屏蔽"。
+func TestInterceptorRunsBeforeAIChat(t *testing.T) {
+	order := NewPlugin().GetMeta().Order
+	if order <= plugin.LevelNormal || order >= plugin.LevelPostHandle {
+		t.Errorf("拦截器 Order = %d，应在普通插件之后、AI 对话插件之前", order)
+	}
+}
 
 func TestNormalizePlatformToken(t *testing.T) {
 	cases := []struct {

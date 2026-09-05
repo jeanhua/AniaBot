@@ -48,8 +48,11 @@ func NewPlugin() *InterceptorPlugin {
 	p.Author = "jeanhua"
 	p.Version = "1.3.0"
 	// 在普通插件（复读机等）之后、AI 对话插件之前执行：
-	// 被拦截的会话仍可使用其他功能插件，仅 AI 请求被屏蔽
-	p.Order = plugin.LevelLog + 100
+	// 被拦截的会话仍可使用其他功能插件，仅 AI 请求被屏蔽。
+	// 注意必须大于普通插件（LevelNormal=0，如复读机、市场插件）且小于 AI 对话
+	// 插件（LevelPostHandle=1000）：返回 false 会终止其后所有插件，
+	// 放在 AI 之前才能实现"只拦 AI"。
+	p.Order = plugin.LevelPostHandle - 100
 	p.ShowFor = plugininfo.ShowForNone
 	return p
 }
