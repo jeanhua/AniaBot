@@ -318,6 +318,7 @@ func truncateRunes(s string, max int) string {
 }
 
 // cacheSent 记录出站消息到内存缓存（GetMsgDetail/历史兜底）。
+// 出站消息先剔除内联 base64/data 负载再入缓存，避免大图常驻内存。
 func (a *discordAdapter) cacheSent(channelID, messageID string, segs []message.OB11Segment, private bool) {
 	msgType := "group"
 	if private {
@@ -329,7 +330,7 @@ func (a *discordAdapter) cacheSent(channelID, messageID string, segs []message.O
 		MessageType: msgType,
 		MessageId:   msgID(channelID, messageID),
 		GroupId:     message.QID(idPrefix + channelID),
-		Message:     segs,
+		Message:     message.StripInlinePayloadSegments(segs),
 		RawMessage:  segmentsPlainText(segs),
 		SelfId:      a.SelfID(),
 		Platform:    Platform,

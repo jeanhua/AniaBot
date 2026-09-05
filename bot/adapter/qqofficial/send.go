@@ -369,6 +369,7 @@ func splitText(text string, limit int) []string {
 }
 
 // cacheSent 记录出站消息到内存缓存（GetMsgDetail/历史兜底）。
+// 出站消息先剔除内联 base64/data 负载再入缓存，避免大图常驻内存。
 func (a *qqOfficialAdapter) cacheSent(openid string, isGroup bool, msgID string, segs []message.OB11Segment) {
 	msgType := "group"
 	if !isGroup {
@@ -379,7 +380,7 @@ func (a *qqOfficialAdapter) cacheSent(openid string, isGroup bool, msgID string,
 		PostType:    "message",
 		MessageType: msgType,
 		MessageId:   message.QID(idPrefix + msgID),
-		Message:     segs,
+		Message:     message.StripInlinePayloadSegments(segs),
 		RawMessage:  segmentsPlainText(segs),
 		SelfId:      a.selfQID(),
 		Platform:    Platform,

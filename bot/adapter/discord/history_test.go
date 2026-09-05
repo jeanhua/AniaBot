@@ -157,3 +157,27 @@ func TestHistoryCountClamp(t *testing.T) {
 		t.Fatalf("默认条数 = %v", msgs)
 	}
 }
+
+// TestCacheSentStripsBase64 出站 base64 图片入缓存前剔除负载，GetMsgDetail 不再持有大图。
+func TestCacheSentStripsBase64(t *testing.T) {
+	a := newSendAdapter(nil)
+	segs := []message.OB11Segment{{
+		Type: message.SegmentImage,
+		Data: message.ImageMessage{File: "base64://AAAA", Url: "base64://AAAA", Summary: "[图片]"}.Marshal(),
+	}}
+	a.cacheSent("c1", "m1", segs, false)
+
+	got, ok := a.GetMsgDetail("dc:c1:m1")
+	if !ok || len(got.Message) != 1 {
+		t.Fatalf("GetMsgDetail = (%v, %v), want 1 条缓存消息", got, ok)
+	}
+	if _, has := got.Message[0].Data["file"]; has {
+		t.Fatal("缓存中的 base64 file 未被剔除")
+	}
+	if _, has := got.Message[0].Data["url"]; has {
+		t.Fatal("缓存中的 base64 url 未被剔除")
+	}
+	if _, has := segs[0].Data["file"]; !has {
+		t.Fatal("原出站段被修改，base64 file 不应丢失")
+	}
+}

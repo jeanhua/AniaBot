@@ -362,6 +362,7 @@ func resolveSegmentBytes(ctx context.Context, rc *resty.Client, fileStr string) 
 }
 
 // cacheSent 记录出站消息到内存缓存（GetMsgDetail/历史兜底）。
+// 出站消息先剔除内联 base64/data 负载再入缓存，避免大图常驻内存。
 func (a *telegramAdapter) cacheSent(chatID int64, messageID int, segs []message.OB11Segment) {
 	msgType := "group"
 	if chatID > 0 {
@@ -373,7 +374,7 @@ func (a *telegramAdapter) cacheSent(chatID int64, messageID int, segs []message.
 		MessageType: msgType,
 		MessageId:   msgID(chatID, messageID),
 		GroupId:     message.QID(idPrefix + chatIDRaw(chatID)),
-		Message:     segs,
+		Message:     message.StripInlinePayloadSegments(segs),
 		RawMessage:  segmentsPlainText(segs),
 		SelfId:      a.selfID(),
 		Platform:    Platform,
