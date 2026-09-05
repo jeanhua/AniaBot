@@ -425,6 +425,7 @@ HTTP 模式下 NapCat 向 `localhost` 上报会失败，请将 NapCat 的 HTTP C
 | --- | --- | --- |
 | `plugin.interceptor.enable` | `false` | 是否启用请求拦截，关闭时放行全部消息 |
 | `plugin.interceptor.mode` | `blacklist` | 名单模式：`blacklist` 名单内屏蔽 / `whitelist` 仅名单内放行 |
+| `plugin.interceptor.platforms` | 全选 | 可用平台（多选）：仅勾选平台进入名单判定，未勾选的平台直接拦截；单独屏蔽某平台时取消勾选它 |
 | `plugin.interceptor.groups` | `[]` | 群 ID 名单，每行一个（QQ 为 `qq:群号`，其他平台为带前缀的群 ID，如 `fs:oc_xxx`） |
 | `plugin.interceptor.friends` | `[]` | 用户 ID 名单，每行一个（QQ 为 `qq:QQ号`，其他平台带前缀），对私聊及群聊消息发送者均生效 |
 

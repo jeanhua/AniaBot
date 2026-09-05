@@ -183,7 +183,7 @@
 
           <Transition name="fade">
             <div v-show="isOpen(group)" class="p-6 grid grid-cols-1 lg:grid-cols-2 gap-x-8 gap-y-5 border-t border-slate-100">
-              <div v-for="field in group.fields" :key="field.key" :class="{ 'lg:col-span-2': ['text', 'strings', 'ints'].includes(field.type) }">
+              <div v-for="field in group.fields" :key="field.key" :class="{ 'lg:col-span-2': ['text', 'strings', 'ints', 'multiselect'].includes(field.type) }">
                 <label class="block text-xs font-medium text-slate-700 mb-1.5">
                   {{ field.label }}
                   <span class="text-slate-400 font-normal ml-1">{{ field.key }}</span>
@@ -205,6 +205,22 @@
                   <option v-if="!hasDefault(field)" value="">（留空）</option>
                   <option v-for="opt in field.options || []" :key="opt" :value="opt">{{ opt }}</option>
                 </select>
+                <div v-else-if="field.type === 'multiselect'" class="space-y-2">
+                  <div class="flex flex-wrap gap-2">
+                    <button
+                      v-for="opt in field.options || []"
+                      :key="opt"
+                      type="button"
+                      class="px-3 py-1.5 text-sm rounded-lg border transition-colors"
+                      :class="isSelected(field, opt) ? 'bg-zinc-900 text-white border-zinc-900' : 'bg-white text-slate-600 border-slate-300 hover:bg-slate-50'"
+                      @click="toggleOption(field, opt)"
+                    >{{ opt }}</button>
+                  </div>
+                  <div class="flex gap-4 text-xs">
+                    <button type="button" class="text-slate-500 hover:text-zinc-800 underline underline-offset-2" @click="selectAllOptions(field)">全选</button>
+                    <button type="button" class="text-slate-500 hover:text-zinc-800 underline underline-offset-2" @click="clearOptions(field)">清空</button>
+                  </div>
+                </div>
 
                 <label v-else-if="field.type === 'bool'" class="inline-flex items-center gap-2.5 cursor-pointer select-none py-1" @click.prevent="form[field.key] = !form[field.key]">
                   <span
@@ -385,7 +401,7 @@ function isOpen(group) {
 }
 
 function groupChanged(group) {
-  return group.fields.some((f) => cleared[f.key] || form[f.key] !== original[f.key])
+  return group.fields.some((f) => cleared[f.key] || !sameFormValue(form[f.key], original[f.key]))
 }
 
 function toggleGroup(name) {
@@ -438,7 +454,21 @@ function groupIcon(group) {
   return { '框架基础': iconCube, 'AI 对话': iconSpark, '插件': iconPuzzle }[cat]
 }
 
-const dirty = computed(() => schema.value.some((f) => cleared[f.key] || form[f.key] !== original[f.key]))
+// multiselect 的表单值是数组，比较时按集合语义（与顺序无关）
+function sameFormValue(a, b) {
+  if (Array.isArray(a) || Array.isArray(b)) {
+    const x = Array.isArray(a) ? a : []
+    const y = Array.isArray(b) ? b : []
+    return x.length === y.length && x.every((v) => y.includes(v))
+  }
+  return a === b
+}
+
+function copyFormValue(v) {
+  return Array.isArray(v) ? [...v] : v
+}
+
+const dirty = computed(() => schema.value.some((f) => cleared[f.key] || !sameFormValue(form[f.key], original[f.key])))
 
 function valueOf(key) {
   return values.value[key.toLowerCase()]
@@ -453,6 +483,7 @@ function placeholderOf(field) {
 
 function toFormValue(field) {
   const v = valueOf(field.key)
+  if (field.type === 'multiselect') return Array.isArray(v) ? [...v] : []
   if (field.type === 'bool') return v === true
   if (v === undefined || v === null) return ''
   if (field.type === 'strings' || field.type === 'ints') return Array.isArray(v) ? v.join('\n') : ''
@@ -471,10 +502,32 @@ function fromFormValue(field) {
     if (field.optional && raw.trim() === '') return null // 可选参数：清空=删除该键，不向下游传
     const n = parseFloat(raw); return Number.isNaN(n) ? 0 : n
   }
+  if (field.type === 'multiselect') return Array.isArray(raw) ? [...raw] : []
   if (field.type === 'strings') return raw.split('\n').map((s) => s.trim()).filter(Boolean)
   if (field.type === 'select') return raw === '' ? null : raw // 留空=删除该键，恢复「跟随主模型格式」等未配置语义
   if (field.type === 'ints') return raw.split('\n').map((s) => parseInt(s.trim(), 10)).filter((n) => !Number.isNaN(n))
   return raw
+}
+
+function isSelected(field, opt) {
+  const v = form[field.key]
+  return Array.isArray(v) && v.includes(opt)
+}
+
+function toggleOption(field, opt) {
+  const cur = Array.isArray(form[field.key]) ? [...form[field.key]] : []
+  const i = cur.indexOf(opt)
+  if (i >= 0) cur.splice(i, 1)
+  else cur.push(opt)
+  form[field.key] = cur
+}
+
+function selectAllOptions(field) {
+  form[field.key] = [...(field.options || [])]
+}
+
+function clearOptions(field) {
+  form[field.key] = []
 }
 
 function hasDefault(field) {
@@ -489,14 +542,14 @@ function clearField(field) {
 }
 
 function resetForm() {
-  for (const f of schema.value) { form[f.key] = original[f.key]; cleared[f.key] = false }
+  for (const f of schema.value) { form[f.key] = copyFormValue(original[f.key]); cleared[f.key] = false }
 }
 
 async function reloadValues() {
   values.value = await api.getConfig()
   for (const f of schema.value) {
     form[f.key] = toFormValue(f)
-    original[f.key] = form[f.key]
+    original[f.key] = copyFormValue(form[f.key])
     cleared[f.key] = false
   }
   rawText.value = JSON.stringify(values.value, null, 2)
@@ -509,7 +562,7 @@ onMounted(async () => {
   values.value = v
   for (const f of s) {
     form[f.key] = toFormValue(f)
-    original[f.key] = form[f.key]
+    original[f.key] = copyFormValue(form[f.key])
     cleared[f.key] = false
   }
   rawText.value = JSON.stringify(v, null, 2)
@@ -528,7 +581,7 @@ async function onSave() {
       updates[f.key] = null // 显式清空敏感字段=删除该键，恢复「留空使用主模型」等未配置语义
       continue
     }
-    if (form[f.key] === original[f.key]) continue
+    if (sameFormValue(form[f.key], original[f.key])) continue
     if (f.sensitive && form[f.key] === '') continue // 未填写 = 不修改
     updates[f.key] = fromFormValue(f)
   }

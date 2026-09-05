@@ -195,6 +195,51 @@ func TestLoad(t *testing.T) {
 	}
 }
 
+func TestMultiselect(t *testing.T) {
+	type multiConfig struct {
+		Platforms []string `cfg:"plugin.demo.platforms" label:"可用平台" type:"multiselect" options:"qq,telegram,feishu" group:"演示" default:"qq,telegram,feishu"`
+	}
+	var cfg multiConfig
+	if err := RegisterStruct(&cfg); err != nil {
+		t.Fatalf("RegisterStruct: %v", err)
+	}
+	byKey := map[string]Field{}
+	for _, f := range Fields() {
+		byKey[f.Key] = f
+	}
+	f, ok := byKey["plugin.demo.platforms"]
+	if !ok {
+		t.Fatal("multiselect 字段未注册")
+	}
+	if f.Type != "multiselect" {
+		t.Errorf("Type = %q, 期望 multiselect", f.Type)
+	}
+	if len(f.Options) != 3 || f.Options[0] != "qq" || f.Options[2] != "feishu" {
+		t.Errorf("Options = %v", f.Options)
+	}
+
+	v := viper.New()
+	for k, val := range Defaults() {
+		v.Set(k, val)
+	}
+	var loaded multiConfig
+	if err := Load(v, &loaded); err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if len(loaded.Platforms) != 3 || loaded.Platforms[0] != "qq" {
+		t.Errorf("默认值未填充, Platforms = %v", loaded.Platforms)
+	}
+	// 用户取消勾选部分平台后应原样读回
+	v.Set("plugin.demo.platforms", []string{"qq"})
+	var partial multiConfig
+	if err := Load(v, &partial); err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if len(partial.Platforms) != 1 || partial.Platforms[0] != "qq" {
+		t.Errorf("部分选择未读回, Platforms = %v", partial.Platforms)
+	}
+}
+
 func TestParseSchemaErrors(t *testing.T) {
 	cases := []struct {
 		name string
@@ -214,6 +259,12 @@ func TestParseSchemaErrors(t *testing.T) {
 		}{}},
 		{"select 缺 options", &struct {
 			S string `cfg:"a.b" type:"select"`
+		}{}},
+		{"multiselect 缺 options", &struct {
+			S []string `cfg:"a.b" type:"multiselect"`
+		}{}},
+		{"multiselect 非 []string", &struct {
+			S string `cfg:"a.b" type:"multiselect" options:"a,b"`
 		}{}},
 		{"password 非 string", &struct {
 			P int `cfg:"a.b" type:"password"`

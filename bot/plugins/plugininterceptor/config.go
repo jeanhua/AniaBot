@@ -5,6 +5,12 @@ package plugininterceptor
 type interceptorConfig struct {
 	Enable bool   `cfg:"plugin.interceptor.enable" label:"启用请求拦截" group:"请求拦截插件" help:"开启后按名单模式放行或屏蔽群聊/好友的 AI 请求" default:"false"`
 	Mode   string `cfg:"plugin.interceptor.mode" label:"名单模式" type:"select" options:"blacklist,whitelist" group:"请求拦截插件" help:"blacklist=名单内的群/用户被屏蔽；whitelist=仅名单内的群放行，放行的群对全部成员开放（私聊仍按用户名单）" default:"blacklist"`
+	// Platforms 可用平台总开关（多选，默认全选）：仅勾选平台的消息进入名单判定，
+	// 未勾选平台的群聊与私聊直接拦截（不触发 AI），与名单模式无关。
+	// 默认全选即与旧行为一致；想单独屏蔽某平台（如只保留 QQ）时取消勾选它即可。
+	// 黑名单模式下勾选即放行该平台（名单命中的群/用户除外）；
+	// 白名单模式下勾选是放行的必要条件，还需群/用户名单命中。
+	Platforms []string `cfg:"plugin.interceptor.platforms" label:"可用平台" type:"multiselect" options:"qq,qqofficial,telegram,feishu,discord" group:"请求拦截插件" help:"仅勾选平台的消息进入名单判定，未勾选的平台直接拦截（不触发 AI）。默认全选（与旧行为一致）；单独屏蔽某平台时取消勾选它" default:"qq,qqofficial,telegram,feishu,discord"`
 	// 名单留空的语义：blacklist 模式下表示不屏蔽任何会话；
 	// whitelist 模式下表示拦截所有群聊（私聊按用户名单，用户名单为空则全部拦截）
 	// ID 支持多平台格式：QQ 为 qq: 前缀，其他平台带前缀（如飞书 fs:oc_xxx）

@@ -25,8 +25,8 @@ import (
 type Field struct {
 	Key       string   `json:"key"`                 // 点分配置键，如 plugin.xxx.enable（统一小写）
 	Label     string   `json:"label"`               // 面板表单中的显示名
-	Type      string   `json:"type"`                // string | password | int | float | bool | text | strings | ints | select
-	Options   []string `json:"options,omitempty"`   // 仅 select 类型：可选项列表
+	Type      string   `json:"type"`                // string | password | int | float | bool | text | strings | ints | select | multiselect
+	Options   []string `json:"options,omitempty"`   // select / multiselect 类型：可选项列表
 	Group     string   `json:"group"`               // 面板中的分组名
 	Help      string   `json:"help,omitempty"`      // 字段说明（可选）
 	Sensitive bool     `json:"sensitive,omitempty"` // 敏感字段：面板不回显，API 掩码处理

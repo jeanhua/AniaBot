@@ -11,8 +11,8 @@
 //
 //	cfg       点分配置键（必填；嵌套结构体字段作为前缀段递归；`cfg:"-"` 跳过）
 //	label     面板显示名（缺省用字段名）
-//	type      覆盖类型推断（password / text / select 等必须显式声明）
-//	options   select 类型的可选项，逗号分隔
+//	type      覆盖类型推断（password / text / select / multiselect 等必须显式声明）
+//	options   select / multiselect 类型的可选项，逗号分隔
 //	group     面板分组
 //	help      字段说明
 //	sensitive "true" 时按敏感字段处理（面板不回显）
@@ -162,8 +162,8 @@ func buildBinding(sf reflect.StructField, key string, idx []int) (fieldBinding, 
 	if sf.Tag.Get("sensitive") == "true" {
 		f.Sensitive = true
 	}
-	if fieldType == "select" && len(f.Options) == 0 {
-		return fieldBinding{}, fmt.Errorf("pluginconfig: 字段 %s (%s): select 类型必须声明 options", sf.Name, key)
+	if (fieldType == "select" || fieldType == "multiselect") && len(f.Options) == 0 {
+		return fieldBinding{}, fmt.Errorf("pluginconfig: 字段 %s (%s): %s 类型必须声明 options", sf.Name, key, fieldType)
 	}
 
 	if raw, ok := sf.Tag.Lookup("default"); ok && raw != "" {
@@ -214,6 +214,11 @@ func inferFieldType(sf reflect.StructField, base reflect.Type) (string, error) {
 	case "password", "text", "select":
 		if base.Kind() != reflect.String {
 			return "", fmt.Errorf("pluginconfig: 字段 %s: type=%s 要求字段为 string 类型", sf.Name, override)
+		}
+		return override, nil
+	case "multiselect":
+		if base.Kind() != reflect.Slice || base.Elem().Kind() != reflect.String {
+			return "", fmt.Errorf("pluginconfig: 字段 %s: type=multiselect 要求字段为 []string 类型", sf.Name)
 		}
 		return override, nil
 	default:
