@@ -6,7 +6,7 @@ hero:
   text: 插件驱动型多平台机器人框架
   tagline: 基于 Go 语言 · QQ / QQ 官方 / 飞书 / Telegram / Discord 多平台 · 插件化架构 · 内置 AI 对话 / MCP / 定时任务，几十行代码写出你的第一个插件
   image:
-    src: /logo.png
+    src: /logo.webp
     alt: AniaBot
   actions:
     - theme: brand
@@ -26,3 +26,4 @@ hero:
 
 
 <HomeSections />
+

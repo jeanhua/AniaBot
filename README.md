@@ -1,10 +1,11 @@
 <div align="center">
-  <img src="./README/logo.png" width="200" alt="AniaBot Logo"/>
+  <img src="./README/logo.webp" width="200" alt="AniaBot Logo"/>
   <h1>AniaBot</h1>
   <p>一个插件驱动型多平台机器人框架</p>
   <a href="https://jeanhua.github.io/AniaBot/">📖 文档</a> |
   <a href="https://github.com/jeanhua/AniaBot">GitHub</a>
 </div>
+
 
 ## 项目介绍
 
@@ -16,9 +17,9 @@
 - **开箱即用**：内置 AI 对话（含 MCP/Skills/Tool Use）、复读机、每日新闻等插件
 - **插件市场**：独立插件仓库（AniaBot-Plugins）支持 PR 提交插件，面板「插件市场」可浏览插件介绍、在线安装/升级/卸载并自动编译重启（容器内开箱即用）
 
-![framework](./README/framework.png)
+![framework](./README/framework.webp)
 
-![pannel](./README/pannel0801.png)
+![pannel](./README/pannel.webp)
 
 ## 快速开始
 

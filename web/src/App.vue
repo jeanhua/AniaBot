@@ -14,7 +14,7 @@
     <!-- 侧边导航 -->
     <aside class="w-60 bg-zinc-950 flex flex-col shrink-0 sticky top-0 h-screen">
       <div class="px-5 pt-6 pb-5 flex items-center gap-3">
-        <img src="/logo.png" alt="AniaBot" class="w-9 h-9 rounded-full object-cover shadow-lg ring-1 ring-white/20" />
+        <img src="/logo.webp" alt="AniaBot" class="w-9 h-9 rounded-full object-cover shadow-lg ring-1 ring-white/20" />
         <div>
           <div class="text-white font-semibold leading-tight tracking-[0.2em]">ANIABOT</div>
           <div class="text-[10px] text-zinc-500 leading-tight tracking-[0.15em] uppercase mt-0.5">Console · 控制面板</div>
@@ -236,3 +236,4 @@ async function onChangePwd() {
   transform: translateX(-50%) translateY(0);
 }
 </style>
+

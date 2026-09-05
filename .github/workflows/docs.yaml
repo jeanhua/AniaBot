@@ -43,7 +43,7 @@ jobs:
         run: npm install
 
       - name: Copy logo asset
-        run: cp docs/logo.png docs/.vitepress/public/logo.png 2>/dev/null || true
+        run: cp docs/logo.webp docs/.vitepress/public/logo.webp 2>/dev/null || true
 
       - name: Build VitePress docs
         working-directory: docs
@@ -66,3 +66,4 @@ jobs:
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
+
