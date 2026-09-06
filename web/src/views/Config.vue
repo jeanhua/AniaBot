@@ -12,7 +12,7 @@
         />
       </div>
 
-      <div v-for="cat in groupTree" :key="cat.name">
+      <div v-for="cat in cards" :key="cat.name">
         <button
           class="w-full flex items-center justify-between px-3 mb-1.5 text-[11px] font-semibold uppercase tracking-wider transition-colors"
           :class="activeCategory === cat.name ? 'text-zinc-900' : 'text-slate-400 hover:text-zinc-600'"
@@ -23,26 +23,26 @@
         </button>
         <nav class="space-y-0.5">
           <template v-for="node in cat.nodes" :key="node.name">
-            <!-- 有子分组的父节点：小标题 + 缩进的子项 -->
-            <template v-if="node.children.length">
+            <!-- 插件卡片（有子分组）：插件名小标题 + 缩进的子分组 -->
+            <template v-if="hasSubs(node)">
               <button
                 class="w-full flex items-center justify-between px-3 pt-1.5 text-xs font-medium text-slate-500 hover:text-zinc-700 transition-colors"
-                @click="jumpTo(node.children[0].name)"
+                @click="jumpTo(node.sections[0].name)"
               >
                 <span class="truncate">{{ node.name }}</span>
-                <span class="text-[10px] text-slate-400 ml-2 shrink-0">{{ nodeTotal(node) }}</span>
+                <span class="text-[10px] text-slate-400 ml-2 shrink-0">{{ cardCount(node) }}</span>
               </button>
               <button
-                v-for="c in node.children"
-                :key="c.name"
+                v-for="s in node.sections"
+                :key="s.name"
                 class="w-full flex items-center justify-between pl-6 pr-3 py-1.5 rounded-lg text-[13px] transition-colors"
-                :class="activeGroup === c.name
+                :class="activeGroup === s.name
                   ? 'bg-zinc-100 text-zinc-900 font-medium'
                   : 'text-slate-600 hover:bg-slate-200/60'"
-                @click="jumpTo(c.name)"
+                @click="jumpTo(s.name)"
               >
-                <span class="truncate">{{ c.label }}</span>
-                <span class="text-[11px] text-slate-400 ml-2 shrink-0">{{ c.count }}</span>
+                <span class="truncate">{{ s.label }}</span>
+                <span class="text-[11px] text-slate-400 ml-2 shrink-0">{{ s.fields.length }}</span>
               </button>
             </template>
             <!-- 无子分组的平铺分组 -->
@@ -55,12 +55,12 @@
               @click="jumpTo(node.name)"
             >
               <span class="truncate">{{ node.name }}</span>
-              <span class="text-[11px] text-slate-400 ml-2 shrink-0">{{ node.fields.length }}</span>
+              <span class="text-[11px] text-slate-400 ml-2 shrink-0">{{ cardCount(node) }}</span>
             </button>
           </template>
         </nav>
       </div>
-      <p v-if="categorized.length === 0" class="px-3 text-xs text-slate-400">没有匹配「{{ search }}」的配置项</p>
+      <p v-if="cards.length === 0" class="px-3 text-xs text-slate-400">没有匹配「{{ search }}」的配置项</p>
     </aside>
 
     <!-- 配置主体 -->
@@ -165,16 +165,16 @@
         <!-- 分类页签 -->
         <div v-if="!searching" class="flex items-center gap-2 flex-wrap">
           <button
-            v-for="cat in categories"
-            :key="cat"
+            v-for="cat in cards"
+            :key="cat.name"
             class="px-4 py-2 rounded-lg text-sm transition-colors"
-            :class="activeCategory === cat
+            :class="activeCategory === cat.name
               ? 'bg-zinc-900 text-white font-medium shadow-sm'
               : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'"
-            @click="selectCategory(cat)"
+            @click="selectCategory(cat.name)"
           >
-            {{ cat }}
-            <span class="ml-1.5 text-[11px]" :class="activeCategory === cat ? 'text-zinc-300' : 'text-slate-400'">{{ categoryCount(cat) }} 项</span>
+            {{ cat.name }}
+            <span class="ml-1.5 text-[11px]" :class="activeCategory === cat.name ? 'text-zinc-300' : 'text-slate-400'">{{ cat.total }} 项</span>
           </button>
           <button
             class="ml-auto px-3 py-2 text-xs rounded-lg border border-slate-200 text-slate-500 hover:bg-slate-50 transition-colors"
@@ -185,29 +185,42 @@
         </div>
 
         <section
-          v-for="group in displayGroups"
-          :key="group.name"
-          :id="sectionId(group.name)"
+          v-for="node in displayCards"
+          :key="node.name"
+          :id="sectionId(node.name)"
           class="bg-white rounded-xl shadow-sm border border-slate-200/60 scroll-mt-24 overflow-hidden"
         >
           <button
             class="w-full flex items-center justify-between gap-3 px-6 py-4 text-left hover:bg-slate-50 transition-colors"
-            @click="toggleGroup(group.name)"
+            @click="toggleGroup(node.name)"
           >
             <span class="flex items-center gap-2.5 min-w-0">
-              <span class="w-7 h-7 rounded-lg flex items-center justify-center text-white text-xs shrink-0 [&>svg]:w-4 [&>svg]:h-4" :class="groupColor(group)" v-html="groupIcon(group)" />
-              <span class="text-sm font-semibold text-slate-800 truncate">{{ groupDisplayName(group.name) }}</span>
-              <span class="text-xs font-normal text-slate-400 shrink-0">{{ group.fields.length }} 项</span>
+              <span class="w-7 h-7 rounded-lg flex items-center justify-center text-white text-xs shrink-0 [&>svg]:w-4 [&>svg]:h-4" :class="groupColor(node)" v-html="groupIcon(node)" />
+              <span class="text-sm font-semibold text-slate-800 truncate">{{ node.name }}</span>
+              <span class="text-xs font-normal text-slate-400 shrink-0">{{ cardCount(node) }} 项</span>
             </span>
             <span class="flex items-center gap-3 shrink-0">
-              <span v-if="groupChanged(group)" class="text-[11px] text-amber-600">● 有修改</span>
-              <svg class="w-4 h-4 text-slate-400 transition-transform duration-200" :class="isOpen(group) ? 'rotate-180' : ''" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="m19.5 8.25-7.5 7.5-7.5-7.5" /></svg>
+              <span v-if="groupChanged(node)" class="text-[11px] text-amber-600">● 有修改</span>
+              <svg class="w-4 h-4 text-slate-400 transition-transform duration-200" :class="isOpen(node) ? 'rotate-180' : ''" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="m19.5 8.25-7.5 7.5-7.5-7.5" /></svg>
             </span>
           </button>
 
           <Transition name="fade">
-            <div v-show="isOpen(group)" class="p-6 grid grid-cols-1 lg:grid-cols-2 gap-x-8 gap-y-5 border-t border-slate-100">
-              <div v-for="field in group.fields" :key="field.key" :class="{ 'lg:col-span-2': ['text', 'strings', 'ints', 'multiselect'].includes(field.type) }">
+            <div v-show="isOpen(node)" class="p-6 border-t border-slate-100" :class="{ 'space-y-5': hasSubs(node) }">
+              <!-- 子分组分节：线框归类；平铺分组只有一个无名分节，直接铺字段 -->
+              <div
+                v-for="s in node.sections"
+                :key="s.name"
+                :id="s.name !== node.name ? sectionId(s.name) : undefined"
+                :class="hasSubs(node) ? 'rounded-lg border border-slate-200 p-5 scroll-mt-24' : ''"
+              >
+                <p v-if="s.label" class="flex items-center gap-2 text-xs font-semibold text-slate-500 mb-4">
+                  <span class="w-1 h-3.5 rounded-full bg-zinc-400" />
+                  {{ s.label }}
+                  <span class="text-[10px] font-normal text-slate-400">{{ s.fields.length }} 项</span>
+                </p>
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-x-8 gap-y-5">
+                  <div v-for="field in s.fields" :key="field.key" :class="{ 'lg:col-span-2': ['text', 'strings', 'ints', 'multiselect'].includes(field.type) }">
                 <label class="block text-xs font-medium text-slate-700 mb-1.5">
                   {{ field.label }}
                   <span class="text-slate-400 font-normal ml-1">{{ field.key }}</span>
@@ -271,6 +284,8 @@
                   <code class="font-mono bg-amber-50 px-1 rounded">ANIA_BOT_ADMIN_PANEL_ENABLE=true</code>
                   覆盖配置后重启 Bot。
                 </p>
+                  </div>
+                </div>
               </div>
             </div>
           </Transition>
@@ -318,7 +333,6 @@ const inputClass = 'w-full border border-slate-300 rounded-lg px-3 py-2 text-sm 
 
 const iconSearch = '<svg fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z"/></svg>'
 const iconCheck = '<svg fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z"/></svg>'
-const iconSpark = '<svg fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M9.813 15.904 9 18.75l-.813-2.846a4.5 4.5 0 0 0-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 0 0 3.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 0 0 3.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 0 0-3.09 3.09ZM18.259 8.715 18 9.75l-.259-1.035a3.375 3.375 0 0 0-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 0 0 2.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 0 0 2.456 2.456L21.75 6l-1.035.259a3.375 3.375 0 0 0-2.456 2.456Z"/></svg>'
 const iconPuzzle = '<svg fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M14.25 6.087c0-.355.186-.676.401-.959.221-.29.349-.634.349-1.003 0-1.036-1.007-1.875-2.25-1.875s-2.25.84-2.25 1.875c0 .369.128.713.349 1.003.215.283.401.604.401.959v.431c0 .46-.335.84-.782.927a7.59 7.59 0 0 1-1.181.093h-.77c-.254 0-.487.09-.668.24-.297.246-.451.619-.371 1.014.073.361.026.74-.145 1.086-.199.402-.576.65-1.007.65H7.5c-.621 0-1.125.504-1.125 1.125v.77c0 .418.314.82.77 1.118.198.13.37.305.48.515.16.308.165.674.014.97-.168.333-.502.521-.864.521H4.875A1.875 1.875 0 0 1 3 14.25v-1.77c0-.358-.215-.68-.543-.822A1.87 1.87 0 0 0 1.875 9.75c0-1.243 1.007-2.25 2.25-2.25.369 0 .713.128 1.003.349.283.215.604.401.959.401h.413"/></svg>'
 const iconCube = '<svg fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="m21 7.5-9-5.25L3 7.5m18 0-9 5.25m9-5.25v9l-9 5.25M3 7.5l9 5.25M3 7.5v9l9 5.25m0-9v9"/></svg>'
 const iconBookmark = '<svg fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M17.593 3.322c1.1.128 1.907 1.077 1.907 2.185V21L12 17.25 4.5 21V5.507c0-1.108.806-2.057 1.907-2.185a48.507 48.507 0 0 1 11.186 0Z"/></svg>'
@@ -342,8 +356,7 @@ const presetSaving = ref(false)
 // ---- 页面整理状态 ----
 const presetsOpen = ref(false) // 配置预设折叠面板（默认收起，避免抢占页面空间）
 const activeCategory = ref('框架基础') // 当前分类页签
-const openGroups = ref(new Set()) // 已展开的分组（默认全部展开，方便一眼看全配置）
-const allOpen = computed(() => openGroups.value.size >= groups.value.length) // 是否展开全部分组
+const openGroups = ref(new Set()) // 已展开的卡片（父分组名，默认全部展开，方便一眼看全配置）
 
 const searching = computed(() => search.value.trim() !== '')
 
@@ -356,9 +369,8 @@ const groups = computed(() => {
   return [...map.entries()].map(([name, fields]) => ({ name, fields }))
 })
 
-// 分组归类：框架基础 / AI 对话 / 插件
-// 按配置键前缀判断：bot.* 为框架基础，plugin.* 为插件；AI 对话插件单独归类
-const CAT_ORDER = ['框架基础', 'AI 对话', '插件']
+// 分类：按配置键前缀判断，bot.* 为框架基础，其余归入插件（AI 对话插件也是插件，不单独设分类）
+const CAT_ORDER = ['框架基础', '插件']
 
 // 分组名支持子分组：以 "." 或 " · " 分隔（如 "地震预警.基础"、"AI 对话 · 模型"），
 // 前段为父分组（通常是插件名），后段为子分组名
@@ -367,17 +379,9 @@ function splitGroupName(name) {
   return m ? { parent: m[1].trim(), child: m[2].trim() } : { parent: name, child: '' }
 }
 
-// 卡片标题展示名：子分组以「父 · 子」连接显示
-function groupDisplayName(name) {
-  const { parent, child } = splitGroupName(name)
-  return child ? `${parent} · ${child}` : name
-}
-
 function categoryOf(group) {
   const key = group.fields[0]?.key || ''
-  if (key.startsWith('bot.')) return '框架基础'
-  if (group.name.startsWith('AI 对话')) return 'AI 对话'
-  return '插件'
+  return key.startsWith('bot.') ? '框架基础' : '插件'
 }
 
 // 搜索过滤后的分组，按分类排序（与左侧导航一致，插件在最后）
@@ -398,17 +402,10 @@ const filteredGroups = computed(() => {
   return [...list].sort((a, b) => CAT_ORDER.indexOf(categoryOf(a)) - CAT_ORDER.indexOf(categoryOf(b)))
 })
 
-const categorized = computed(() => {
-  const map = new Map(CAT_ORDER.map((n) => [n, []]))
-  for (const g of filteredGroups.value) {
-    map.get(categoryOf(g)).push(g)
-  }
-  return CAT_ORDER.map((name) => ({ name, groups: map.get(name) })).filter((c) => c.groups.length > 0)
-})
-
-// 左侧导航树：把分组按「父分组 → 子分组」两级组织（保持注册顺序）。
-// 无子分组的平铺分组自成节点；平铺分组与同名子分组并存时，平铺组显示为「通用」。
-const groupTree = computed(() => {
+// 卡片：一个插件（父分组）一张卡片，子分组作为卡片内的分节（保持注册顺序）。
+// 无子分组的平铺分组自成一张卡片（唯一分节 label 为空，直接铺字段）；
+// 平铺分组与同名子分组并存时，平铺组显示为「通用」分节。
+const cards = computed(() => {
   const cats = []
   const byCat = new Map()
   const nodeOf = (catName, parent) => {
@@ -420,7 +417,7 @@ const groupTree = computed(() => {
     }
     let node = cat.byParent.get(parent)
     if (!node) {
-      node = { name: parent, fields: [], children: [] }
+      node = { name: parent, cat: catName, sections: [] }
       cat.byParent.set(parent, node)
       cat.nodes.push(node)
     }
@@ -432,7 +429,7 @@ const groupTree = computed(() => {
     if (child) {
       const { cat, node } = nodeOf(categoryOf(g), parent)
       cat.total += g.fields.length
-      node.children.push({ name: g.name, label: child, count: g.fields.length })
+      node.sections.push({ name: g.name, label: child, fields: g.fields })
     } else {
       flat.push(g) // 平铺分组第二遍处理：让子分组先占位，才能识别同名并存
     }
@@ -440,41 +437,43 @@ const groupTree = computed(() => {
   for (const g of flat) {
     const { cat, node } = nodeOf(categoryOf(g), g.name)
     cat.total += g.fields.length
-    if (node.children.length) node.children.unshift({ name: g.name, label: '通用', count: g.fields.length })
-    else node.fields = g.fields
+    if (node.sections.length) node.sections.unshift({ name: g.name, label: '通用', fields: g.fields })
+    else node.sections.push({ name: g.name, label: '', fields: g.fields })
   }
   return cats
 })
 
-function nodeTotal(node) {
-  return node.fields.length + node.children.reduce((n, c) => n + c.count, 0)
+// 是否有子分组分节（否则平铺直排字段）
+function hasSubs(node) {
+  return node.sections.length > 1 || (node.sections.length === 1 && node.sections[0].label !== '')
 }
 
-const categories = computed(() => categorized.value.map((c) => c.name))
+function cardCount(node) {
+  return node.sections.reduce((n, s) => n + s.fields.length, 0)
+}
 
-const activeCategoryGroups = computed(() => {
-  const cat = categorized.value.find((c) => c.name === activeCategory.value)
-  return cat ? cat.groups : []
+const totalCards = computed(() => cards.value.reduce((n, c) => n + c.nodes.length, 0))
+
+const allOpen = computed(() => openGroups.value.size >= totalCards.value) // 是否展开全部卡片
+
+const activeCatNodes = computed(() => {
+  const cat = cards.value.find((c) => c.name === activeCategory.value)
+  return cat ? cat.nodes : []
 })
 
-// 展示的分组：搜索时展示所有匹配分组（方便扫读），否则只展示当前分类
-const displayGroups = computed(() => (searching.value ? filteredGroups.value : activeCategoryGroups.value))
-
-function categoryCount(name) {
-  const cat = categorized.value.find((c) => c.name === name)
-  return cat ? cat.groups.reduce((n, g) => n + g.fields.length, 0) : 0
-}
+// 展示的卡片：搜索时展示所有匹配卡片（方便扫读），否则只展示当前分类
+const displayCards = computed(() => (searching.value ? cards.value.flatMap((c) => c.nodes) : activeCatNodes.value))
 
 function sectionId(name) {
   return 'grp-' + name.replace(/[^\w一-龥]+/g, '-')
 }
 
-function isOpen(group) {
-  return searching.value || openGroups.value.has(group.name)
+function isOpen(node) {
+  return searching.value || openGroups.value.has(node.name)
 }
 
-function groupChanged(group) {
-  return group.fields.some((f) => cleared[f.key] || !sameFormValue(form[f.key], original[f.key]))
+function groupChanged(node) {
+  return node.sections.some((s) => s.fields.some((f) => cleared[f.key] || !sameFormValue(form[f.key], original[f.key])))
 }
 
 function toggleGroup(name) {
@@ -486,45 +485,47 @@ function toggleGroup(name) {
 }
 
 function toggleAll() {
-  openGroups.value = allOpen.value
-    ? new Set()
-    : new Set(groups.value.map((g) => g.name))
+  const all = cards.value.flatMap((c) => c.nodes.map((n) => n.name))
+  openGroups.value = allOpen.value ? new Set() : new Set(all)
 }
 
 function selectCategory(name) {
   search.value = ''
   activeCategory.value = name
-  const cat = categorized.value.find((c) => c.name === name)
-  const first = cat && cat.groups.length ? cat.groups[0].name : ''
-  activeGroup.value = first
+  const cat = cards.value.find((c) => c.name === name)
+  activeGroup.value = cat && cat.nodes.length ? cat.nodes[0].name : ''
   window.scrollTo({ top: 0, behavior: 'smooth' })
 }
 
 async function jumpTo(name) {
-  const g = groups.value.find((x) => x.name === name)
-  if (!g) return
+  // name 为卡片名（父分组）或分节名（子分组）：展开所属卡片后滚动到对应位置
+  let card = null
+  for (const cat of cards.value) {
+    for (const n of cat.nodes) {
+      if (n.name === name || n.sections.some((s) => s.name === name)) {
+        card = n
+        break
+      }
+    }
+    if (card) break
+  }
+  if (!card) return
   search.value = ''
-  activeCategory.value = categoryOf(g)
+  activeCategory.value = card.cat
   const s = new Set(openGroups.value)
-  s.add(name)
+  s.add(card.name)
   openGroups.value = s
   activeGroup.value = name
   await nextTick()
   document.getElementById(sectionId(name))?.scrollIntoView({ behavior: 'smooth', block: 'start' })
 }
 
-function groupColor(group) {
-  const cat = categoryOf(group)
-  return {
-    '框架基础': 'bg-zinc-500',
-    'AI 对话': 'bg-zinc-900',
-    '插件': 'bg-zinc-700',
-  }[cat]
+function groupColor(node) {
+  return node.cat === '框架基础' ? 'bg-zinc-500' : 'bg-zinc-700'
 }
 
-function groupIcon(group) {
-  const cat = categoryOf(group)
-  return { '框架基础': iconCube, 'AI 对话': iconSpark, '插件': iconPuzzle }[cat]
+function groupIcon(node) {
+  return node.cat === '框架基础' ? iconCube : iconPuzzle
 }
 
 // multiselect 的表单值是数组，比较时按集合语义（与顺序无关）
@@ -639,11 +640,10 @@ onMounted(async () => {
     cleared[f.key] = false
   }
   rawText.value = JSON.stringify(v, null, 2)
-  if (groups.value.length) {
-    const first = groups.value[0]
-    activeCategory.value = categoryOf(first)
-    activeGroup.value = first.name
-    openGroups.value = new Set(groups.value.map((g) => g.name)) // 默认全部展开，方便一眼看全配置
+  if (cards.value.length) {
+    activeCategory.value = cards.value[0].name
+    activeGroup.value = cards.value[0].nodes.length ? cards.value[0].nodes[0].name : ''
+    openGroups.value = new Set(cards.value.flatMap((c) => c.nodes.map((n) => n.name))) // 默认全部展开，方便一眼看全配置
   }
 })
 
