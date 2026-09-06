@@ -295,43 +295,72 @@ func (e *ToolExecuter) RemoveMCP(name string) error {
 
 // ReconnectMCP 重新连接指定 MCP 服务器并刷新其工具列表（两种模式均支持）。
 // 会话内此前已加载的该服务器工具句柄随之失效，需要重新 mcp_load。
+//
+// 连接建立（Connect 可能阻塞长达 config.Timeout）在全局写锁之外完成：
+// e.mu 保护所有会话共享的工具表，若持锁连接，一个挂死的服务器会卡住全部
+// 会话的工具解析与列表下发（与 AddMCP 的「先连接后换锁」模式一致）。
 func (e *ToolExecuter) ReconnectMCP(ctx context.Context, name string) error {
+	// 懒加载（发现模式）：manager 原地重连，会话内的 mcp_load 工具引用同一
+	// manager，重连后新加载的工具自动使用新连接（manager.mu 为该服务器私有，
+	// 阻塞范围仅限此服务器的按需加载）
+	e.mu.RLock()
+	var manager *MCPToolManager
+	for _, m := range e.mcpManagers {
+		if m.Name() == name {
+			manager = m
+			break
+		}
+	}
+	e.mu.RUnlock()
+	if manager != nil {
+		return manager.Reconnect(ctx)
+	}
+
+	// 全量注册模式：读锁下仅定位旧客户端，连接在锁外建立
+	e.mu.RLock()
+	var oldClient *MCPClient
+	for _, tool := range e.tools {
+		if mcpTool, ok := tool.(*MCPTool); ok && mcpTool.client.config.Name == name {
+			oldClient = mcpTool.client
+			break
+		}
+	}
+	e.mu.RUnlock()
+	if oldClient == nil {
+		return fmt.Errorf("MCP 服务器 '%s' 未注册", name)
+	}
+
+	fresh := NewMCPClient(oldClient.config)
+	if err := fresh.Connect(ctx); err != nil {
+		return fmt.Errorf("重连 MCP 服务器 '%s' 失败: %w", name, err)
+	}
+
 	e.mu.Lock()
 	defer e.mu.Unlock()
-
-	// 懒加载（发现模式）：manager 原地重连，会话内的 mcp_load 工具引用同一
-	// manager，重连后新加载的工具自动使用新连接
-	for _, manager := range e.mcpManagers {
-		if manager.Name() == name {
-			return manager.Reconnect(ctx)
+	// 双检：锁外连接期间该服务器可能已被移除（RemoveMCP 会关闭旧连接），
+	// 此时不得把新工具重新挂回已删除的服务器
+	present := false
+	for _, t := range e.tools {
+		if t2, ok := t.(*MCPTool); ok && t2.client == oldClient {
+			present = true
+			break
 		}
 	}
-
-	// 全量注册模式：用原配置重建客户端，整体替换该服务器的工具
-	for _, tool := range e.tools {
-		mcpTool, ok := tool.(*MCPTool)
-		if !ok || mcpTool.client.config.Name != name {
-			continue
-		}
-		oldClient := mcpTool.client
-		fresh := NewMCPClient(oldClient.config)
-		if err := fresh.Connect(ctx); err != nil {
-			return fmt.Errorf("重连 MCP 服务器 '%s' 失败: %w", name, err)
-		}
-		oldClient.Close()
-		for toolName, t := range e.tools {
-			if t2, ok := t.(*MCPTool); ok && t2.client == oldClient {
-				delete(e.tools, toolName)
-			}
-		}
-		for _, toolDef := range fresh.GetTools() {
-			e.tools[toolDef.Name] = NewMCPTool(fresh, toolDef)
-		}
-		log.Printf("[MCP:%s] 重连完成（全量模式），共 %d 个工具", name, len(fresh.GetTools()))
-		return nil
+	if !present {
+		fresh.Close()
+		return fmt.Errorf("MCP 服务器 '%s' 已被移除", name)
 	}
-
-	return fmt.Errorf("MCP 服务器 '%s' 未注册", name)
+	oldClient.Close()
+	for toolName, t := range e.tools {
+		if t2, ok := t.(*MCPTool); ok && t2.client == oldClient {
+			delete(e.tools, toolName)
+		}
+	}
+	for _, toolDef := range fresh.GetTools() {
+		e.tools[toolDef.Name] = NewMCPTool(fresh, toolDef)
+	}
+	log.Printf("[MCP:%s] 重连完成（全量模式），共 %d 个工具", name, len(fresh.GetTools()))
+	return nil
 }
 
 // MCPServerInfos 返回当前已注册的全部 MCP 服务器信息（按名称排序，

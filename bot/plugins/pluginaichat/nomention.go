@@ -101,12 +101,13 @@ func (p *AIChatPlugin) tryClearNoMentionChat(ctx context.Context, groupID messag
 	if !ok2 || e.chat == nil {
 		return false
 	}
-	if !p.tryLock(groupID, true) {
+	lock := p.tryLock(groupID, true)
+	if lock == nil {
 		// AI 长响应中拿不到锁：保留计数，响应结束后继续累计直到成功清理，
 		// 否则长响应期间积累的 30+ 条消息永远不会触发历史清理
 		return false
 	}
-	defer p.unLock(groupID, true)
+	defer lock.release()
 	return p.clearChatHistory(ctx, groupID, e.chat)
 }
 

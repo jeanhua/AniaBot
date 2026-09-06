@@ -10,8 +10,8 @@ import (
 	"github.com/jeanhua/AniaBot/common/storage"
 )
 
-// lockFake 最小内存 Storage 实现：仅支持 tryLock 需要的 SETNX 与 Del，
-// 其余方法经内嵌接口兜底（测试中不会触达）。
+// lockFake 最小内存 Storage 实现：仅支持 tryLock/release 需要的 SETNX、
+// GetString、Expire 与 Del，其余方法经内嵌接口兜底（测试中不会触达）。
 type lockFake struct {
 	storage.Storage
 	mu   sync.Mutex
@@ -34,6 +34,20 @@ func (f *lockFake) SetString(_ context.Context, key, val string, opts ...storage
 	}
 	f.data[key] = val
 	return true
+}
+
+func (f *lockFake) GetString(_ context.Context, key string) (string, bool) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	v, ok := f.data[key]
+	return v, ok
+}
+
+func (f *lockFake) Expire(_ context.Context, key string, _ time.Duration) bool {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	_, ok := f.data[key]
+	return ok
 }
 
 func (f *lockFake) Del(_ context.Context, key string) bool {
@@ -81,10 +95,11 @@ func TestEvictChatsSkipsLockedSession(t *testing.T) {
 	storeIdleEntry(p, "g:qq:1003", id, true, 3*time.Hour)
 
 	// 模拟该会话正在响应（持有会话锁）
-	if !p.tryLock(id, true) {
+	lock := p.tryLock(id, true)
+	if lock == nil {
 		t.Fatal("预取会话锁失败")
 	}
-	defer p.unLock(id, true)
+	defer lock.release()
 
 	p.evictChats(2*time.Hour, 0)
 	if _, ok := p.chats.Load("g:qq:1003"); !ok {

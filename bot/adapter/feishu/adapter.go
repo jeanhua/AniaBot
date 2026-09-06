@@ -956,9 +956,10 @@ func appendTextSeg(segs []message.OB11Segment, text string) []message.OB11Segmen
 		return segs
 	}
 	if len(segs) > 0 && segs[len(segs)-1].Type == message.SegmentText {
-		prev := segs[len(segs)-1].Data["text"].(string)
-		segs[len(segs)-1].Data["text"] = prev + text
-		return segs
+		if prev, ok := segs[len(segs)-1].Data["text"].(string); ok {
+			segs[len(segs)-1].Data["text"] = prev + text
+			return segs
+		}
 	}
 	return append(segs, message.OB11Segment{Type: message.SegmentText, Data: message.TextMessage{Text: text}.Marshal()})
 }

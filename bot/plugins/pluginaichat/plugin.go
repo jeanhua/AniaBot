@@ -210,7 +210,8 @@ func (p *AIChatPlugin) OnGroupMsg(ctx context.Context, bot bot.Bot, cmd command.
 		p.commandManager.rewriteCustomCommand(cmd, &msg)
 	}
 
-	if !p.tryLock(msg.GroupId, true) {
+	lock := p.tryLock(msg.GroupId, true)
+	if lock == nil {
 		// 当前正在响应：消息进入排队队列，响应结束后自动合并处理
 		first, ok := p.enqueuePending(msg.GroupId, true, msg)
 		if !ok {
@@ -226,7 +227,7 @@ func (p *AIChatPlugin) OnGroupMsg(ctx context.Context, bot bot.Bot, cmd command.
 		return true, nil
 	}
 	p.touchChat(sessionKey(msg.GroupId, true))
-	defer p.unLock(msg.GroupId, true)
+	defer lock.release()
 	defer p.clearActiveContext(msg.GroupId, true)
 
 	chat := p.getChat(bot, msg.GroupId, true, p.getPromptForID(msg.GroupId, true))
@@ -304,7 +305,8 @@ func (p *AIChatPlugin) OnFriendMsg(ctx context.Context, bot bot.Bot, cmd command
 		p.commandManager.rewriteCustomCommand(cmd, &msg)
 	}
 
-	if !p.tryLock(msg.Sender.UserId, false) {
+	lock := p.tryLock(msg.Sender.UserId, false)
+	if lock == nil {
 		// 当前正在响应：消息进入排队队列，响应结束后自动合并处理
 		first, ok := p.enqueuePending(msg.Sender.UserId, false, msg)
 		if !ok {
@@ -320,7 +322,7 @@ func (p *AIChatPlugin) OnFriendMsg(ctx context.Context, bot bot.Bot, cmd command
 		return true, nil
 	}
 	p.touchChat(sessionKey(msg.Sender.UserId, false))
-	defer p.unLock(msg.Sender.UserId, false)
+	defer lock.release()
 	defer p.clearActiveContext(msg.Sender.UserId, false)
 
 	chat := p.getChat(bot, msg.Sender.UserId, false, p.getPromptForID(msg.Sender.UserId, false))

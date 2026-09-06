@@ -74,12 +74,14 @@ func (p *RepeatPlugin) OnGroupMsg(ctx context.Context, bot bot.Bot, cmd command.
 	if p.enable.Load() == false {
 		return true, nil
 	}
-	val, ok := p.repeatGMap.Load(msg.GroupId)
-	if !ok {
-		p.repeatGMap.Store(msg.GroupId, &repeatCount{
-			msg:   msg.RawMessage,
-			count: 1,
-		})
+	// LoadOrStore 原子初始化：群内两条消息并发到达时，Load+Store 组合会各自
+	// Store 一个独立计数器，丢失其一（复读计数错乱）
+	val, loaded := p.repeatGMap.LoadOrStore(msg.GroupId, &repeatCount{
+		msg:   msg.RawMessage,
+		count: 1,
+	})
+	if !loaded {
+		// 本消息创建的计数器已自带 count=1，无需再比较
 		return true, nil
 	}
 

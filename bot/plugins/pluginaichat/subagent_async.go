@@ -202,10 +202,11 @@ func (p *AIChatPlugin) onSubagentComplete(b bot.Bot, id message.QID, isGroup boo
 // tryProcessPending 尝试获取会话锁并处理排队消息。
 // 若锁不可用（会话正在响应中），排队消息会在当前响应结束后的 drain 循环中被处理。
 func (p *AIChatPlugin) tryProcessPending(b bot.Bot, id message.QID, isGroup bool) {
-	if !p.tryLock(id, isGroup) {
+	lock := p.tryLock(id, isGroup)
+	if lock == nil {
 		return
 	}
-	defer p.unLock(id, isGroup)
+	defer lock.release()
 
 	chat := p.getChat(b, id, isGroup, p.getPromptForID(id, isGroup))
 	if chat == nil {

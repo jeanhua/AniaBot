@@ -121,10 +121,11 @@ func (p *AIChatPlugin) evictChats(maxIdle time.Duration, maxSessions int) {
 // tryLock 会瞬时占用一个并发槽位，可忽略。
 func (p *AIChatPlugin) evictOneChat(key string, e *chatEntry) {
 	lastSeen := e.lastActive.Load()
-	if !p.tryLock(e.id, e.isGroup) {
+	lock := p.tryLock(e.id, e.isGroup)
+	if lock == nil {
 		return
 	}
-	defer p.unLock(e.id, e.isGroup)
+	defer lock.release()
 	if e.lastActive.Load() != lastSeen || p.hasPending(key) {
 		return
 	}
