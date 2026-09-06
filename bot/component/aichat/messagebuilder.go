@@ -7,7 +7,8 @@ import (
 )
 
 type MessageBuilder struct {
-	prompt       string
+	prompt       string // 静态配置提示词（或会话覆盖版），不含场景描述
+	scene        string // 场景提示词，拼在 available_skills 之后
 	skillManager *llmtool.SkillManager
 }
 
@@ -26,20 +27,27 @@ func (b *MessageBuilder) WithSkillManager(manager *llmtool.SkillManager) {
 	b.skillManager = manager
 }
 
-// SetPrompt 运行时更新系统提示词（面板修改 Prompt 覆盖后，驻留会话下一轮立即生效）。
+// SetPrompt 运行时更新静态系统提示词（面板修改 Prompt 覆盖后，驻留会话下一轮立即生效）。
 func (b *MessageBuilder) SetPrompt(prompt string) {
 	b.prompt = prompt
 }
 
+// SetScene 运行时更新场景提示词（群名/人数等变化后下一轮生效），与 SetPrompt 配套。
+func (b *MessageBuilder) SetScene(scene string) {
+	b.scene = scene
+}
+
+// buildSystemPrompt 按「静态提示词 + available_skills + 场景描述」组装 system prompt。
+// 场景描述含会话 ID/群名等每会话不同的内容，必须排在 skills 之后：上游前缀缓存
+// 按最长公共前缀命中，场景夹在静态段与 skills 之间会把 skills 挡在共享前缀之外。
 func (b *MessageBuilder) buildSystemPrompt() string {
-	if b.skillManager == nil {
-		return b.prompt
+	prompt := b.prompt
+	if b.skillManager != nil {
+		if skillBlock := b.skillManager.BuildAvailableSkillsPrompt(); skillBlock != "" {
+			prompt += "\n\n" + skillBlock
+		}
 	}
-	skillBlock := b.skillManager.BuildAvailableSkillsPrompt()
-	if skillBlock == "" {
-		return b.prompt
-	}
-	return b.prompt + "\n\n" + skillBlock
+	return prompt + b.scene
 }
 
 func (b *MessageBuilder) withTimePrefix(input string) string {

@@ -32,7 +32,8 @@ func (p *AIChatPlugin) clearActiveContext(id message.QID, isGroup bool) {
 	p.activeContexts.Delete(sessionKey(id, isGroup))
 }
 
-// buildScenePrompt 生成当前对话场景描述，注入到 system prompt 末尾，
+// buildScenePrompt 生成当前对话场景描述，经 WithScenePrompt 注入 system prompt
+// 末尾（排在 available_skills 之后，保证 skills 参与跨会话共享的前缀缓存），
 // 让 AI 明确自己处于群聊还是私聊，以及消息 [nickname:昵称 id:用户ID] 前缀中
 // id 的含义（用于 @人、填写定时任务 created_by 等场景）。
 func (p *AIChatPlugin) buildScenePrompt(b bot.Bot, id message.QID, isGroup bool) string {
@@ -210,7 +211,8 @@ func (p *AIChatPlugin) getChat(b bot.Bot, id message.QID, isGroup bool, prompt s
 		// 对话时同步新的系统提示词（覆盖词 + 场景描述），无需重启或等会话回收
 		if e.prompt != prompt {
 			e.prompt = prompt
-			e.chat.SetSystemPrompt(prompt + p.buildScenePrompt(b, id, isGroup))
+			e.chat.SetSystemPrompt(prompt)
+			e.chat.SetScenePrompt(p.buildScenePrompt(b, id, isGroup))
 		}
 		return e.chat
 	}
@@ -236,9 +238,9 @@ func (p *AIChatPlugin) getChat(b bot.Bot, id message.QID, isGroup bool, prompt s
 				sessionExecutor.RegisterSession(tool)
 			}
 		}
-		// 在 system prompt 末尾注入当前对话场景（群聊/私聊、群信息、消息 id 前缀含义）
+		// 场景描述（群聊/私聊、群信息、消息 id 前缀含义）经 WithScenePrompt 注入，
+		// 组装时排在 available_skills 之后，保住「覆盖词 + skills」的跨会话共享前缀
 		scene := p.buildScenePrompt(b, id, isGroup)
-		fullPrompt := prompt + scene
 		// 每个会话独立的历史持久化存储；g:/f: 前缀避免群聊与好友 id 相同导致历史串扰。
 		// SQL 后端走行级存储（ania_chat_session/ania_chat_message），否则回退 KV 整段 JSON
 		var historyStore aichat.HistoryStore
@@ -252,12 +254,13 @@ func (p *AIChatPlugin) getChat(b bot.Bot, id message.QID, isGroup bool, prompt s
 			p.cfg.BaseURL,
 			p.cfg.APIKey,
 			p.cfg.Model,
-			fullPrompt,
+			prompt,
 			p.cfg.MaxContextTokens,
 			sessionExecutor,
 			historyStore,
 			aichat.WithClientOptions(append(p.llmClientOptions(), aichat.WithAPIFormat(p.cfg.APIFormat))...),
 			aichat.WithCompressorClient(p.buildCompressorClient()),
+			aichat.WithScenePrompt(scene),
 		)
 		if err != nil {
 			p.Logger.Error("创建 ChatBot 失败", "error", err.Error())

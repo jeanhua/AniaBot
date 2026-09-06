@@ -711,8 +711,10 @@ func (m *clockManager) executeTask(ctx context.Context, task *ClockTask, rec *ta
 	p := m.plugin
 	isGroup := task.TargetType == clockTargetGroup
 	targetQID := parseQID(task.TargetID)
-	// 注入对话场景（群聊/私聊），触发时 AI 同样清楚自己面对的场景
-	prompt := p.getPromptForID(targetQID, isGroup) + p.buildScenePrompt(m.bot, targetQID, isGroup)
+	// 注入对话场景（群聊/私聊），触发时 AI 同样清楚自己面对的场景；经
+	// WithScenePrompt 注入并排在 available_skills 之后，保住跨执行共享的前缀
+	prompt := p.getPromptForID(targetQID, isGroup)
+	scene := p.buildScenePrompt(m.bot, targetQID, isGroup)
 
 	// 每次触发独立的 SessionToolExecutor（动态 MCP 工具互不影响）；
 	// historyStore 传 nil → 全新一次性上下文，不持久化、执行后丢弃
@@ -738,6 +740,7 @@ func (m *clockManager) executeTask(ctx context.Context, task *ClockTask, rec *ta
 		saBaseURL, saAPIKey, saModel,
 		prompt, p.cfg.MaxContextTokens, sessionExecutor, nil,
 		aichat.WithClientOptions(append(p.llmClientOptions(), aichat.WithAPIFormat(saFormat))...),
+		aichat.WithScenePrompt(scene),
 	)
 	if err != nil {
 		return "", aichat.TokenUsage{}, fmt.Errorf("创建对话失败: %w", err)

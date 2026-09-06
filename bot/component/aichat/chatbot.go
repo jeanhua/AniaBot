@@ -23,6 +23,7 @@ type ChatBot struct {
 type chatBotConfig struct {
 	clientOpts       []LLMClientOption // 主对话 LLM 客户端的可选配置（重试/备用模型）
 	compressorClient *LLMClient        // 上下文压缩专用客户端；nil 复用主对话客户端
+	scene            string            // 场景提示词，组装时排在 available_skills 之后
 }
 
 // ChatBotOption 配置 ChatBot 的可选参数（函数选项模式）。
@@ -43,6 +44,15 @@ func WithCompressorClient(client *LLMClient) ChatBotOption {
 	}
 }
 
+// WithScenePrompt 注入场景提示词（群聊/私聊、会话 ID、群信息等每会话不同的内容）。
+// 组装时排在 available_skills 之后，使「静态提示词 + skills」保持跨会话稳定的
+// 前缀缓存共享段（见 MessageBuilder.buildSystemPrompt）。
+func WithScenePrompt(scene string) ChatBotOption {
+	return func(c *chatBotConfig) {
+		c.scene = scene
+	}
+}
+
 func NewChatBot(baseURL, apiKey, model, prompt string, maxContextTokens int, toolExecutor ToolExecutor, historyStore HistoryStore, opts ...ChatBotOption) (*ChatBot, error) {
 	cfg := chatBotConfig{}
 	for _, opt := range opts {
@@ -55,6 +65,7 @@ func NewChatBot(baseURL, apiKey, model, prompt string, maxContextTokens int, too
 	}
 
 	msgBuilder := NewMessageBuilder(prompt)
+	msgBuilder.SetScene(cfg.scene)
 	toolOrchestrator := NewToolOrchestrator(toolExecutor, msgBuilder)
 
 	compressor := NewContextCompressor(prompt)
@@ -74,9 +85,15 @@ func (b *ChatBot) LoadHistory(ctx context.Context) {
 	b.window.load(ctx)
 }
 
-// SetSystemPrompt 运行时更新系统提示词（面板修改 Prompt 覆盖后，驻留会话下一轮立即生效）。
+// SetSystemPrompt 运行时更新静态系统提示词（面板修改 Prompt 覆盖后，驻留会话
+// 下一轮立即生效）。场景提示词经 SetScenePrompt 单独更新。
 func (b *ChatBot) SetSystemPrompt(prompt string) {
 	b.msgBuilder.SetPrompt(prompt)
+}
+
+// SetScenePrompt 运行时更新场景提示词（群名/人数、记忆/知识库开关变化后下一轮生效）。
+func (b *ChatBot) SetScenePrompt(scene string) {
+	b.msgBuilder.SetScene(scene)
 }
 
 func (b *ChatBot) Chat(ctx context.Context, userInput string, callbacks llmtool.CallBackFuncs, opts ChatOptions) (string, TokenUsage, error) {
