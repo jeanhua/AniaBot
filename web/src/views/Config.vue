@@ -423,22 +423,22 @@ const cards = computed(() => {
     }
     return { cat, node }
   }
-  const flat = []
   for (const g of filteredGroups.value) {
     const { parent, child } = splitGroupName(g.name)
-    if (child) {
-      const { cat, node } = nodeOf(categoryOf(g), parent)
-      cat.total += g.fields.length
-      node.sections.push({ name: g.name, label: child, fields: g.fields })
-    } else {
-      flat.push(g) // 平铺分组第二遍处理：让子分组先占位，才能识别同名并存
-    }
-  }
-  for (const g of flat) {
-    const { cat, node } = nodeOf(categoryOf(g), g.name)
+    const { cat, node } = nodeOf(categoryOf(g), parent)
     cat.total += g.fields.length
-    if (node.sections.length) node.sections.unshift({ name: g.name, label: '通用', fields: g.fields })
-    else node.sections.push({ name: g.name, label: '', fields: g.fields })
+    node.sections.push({ name: g.name, label: child, fields: g.fields })
+  }
+  // 平铺分组与同名子分组并存：平铺组分节改标「通用」并移到最前
+  for (const cat of cats) {
+    for (const node of cat.nodes) {
+      const bare = node.sections.find((s) => !s.label)
+      if (bare && node.sections.length > 1) {
+        bare.label = '通用'
+        node.sections.splice(node.sections.indexOf(bare), 1)
+        node.sections.unshift(bare)
+      }
+    }
   }
   return cats
 })
