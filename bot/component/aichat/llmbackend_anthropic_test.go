@@ -14,9 +14,9 @@ import (
 )
 
 // anthropicUsageJSON 构造 Anthropic usage JSON 片段。
-func anthropicUsageJSON(input, output, cacheRead int) string {
+func anthropicUsageJSON(input, output, cacheCreation, cacheRead int) string {
 	return fmt.Sprintf(`{"input_tokens":%d,"output_tokens":%d,`+
-		`"cache_creation_input_tokens":0,"cache_read_input_tokens":%d}`, input, output, cacheRead)
+		`"cache_creation_input_tokens":%d,"cache_read_input_tokens":%d}`, input, output, cacheCreation, cacheRead)
 }
 
 // anthropicStreamEvent 构造一条 Anthropic SSE 帧。
@@ -61,11 +61,25 @@ func anthropicSSEReply(sseBody string, reqBody *map[string]any) http.HandlerFunc
 	}
 }
 
+// TestAnthropicTokenUsage 用量转换：PromptTokens/TotalTokens 必须包含缓存写入
+// 与缓存命中（Anthropic 的 input_tokens 不含这两者，官方口径总输入为三者之和）。
+func TestAnthropicTokenUsage(t *testing.T) {
+	u := anthropicTokenUsage(anthropic.Usage{
+		InputTokens:              5,
+		OutputTokens:             3,
+		CacheCreationInputTokens: 4,
+		CacheReadInputTokens:     2,
+	})
+	if u.PromptTokens != 11 || u.CompletionTokens != 3 || u.TotalTokens != 14 || u.CachedTokens != 2 {
+		t.Fatalf("usage 不符: %+v", u)
+	}
+}
+
 // TestAnthropicGenerate 基本生成：system 走独立参数、文本解析与用量转换（含缓存命中）。
 func TestAnthropicGenerate(t *testing.T) {
 	var reqBody map[string]any
 	srv := httptest.NewServer(anthropicSSEReply(
-		anthropicTextStream(`"hi"`, anthropicUsageJSON(5, 3, 2)), &reqBody))
+		anthropicTextStream(`"hi"`, anthropicUsageJSON(5, 3, 4, 2)), &reqBody))
 	defer srv.Close()
 
 	c, err := NewLLMClient(srv.URL, "test-key", "claude-test", WithAPIFormat(APIFormatAnthropic))
@@ -82,7 +96,7 @@ func TestAnthropicGenerate(t *testing.T) {
 	if resp.Content != "hi" {
 		t.Fatalf("content = %q", resp.Content)
 	}
-	if usage.PromptTokens != 5 || usage.CompletionTokens != 3 || usage.TotalTokens != 8 || usage.CachedTokens != 2 {
+	if usage.PromptTokens != 11 || usage.CompletionTokens != 3 || usage.TotalTokens != 14 || usage.CachedTokens != 2 {
 		t.Fatalf("usage 不符: %+v", usage)
 	}
 	// system 应在独立参数而非 messages 中
@@ -104,7 +118,7 @@ func TestAnthropicGenerate(t *testing.T) {
 func TestAnthropicGenerateToolCallWithThinking(t *testing.T) {
 	var sse strings.Builder
 	sse.WriteString(anthropicStreamEvent("message_start",
-		`{"type":"message_start","message":{"id":"msg_1","type":"message","role":"assistant","model":"claude-test","content":[],"usage":`+anthropicUsageJSON(10, 1, 0)+`}}`))
+		`{"type":"message_start","message":{"id":"msg_1","type":"message","role":"assistant","model":"claude-test","content":[],"usage":`+anthropicUsageJSON(10, 1, 0, 0)+`}}`))
 	sse.WriteString(anthropicStreamEvent("content_block_start",
 		`{"type":"content_block_start","index":0,"content_block":{"type":"thinking","thinking":"","signature":""}}`))
 	sse.WriteString(anthropicStreamEvent("content_block_delta",
@@ -157,7 +171,7 @@ func TestAnthropicGenerateToolCallWithThinking(t *testing.T) {
 func TestAnthropicThinkingReplayAndToolRoundtrip(t *testing.T) {
 	var reqBody map[string]any
 	srv := httptest.NewServer(anthropicSSEReply(
-		anthropicTextStream(`"done"`, anthropicUsageJSON(1, 1, 0)), &reqBody))
+		anthropicTextStream(`"done"`, anthropicUsageJSON(1, 1, 0, 0)), &reqBody))
 	defer srv.Close()
 
 	thinkingRaw := json.RawMessage(`[{"type":"thinking","thinking":"先想想","signature":"sig_abc"}]`)
@@ -217,7 +231,7 @@ func TestAnthropicThinkingReplayAndToolRoundtrip(t *testing.T) {
 func TestAnthropicThinkingParams(t *testing.T) {
 	var reqBody map[string]any
 	srv := httptest.NewServer(anthropicSSEReply(
-		anthropicTextStream(`"ok"`, anthropicUsageJSON(1, 1, 0)), &reqBody))
+		anthropicTextStream(`"ok"`, anthropicUsageJSON(1, 1, 0, 0)), &reqBody))
 	defer srv.Close()
 
 	c, err := NewLLMClient(srv.URL, "test-key", "claude-test", WithAPIFormat(APIFormatAnthropic))
@@ -256,7 +270,7 @@ func TestAnthropicThinkingParams(t *testing.T) {
 func TestAnthropicStream(t *testing.T) {
 	var sse strings.Builder
 	sse.WriteString(anthropicStreamEvent("message_start",
-		`{"type":"message_start","message":{"id":"msg_1","type":"message","role":"assistant","model":"claude-test","content":[],"usage":`+anthropicUsageJSON(7, 1, 3)+`}}`))
+		`{"type":"message_start","message":{"id":"msg_1","type":"message","role":"assistant","model":"claude-test","content":[],"usage":`+anthropicUsageJSON(7, 1, 0, 3)+`}}`))
 	sse.WriteString(anthropicStreamEvent("content_block_start",
 		`{"type":"content_block_start","index":0,"content_block":{"type":"thinking","thinking":"","signature":""}}`))
 	sse.WriteString(anthropicStreamEvent("content_block_delta",
@@ -314,7 +328,7 @@ func TestAnthropicStream(t *testing.T) {
 		tbs[0].Thinking != "想" || tbs[0].Signature != "sig_s" {
 		t.Fatalf("ThinkingBlocks 不符: %v %+v", err, tbs)
 	}
-	if usage.PromptTokens != 7 || usage.CompletionTokens != 9 || usage.TotalTokens != 16 || usage.CachedTokens != 3 {
+	if usage.PromptTokens != 10 || usage.CompletionTokens != 9 || usage.TotalTokens != 19 || usage.CachedTokens != 3 {
 		t.Fatalf("usage 不符: %+v", usage)
 	}
 }
@@ -405,7 +419,7 @@ func TestConvertAnthropicMessagesCacheToolResult(t *testing.T) {
 func TestAnthropicGeneratePromptCacheJSON(t *testing.T) {
 	var reqBody map[string]any
 	srv := httptest.NewServer(anthropicSSEReply(
-		anthropicTextStream(`"hi"`, anthropicUsageJSON(5, 3, 2)), &reqBody))
+		anthropicTextStream(`"hi"`, anthropicUsageJSON(5, 3, 0, 2)), &reqBody))
 	defer srv.Close()
 
 	c, err := NewLLMClient(srv.URL, "test-key", "claude-test",
@@ -440,7 +454,7 @@ func TestAnthropicGeneratePromptCacheJSON(t *testing.T) {
 func TestAnthropicGenerateNoPromptCacheByDefault(t *testing.T) {
 	var reqBody map[string]any
 	srv := httptest.NewServer(anthropicSSEReply(
-		anthropicTextStream(`"hi"`, anthropicUsageJSON(5, 3, 2)), &reqBody))
+		anthropicTextStream(`"hi"`, anthropicUsageJSON(5, 3, 0, 2)), &reqBody))
 	defer srv.Close()
 
 	c, err := NewLLMClient(srv.URL, "test-key", "claude-test", WithAPIFormat(APIFormatAnthropic))

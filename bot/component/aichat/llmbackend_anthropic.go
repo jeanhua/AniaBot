@@ -368,12 +368,16 @@ func convertAnthropicToolDef(td llmtool.ToolDef) anthropic.ToolUnionParam {
 }
 
 // anthropicTokenUsage 转换 token 用量。Anthropic 不直接返回总量，以 in+out 合计；
-// 缓存命中取 cache_read_input_tokens。
+// input_tokens 不含缓存部分（cache_creation/cache_read 单独上报），按官方口径
+// 总输入为三者之和，与 OpenAI 的 prompt_tokens（含 cached 子集）语义对齐——
+// 漏算缓存会低估统计与配额，且压缩判断依赖的 LastPromptTokens 永远达不到阈值。
+// CachedTokens 取 cache_read_input_tokens（缓存命中）；缓存写入并入 PromptTokens。
 func anthropicTokenUsage(u anthropic.Usage) TokenUsage {
+	prompt := int(u.InputTokens + u.CacheCreationInputTokens + u.CacheReadInputTokens)
 	return TokenUsage{
-		PromptTokens:     int(u.InputTokens),
+		PromptTokens:     prompt,
 		CompletionTokens: int(u.OutputTokens),
-		TotalTokens:      int(u.InputTokens + u.OutputTokens),
+		TotalTokens:      prompt + int(u.OutputTokens),
 		CachedTokens:     int(u.CacheReadInputTokens),
 	}
 }
