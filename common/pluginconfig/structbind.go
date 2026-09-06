@@ -13,7 +13,8 @@
 //	label     面板显示名（缺省用字段名）
 //	type      覆盖类型推断（password / text / select / multiselect 等必须显式声明）
 //	options   select / multiselect 类型的可选项，逗号分隔
-//	group     面板分组
+//	group     面板分组；支持「父分组.子分组」两级写法（如 "骰子.规则"），
+//	          "." 或 " · " 均可作分隔符，面板左侧导航按父子两级展示
 //	help      字段说明
 //	sensitive "true" 时按敏感字段处理（面板不回显）
 //	default   默认值（字符串形式，按字段类型解析；切片逗号分隔；

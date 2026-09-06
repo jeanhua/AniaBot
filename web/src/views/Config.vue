@@ -12,28 +12,52 @@
         />
       </div>
 
-      <div v-for="cat in categorized" :key="cat.name">
+      <div v-for="cat in groupTree" :key="cat.name">
         <button
           class="w-full flex items-center justify-between px-3 mb-1.5 text-[11px] font-semibold uppercase tracking-wider transition-colors"
           :class="activeCategory === cat.name ? 'text-zinc-900' : 'text-slate-400 hover:text-zinc-600'"
           @click="selectCategory(cat.name)"
         >
           <span>{{ cat.name }}</span>
-          <span class="text-[10px] font-normal normal-case tracking-normal">{{ catTotal(cat) }} 项</span>
+          <span class="text-[10px] font-normal normal-case tracking-normal">{{ cat.total }} 项</span>
         </button>
         <nav class="space-y-0.5">
-          <button
-            v-for="g in cat.groups"
-            :key="g.name"
-            class="w-full flex items-center justify-between px-3 py-1.5 rounded-lg text-[13px] transition-colors"
-            :class="activeGroup === g.name
-              ? 'bg-zinc-100 text-zinc-900 font-medium'
-              : 'text-slate-600 hover:bg-slate-200/60'"
-            @click="jumpTo(g.name)"
-          >
-            <span class="truncate">{{ shortName(g.name) }}</span>
-            <span class="text-[11px] text-slate-400 ml-2 shrink-0">{{ g.fields.length }}</span>
-          </button>
+          <template v-for="node in cat.nodes" :key="node.name">
+            <!-- 有子分组的父节点：小标题 + 缩进的子项 -->
+            <template v-if="node.children.length">
+              <button
+                class="w-full flex items-center justify-between px-3 pt-1.5 text-xs font-medium text-slate-500 hover:text-zinc-700 transition-colors"
+                @click="jumpTo(node.children[0].name)"
+              >
+                <span class="truncate">{{ node.name }}</span>
+                <span class="text-[10px] text-slate-400 ml-2 shrink-0">{{ nodeTotal(node) }}</span>
+              </button>
+              <button
+                v-for="c in node.children"
+                :key="c.name"
+                class="w-full flex items-center justify-between pl-6 pr-3 py-1.5 rounded-lg text-[13px] transition-colors"
+                :class="activeGroup === c.name
+                  ? 'bg-zinc-100 text-zinc-900 font-medium'
+                  : 'text-slate-600 hover:bg-slate-200/60'"
+                @click="jumpTo(c.name)"
+              >
+                <span class="truncate">{{ c.label }}</span>
+                <span class="text-[11px] text-slate-400 ml-2 shrink-0">{{ c.count }}</span>
+              </button>
+            </template>
+            <!-- 无子分组的平铺分组 -->
+            <button
+              v-else
+              class="w-full flex items-center justify-between px-3 py-1.5 rounded-lg text-[13px] transition-colors"
+              :class="activeGroup === node.name
+                ? 'bg-zinc-100 text-zinc-900 font-medium'
+                : 'text-slate-600 hover:bg-slate-200/60'"
+              @click="jumpTo(node.name)"
+            >
+              <span class="truncate">{{ node.name }}</span>
+              <span class="text-[11px] text-slate-400 ml-2 shrink-0">{{ node.fields.length }}</span>
+            </button>
+          </template>
         </nav>
       </div>
       <p v-if="categorized.length === 0" class="px-3 text-xs text-slate-400">没有匹配「{{ search }}」的配置项</p>
@@ -172,7 +196,7 @@
           >
             <span class="flex items-center gap-2.5 min-w-0">
               <span class="w-7 h-7 rounded-lg flex items-center justify-center text-white text-xs shrink-0 [&>svg]:w-4 [&>svg]:h-4" :class="groupColor(group)" v-html="groupIcon(group)" />
-              <span class="text-sm font-semibold text-slate-800 truncate">{{ group.name }}</span>
+              <span class="text-sm font-semibold text-slate-800 truncate">{{ groupDisplayName(group.name) }}</span>
               <span class="text-xs font-normal text-slate-400 shrink-0">{{ group.fields.length }} 项</span>
             </span>
             <span class="flex items-center gap-3 shrink-0">
@@ -336,6 +360,19 @@ const groups = computed(() => {
 // 按配置键前缀判断：bot.* 为框架基础，plugin.* 为插件；AI 对话插件单独归类
 const CAT_ORDER = ['框架基础', 'AI 对话', '插件']
 
+// 分组名支持子分组：以 "." 或 " · " 分隔（如 "地震预警.基础"、"AI 对话 · 模型"），
+// 前段为父分组（通常是插件名），后段为子分组名
+function splitGroupName(name) {
+  const m = name.match(/^(.+?)(?:\s·\s|\.)(.+)$/)
+  return m ? { parent: m[1].trim(), child: m[2].trim() } : { parent: name, child: '' }
+}
+
+// 卡片标题展示名：子分组以「父 · 子」连接显示
+function groupDisplayName(name) {
+  const { parent, child } = splitGroupName(name)
+  return child ? `${parent} · ${child}` : name
+}
+
 function categoryOf(group) {
   const key = group.fields[0]?.key || ''
   if (key.startsWith('bot.')) return '框架基础'
@@ -369,6 +406,50 @@ const categorized = computed(() => {
   return CAT_ORDER.map((name) => ({ name, groups: map.get(name) })).filter((c) => c.groups.length > 0)
 })
 
+// 左侧导航树：把分组按「父分组 → 子分组」两级组织（保持注册顺序）。
+// 无子分组的平铺分组自成节点；平铺分组与同名子分组并存时，平铺组显示为「通用」。
+const groupTree = computed(() => {
+  const cats = []
+  const byCat = new Map()
+  const nodeOf = (catName, parent) => {
+    let cat = byCat.get(catName)
+    if (!cat) {
+      cat = { name: catName, nodes: [], byParent: new Map(), total: 0 }
+      byCat.set(catName, cat)
+      cats.push(cat)
+    }
+    let node = cat.byParent.get(parent)
+    if (!node) {
+      node = { name: parent, fields: [], children: [] }
+      cat.byParent.set(parent, node)
+      cat.nodes.push(node)
+    }
+    return { cat, node }
+  }
+  const flat = []
+  for (const g of filteredGroups.value) {
+    const { parent, child } = splitGroupName(g.name)
+    if (child) {
+      const { cat, node } = nodeOf(categoryOf(g), parent)
+      cat.total += g.fields.length
+      node.children.push({ name: g.name, label: child, count: g.fields.length })
+    } else {
+      flat.push(g) // 平铺分组第二遍处理：让子分组先占位，才能识别同名并存
+    }
+  }
+  for (const g of flat) {
+    const { cat, node } = nodeOf(categoryOf(g), g.name)
+    cat.total += g.fields.length
+    if (node.children.length) node.children.unshift({ name: g.name, label: '通用', count: g.fields.length })
+    else node.fields = g.fields
+  }
+  return cats
+})
+
+function nodeTotal(node) {
+  return node.fields.length + node.children.reduce((n, c) => n + c.count, 0)
+}
+
 const categories = computed(() => categorized.value.map((c) => c.name))
 
 const activeCategoryGroups = computed(() => {
@@ -382,14 +463,6 @@ const displayGroups = computed(() => (searching.value ? filteredGroups.value : a
 function categoryCount(name) {
   const cat = categorized.value.find((c) => c.name === name)
   return cat ? cat.groups.reduce((n, g) => n + g.fields.length, 0) : 0
-}
-
-function catTotal(cat) {
-  return cat.groups.reduce((n, g) => n + g.fields.length, 0)
-}
-
-function shortName(groupName) {
-  return groupName.replace('AI 对话 · ', '')
 }
 
 function sectionId(name) {

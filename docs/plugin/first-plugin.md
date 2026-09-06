@@ -148,7 +148,7 @@ func (p *DicePlugin) Start(ctx context.Context, cfg *viper.Viper) error {
 | 标签 | 说明 |
 | --- | --- |
 | `cfg` | 点分配置键（必填）；嵌套结构体作为键前缀递归；`cfg:"-"` 跳过 |
-| `label` / `group` / `help` | 面板显示名 / 分组 / 说明 |
+| `label` / `group` / `help` | 面板显示名 / 分组 / 说明。`group` 支持「父分组.子分组」两级写法（如 `骰子.规则`，`.` 或 ` · ` 分隔），配置项多时按子分组归类展示 |
 | `type` | 覆盖类型推断：`password`、`text`（多行文本）、`select`（需配合 `options`） |
 | `options` | select 可选项，逗号分隔 |
 | `sensitive` | `"true"` 时面板不回显（API 密钥等） |

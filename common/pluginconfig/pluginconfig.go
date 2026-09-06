@@ -27,7 +27,7 @@ type Field struct {
 	Label     string   `json:"label"`               // 面板表单中的显示名
 	Type      string   `json:"type"`                // string | password | int | float | bool | text | strings | ints | select | multiselect
 	Options   []string `json:"options,omitempty"`   // select / multiselect 类型：可选项列表
-	Group     string   `json:"group"`               // 面板中的分组名
+	Group     string   `json:"group"`               // 面板中的分组名；支持「父分组.子分组」两级写法（"." 或 " · " 分隔），面板按父子两级展示
 	Help      string   `json:"help,omitempty"`      // 字段说明（可选）
 	Sensitive bool     `json:"sensitive,omitempty"` // 敏感字段：面板不回显，API 掩码处理
 	Optional  bool     `json:"optional,omitempty"`  // 可选字段（Go 指针标量）：留空/清空表示未配置，不向下游传参
