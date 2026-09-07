@@ -23,6 +23,7 @@ flowchart LR
         F[飞书/Lark]
         T[Telegram]
         D[Discord]
+        W[微信 iLink Bot]
     end
     subgraph Adapters[适配器层 · 边界翻译]
         NA[NapCat 适配器]
@@ -30,6 +31,7 @@ flowchart LR
         FA[飞书适配器]
         TA[Telegram 适配器]
         DA[Discord 适配器]
+        WA[微信适配器]
     end
     subgraph Core[框架核心 bot/core]
         Route[ID 前缀路由]
@@ -54,11 +56,13 @@ flowchart LR
     F <--> FA
     T <--> TA
     D <--> DA
+    W <--> WA
     NA --> Route
     QA --> Route
     FA --> Route
     TA --> Route
     DA --> Route
+    WA --> Route
     Route --> Dispatch --> Chain
     Chain --> AI & Other
     AI --> LLM

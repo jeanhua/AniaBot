@@ -33,7 +33,8 @@ func (a *weixinAdapter) SendGroupMsg(groupId message.QID, chain msgchain.GroupCh
 // 避免把其他平台 ID 误当作微信用户）。
 func (a *weixinAdapter) sendToUser(target message.QID, segs []message.OB11Segment) (message.QID, bool) {
 	raw := target.TrimPrefix(idPrefix)
-	if raw == target.String() || raw == "" || a.client == nil {
+	c := a.currentClient() // 凭证失效重登时整体替换，加锁取用
+	if raw == target.String() || raw == "" || c == nil {
 		return "", false
 	}
 	// 回复段仅入站表达上下文（微信回复出站无引用 API），出站剔除
@@ -58,7 +59,7 @@ func (a *weixinAdapter) sendToUser(target message.QID, segs []message.OB11Segmen
 		t := text.String()
 		text.Reset()
 		for _, part := range splitText(t) {
-			if a.sendText(ctx, raw, part) {
+			if a.sendText(c, ctx, raw, part) {
 				sentAny = true
 			}
 		}
@@ -72,7 +73,7 @@ func (a *weixinAdapter) sendToUser(target message.QID, segs []message.OB11Segmen
 			}
 		case message.SegmentImage, message.SegmentFile, message.SegmentRecord, message.SegmentVideo:
 			flushText()
-			if a.sendMediaSegment(ctx, raw, s) {
+			if a.sendMediaSegment(c, ctx, raw, s) {
 				sentAny = true
 			}
 		case message.SegmentMention:
@@ -94,20 +95,20 @@ func (a *weixinAdapter) sendToUser(target message.QID, segs []message.OB11Segmen
 }
 
 // sendText 发送一条文本消息。
-func (a *weixinAdapter) sendText(ctx context.Context, rawUserID, text string) bool {
-	return a.sendMessageItem(ctx, rawUserID, &MessageItem{Type: ItemText, TextItem: &TextItem{Text: text}})
+func (a *weixinAdapter) sendText(c *client, ctx context.Context, rawUserID, text string) bool {
+	return a.sendMessageItem(c, ctx, rawUserID, &MessageItem{Type: ItemText, TextItem: &TextItem{Text: text}})
 }
 
 // sendMediaSegment 发送一个媒体段：解析段内文件源为字节（http(s)/data:/base64:///
 // file://），经 CDN 加密上传后按段型组装条目发送。
-func (a *weixinAdapter) sendMediaSegment(ctx context.Context, rawUserID string, s message.OB11Segment) bool {
+func (a *weixinAdapter) sendMediaSegment(c *client, ctx context.Context, rawUserID string, s message.OB11Segment) bool {
 	mediaType, defaultName := uploadKindOf(s)
 	src := segmentFileSource(s.Data)
 	if src == "" {
 		a.logger.Debug("微信媒体段缺少文件源，跳过", "segment", s.Type)
 		return false
 	}
-	data, ok := a.resolveSegmentBytes(ctx, src)
+	data, ok := a.resolveSegmentBytes(c, ctx, src)
 	if !ok {
 		a.logger.Warn("微信媒体资源解析失败", "source", previewSource(src))
 		return false
@@ -120,7 +121,7 @@ func (a *weixinAdapter) sendMediaSegment(ctx context.Context, rawUserID string, 
 			name = base
 		}
 	}
-	up, err := a.uploadMedia(ctx, data, rawUserID, mediaType)
+	up, err := a.uploadMedia(c, ctx, data, rawUserID, mediaType)
 	if err != nil {
 		a.logger.Warn("微信媒体上传失败", "error", err)
 		return false
@@ -139,7 +140,7 @@ func (a *weixinAdapter) sendMediaSegment(ctx context.Context, rawUserID string, 
 	default:
 		item = &MessageItem{Type: ItemFile, FileItem: &FileItem{Media: media, FileName: name, Len: strconv.FormatInt(up.RawSize, 10)}}
 	}
-	return a.sendMessageItem(ctx, rawUserID, item)
+	return a.sendMessageItem(c, ctx, rawUserID, item)
 }
 
 // uploadKindOf 段型 → (上传媒体类型, 默认文件名)。
@@ -157,7 +158,7 @@ func uploadKindOf(s message.OB11Segment) (int, string) {
 
 // sendMessageItem 组装 WeixinMessage 并发送；携带票据被拒（ret 非零）时降级为
 // 无 context_token 重发一次。
-func (a *weixinAdapter) sendMessageItem(ctx context.Context, rawUserID string, item *MessageItem) bool {
+func (a *weixinAdapter) sendMessageItem(c *client, ctx context.Context, rawUserID string, item *MessageItem) bool {
 	var send func(withToken bool) bool
 	send = func(withToken bool) bool {
 		msg := &WeixinMessage{
@@ -170,7 +171,7 @@ func (a *weixinAdapter) sendMessageItem(ctx context.Context, rawUserID string, i
 		if withToken {
 			msg.ContextToken = a.ctxTokens.get(rawUserID)
 		}
-		err := a.client.sendMessage(ctx, msg)
+		err := c.sendMessage(ctx, msg)
 		if err == nil {
 			return true
 		}
@@ -228,12 +229,12 @@ func previewSource(src string) string {
 
 // resolveSegmentBytes 解析文件源为字节：http(s) URL 下载（60s 超时）、
 // base64:// / data: / file:// 本地解析。
-func (a *weixinAdapter) resolveSegmentBytes(ctx context.Context, src string) ([]byte, bool) {
+func (a *weixinAdapter) resolveSegmentBytes(c *client, ctx context.Context, src string) ([]byte, bool) {
 	ctx, cancel := context.WithTimeout(ctx, 60*time.Second)
 	defer cancel()
 	switch {
 	case strings.HasPrefix(src, "http://"), strings.HasPrefix(src, "https://"):
-		resp, err := a.client.http.R().SetContext(ctx).SetDoNotParseResponse(true).Get(src)
+		resp, err := c.http.R().SetContext(ctx).SetDoNotParseResponse(true).Get(src)
 		if err != nil {
 			return nil, false
 		}

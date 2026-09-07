@@ -354,3 +354,51 @@ func TestAccountStateJSONShape(t *testing.T) {
 		}
 	}
 }
+
+// TestSwitchCredentialsHotReload 面板扫码换账号热切换：token 变化时整体替换
+// 客户端并跟随新 base 地址，跨账号重置轮询游标；token 未变化时不切换。
+func TestSwitchCredentialsHotReload(t *testing.T) {
+	a := newTestAdapter(t, "https://stub.example")
+	a.mu.Lock()
+	a.client = newClient("old-token", "https://stub.example", DefaultCDNBase)
+	a.clientBotID = "old@im.bot"
+	a.mu.Unlock()
+
+	apiBase := "https://stub.example"
+	cdnBase := DefaultCDNBase
+	buf := "cursor-old"
+
+	// 同账号重复保存（token 未变化）：不切换、游标保留
+	if err := a.saveLoginCredentials(&accountState{Token: "old-token", BotID: "old@im.bot", BaseURL: apiBase, CDNBase: cdnBase}); err != nil {
+		t.Fatalf("save same-account credentials: %v", err)
+	}
+	a.switchCredentialsIfChanged(&apiBase, &cdnBase, &buf)
+	if a.currentToken() != "old-token" || buf != "cursor-old" {
+		t.Fatalf("same token should not switch: token=%q buf=%q", a.currentToken(), buf)
+	}
+
+	// 换账号：切换客户端、跟随新 base、重置游标、self 跟随新 bot ID
+	if err := a.saveLoginCredentials(&accountState{Token: "new-token", BotID: "new@im.bot", BaseURL: "https://new.example", CDNBase: cdnBase}); err != nil {
+		t.Fatalf("save new-account credentials: %v", err)
+	}
+	a.switchCredentialsIfChanged(&apiBase, &cdnBase, &buf)
+	if a.currentToken() != "new-token" {
+		t.Fatalf("token should hot-switch, got %q", a.currentToken())
+	}
+	if apiBase != "https://new.example" {
+		t.Fatalf("apiBase should follow new account, got %q", apiBase)
+	}
+	if buf != "" {
+		t.Fatalf("cursor should reset across accounts, got %q", buf)
+	}
+	if a.SelfID() != message.QID("wx:new@im.bot") {
+		t.Fatalf("self should follow new bot id, got %q", a.SelfID())
+	}
+
+	// 恢复游标后再次触发（token 已一致）：游标保留
+	buf = "cursor-new"
+	a.switchCredentialsIfChanged(&apiBase, &cdnBase, &buf)
+	if buf != "cursor-new" || a.currentToken() != "new-token" {
+		t.Fatalf("idempotent re-check should keep state: token=%q buf=%q", a.currentToken(), buf)
+	}
+}

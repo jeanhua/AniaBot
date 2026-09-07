@@ -95,7 +95,7 @@ type uploadedMedia struct {
 
 // uploadMedia 通用上传管线：随机 key → getuploadurl → AES-ECB 加密 → POST CDN。
 // toUserID 为收件人原始 ID；mediaType 见 UploadMedia* 常量。
-func (a *weixinAdapter) uploadMedia(ctx context.Context, data []byte, toUserID string, mediaType int) (*uploadedMedia, error) {
+func (a *weixinAdapter) uploadMedia(c *client, ctx context.Context, data []byte, toUserID string, mediaType int) (*uploadedMedia, error) {
 	rawKey := make([]byte, 16)
 	if _, err := rand.Read(rawKey); err != nil {
 		return nil, err
@@ -107,7 +107,7 @@ func (a *weixinAdapter) uploadMedia(ctx context.Context, data []byte, toUserID s
 	keyHex := hex.EncodeToString(rawKey)
 	fkHex := hex.EncodeToString(filekey)
 
-	resp, err := a.client.getUploadURL(ctx, &GetUploadUrlReq{
+	resp, err := c.getUploadURL(ctx, &GetUploadUrlReq{
 		Filekey:     fkHex,
 		MediaType:   mediaType,
 		ToUserID:    toUserID,
@@ -122,7 +122,7 @@ func (a *weixinAdapter) uploadMedia(ctx context.Context, data []byte, toUserID s
 	}
 	uploadURL := strings.TrimSpace(resp.UploadFullURL)
 	if uploadURL == "" && resp.UploadParam != "" {
-		uploadURL = a.client.cdnBase + "/upload?encrypted_query_param=" + queryEscape(resp.UploadParam) + "&filekey=" + queryEscape(fkHex)
+		uploadURL = c.cdnBase + "/upload?encrypted_query_param=" + queryEscape(resp.UploadParam) + "&filekey=" + queryEscape(fkHex)
 	}
 	if uploadURL == "" {
 		return nil, fmt.Errorf("weixin getuploadurl: 未返回上传地址")
@@ -131,7 +131,7 @@ func (a *weixinAdapter) uploadMedia(ctx context.Context, data []byte, toUserID s
 	if err != nil {
 		return nil, err
 	}
-	downloadParam, err := a.client.upload(ctx, uploadURL, ciphertext)
+	downloadParam, err := c.upload(ctx, uploadURL, ciphertext)
 	if err != nil {
 		return nil, err
 	}
@@ -152,7 +152,10 @@ func aesPaddedSize(n int) int {
 
 // downloadCdnMedia 下载并解密 CDN 媒体。aesKeyB64 为 CDNMedia.AesKey（base64），
 // 优先使用 fullURL（服务端直发完整地址），否则按 encryptQueryParam 拼 CDN 下载地址。
-func (a *weixinAdapter) downloadCdnMedia(ctx context.Context, media *CDNMedia, aesKeyB64 string) ([]byte, error) {
+func (a *weixinAdapter) downloadCdnMedia(c *client, ctx context.Context, media *CDNMedia, aesKeyB64 string) ([]byte, error) {
+	if c == nil {
+		return nil, errAdapterClosed
+	}
 	if media == nil {
 		return nil, fmt.Errorf("weixin cdn: 无媒体引用")
 	}
@@ -161,9 +164,9 @@ func (a *weixinAdapter) downloadCdnMedia(ctx context.Context, media *CDNMedia, a
 		if media.EncryptQueryParam == "" {
 			return nil, fmt.Errorf("weixin cdn: 无下载地址（缺少 full_url 与 encrypt_query_param）")
 		}
-		url = a.client.cdnBase + "/download?encrypted_query_param=" + queryEscape(media.EncryptQueryParam)
+		url = c.cdnBase + "/download?encrypted_query_param=" + queryEscape(media.EncryptQueryParam)
 	}
-	encrypted, err := a.client.download(ctx, url)
+	encrypted, err := c.download(ctx, url)
 	if err != nil {
 		return nil, err
 	}

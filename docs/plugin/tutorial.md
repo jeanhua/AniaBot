@@ -61,7 +61,7 @@ func NewPlugin() *DailyBriefPlugin {
 			ShowFor:   plugininfo.ShowForGroup,
 			Author:    "you",
 			Version:   "1.0.0",
-			// Platforms 留空 = 支持全部平台（QQ / 飞书 / Telegram / Discord）
+			// Platforms 留空 = 支持全部平台（QQ / 飞书 / Telegram / Discord / 微信）
 		},
 	}
 }

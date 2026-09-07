@@ -133,7 +133,8 @@ func (a *weixinAdapter) imageSegment(img *ImageItem) (message.OB11Segment, bool)
 	if img.Aeskey != "" {
 		aesKeyB64 = base64.StdEncoding.EncodeToString([]byte(img.Aeskey))
 	}
-	data, err := a.downloadCdnMedia(context.Background(), media, aesKeyB64)
+	c := a.currentClient()
+	data, err := a.downloadCdnMedia(c, context.Background(), media, aesKeyB64)
 	if err != nil {
 		a.logger.Debug("微信图片下载/解密失败", "error", err)
 		return message.OB11Segment{}, false

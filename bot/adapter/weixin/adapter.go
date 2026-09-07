@@ -55,6 +55,9 @@ type weixinAdapter struct {
 	client *client
 	// self 机器人自身 ID（xxx@im.bot），登录成功后填充
 	self string
+	// clientBotID 当前 client 对应的 bot 账号：面板扫码换账号热切换时
+	// 判断旧轮询游标是否跨账号作废（与 client 同锁保护）
+	clientBotID string
 
 	state     *stateStore
 	ctxTokens *contextTokenStore
@@ -163,6 +166,7 @@ func (a *weixinAdapter) loadConfig(v *viper.Viper) weixinConfig {
 }
 
 // resolveAccount 解析登录凭据：配置 token 优先，其次状态文件；均无时返回 nil。
+// 仅在 Serve goroutine 内调用（读取已由本 goroutine 加锁发布的字段）。
 func (a *weixinAdapter) resolveAccount() *accountState {
 	if a.cfg.configToken != "" {
 		// 配置手工置入 token：其余字段尽力从状态文件补齐
@@ -203,6 +207,29 @@ func (a *weixinAdapter) currentToken() string {
 		return ""
 	}
 	return a.client.token
+}
+
+// currentClient 当前 API 客户端。凭证失效重登时整体替换，须加锁读取；
+// 并发发送方拿到即将被替换的旧客户端最多多一次 token 失效重试，功能不受影响。
+func (a *weixinAdapter) currentClient() *client {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.client
+}
+
+// runtimeConfig 运行配置快照。面板可能先于 Serve 读到默认零值配置，
+// 扫码登录入口并发读取配置字段必须经此加锁。
+func (a *weixinAdapter) runtimeConfig() weixinConfig {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.cfg
+}
+
+// runtimeState 当前账号状态存储（Serve 按配置目录重建后指针会变，须加锁读取）。
+func (a *weixinAdapter) runtimeState() *stateStore {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.state
 }
 
 // ensureLogin 确保持有有效凭据：无凭据（或登录后仍无）时进入控制台扫码登录。
@@ -254,11 +281,13 @@ func (a *weixinAdapter) newLoginSession(console bool) *loginSession {
 
 // newLoginSessionWith 同 newLoginSession，凭据信号由调用方传入
 // （QRLoginStart 持有 loginMu 期间构造会话，需先在锁外取信号避免重入死锁）。
+// 面板调用可能先于 Serve，配置经加锁快照读取。
 func (a *weixinAdapter) newLoginSessionWith(sig <-chan struct{}, console bool) *loginSession {
+	cfg := a.runtimeConfig()
 	return &loginSession{
-		apiBase:     a.cfg.apiBase,
-		cdnBase:     a.cfg.cdnBase,
-		botType:     a.cfg.botType,
+		apiBase:     cfg.apiBase,
+		cdnBase:     cfg.cdnBase,
+		botType:     cfg.botType,
 		localTokens: a.localTokens(),
 		console:     console,
 		superseded:  sig,
@@ -325,7 +354,7 @@ func (a *weixinAdapter) QRLoginStatus() (string, string, string) {
 	}
 	state, detail, qr := s.snapshot()
 	if state == LoginStateConnected && a.currentConnState() == "connected" {
-		detail += "；当前 bot 已在线，若登录了其他账号，重启 Bot 后生效"
+		detail += "；新凭据将自动热生效（最长约一个轮询周期），换账号无需重启"
 	}
 	return state, detail, qr
 }
@@ -356,32 +385,39 @@ func (a *weixinAdapter) currentConnState() string {
 // localTokens 已保存的本地 token 列表（登录请求携带，服务端用于识别已登录 bot）。
 func (a *weixinAdapter) localTokens() []string {
 	var tokens []string
-	if st, err := a.state.load(); err == nil && st != nil && st.Token != "" {
-		tokens = append(tokens, st.Token)
+	if st := a.runtimeState(); st != nil {
+		if saved, err := st.load(); err == nil && saved != nil && saved.Token != "" {
+			tokens = append(tokens, saved.Token)
+		}
 	}
-	if a.cfg.configToken != "" {
-		tokens = append(tokens, a.cfg.configToken)
+	if cfg := a.runtimeConfig(); cfg.configToken != "" {
+		tokens = append(tokens, cfg.configToken)
 	}
 	return tokens
 }
 
 // Serve 启动微信适配器（阻塞）：确保登录 → notifyStart → 长轮询循环。
 func (a *weixinAdapter) Serve(v *viper.Viper) {
-	a.cfg = a.loadConfig(v)
-	a.state = newStateStore(a.cfg.stateDir)
-	a.ctxTokens = newContextTokenStore(a.cfg.stateDir + "/context_tokens.json")
+	cfg := a.loadConfig(v)
+	// 面板先于适配器启动，其扫码登录入口会并发读取配置/状态字段，须加锁发布
+	a.mu.Lock()
+	a.cfg = cfg
+	a.state = newStateStore(cfg.stateDir)
+	a.ctxTokens = newContextTokenStore(cfg.stateDir + "/context_tokens.json")
+	a.mu.Unlock()
 
 	st := a.ensureLogin()
 	apiBase := st.BaseURL
 	if apiBase == "" {
-		apiBase = a.cfg.apiBase
+		apiBase = cfg.apiBase
 	}
 	cdnBase := st.CDNBase
 	if cdnBase == "" {
-		cdnBase = a.cfg.cdnBase
+		cdnBase = cfg.cdnBase
 	}
 	a.mu.Lock()
 	a.client = newClient(st.Token, apiBase, cdnBase)
+	a.clientBotID = st.BotID
 	a.mu.Unlock()
 
 	a.setStatus("connecting", "连接微信服务")
@@ -395,16 +431,25 @@ func (a *weixinAdapter) Serve(v *viper.Viper) {
 }
 
 // pollLoop 长轮询主循环：getupdates(buf) → 推进游标 → 异步分发。
-// 凭证失效（errcode -14）时自动重新进入扫码登录（控制台展示二维码）。
+// 凭证失效（errcode -14）时自动重新进入扫码登录（控制台展示二维码）；
+// 面板扫码保存新凭据（换账号/重登）时热切换，无需重启。
 func (a *weixinAdapter) pollLoop(ctx context.Context, apiBase, cdnBase string) {
 	getUpdatesBuf := a.state.loadUpdatesBuf()
 	if getUpdatesBuf != "" {
 		a.logger.Info("恢复上次长轮询游标", "size", len(getUpdatesBuf))
 	}
 	backoff := 2 * time.Second
+	credSig := a.credsSignal()
 	for {
 		if ctx.Err() != nil {
 			return
+		}
+		// 凭据落盘信号：面板扫码保存了新凭据（信号为一次性，消费后换新信号）
+		select {
+		case <-credSig:
+			a.switchCredentialsIfChanged(&apiBase, &cdnBase, &getUpdatesBuf)
+			credSig = a.credsSignal()
+		default:
 		}
 		resp, err := a.getUpdates(ctx, getUpdatesBuf)
 		if err != nil {
@@ -426,8 +471,12 @@ func (a *weixinAdapter) pollLoop(ctx context.Context, apiBase, cdnBase string) {
 				if newSt.BaseURL != "" {
 					apiBase = newSt.BaseURL
 				}
+				if newSt.CDNBase != "" {
+					cdnBase = newSt.CDNBase
+				}
 				a.mu.Lock()
 				a.client = newClient(newSt.Token, apiBase, cdnBase)
+				a.clientBotID = newSt.BotID
 				a.mu.Unlock()
 				a.setStatus("connected", "")
 				backoff = 2 * time.Second
@@ -474,6 +523,34 @@ func (a *weixinAdapter) getUpdates(ctx context.Context, buf string) (*GetUpdates
 		return nil, errAdapterClosed
 	}
 	return c.getUpdates(ctx, buf, timeout)
+}
+
+// switchCredentialsIfChanged 面板扫码保存新凭据后的热切换（仅 pollLoop 的
+// Serve goroutine 调用）：token 与当前客户端一致时不动；变化时整体替换客户端。
+// 换绑了其他 bot 账号时旧轮询游标作废，重置后从当前消息开始拉取
+// （at-least-once + core 去重保证不丢不重）。最迟一个长轮询周期（约 35s）内生效。
+func (a *weixinAdapter) switchCredentialsIfChanged(apiBase, cdnBase, getUpdatesBuf *string) {
+	st := a.resolveAccount()
+	if st == nil || st.Token == "" || st.Token == a.currentToken() {
+		return
+	}
+	if st.BaseURL != "" {
+		*apiBase = st.BaseURL
+	}
+	if st.CDNBase != "" {
+		*cdnBase = st.CDNBase
+	}
+	a.mu.Lock()
+	sameBot := st.BotID == "" || st.BotID == a.clientBotID
+	a.client = newClient(st.Token, *apiBase, *cdnBase)
+	a.clientBotID = st.BotID
+	a.mu.Unlock()
+	if !sameBot {
+		*getUpdatesBuf = ""
+		a.state.saveUpdatesBuf("")
+	}
+	a.logger.Info("微信凭据已更新（面板扫码），热切换生效", "botId", st.BotID)
+	a.setStatus("connected", "")
 }
 
 // handleMessage 分发一条入站消息（独立 goroutine）：缓存 context_token、
