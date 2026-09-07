@@ -11,6 +11,8 @@
 
 ## [Unreleased]
 
+## [v4.6.6] - 2026-09-07
+
 ### 新增
 
 - 发布 Release 时自动附加各平台编译产物：Linux（amd64/arm64）、macOS（amd64/Apple Silicon）提供 tar.gz，Windows 提供 zip，可直接下载运行。
