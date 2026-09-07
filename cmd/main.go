@@ -11,6 +11,7 @@ import (
 	_ "github.com/jeanhua/AniaBot/bot/adapter/napcat"
 	_ "github.com/jeanhua/AniaBot/bot/adapter/qqofficial"
 	_ "github.com/jeanhua/AniaBot/bot/adapter/telegram"
+	_ "github.com/jeanhua/AniaBot/bot/adapter/weixin"
 	"github.com/jeanhua/AniaBot/bot/core"
 	"github.com/jeanhua/AniaBot/bot/plugins/pluginaichat"
 	"github.com/jeanhua/AniaBot/bot/plugins/plugininterceptor"

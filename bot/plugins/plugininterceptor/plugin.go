@@ -106,7 +106,7 @@ func (p *InterceptorPlugin) OnGroupMsg(ctx context.Context, bot bot.Bot, cmd com
 // idPrefixes 已知的平台 ID 前缀（QQ 为 qq:，其余平台为各自前缀）。
 // 用于解析"群ID:用户ID"规则时确定群段边界：群段带前缀时第一个冒号属于前缀，
 // 边界在第二个冒号处；否则边界在第一个冒号处。
-var idPrefixes = []string{message.QQIDPrefix, "qo:", "tg:", "fs:", "dc:"}
+var idPrefixes = []string{message.QQIDPrefix, "qo:", "tg:", "fs:", "dc:", "wx:"}
 
 // splitGroupUser 解析一行"群ID:用户ID"规则，返回群 ID 与用户 ID。
 func splitGroupUser(line string) (group, user message.QID, ok bool) {

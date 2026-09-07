@@ -192,6 +192,7 @@ type Options struct {
 	Marketplace     *marketplace.Service                               // 插件市场服务（可为 nil）
 	QueryLogs       func(f querylog.Filter) []querylog.Entry           // AI Query 日志（可为 nil）
 	ConsoleLogs     func(limit int, beforeID uint64) []consollog.Entry // 控制台日志（slog + log 输出，可为 nil）
+	QRLogins        []QRLoginChannel                                   // 支持扫码登录的平台适配器（如微信；可为 nil）
 	Logger          *slog.Logger
 }
 
@@ -289,6 +290,10 @@ func (s *Server) routes() {
 	s.mux.Handle("PUT /api/knowledge", s.requireAuth(http.HandlerFunc(s.handleKnowledgeUpdate)))
 	s.mux.Handle("DELETE /api/knowledge", s.requireAuth(http.HandlerFunc(s.handleKnowledgeDelete)))
 	s.mux.Handle("POST /api/knowledge/import-url", s.requireAuth(http.HandlerFunc(s.handleKnowledgeImportURL)))
+	s.mux.Handle("GET /api/qrlogin/sources", s.requireAuth(http.HandlerFunc(s.handleQRLoginSources)))
+	s.mux.Handle("POST /api/qrlogin/{platform}/start", s.requireAuth(http.HandlerFunc(s.handleQRLoginStart)))
+	s.mux.Handle("GET /api/qrlogin/{platform}/status", s.requireAuth(http.HandlerFunc(s.handleQRLoginStatus)))
+	s.mux.Handle("POST /api/qrlogin/{platform}/verify", s.requireAuth(http.HandlerFunc(s.handleQRLoginVerify)))
 	s.mux.Handle("POST /api/restart", s.requireAuth(http.HandlerFunc(s.handleRestart)))
 	s.mux.Handle("GET /api/update/info", s.requireAuth(http.HandlerFunc(s.handleUpdateInfo)))
 	s.mux.Handle("POST /api/update/start", s.requireAuth(http.HandlerFunc(s.handleUpdateStart)))

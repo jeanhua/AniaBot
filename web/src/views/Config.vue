@@ -72,6 +72,9 @@
         </div>
       </Transition>
 
+      <!-- 微信扫码登录卡片：适配器在运行，或已勾选启用（待重启）时显示 -->
+      <QrLoginCard :weixin-enabled="form['bot.platform.weixin.enable'] === true" />
+
       <div class="flex items-center justify-between gap-4">
         <div class="min-w-0">
           <p class="text-sm text-slate-500">配置存储在数据库中，修改保存后重启生效。</p>
@@ -327,6 +330,7 @@
 <script setup>
 import { computed, nextTick, onMounted, reactive, ref } from 'vue'
 import { api } from '../api.js'
+import QrLoginCard from '../components/QrLoginCard.vue'
 
 const MASK = '********'
 const inputClass = 'w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-400 focus:border-zinc-400 transition-shadow'

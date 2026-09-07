@@ -25,7 +25,7 @@ const features = [
   {
     icon: 'link',
     title: '多平台接入',
-    desc: 'QQ（OneBot v11，NapCat WebSocket / HTTP）+ 飞书（官方 SDK 长连接 / Webhook）+ Telegram（Bot API 长轮询）+ Discord（Gateway WebSocket），可同时在线、按需扩展新平台。',
+    desc: 'QQ（OneBot v11，NapCat WebSocket / HTTP）+ 飞书（官方 SDK 长连接 / Webhook）+ Telegram（Bot API 长轮询）+ Discord（Gateway WebSocket）+ 微信（iLink bot 扫码登录），可同时在线、按需扩展新平台。',
   },
   {
     icon: 'database',
@@ -74,7 +74,7 @@ const steps = [
   },
   {
     title: '部署平台端',
-    desc: 'QQ：部署 NapCat 开放 WebSocket / HTTP 接口；飞书：创建应用并开通权限；Telegram：@BotFather 建机器人填 Token；Discord：Developer Portal 建应用填 Token（均无需额外协议端）',
+    desc: 'QQ：部署 NapCat 开放 WebSocket / HTTP 接口；飞书：创建应用并开通权限；Telegram：@BotFather 建机器人填 Token；Discord：Developer Portal 建应用填 Token；微信：控制台扫码登录（均无需额外协议端）',
   },
   {
     title: '面板中配置',

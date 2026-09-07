@@ -49,7 +49,7 @@ AniaBot 的配置存储在数据库中，**首次启动**会自动写入默认�
 ============================================================
 ```
 
-使用该密码登录 `http://127.0.0.1:7700`，首次登录会自动进入**设置向导**：先在「平台接入」步骤勾选要启用的平台（QQ(NapCat) 默认勾选，QQ 官方 / 飞书 / Telegram / Discord 可选，填写对应连接配置与管理员 ID），再填 AI 模型配置（Base URL / API Key / 模型），保存后一键重启即可生效。
+使用该密码登录 `http://127.0.0.1:7700`，首次登录会自动进入**设置向导**：先在「平台接入」步骤勾选要启用的平台（QQ(NapCat) 默认勾选，QQ 官方 / 飞书 / Telegram / Discord / 微信可选；其余平台填写对应连接配置与管理员 ID，微信无需填写、重启后在「配置管理」页扫码登录），再填 AI 模型配置（Base URL / API Key / 模型），保存后一键重启即可生效。
 
 默认启用 QQ 平台。要同时接入 QQ 官方 / 飞书 / Telegram，在向导中勾选对应平台并填写 AppID/AppSecret 或 Bot Token 即可（或稍后在「配置 → 平台适配器」启用，详见 [QQ 官方适配器](/guide/configuration#qqofficial-——-qq-官方适配器)、[飞书适配器](/guide/configuration#feishu-——-飞书适配器) 与 [Telegram 适配器](/guide/configuration#telegram-——-telegram-适配器)）。多平台可同时在线；QQ 官方与 Telegram 都无需部署额外协议端，Telegram 国内部署可在配置中填写代理或自建 API 网关地址。
 
@@ -95,6 +95,7 @@ AniaBot/
 │   ├── adapter/feishu/    # 飞书适配器（官方 SDK，长连接 / Webhook）
 │   ├── adapter/telegram/  # Telegram 适配器（Bot API，长轮询）
 │   ├── adapter/discord/   # Discord 适配器（discordgo，Gateway WebSocket）
+│   ├── adapter/weixin/    # 微信适配器（iLink bot，HTTP 长轮询 + CDN 媒体）
 │   ├── component/         # AI 引擎：aichat / llmtool / functool
 │   ├── plugins/           # 六个内置插件（系统/日志/复读/请求拦截/AI/每日新闻）
 │   └── utils/             # 命令解析、消息提取等工具

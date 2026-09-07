@@ -60,7 +60,7 @@ AniaBot 的全部配置存储在**数据库**中（持久化存储的 `ania_kv` 
 
 ### platform —— 平台适配器开关
 
-多平台并存，各自独立开关（`bot.platform.<name>.enable`）。默认仅启用 QQ，QQ 官方 / 飞书 / Telegram / Discord 默认关闭：
+多平台并存，各自独立开关（`bot.platform.<name>.enable`）。默认仅启用 QQ，QQ 官方 / 飞书 / Telegram / Discord / 微信默认关闭：
 
 | 配置键 | 默认值 | 说明 |
 | --- | --- | --- |
@@ -69,6 +69,7 @@ AniaBot 的全部配置存储在**数据库**中（持久化存储的 `ania_kv` 
 | `bot.platform.feishu.enable` | `false` | 是否启用飞书平台（需同时配置下方 `bot.feishu.*`） |
 | `bot.platform.telegram.enable` | `false` | 是否启用 Telegram 平台（需同时配置下方 `bot.telegram.*`） |
 | `bot.platform.discord.enable` | `false` | 是否启用 Discord 平台（需同时配置下方 `bot.discord.*`） |
+| `bot.platform.weixin.enable` | `false` | 是否启用微信平台（需同时配置下方 `bot.weixin.*`；首次连接在控制台扫码登录） |
 
 勾选后**重启生效**。未来新增平台同样在此出现对应开关。
 
@@ -146,6 +147,26 @@ Discord 适配器支持文本 / @提及 / @everyone / 图片 / 文件 / 语音 /
 - 消息删除事件不携带删除者与原消息作者：作者从运行期缓存反查；删除者经审计日志尽力解析（**需为机器人勾选 View Audit Log 权限**——管理删除会落审计条目，本人自删不落，据「无匹配条目」推断自删；无权限或作者未入缓存时操作者留空）
 - 成员进出事件携带服务器 ID 而非频道 ID，因此映射为平台事件而非公共进出通知
 - 斜杠命令（Interactions）、合并转发、戳一戳等不在支持范围；QQ 专属能力（防撤回依赖的合并转发等）在本平台不生效
+:::
+
+### weixin —— 微信适配器
+
+接入微信 **iLink bot** 通道（HTTP 长轮询收消息，**无需公网地址、无需部署任何协议端**）。与其他平台不同，微信没有静态 Token 可申请：**启用平台并重启后，在 Web 面板「配置」页顶部的「微信扫码登录」卡片点击扫码**（或直接看 Bot 控制台的二维码），用手机微信扫码、按提示输入手机上显示的配对数字并确认即可完成授权，登录凭据自动保存在状态目录（`bot.weixin.state_dir`，建议放在 data 卷，容器重建后不丢登录）。凭据失效（长时间未使用等）时适配器会重新进入扫码流程，在面板或控制台重新扫一次即可。
+
+| 配置键 | 默认值 | 说明 |
+| --- | --- | --- |
+| `bot.weixin.token` | 空 | 登录凭据由控制台扫码后自动保存，一般无需填写；手动置入则跳过扫码（优先于状态文件） |
+| `bot.weixin.api_base` | `https://ilinkai.weixin.qq.com` | iLink Bot API 地址；登录成功后自动记录服务端下发的专属地址 |
+| `bot.weixin.cdn_base` | `https://novac2c.cdn.weixin.qq.com/c2c` | 微信媒体 CDN 地址（图片/文件上传下载） |
+| `bot.weixin.state_dir` | `./data/weixin` | 登录凭据与长轮询游标的保存目录 |
+| `bot.weixin.bot_type` | `3` | 扫码登录的 ilink bot 类型 |
+
+::: tip 微信能做什么 / 不能做什么
+微信适配器支持**一对一私聊**（bot ↔ 用户）：文本、图片 / 文件 / 视频（经微信 CDN 端侧 AES 加密中转）、语音（平台自带转写时 AI 直接可读）、引用消息（以「引用」摘要呈现上下文）；私聊直接触发 AI 对话。**平台限制**：
+- 无群聊会话概念：插件看到的所有会话都是私聊（`message_type=private`）
+- 无好友/群列表 API，面板通讯录不展示本平台；无消息历史 API，历史消息仅覆盖适配器运行期间的缓存（AI 会话历史不受影响，由持久化存储承载）
+- 无 @、戳一戳、表情回应、撤回等事件；QQ 专属能力在本平台不生效
+- 每个微信号只能作为「用户」扫码授权一个 bot 会话；「设置向导」中仅勾选启用（微信无需填写连接配置），重启后到配置页扫码
 :::
 
 ### adapter —— QQ(NapCat) 协议适配器

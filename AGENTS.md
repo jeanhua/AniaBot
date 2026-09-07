@@ -4,9 +4,9 @@ This file provides guidance to Agents when working with code in this repository.
 
 ## Project Overview
 
-AniaBot is a plugin-driven multi-platform bot framework built with Go. It connects to platforms via pluggable adapters — QQ through NapCat (WebSocket or HTTP adapter using the OneBot v11 protocol), QQ Official through the QQ Open Platform API v2 (WebSocket gateway + REST OpenAPI, hand-rolled resty/gorilla client), Feishu/Lark through the official oapi-sdk-go (WebSocket long-connection or webhook), Telegram through the Bot API (long polling, hand-rolled resty client), Discord through bwmarrin/discordgo (Gateway WebSocket + REST) — and features an AI chat engine supporting three LLM API formats (OpenAI Chat Completions / OpenAI Responses / Anthropic Messages) with tool calling, MCP (Model Context Protocol) integration, and a skill system.
+AniaBot is a plugin-driven multi-platform bot framework built with Go. It connects to platforms via pluggable adapters — QQ through NapCat (WebSocket or HTTP adapter using the OneBot v11 protocol), QQ Official through the QQ Open Platform API v2 (WebSocket gateway + REST OpenAPI, hand-rolled resty/gorilla client), Feishu/Lark through the official oapi-sdk-go (WebSocket long-connection or webhook), Telegram through the Bot API (long polling, hand-rolled resty client), Discord through bwmarrin/discordgo (Gateway WebSocket + REST), WeChat through the iLink bot HTTP long-polling API (QR-code login, CDN media with AES-128-ECB, protocol reference: Tencent's open-source openclaw-weixin) — and features an AI chat engine supporting three LLM API formats (OpenAI Chat Completions / OpenAI Responses / Anthropic Messages) with tool calling, MCP (Model Context Protocol) integration, and a skill system.
 
-**Multi-platform model**: the framework normalizes every platform to the OneBot v11 segment format (`OB11Segment{Type, Data}`) as its canonical message shape — adapters translate at the boundary (inbound: platform event → segments; outbound: segments → platform API). IDs are platform-prefixed (`qo:<openid>` for QQ Official, `fs:oc_xxx` for Feishu, `tg:<chat_id>:<message_id>` for Telegram messages, `dc:<channel_id>:<message_id>` for Discord messages); QQ legacy numeric IDs carry no prefix and route to the default adapter. Platform-specific capabilities are exposed via optional interfaces (`adapter.QQExt` / plugin-facing `bot.QQ`; `adapter.ContactsExt` backs the panel's multi-platform address book) — plugins type-assert to probe them, so a plugin written for QQ degrades gracefully on other platforms. Adding a platform = a new adapter package + one blank import in `cmd/main.go`; the core is untouched.
+**Multi-platform model**: the framework normalizes every platform to the OneBot v11 segment format (`OB11Segment{Type, Data}`) as its canonical message shape — adapters translate at the boundary (inbound: platform event → segments; outbound: segments → platform API). IDs are platform-prefixed (`qo:<openid>` for QQ Official, `fs:oc_xxx` for Feishu, `tg:<chat_id>:<message_id>` for Telegram messages, `dc:<channel_id>:<message_id>` for Discord messages, `wx:<user_id>:<message_id>` for WeChat messages); QQ legacy numeric IDs carry no prefix and route to the default adapter. Platform-specific capabilities are exposed via optional interfaces (`adapter.QQExt` / plugin-facing `bot.QQ`; `adapter.ContactsExt` backs the panel's multi-platform address book) — plugins type-assert to probe them, so a plugin written for QQ degrades gracefully on other platforms. Adding a platform = a new adapter package + one blank import in `cmd/main.go`; the core is untouched.
 
 ## Commands
 
@@ -78,6 +78,7 @@ bot/adapter/qqofficial/  QQ Official adapter (QQ Open Platform API v2: WebSocket
 bot/adapter/feishu/      Feishu/Lark adapter (larksuite/oapi-sdk-go/v3), WebSocket long-connection + webhook
 bot/adapter/telegram/    Telegram adapter (hand-rolled Bot API client, long polling; proxy/api_base config)
 bot/adapter/discord/     Discord adapter (bwmarrin/discordgo, Gateway WebSocket; proxy config)
+bot/adapter/weixin/      WeChat adapter (iLink bot HTTP long-poll; QR login via panel QRLoginSource API or console, credentials in ./data/weixin, CDN media)
 bot/component/           AI chat engine
   aichat/                  ChatBot, LLMClient, MessageBuilder, ToolOrchestrator, messageWindow
   llmtool/                 Tool interface, ToolExecuter, MCP client, SkillManager, schema parser
@@ -94,7 +95,8 @@ docs/                    VitePress documentation site
 ### Dependency Flow (strictly top-down)
 
 ```
-cmd/main.go → bot/core, bot/adapter/napcat, bot/adapter/qqofficial, bot/adapter/feishu, bot/adapter/telegram, bot/adapter/discord, bot/plugins/*
+cmd/main.go → bot/core, bot/adapter/napcat, bot/adapter/qqofficial, bot/adapter/feishu, bot/adapter/telegram, bot/adapter/discord, bot/adapter/weixin, bot/plugins/*
+bot/adapter/weixin → common/adapter, common/bot, common/model/message, common/msgchain, external (resty, go-qrcode)
 bot/core → common/*, bot/utils
 bot/adapter/napcat → common/adapter, common/bot, common/model/message, common/msgchain
 bot/adapter/qqofficial → common/adapter, common/bot, common/model/message, common/msgchain, external (resty, gorilla/websocket)
@@ -199,6 +201,7 @@ Four GitHub Actions workflows in `.github/workflows/`:
 | `modelcontextprotocol/go-sdk`    | MCP protocol client                        |
 | `gorilla/websocket`              | WebSocket for NapCat / QQ Official / Discord adapters |
 | `bwmarrin/discordgo`             | Discord adapter (Gateway WebSocket + REST)            |
+| `skip2/go-qrcode`                | WeChat adapter QR login (terminal QR rendering)       |
 | `go-resty/resty/v2`              | HTTP client                                |
 | `redis/go-redis/v9`              | Redis cache storage backend                |
 | `modernc.org/sqlite`             | Pure-Go SQLite, persistent storage default |

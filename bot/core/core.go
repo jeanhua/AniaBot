@@ -525,12 +525,21 @@ func (ania *AniaBot) startAdminPanel() {
 	// 面板通讯录来源（群/好友列表）：收集所有实现 adapter.ContactsExt 的适配器，
 	// 支持多平台并列展示；无枚举 API 的平台（Telegram、QQ 官方）自然缺席。
 	contacts := make([]adminpanel.ContactSource, 0, len(ania.adapters))
+	// 面板扫码登录来源（如微信）：收集所有实现 adminpanel.QRLoginSource 的适配器
+	qrLogins := make([]adminpanel.QRLoginChannel, 0, len(ania.adapters))
 	for _, e := range ania.adapters {
 		if ce, ok := e.adapter.(adapter.ContactsExt); ok {
 			contacts = append(contacts, adminpanel.ContactSource{
 				Name:     e.def.Name,
 				Platform: e.def.Platform,
 				Contacts: ce,
+			})
+		}
+		if qs, ok := e.adapter.(adminpanel.QRLoginSource); ok {
+			qrLogins = append(qrLogins, adminpanel.QRLoginChannel{
+				Name:     e.def.Name,
+				Platform: e.def.Platform,
+				Source:   qs,
 			})
 		}
 	}
@@ -582,6 +591,7 @@ func (ania *AniaBot) startAdminPanel() {
 		Quota:           quotaSrc,
 		QueryLogs:       queryLogFn,
 		ConsoleLogs:     consollog.Page,
+		QRLogins:        qrLogins,
 		Marketplace:     marketplace.New(ania.configStore, Logger().WithGroup("Marketplace")),
 		Logger:          Logger().WithGroup("AdminPanel"),
 	})

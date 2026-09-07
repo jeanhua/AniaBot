@@ -39,6 +39,11 @@ type AIChatPlugin struct {
 	lockStorage storage.Storage
 	rateCh      chan struct{}
 
+	// ready 插件是否完成完整初始化（AI 必需配置 base_url/api_key/model 齐备且
+	// 各组件构造成功）。未就绪时消息事件直接跳过：未配置 API 不算错误，插件
+	// 以降载模式运行（面板/配置页仍可用），避免空指针与反复刷错误日志
+	ready bool
+
 	activeContexts sync.Map
 
 	// asyncSubagents 异步子代理管理，按会话（群/好友）隔离
@@ -150,6 +155,10 @@ func NewAIChatPlugin() *AIChatPlugin {
 }
 
 func (p *AIChatPlugin) OnGroupMsg(ctx context.Context, bot bot.Bot, cmd command.Command, msg message.Message) (bool, error) {
+	// 未完成初始化（如未配置 API KEY）时跳过全部处理，交由后续插件
+	if !p.ready {
+		return true, nil
+	}
 	// 工具审批回复必须最先拦截：审批等待期间会话锁被占用（回复走不到正常聊天
 	// 流程），且回复通常不带 @（mention 门会把它挡掉）
 	if p.approvalManager != nil {
@@ -260,6 +269,10 @@ func (p *AIChatPlugin) OnGroupMsg(ctx context.Context, bot bot.Bot, cmd command.
 }
 
 func (p *AIChatPlugin) OnFriendMsg(ctx context.Context, bot bot.Bot, cmd command.Command, msg message.Message) (bool, error) {
+	// 未完成初始化（如未配置 API KEY）时跳过全部处理，交由后续插件
+	if !p.ready {
+		return true, nil
+	}
 	// 工具审批回复必须最先拦截：审批等待期间会话锁被占用，回复走不到正常聊天流程
 	if p.approvalManager != nil {
 		text, _ := utils.ExtraMessageStr(msg)
@@ -713,14 +726,11 @@ func (p *AIChatPlugin) Start(ctx context.Context, cfg *viper.Viper) error {
 	}
 	p.rateCh = make(chan struct{}, rateLimit)
 
-	if p.cfg.BaseURL == "" {
-		return fmt.Errorf("%w: 未配置 Base Url（plugin.ai_chat_bot.base_url）", aniaerror.ParameterInitializeError)
-	}
-	if p.cfg.Model == "" {
-		return fmt.Errorf("%w: 未配置 Model（plugin.ai_chat_bot.model）", aniaerror.ParameterInitializeError)
-	}
-	if p.cfg.APIKey == "" {
-		return fmt.Errorf("%w: 未配置 API KEY（plugin.ai_chat_bot.api_key）", aniaerror.ParameterInitializeError)
+	// AI 必需配置缺失不算初始化错误（首次启动设置向导期间是正常状态）：
+	// 记警告并以降载模式加载（ready=false），消息事件直接跳过，不刷错误日志
+	if p.cfg.BaseURL == "" || p.cfg.Model == "" || p.cfg.APIKey == "" {
+		p.Logger.Warn("AI 对话未配置（缺少 base_url / model / api_key），AI 对话功能暂不可用；请在 Web 面板填写后重启 Bot")
+		return nil
 	}
 	switch p.cfg.APIFormat {
 	case "", aichat.APIFormatChatCompletions, aichat.APIFormatResponses, aichat.APIFormatAnthropic:
@@ -995,6 +1005,8 @@ func (p *AIChatPlugin) Start(ctx context.Context, cfg *viper.Viper) error {
 			"max_idle_minutes", p.cfg.Session.MaxIdleMinutes, "max_sessions", maxSessions)
 	}
 
+	// 全部组件就绪：放行消息事件（早退路径保持 false，处理器据此跳过）
+	p.ready = true
 	return nil
 }
 

@@ -108,6 +108,14 @@ export const api = {
   saveFile: (name, content) =>
     request(`/api/files/${name}`, { method: 'PUT', body: JSON.stringify({ content }) }),
 
+  // 扫码登录（如微信 iLink bot）：sources 为支持的平台列表，start 返回二维码 data URL，
+  // status 轮询登录状态（idle/pending/scaned/need_verify/connected/failed），verify 提交配对码
+  getQRLoginSources: () => request('/api/qrlogin/sources'),
+  startQRLogin: (platform) => request(`/api/qrlogin/${encodeURIComponent(platform)}/start`, { method: 'POST' }),
+  getQRLoginStatus: (platform) => request(`/api/qrlogin/${encodeURIComponent(platform)}/status`),
+  submitQRLoginVerify: (platform, code) =>
+    request(`/api/qrlogin/${encodeURIComponent(platform)}/verify`, { method: 'POST', body: JSON.stringify({ code }) }),
+
   getStatus: () => request('/api/status'),
   getHost: () => request('/api/host'),
   getPlugins: () => request('/api/plugins'),

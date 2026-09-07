@@ -202,6 +202,20 @@
             </template>
           </div>
 
+          <!-- 微信 -->
+          <div :class="['border rounded-xl p-4 space-y-3 transition-colors', form.enableWeixin ? 'border-slate-300 bg-slate-50' : 'border-slate-200']">
+            <label class="flex items-center gap-2.5 cursor-pointer select-none">
+              <input type="checkbox" v-model="form.enableWeixin" class="w-4 h-4 accent-zinc-900" />
+              <span class="text-sm font-medium text-slate-700">
+                微信
+                <span class="text-xs text-slate-400 font-normal">· iLink bot 长轮询，无需公网地址；一对一私聊</span>
+              </span>
+            </label>
+            <p v-if="form.enableWeixin" class="text-xs text-slate-500">
+              微信没有静态 Token：完成向导并重启后，在「配置管理」页顶部的 <b>微信扫码登录</b> 卡片扫码授权（也可在 Bot 控制台扫码）。
+            </p>
+          </div>
+
           <div>
             <label class="block text-xs font-medium text-slate-600 mb-1.5">管理员 ID</label>
             <input v-model="form.adminId" type="text" placeholder="QQ 为 qq:QQ号，其他平台为带前缀的 ID（如 fs:ou_xxx），接收启动/异常通知" :class="inputClass" />
@@ -296,6 +310,7 @@ const form = reactive({
   enableDiscord: false,
   discordToken: '',
   discordProxy: '',
+  enableWeixin: false,
   adminId: '',
   baseUrl: '',
   apiKey: '',
@@ -324,6 +339,7 @@ onMounted(async () => {
     form.telegramProxy = cfg['bot.telegram.proxy'] || ''
     form.enableDiscord = cfg['bot.platform.discord.enable'] === true
     form.discordProxy = cfg['bot.discord.proxy'] || ''
+    form.enableWeixin = cfg['bot.platform.weixin.enable'] === true
     form.baseUrl = cfg['plugin.ai_chat_bot.base_url'] || ''
     form.model = cfg['plugin.ai_chat_bot.model'] || ''
     const adminId = cfg['bot.admin_id']
@@ -334,8 +350,8 @@ onMounted(async () => {
 // 平台步骤校验：至少启用一个平台
 function onNext() {
   error.value = ''
-  if (!form.enableNapcat && !form.enableQQOfficial && !form.enableFeishu && !form.enableTelegram && !form.enableDiscord) {
-    error.value = '请至少启用一个平台（QQ、飞书、Telegram 或 Discord），也可「跳过引导」稍后在配置管理中设置'
+  if (!form.enableNapcat && !form.enableQQOfficial && !form.enableFeishu && !form.enableTelegram && !form.enableDiscord && !form.enableWeixin) {
+    error.value = '请至少启用一个平台（QQ、飞书、Telegram、Discord 或微信），也可「跳过引导」稍后在配置管理中设置'
     return
   }
   step.value++
@@ -343,8 +359,8 @@ function onNext() {
 
 async function onSave() {
   error.value = ''
-  if (!form.enableNapcat && !form.enableQQOfficial && !form.enableFeishu && !form.enableTelegram && !form.enableDiscord) {
-    error.value = '请至少启用一个平台（QQ、飞书、Telegram 或 Discord），也可「跳过引导」稍后在配置管理中设置'
+  if (!form.enableNapcat && !form.enableQQOfficial && !form.enableFeishu && !form.enableTelegram && !form.enableDiscord && !form.enableWeixin) {
+    error.value = '请至少启用一个平台（QQ、飞书、Telegram、Discord 或微信），也可「跳过引导」稍后在配置管理中设置'
     return
   }
   const updates = {}
@@ -355,6 +371,7 @@ async function onSave() {
   updates['bot.platform.feishu.enable'] = form.enableFeishu
   updates['bot.platform.telegram.enable'] = form.enableTelegram
   updates['bot.platform.discord.enable'] = form.enableDiscord
+  updates['bot.platform.weixin.enable'] = form.enableWeixin
 
   // QQ(NapCat)
   if (form.enableNapcat) {

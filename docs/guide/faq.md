@@ -31,13 +31,17 @@
 
 向 [@BotFather](https://t.me/BotFather) 创建机器人拿到 Bot Token，然后在面板「配置 → 平台适配器」勾选「启用 Telegram 平台」、填写 `bot.telegram.token` 后重启。默认走 **Bot API 长轮询**，无需公网地址、无需部署协议端；国内部署如无法直连官方 API，可配置 `bot.telegram.proxy`（HTTP/SOCKS5 代理）或 `bot.telegram.api_base`（自建 Bot API 网关/反代）。详见 [配置详解](/guide/configuration#telegram-——-telegram-适配器)。
 
+### 怎么接入微信？
+
+在面板「配置 → 平台适配器」勾选「启用微信平台」（`bot.platform.weixin.enable`）并重启。与其他平台不同，微信没有静态 Token 可申请：重启后在**面板「配置」页的「微信扫码登录」卡片**（或 Bot 控制台）扫码，按提示输入手机上显示的配对数字并确认即可完成授权，凭据自动保存；失效时重新扫码即可。走 **HTTP 长轮询**，无需公网地址、无需部署任何协议端；仅支持一对一私聊（bot ↔ 用户），无群聊/@/撤回等事件。详见 [配置详解](/guide/configuration#weixin-——-微信适配器)。
+
 ### 怎么接入 Discord？
 
 在 [Discord Developer Portal](https://discord.com/developers/applications) 创建应用，「Bot」页面获取 Token 并**开启 Message Content Intent**（特权意图，不开则网关拒绝连接），然后在面板「配置 → 平台适配器」勾选「启用 Discord 平台」、填写 `bot.discord.token` 后重启。走 **Gateway WebSocket**，无需公网地址、无需部署协议端；无法直连时可配置 `bot.discord.proxy`（HTTP/SOCKS5 代理，REST 与网关都生效）。详见 [配置详解](/guide/configuration#discord-——-discord-适配器)。
 
 ### QQ 和飞书能同时在线吗？
 
-能（加 Telegram、Discord 也一样）。平台适配器各自独立开关（`bot.platform.napcat.enable` / `bot.platform.feishu.enable` / `bot.platform.telegram.enable` / `bot.platform.discord.enable`），都开启后即可并存。各平台收到的消息会带上自己的 `Platform` 标识，插件按 `Meta.Platforms` 声明决定处理哪些平台。
+能（加 Telegram、Discord、微信也一样）。平台适配器各自独立开关（`bot.platform.napcat.enable` / `bot.platform.feishu.enable` / `bot.platform.telegram.enable` / `bot.platform.discord.enable` / `bot.platform.weixin.enable`），都开启后即可并存。各平台收到的消息会带上自己的 `Platform` 标识，插件按 `Meta.Platforms` 声明决定处理哪些平台。
 
 ### 飞书机器人 @ 了不回复？
 
