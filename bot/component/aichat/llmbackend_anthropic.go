@@ -10,6 +10,7 @@ import (
 	"github.com/anthropics/anthropic-sdk-go"
 	"github.com/anthropics/anthropic-sdk-go/option"
 	"github.com/jeanhua/AniaBot/bot/component/llmtool"
+	"github.com/jeanhua/AniaBot/bot/version"
 )
 
 // anthropicBackend Anthropic Messages API 格式后端。
@@ -29,7 +30,11 @@ type anthropicBackend struct {
 }
 
 func newAnthropicBackend(baseURL, apiKey, model string, cache PromptCacheConfig) *anthropicBackend {
-	opts := []option.RequestOption{option.WithAPIKey(apiKey)}
+	opts := []option.RequestOption{
+		option.WithAPIKey(apiKey),
+		// 覆盖 SDK 默认 UA，标识请求来源与版本
+		option.WithHeader("User-Agent", version.UserAgent()),
+	}
 	if baseURL != "" {
 		opts = append(opts, option.WithBaseURL(baseURL))
 	}

@@ -9,6 +9,8 @@ import (
 
 	"github.com/openai/openai-go/v3"
 	"github.com/openai/openai-go/v3/option"
+
+	"github.com/jeanhua/AniaBot/bot/version"
 )
 
 // embeddingTimeout embedding 请求超时：服务无响应时调用方（kb_add/kb_search）
@@ -47,7 +49,12 @@ func newEmbedder(baseURL, apiKey, model string, logger *slog.Logger) *embedder {
 		return nil
 	}
 	return &embedder{
-		client: openai.NewClient(option.WithAPIKey(apiKey), option.WithBaseURL(baseURL)),
+		client: openai.NewClient(
+			option.WithAPIKey(apiKey),
+			option.WithBaseURL(baseURL),
+			// 与 LLMClient 一致，覆盖 SDK 默认 UA 标识请求来源与版本
+			option.WithHeader("User-Agent", version.UserAgent()),
+		),
 		model:  model,
 		logger: logger,
 		cache:  make(map[string][]float32),

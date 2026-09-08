@@ -33,7 +33,7 @@ cd web && npm ci && npm run build
 直接运行，首次启动会自动写入默认配置，并在控制台打印 Web 控制面板的随机初始密码：
 
 ```bash
-go run cmd/main.go
+go run ./cmd
 ```
 
 交叉编译

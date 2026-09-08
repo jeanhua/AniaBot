@@ -46,6 +46,19 @@ jobs:
 
           echo "description=$DESC" >> "$GITHUB_OUTPUT"
 
+      # 版本号注入二进制（LLM 请求 UA 标识）：tag 构建用 tag 名；
+      # 手动触发无 tag，用短 commit SHA 标识（滚动更新拉 latest 时可溯源）
+      - name: 计算版本号
+        id: version
+        run: |
+          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+            VERSION="${GITHUB_REF_NAME}"
+          else
+            VERSION="${GITHUB_SHA::7}"
+          fi
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "注入版本号: ${VERSION}"
+
       - name: 登录 Docker Hub
         uses: docker/login-action@v3
         with:
@@ -73,5 +86,7 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            VERSION=${{ steps.version.outputs.version }}
           cache-from: type=gha
           cache-to: type=gha,mode=max

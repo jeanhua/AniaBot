@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/jeanhua/AniaBot/bot/component/llmtool"
+	"github.com/jeanhua/AniaBot/bot/version"
 	"github.com/openai/openai-go/v3"
 	"github.com/openai/openai-go/v3/option"
 	"github.com/openai/openai-go/v3/shared"
@@ -25,6 +26,8 @@ func newChatCompletionsBackend(baseURL, apiKey, model string) *chatCompletionsBa
 		client: openai.NewClient(
 			option.WithAPIKey(apiKey),
 			option.WithBaseURL(baseURL),
+			// 覆盖 SDK 默认 UA，标识请求来源与版本
+			option.WithHeader("User-Agent", version.UserAgent()),
 		),
 		model: model,
 	}

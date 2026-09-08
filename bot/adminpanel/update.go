@@ -22,6 +22,7 @@ import (
 	"github.com/jeanhua/AniaBot/bot/component/oplog"
 	"github.com/jeanhua/AniaBot/bot/component/sysrestart"
 	"github.com/jeanhua/AniaBot/bot/marketplace"
+	"github.com/jeanhua/AniaBot/bot/version"
 )
 
 // 更新流水线阶段
@@ -455,7 +456,9 @@ func (s *Server) runUpdate(srcDir, gitURL, branch string) {
 		fail("系统错误", fmt.Errorf("创建构建输出目录失败: %w", err))
 		return
 	}
-	if err := stepCmd(ctx, srcDir, "go", "build", "-ldflags", "-s -w", "-o", builtPath, "./cmd/"); err != nil {
+	// ldflags 透传当前运行版本号：源码默认值是 dev，若不注入，自动更新后的
+	// 二进制会丢失 CI 注入的版本标识（LLM 请求 UA 无法溯源）
+	if err := stepCmd(ctx, srcDir, "go", "build", "-ldflags", version.Ldflags("-s -w"), "-o", builtPath, "./cmd/"); err != nil {
 		fail("编译错误", fmt.Errorf("go build 失败: %w", err))
 		return
 	}

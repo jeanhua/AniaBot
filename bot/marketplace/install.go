@@ -15,6 +15,7 @@ import (
 
 	"github.com/jeanhua/AniaBot/bot/component/oplog"
 	"github.com/jeanhua/AniaBot/bot/component/sysrestart"
+	"github.com/jeanhua/AniaBot/bot/version"
 	"github.com/jeanhua/AniaBot/common/pluginmeta"
 )
 
@@ -349,7 +350,8 @@ func (s *Service) runInstall(id, commit string) {
 		fail("系统", err)
 		return
 	}
-	if err := s.stepCmd(ctx, s.sourceDir(), "go", "build", "-ldflags", "-s -w", "-o", builtPath, "./cmd/"); err != nil {
+	// ldflags 透传当前运行版本号，重新编译不丢失 CI 注入的版本标识（见 version 包）
+	if err := s.stepCmd(ctx, s.sourceDir(), "go", "build", "-ldflags", version.Ldflags("-s -w"), "-o", builtPath, "./cmd/"); err != nil {
 		fail("编译", fmt.Errorf("go build 失败（插件与当前框架 API 不兼容时通常在此报错）: %w", err))
 		return
 	}
@@ -461,7 +463,7 @@ func (s *Service) runUninstall(id string) {
 		fail("系统", err)
 		return
 	}
-	if err := s.stepCmd(ctx, s.sourceDir(), "go", "build", "-ldflags", "-s -w", "-o", builtPath, "./cmd/"); err != nil {
+	if err := s.stepCmd(ctx, s.sourceDir(), "go", "build", "-ldflags", version.Ldflags("-s -w"), "-o", builtPath, "./cmd/"); err != nil {
 		fail("编译", err)
 		return
 	}

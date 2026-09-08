@@ -16,6 +16,8 @@ RUN npm run build
 # ---------- 阶段 2：编译 Go ----------
 FROM golang:1.25-alpine AS go-builder
 WORKDIR /build
+# 版本号由 CI 传入（tag 名或短 commit SHA），本地 docker build 缺省为 dev
+ARG VERSION=dev
 COPY go.mod go.sum ./
 RUN go mod download
 COPY cmd/ ./cmd/
@@ -24,7 +26,7 @@ COPY bot/ ./bot/
 COPY common/ ./common/
 # 前端产物（.dockerignore 已排除仓库内 dist，此处用阶段 1 的新鲜产物）
 COPY --from=web-builder /build/bot/adminpanel/dist ./bot/adminpanel/dist
-RUN CGO_ENABLED=0 go build -ldflags="-s -w" -o /out/AniaBot ./cmd/
+RUN CGO_ENABLED=0 go build -ldflags="-s -w -X github.com/jeanhua/AniaBot/bot/version.Version=${VERSION}" -o /out/AniaBot ./cmd/
 
 # ---------- 阶段 3：运行时 ----------
 # 保留 golang 基础镜像：自动更新需要在容器内执行 go build
