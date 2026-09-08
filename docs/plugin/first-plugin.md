@@ -109,7 +109,7 @@ func main() {
 ## 第五步：运行测试
 
 ```bash
-go run cmd/main.go
+go run ./cmd
 ```
 
 群里 @机器人 发送 `/dice`，同时私聊发送 `/help` 可以看到你的插件已经出现在列表中。

@@ -291,7 +291,7 @@ func main() {
 ```
 
 ```bash
-go run cmd/main.go
+go run ./cmd
 ```
 
 调试技巧：

@@ -13,7 +13,7 @@ AniaBot is a plugin-driven multi-platform bot framework built with Go. It connec
 ### Run
 
 ```bash
-go run cmd/main.go
+go run ./cmd    # 不能用 go run cmd/main.go：cmd 下有插件市场生成的注册文件，单文件运行会编译失败
 ```
 
 ### Build (cross-compile)

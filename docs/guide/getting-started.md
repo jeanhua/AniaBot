@@ -37,7 +37,7 @@ go mod tidy
 ## 第三步：启动与配置
 
 ```bash
-go run cmd/main.go
+go run ./cmd
 ```
 
 AniaBot 的配置存储在数据库中，**首次启动**会自动写入默认配置，并在控制台打印 Web 控制面板的**随机初始密码**（仅显示一次）：
