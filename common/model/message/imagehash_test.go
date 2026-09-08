@@ -26,6 +26,27 @@ func TestImageMessageHashFallbackToFile(t *testing.T) {
 	}
 }
 
+func TestFriendlyTextDataURIImageMark(t *testing.T) {
+	// data URI（微信/飞书/Telegram/Discord 适配器内联图片）是 MB 级 base64，
+	// 不能写进标记文本，否则会随消息进入 LLM 上下文与落盘历史；
+	// 只保留哈希供 load_images 按需加载
+	const uri = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUg=="
+	raw := Message{
+		Message: []OB11Segment{
+			{Type: SegmentImage, Data: map[string]any{"url": uri, "file": "a.png"}},
+		},
+	}
+
+	text := raw.FriendlyText(true, WithNoSenderPrefix())
+	want := "[图片 " + ImageHash(uri) + "]"
+	if !strings.Contains(text, want) {
+		t.Fatalf("data URI 应只输出哈希标记 %q, got %q", want, text)
+	}
+	if strings.Contains(text, "url:") || strings.Contains(text, "base64") {
+		t.Fatalf("标记文本中不得出现 data URI, got %q", text)
+	}
+}
+
 func TestFriendlyTextImageHashMark(t *testing.T) {
 	const url = "https://gchat.qpic.cn/download?fileid=abc123"
 	raw := Message{

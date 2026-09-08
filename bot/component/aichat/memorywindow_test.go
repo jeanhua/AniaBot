@@ -218,6 +218,32 @@ func TestPersistDegradesDataURI(t *testing.T) {
 	}
 }
 
+func TestDegradeStripsInlineDataURIFromText(t *testing.T) {
+	// 旧版本把适配器内联 data URI 完整写进 [图片 <hash> url:...] 标记并随之落盘，
+	// MB 级 base64 会在回放与压缩重写时反复进入上下文；落盘与回放都应清洗
+	uri := "data:image/png;base64,iVBORw0KGgo="
+	mark := "[图片 " + message.ImageHash(uri) + " url:" + uri + "]"
+	msg := TextMessage(RoleUser, "看图 "+mark)
+	want := "看图 [图片 " + message.ImageHash(uri) + "]"
+
+	got := degradeImagesForPersist([]Message{msg})[0]
+	if got.Parts[0].Text != want {
+		t.Fatalf("落盘文本应剔除内联 data URI:\n got %q\nwant %q", got.Parts[0].Text, want)
+	}
+	// 原消息不被修改
+	if msg.Parts[0].Text != "看图 "+mark {
+		t.Fatalf("原消息被修改: %q", msg.Parts[0].Text)
+	}
+
+	// 回放路径同样清洗（兼容旧版本已落盘的数据）
+	store := &fakeHistoryStore{saved: []Message{msg}}
+	w := newMessageWindow(1000, nil, nil, store)
+	w.load(context.Background())
+	if w.history()[0].Parts[0].Text != want {
+		t.Fatalf("回放文本应剔除内联 data URI:\n got %q\nwant %q", w.history()[0].Parts[0].Text, want)
+	}
+}
+
 // TestMaybeCompressRecordsUsage 压缩成功后其 token 用量被记录并可被取走
 // （ChatBot.Chat 据此并入当次请求统计）；取走后清零，压缩失败不记录。
 func TestMaybeCompressRecordsUsage(t *testing.T) {

@@ -83,8 +83,11 @@ func (raw Message) FriendlyText(showUrl bool, opts ...MsgOptFunc) string {
 				} else {
 					if showUrl {
 						// 同时输出短哈希与 URL：哈希用于 load_images 按需加载，
-						// URL 供 AI 下载图片到本地（如 bash/file 工具）
-						if msg.Url != "" {
+						// URL 供 AI 下载图片到本地（如 bash/file 工具）。
+						// data URI（微信/飞书/Telegram/Discord 的内联图片）是 MB 级
+						// base64，写进标记会随消息文本进入 LLM 上下文与落盘历史，
+						// 只保留哈希（load_images 注册表仍持有完整 URI，按哈希可加载）
+						if msg.Url != "" && !strings.HasPrefix(msg.Url, "data:") {
 							result.WriteString(fmt.Sprintf("[图片 %s url:%s]", msg.Hash(), msg.Url))
 						} else {
 							result.WriteString(fmt.Sprintf("[图片 %s]", msg.Hash()))

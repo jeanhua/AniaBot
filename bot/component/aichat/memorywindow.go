@@ -3,6 +3,7 @@ package aichat
 import (
 	"context"
 	"fmt"
+	"regexp"
 	"strings"
 	"unicode/utf8"
 
@@ -61,8 +62,9 @@ func (w *messageWindow) load(ctx context.Context) {
 		// 加载失败不应阻断对话，按空历史继续，后续 Save 会覆盖
 		return
 	}
-	// 落盘副本已剔除图片片段（见 degradeImagesForPersist），回放原样恢复即可
-	w.messages = msgs
+	// 落盘副本已剔除图片片段（见 degradeImagesForPersist）；回放前再过一遍
+	// 降级以清洗旧版本落盘的文本内嵌 data URI 标记（MB 级 base64 会随历史轮轮重发）
+	w.messages = degradeImagesForPersist(msgs)
 }
 
 // persistAppend 将新追加的消息增量落盘；store 未注入或增量为空时为空操作。
@@ -93,8 +95,13 @@ func (w *messageWindow) persistReplace() {
 	}
 }
 
+// inlineDataURIRe 匹配消息文本标记里内联的 data URI（url:data:<mime>;base64,<payload>）。
+// 旧版本会把适配器内联图片的完整 data URI 写进 [图片 <hash> url:...] 标记并随之落盘，
+// MB 级 base64 会在回放与压缩重写时反复进入上下文；此处统一清洗为仅保留哈希的标记。
+var inlineDataURIRe = regexp.MustCompile(` url:data:[^;\s\]]+;base64,[A-Za-z0-9+/=]+`)
+
 // degradeImagesForPersist 将待落盘消息中的所有图片片段（http(s) 与 data URI）
-// 替换为文本标记，返回新切片，不修改原消息。
+// 替换为文本标记，并剔除文本标记里内联的 data URI，返回新切片，不修改原消息。
 func degradeImagesForPersist(msgs []Message) []Message {
 	out := make([]Message, len(msgs))
 	for i := range msgs {
@@ -111,6 +118,13 @@ func degradeImagesForPersist(msgs []Message) []Message {
 				newParts = append(newParts, TextPart("[图片 "+message.ImageHash(p.ImageURL)+"]"))
 				changed = true
 				continue
+			}
+			if p.Type == ContentPartText && strings.Contains(p.Text, "url:data:") {
+				if cleaned := inlineDataURIRe.ReplaceAllString(p.Text, ""); cleaned != p.Text {
+					newParts = append(newParts, TextPart(cleaned))
+					changed = true
+					continue
+				}
 			}
 			newParts = append(newParts, p)
 		}
