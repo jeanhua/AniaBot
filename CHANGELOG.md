@@ -11,6 +11,8 @@
 
 ## [Unreleased]
 
+## [v4.7.0] - 2026-09-08
+
 ### 新增
 
 - 请求 LLM API 时自动带上 `AniaBot/版本号` 的 User-Agent 标识，便于上游识别请求来源；版本号由发布流程自动注入（Release 用 tag、Docker 镜像用 tag 或短 commit 号），直接源码运行时显示 dev，面板自动更新后版本标识不丢失。
