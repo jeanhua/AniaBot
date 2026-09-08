@@ -16,11 +16,12 @@ const (
 	platformFeishu     = "feishu"
 	platformTelegram   = "telegram"
 	platformDiscord    = "discord"
+	platformWeixin     = "weixin"
 )
 
 // allPlatforms 全平台集合：平台名单为 nil（从未配置，如旧版本调用）时视为全选，
 // 与面板默认值一致，保证升级兼容。
-var allPlatforms = []string{platformQQ, platformQQOfficial, platformTelegram, platformFeishu, platformDiscord}
+var allPlatforms = []string{platformQQ, platformQQOfficial, platformTelegram, platformFeishu, platformDiscord, platformWeixin}
 
 // ListStore 名单状态的共享载体：解析后的群/用户/平台名单与模式，支持运行时热重载。
 //
@@ -58,7 +59,7 @@ type ListSnapshot struct {
 }
 
 // NormalizePlatformToken 把平台名单项归一化为规范平台名。
-// 接受平台名（qq/qqofficial/feishu/telegram/discord）与常用简称（qo/tg/fs/dc），
+// 接受平台名（qq/qqofficial/feishu/telegram/discord/weixin）与常用简称（qo/tg/fs/dc/wx），
 // 大小写不限，末尾带不带冒号均可（如 tg、TG:、telegram 都返回 telegram）。
 // 第二个返回值为 false 表示不是合法的平台 token。
 func NormalizePlatformToken(s string) (string, bool) {
@@ -76,6 +77,8 @@ func NormalizePlatformToken(s string) (string, bool) {
 		return platformTelegram, true
 	case platformDiscord, "dc":
 		return platformDiscord, true
+	case platformWeixin, "wx":
+		return platformWeixin, true
 	default:
 		return "", false
 	}
@@ -99,6 +102,8 @@ func inferPlatformFromQID(id message.QID) string {
 		return platformTelegram
 	case strings.HasPrefix(s, "dc:"):
 		return platformDiscord
+	case strings.HasPrefix(s, "wx:"):
+		return platformWeixin
 	}
 	if _, err := strconv.ParseUint(s, 10, 64); err == nil {
 		return platformQQ

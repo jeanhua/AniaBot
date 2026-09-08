@@ -38,6 +38,9 @@ func TestNormalizePlatformToken(t *testing.T) {
 		{"fs", "feishu", true},
 		{"discord", "discord", true},
 		{"dc", "discord", true},
+		{"weixin", "weixin", true},
+		{"wx", "weixin", true},
+		{"WX:", "weixin", true},
 		{"  tg  ", "telegram", true},
 		{"", "", false},
 		{"tgg", "", false},
@@ -87,6 +90,12 @@ func TestPlatformOfMessage(t *testing.T) {
 	}
 	if got := PlatformOfMessage(friendMsg("qo:abc")); got != "qqofficial" {
 		t.Errorf("从 qo 用户 ID 推断 = %q", got)
+	}
+	if got := PlatformOfMessage(friendMsg("wx:abc@im.wechat")); got != "weixin" {
+		t.Errorf("从 wx 用户 ID 推断 = %q", got)
+	}
+	if got := PlatformOfMessage(platformMsg("weixin", "", "wx:abc@im.wechat")); got != "weixin" {
+		t.Errorf("显式 weixin 平台 = %q", got)
 	}
 	// 裸数字视为 QQ 旧格式
 	if got := PlatformOfMessage(friendMsg("123456")); got != "qq" {
@@ -172,7 +181,7 @@ func TestPlatformsNilMeansAll(t *testing.T) {
 	if allowed, _ := p.OnGroupMsg(ctx, nil, command.Command{}, groupMsg("tg:-1001", "tg:111")); !allowed {
 		t.Error("platforms 为 nil 时应视为全选透放")
 	}
-	for _, plat := range []string{"qq", "qqofficial", "telegram", "feishu", "discord"} {
+	for _, plat := range []string{"qq", "qqofficial", "telegram", "feishu", "discord", "weixin"} {
 		if !p.store.PlatformEnabled(plat) {
 			t.Errorf("platforms 为 nil 时 %s 应启用", plat)
 		}
@@ -190,6 +199,76 @@ func TestPlatformsExplicitEmptyBlocksAll(t *testing.T) {
 		t.Error("显式清空平台名单应拦截全部私聊")
 	}
 }
+
+// 升级兼容：存量配置的平台名单恰等于旧默认（用户未自定义）时，
+// Start 自动补选微信平台，避免微信消息被「未勾选平台直接拦截」。
+func TestLegacyPlatformDefaultMigratesWeixin(t *testing.T) {
+	p := newTestPlugin(t, interceptorConfig{
+		Enable:    true,
+		Mode:      modeBlacklist,
+		Platforms: []string{"qq", "qqofficial", "telegram", "feishu", "discord"},
+	})
+	if !p.store.PlatformEnabled("weixin") {
+		t.Error("旧默认名单应自动补选微信平台")
+	}
+	// 微信私聊在补选后按名单放行
+	if allowed, _ := p.OnFriendMsg(ctx0(), nil, command.Command{}, friendMsg("wx:abc@im.wechat")); !allowed {
+		t.Error("补选后微信私聊应放行")
+	}
+}
+
+// 用户自定义过的名单（哪怕恰好五个平台但内容不同）不迁移，尊重主动选择。
+func TestCustomPlatformListNotMigrated(t *testing.T) {
+	p := newTestPlugin(t, interceptorConfig{
+		Enable:    true,
+		Mode:      modeBlacklist,
+		Platforms: []string{"qq", "qqofficial", "telegram", "feishu", "weixin"},
+	})
+	if p.store.PlatformEnabled("discord") {
+		t.Error("自定义名单不应被改动")
+	}
+	// 用户主动勾选了微信：微信放行
+	if !p.store.PlatformEnabled("weixin") {
+		t.Error("用户勾选的微信应保留")
+	}
+
+	// 显式清空同样是主动选择，不应被补回
+	p2 := newTestPlugin(t, interceptorConfig{Enable: true, Mode: modeBlacklist, Platforms: []string{}})
+	if p2.store.PlatformEnabled("weixin") {
+		t.Error("显式清空平台名单不应被自动补选")
+	}
+}
+
+// 微信作为一等平台参与总开关：未勾选时微信私聊拦截，勾选时放行；
+// wx 简称与 weixin 归一化为同一平台（归一化本身由 TestNormalizePlatformToken 覆盖）。
+func TestWeixinPlatformGate(t *testing.T) {
+	p := newTestPlugin(t, interceptorConfig{
+		Enable:    true,
+		Mode:      modeBlacklist,
+		Platforms: []string{"qq"},
+	})
+	if allowed, _ := p.OnFriendMsg(ctx0(), nil, command.Command{}, friendMsg("wx:abc@im.wechat")); allowed {
+		t.Error("未勾选微信平台时私聊应拦截")
+	}
+	// 简称 "wx" 查询同一开关
+	if p.store.PlatformEnabled("wx") {
+		t.Error("未勾选微信时 wx 简称查询也应为未勾选")
+	}
+
+	p2 := newTestPlugin(t, interceptorConfig{
+		Enable:    true,
+		Mode:      modeBlacklist,
+		Platforms: []string{"wx"},
+	})
+	if !p2.store.PlatformEnabled("weixin") {
+		t.Error("勾选 wx 简称后 weixin 平台应启用")
+	}
+	if allowed, _ := p2.OnFriendMsg(ctx0(), nil, command.Command{}, friendMsg("wx:abc@im.wechat")); !allowed {
+		t.Error("勾选微信平台后私聊应按名单放行")
+	}
+}
+
+func ctx0() context.Context { return context.Background() }
 
 // 未知平台名被忽略并上报，不影响合法项。
 func TestUnknownPlatformTokenIgnored(t *testing.T) {

@@ -10,7 +10,7 @@ type interceptorConfig struct {
 	// 默认全选即与旧行为一致；想单独屏蔽某平台（如只保留 QQ）时取消勾选它即可。
 	// 黑名单模式下勾选即放行该平台（名单命中的群/用户除外）；
 	// 白名单模式下勾选是放行的必要条件，还需群/用户名单命中。
-	Platforms []string `cfg:"plugin.interceptor.platforms" label:"可用平台" type:"multiselect" options:"qq,qqofficial,telegram,feishu,discord" group:"请求拦截插件" help:"仅勾选平台的消息进入名单判定，未勾选的平台直接拦截（不触发 AI）。默认全选（与旧行为一致）；单独屏蔽某平台时取消勾选它" default:"qq,qqofficial,telegram,feishu,discord"`
+	Platforms []string `cfg:"plugin.interceptor.platforms" label:"可用平台" type:"multiselect" options:"qq,qqofficial,telegram,feishu,discord,weixin" group:"请求拦截插件" help:"仅勾选平台的消息进入名单判定，未勾选的平台直接拦截（不触发 AI）。默认全选（与旧行为一致）；单独屏蔽某平台时取消勾选它" default:"qq,qqofficial,telegram,feishu,discord,weixin"`
 	// 名单留空的语义：blacklist 模式下表示不屏蔽任何会话；
 	// whitelist 模式下表示拦截所有群聊（私聊按用户名单，用户名单为空则全部拦截）
 	// ID 支持多平台格式：QQ 为 qq: 前缀，其他平台带前缀（如飞书 fs:oc_xxx）

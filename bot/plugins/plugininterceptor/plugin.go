@@ -58,6 +58,7 @@ func NewPlugin() *InterceptorPlugin {
 }
 
 func (p *InterceptorPlugin) Start(ctx context.Context, cfg *viper.Viper) error {
+	p.migrateLegacyPlatformDefault()
 	p.store.LoadWithPlatforms(p.cfg.Enable, p.cfg.Mode, p.cfg.Groups, p.cfg.Friends, p.cfg.GroupUsers, p.cfg.Platforms,
 		func(rule string) { p.Logger.Warn("忽略非法的拦截规则", "rule", rule) })
 
@@ -73,6 +74,59 @@ func (p *InterceptorPlugin) Start(ctx context.Context, cfg *viper.Viper) error {
 		"groupUsers", groupUsers,
 		"platforms", platforms)
 	return nil
+}
+
+// legacyPlatformDefault 微信平台成为一等平台之前的「可用平台」种子默认值。
+// 存量部署的该键值会被配置中心原样保留（默认值只补缺、不覆盖），微信平台
+// 上线后将命中「未勾选平台直接拦截」，因此需要自动迁移。
+var legacyPlatformDefault = []string{"qq", "qqofficial", "telegram", "feishu", "discord"}
+
+// migrateLegacyPlatformDefault 升级兼容：存量配置的平台名单恰等于旧默认
+// （用户从未自定义过）时补入 weixin 并回写配置中心；自定义过的名单
+// （增删过任何平台、含非法项或重复项）一律不动。
+func (p *InterceptorPlugin) migrateLegacyPlatformDefault() {
+	if !equalPlatformSet(p.cfg.Platforms, legacyPlatformDefault) {
+		return
+	}
+	p.cfg.Platforms = append(append([]string{}, p.cfg.Platforms...), platformWeixin)
+	if p.ConfigEditor == nil {
+		p.Logger.Warn("配置中心不可用，微信平台勾选仅本次运行生效（plugin.interceptor.platforms）")
+		return
+	}
+	if err := p.ConfigEditor.Set("plugin.interceptor.platforms", p.cfg.Platforms); err != nil {
+		p.Logger.Warn("回写微信平台勾选失败", "error", err)
+	} else {
+		p.Logger.Info("检测到旧版平台默认名单，已自动补选微信平台（plugin.interceptor.platforms）")
+	}
+}
+
+// equalPlatformSet 两个平台名单是否为同一集合（逐项规范化后比较，忽略顺序
+// 与大小写/简称差异；空名单与 nil 不视为相等——显式清空是用户的主动选择）。
+func equalPlatformSet(list, want []string) bool {
+	if len(list) != len(want) {
+		return false
+	}
+	seen := make(map[string]struct{}, len(list))
+	for _, v := range list {
+		norm, ok := NormalizePlatformToken(v)
+		if !ok {
+			return false
+		}
+		if _, dup := seen[norm]; dup {
+			return false
+		}
+		seen[norm] = struct{}{}
+	}
+	for _, w := range want {
+		norm, ok := NormalizePlatformToken(w)
+		if !ok {
+			return false
+		}
+		if _, hit := seen[norm]; !hit {
+			return false
+		}
+	}
+	return true
 }
 
 func (p *InterceptorPlugin) OnGroupMsg(ctx context.Context, bot bot.Bot, cmd command.Command, msg message.Message) (bool, error) {
