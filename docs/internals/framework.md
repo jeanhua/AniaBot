@@ -87,11 +87,17 @@ flowchart TB
     subgraph Stream[流式 · bot.StreamSender]
         S1[SendGroupStream / SendFriendStream<br/>先发后改]
     end
+    subgraph Interactive[交互 · bot.Interactive / bot.MsgEditor]
+        I1[keyboard 段按钮 + 点击回调<br/>编辑已发出消息（就地翻页）]
+    end
     Base --- QQ
     Base --- Stream
+    Base --- Interactive
 ```
 
-- 适配器侧对应 `adapter.QQExt` / `adapter.StreamSenderExt` 等可选接口
+- 适配器侧对应 `adapter.QQExt` / `adapter.StreamSenderExt` / `adapter.InteractiveExt` /
+  `adapter.MsgEditorExt`（内联按钮与消息编辑，Telegram 实现；交互应答走 `adapter.InteractionAnswerer`，
+  点击经 `TriggerWrapper.OnInteraction` 进 core 按「插件名:载荷」前缀路由）等可选接口
 - `adapter.WrapBot(base, src)` 按事件来源适配器把公共 `bot.Bot` 包装成带专属能力的扩展外观
 - 插件侧 `if qb, ok := b.(bot.QQ); ok` 类型断言探测，断言失败即平台不支持，优雅退化
 

@@ -230,6 +230,43 @@ func (c *chainBuilder) Raw(rawMsg ...message.OB11Segment) {
 	c.message = append(c.message, rawMsg...)
 }
 
+// Button 回调按钮：点击产生 InteractionEvent 送回插件（data 原样返回，
+// Telegram 限制 ≤64 字节，建议经 Meta.CallbackData 打包插件前缀）。
+func Button(text, data string) message.InlineButton {
+	return message.InlineButton{Text: text, Data: data}
+}
+
+// ButtonURL 链接按钮：点击打开网页，不产生回调。
+func ButtonURL(text, url string) message.InlineButton {
+	return message.InlineButton{Text: text, URL: url}
+}
+
+// Row 按钮行：一行内并排展示的按钮。
+func Row(btns ...message.InlineButton) []message.InlineButton {
+	return btns
+}
+
+// Keyboard 附加内联按钮键盘（每条消息至多一个，后加的覆盖前者）。
+// 平台不支持时（未实现 bot.Interactive）core 出站自动剥离，插件应先断言探测。
+func (c *chainBuilder) Keyboard(rows ...[]message.InlineButton) {
+	// 后加覆盖前加：先移除已有 keyboard 段
+	kept := c.message[:0:0]
+	for _, s := range c.message {
+		if s.Type != message.SegmentKeyboard {
+			kept = append(kept, s)
+		}
+	}
+	kb := message.KeyboardMessage{Rows: rows}
+	if len(rows) == 0 {
+		c.message = kept
+		return
+	}
+	c.message = append(kept, message.OB11Segment{
+		Type: message.SegmentKeyboard,
+		Data: kb.Marshal(),
+	})
+}
+
 // FriendChainBuilder 链式方法
 
 func (c *friendChainBuilder) Text(text string) FriendChainBuilder {
@@ -312,6 +349,11 @@ func (c *friendChainBuilder) Raw(rawMsg ...message.OB11Segment) FriendChainBuild
 	return c
 }
 
+func (c *friendChainBuilder) Keyboard(rows ...[]message.InlineButton) FriendChainBuilder {
+	c.chainBuilder.Keyboard(rows...)
+	return c
+}
+
 // GroupChainBuilder 链式方法
 func (c *groupChainBuilder) Text(text string) GroupChainBuilder {
 	c.chainBuilder.Text(text)
@@ -390,6 +432,11 @@ func (c *groupChainBuilder) RecordBase64(bs64code string) GroupChainBuilder {
 
 func (c *groupChainBuilder) Raw(rawMsg ...message.OB11Segment) GroupChainBuilder {
 	c.chainBuilder.Raw(rawMsg...)
+	return c
+}
+
+func (c *groupChainBuilder) Keyboard(rows ...[]message.InlineButton) GroupChainBuilder {
+	c.chainBuilder.Keyboard(rows...)
 	return c
 }
 

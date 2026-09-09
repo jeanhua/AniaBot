@@ -19,6 +19,9 @@ type GroupChainBuilder interface {
 	RecordLocal(path string) GroupChainBuilder
 	RecordBase64(bs64code string) GroupChainBuilder
 	Raw(rawMsg ...message.OB11Segment) GroupChainBuilder
+	// Keyboard 附加内联按钮键盘（行 × 按钮，Button/Row/ButtonURL 构造）；
+	// 平台不支持时 core 出站自动剥离，插件应先断言 bot.Interactive 探测
+	Keyboard(rows ...[]message.InlineButton) GroupChainBuilder
 
 	Mention(userId message.QID) GroupChainBuilder
 	Build() GroupChain
@@ -41,6 +44,9 @@ type FriendChainBuilder interface {
 	RecordLocal(path string) FriendChainBuilder
 	RecordBase64(bs64code string) FriendChainBuilder
 	Raw(rawMsg ...message.OB11Segment) FriendChainBuilder
+	// Keyboard 附加内联按钮键盘（行 × 按钮，Button/Row/ButtonURL 构造）；
+	// 平台不支持时 core 出站自动剥离，插件应先断言 bot.Interactive 探测
+	Keyboard(rows ...[]message.InlineButton) FriendChainBuilder
 
 	Build() FriendChain
 }
@@ -68,3 +74,15 @@ type GroupForwardChain interface {
 type FriendForwardChain interface {
 	GetForwardMsg() message.ForwardMessageSegment
 }
+
+// segChain 已有段切片的链包装。
+type segChain []message.OB11Segment
+
+func (s segChain) GetGroupMsg() []message.OB11Segment  { return s }
+func (s segChain) GetFriendMsg() []message.OB11Segment { return s }
+
+// NewGroupChain 包装已有段切片为 GroupChain（core 出站剥离不支持段后重建链用）。
+func NewGroupChain(segs []message.OB11Segment) GroupChain { return segChain(segs) }
+
+// NewFriendChain 包装已有段切片为 FriendChain。
+func NewFriendChain(segs []message.OB11Segment) FriendChain { return segChain(segs) }

@@ -78,6 +78,7 @@ type GroupMsgEmojiLikeHandler func(message.GroupMsgEmojiLikeNotice)
 type EssenceHandler func(message.EssenceNotice)
 type GroupCardHandler func(message.GroupCardNotice)
 type PlatformEventHandler func(message.PlatformEvent)
+type InteractionHandler func(message.InteractionEvent)
 
 // TriggerWrapper 回调函数包装器。
 // 消息与公共通知（成员变动/撤回/表情回应等可跨平台映射的事件）各平台按需触发；
@@ -101,6 +102,9 @@ type TriggerWrapper struct {
 	OnGroupCard         GroupCardHandler
 	// OnPlatformEvent 平台特定事件（如飞书卡片回调），可选触发
 	OnPlatformEvent PlatformEventHandler
+	// OnInteraction 内联按钮点击回调（实现 InteractiveExt 的适配器触发），
+	// core 按回调数据中的插件名前缀路由，可选触发
+	OnInteraction InteractionHandler
 }
 
 // EventKeyer 事件幂等去重键提供者，可选接口。
@@ -135,6 +139,34 @@ type SegmentSupport interface {
 type StreamSenderExt interface {
 	SendGroupStream(groupId message.QID, chain msgchain.GroupChain) (bot.StreamHandle, bool)
 	SendFriendStream(userId message.QID, chain msgchain.FriendChain) (bot.StreamHandle, bool)
+}
+
+// MsgEditorExt 适配器侧消息编辑能力（与插件侧外观接口 bot.MsgEditor 对应）。
+// 平台支持「先发后改」时实现（如 Telegram editMessageText）；
+// core 经 BotWrapper 包装后暴露给插件类型断言。
+type MsgEditorExt interface {
+	// EditGroupMsg 编辑已发送的群聊消息（文本内容 + 可选 keyboard 段换按钮）
+	EditGroupMsg(msgId message.QID, chain msgchain.GroupChain) bool
+	// EditFriendMsg 编辑已发送的私聊消息
+	EditFriendMsg(msgId message.QID, chain msgchain.FriendChain) bool
+}
+
+// InteractiveExt 适配器侧内联按钮能力（与插件侧外观接口 bot.Interactive 对应）。
+// 实现方须在出站翻译 keyboard 段（message.ExtractKeyboard）为平台原生按钮，
+// 入站把点击翻译为 InteractionEvent 经 TriggerWrapper.OnInteraction 上报；
+// core 对未实现的平台自动剥离出站 keyboard 段。
+type InteractiveExt interface {
+	// SupportsKeyboard 平台是否支持内联按钮
+	SupportsKeyboard() bool
+}
+
+// InteractionAnswerer 内联按钮点击应答能力，可选接口。
+// 支持按钮的平台在回调被消费后应答（如 Telegram answerCallbackQuery，
+// 消除客户端转圈；text 非空时作为提示展示）。core 在插件 OnInteraction
+// 返回后经 InteractionEvent.CallbackId/AnswerText 调用。
+type InteractionAnswerer interface {
+	// AnswerInteraction 应答一次按钮点击；text 为空表示仅消除等待状态
+	AnswerInteraction(callbackId, text string) bool
 }
 
 type SendMsg interface {

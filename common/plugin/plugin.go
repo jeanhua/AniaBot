@@ -116,6 +116,16 @@ type PlatformEventHandler interface {
 	OnPlatformEvent(ctx context.Context, bot bot.Bot, event message.PlatformEvent) error
 }
 
+// InteractionHandler 可选接口：插件实现后可接收内联按钮点击回调。
+// 插件在消息链中附加 keyboard 段时，回调数据应以 Meta.CallbackData 打包
+// （"插件名:载荷"），框架按前缀把点击路由回本插件的 OnInteraction，
+// 载荷部分填入 ev.Data；handler 返回后框架统一应答平台（ev.AnswerText
+// 非空时作为提示文本展示在点击者客户端）。
+type InteractionHandler interface {
+	// OnInteraction 处理内联按钮点击
+	OnInteraction(ctx context.Context, bot bot.Bot, ev *message.InteractionEvent) error
+}
+
 type SystemConfig struct {
 	AdminId message.QID
 }

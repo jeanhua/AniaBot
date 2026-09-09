@@ -9,6 +9,7 @@
 - **`Meta.Platforms []string`**：插件声明支持的平台（如 `[]string{"qq"}`、`[]string{"qq","feishu"}`、`[]string{"qq","feishu","telegram"}`），空 = 支持全部平台（默认）。core 按事件来源平台过滤插件，不匹配的插件收不到该平台事件。
 - **`bot.QQ` 断言**：事件回调里的 `bot.Bot` 是来源平台能力包装后的外观，QQ 平台可断言为 `bot.QQ`（见 [Bot 接口](/api/bot#qq-专属能力-bot-qq-可选接口)）。
 - **`OnPlatformEvent`（可选接口）**：无法映射为公共事件（消息/通知）的平台自有事件（如飞书卡片回调、机器人入群、Telegram 机器人被拉群/移出），通过实现 `plugin.PlatformEventHandler` 的 `OnPlatformEvent(ctx, bot, message.PlatformEvent)` 接收，广播制、按 `Meta.Platforms` 过滤：
+- **`OnInteraction`（可选接口）**：内联按钮点击回调。插件在消息链中附加 keyboard 段（`bot.Interactive` 断言探测）后，用户点击按钮经实现 `plugin.InteractionHandler` 的 `OnInteraction(ctx, bot, *message.InteractionEvent)` 送回，按回调数据中的插件名前缀精确路由（非广播），详见 [Bot 接口 · 内联按钮交互](/api/bot#内联按钮交互-bot-interactive-可选接口)。
 
 ```go
 type PlatformEvent struct {

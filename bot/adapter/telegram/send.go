@@ -53,11 +53,15 @@ func parseChatID(q message.QID) (int64, bool) {
 // sendChain 把通用消息段翻译为 Telegram 消息序列并发送。
 // 文本按段顺序累积，媒体穿插发送；与媒体相邻的短文本（≤1024 字节）作媒体 caption
 // （Telegram 媒体说明上限），其余单独发消息；首条消息携带 reply_parameters。
+// keyboard 段（至多取首个）翻译为 reply_markup，在正文发送完成后经
+// editMessageReplyMarkup 附加到最后一条消息（对文本/媒体消息均有效）。
 // 返回最后成功消息的框架内 ID（tg:<chat>:<msgid>）。
 func (a *telegramAdapter) sendChain(ctx context.Context, chatID int64, segs []message.OB11Segment) (message.QID, bool) {
 	if a.client == nil {
 		return "", false
 	}
+	// 键盘段先提取（不进入正文发送分支），正文发送完再附加
+	segs, kb := message.ExtractKeyboard(segs)
 	// 提取回复目标（首条 reply 段，非 tg: 前缀忽略），其余段作为正文
 	var replyTo *int
 	body := make([]message.OB11Segment, 0, len(segs))
@@ -138,6 +142,10 @@ func (a *telegramAdapter) sendChain(ctx context.Context, chatID int64, segs []me
 	sendBuffered()
 	if !sentAny {
 		return "", false
+	}
+	if kb != nil {
+		// 附加键盘（best-effort：失败仅告警，正文已发出）
+		a.attachReplyMarkup(chatID, lastMsgID, kb)
 	}
 	a.cacheSent(chatID, lastMsgID, body)
 	return msgID(chatID, lastMsgID), true

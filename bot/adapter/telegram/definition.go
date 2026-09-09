@@ -2,6 +2,9 @@ package telegram
 
 import (
 	"github.com/jeanhua/AniaBot/common/adapter"
+	"github.com/jeanhua/AniaBot/common/bot"
+	"github.com/jeanhua/AniaBot/common/model/message"
+	"github.com/jeanhua/AniaBot/common/msgchain"
 	"github.com/jeanhua/AniaBot/common/pluginconfig"
 	"github.com/spf13/viper"
 )
@@ -25,7 +28,7 @@ var telegramConfigFields = []pluginconfig.Field{
 	{Key: "bot.telegram.parse_mode", Label: "消息渲染模式", Type: "select", Options: []string{"off", "html", "markdown", "markdownv2"}, Group: "Telegram 适配器", Help: "off=纯文本；html=推荐：AI markdown 转换为 Telegram HTML 渲染（标题/加粗/代码块/列表/链接/引用），任意输入都不会解析失败；markdown=旧版 Telegram Markdown 原生解析（仅需转义 _ * [ ]）；markdownv2=新版原生解析（转义严格，AI 输出极易解析失败）；原生模式解析失败自动降级纯文本。流式结束/发送时渲染", Default: "html"},
 }
 
-// init 注册 Telegram 适配器定义。
+// init 注册 Telegram 适配器定义与 bot 外观包装器。
 func init() {
 	adapter.Register(adapter.Definition{
 		Name:         "telegram",
@@ -36,4 +39,46 @@ func init() {
 			return NewAdapter(cfg), nil
 		},
 	})
+
+	// Telegram 交互能力包装：事件来源适配器实现消息编辑（editMessageText）/
+	// 内联按钮（reply_markup + callback_query）能力时，插件在事件回调里
+	// 可对收到的 bot 断言 bot.MsgEditor / bot.Interactive 使用。
+	adapter.RegisterBotWrapper(func(base bot.Bot, src adapter.Adapter) bot.Bot {
+		editor, _ := src.(adapter.MsgEditorExt)
+		interactive, _ := src.(adapter.InteractiveExt)
+		if editor == nil && interactive == nil {
+			return base
+		}
+		return &tgBot{Bot: base, editor: editor, interactive: interactive}
+	})
+}
+
+// tgBot Telegram 事件的外观 bot：嵌入公共 bot.Bot，额外暴露消息编辑与
+// 内联按钮交互能力（字段可能为 nil，方法内兜底，见各方法注释）。
+type tgBot struct {
+	bot.Bot
+	editor      adapter.MsgEditorExt
+	interactive adapter.InteractiveExt
+}
+
+func (t *tgBot) EditGroupMsg(msgId message.QID, chain msgchain.GroupChain) bool {
+	if t.editor == nil {
+		return false
+	}
+	return t.editor.EditGroupMsg(msgId, chain)
+}
+
+func (t *tgBot) EditFriendMsg(msgId message.QID, chain msgchain.FriendChain) bool {
+	if t.editor == nil {
+		return false
+	}
+	return t.editor.EditFriendMsg(msgId, chain)
+}
+
+// SupportsKeyboard 平台支持内联按钮（断言 bot.Interactive 后探测）。
+func (t *tgBot) SupportsKeyboard() bool {
+	if t.interactive == nil {
+		return false
+	}
+	return t.interactive.SupportsKeyboard()
 }

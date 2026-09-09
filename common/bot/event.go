@@ -66,6 +66,31 @@ type StreamSender interface {
 	SendFriendStream(userId message.QID, chain msgchain.FriendChain) (StreamHandle, bool)
 }
 
+// MsgEditor 消息编辑能力，可选接口（与 bot.QQ 同模式）。
+// 平台支持「先发后改」（如 Telegram editMessageText、Discord 消息编辑、
+// 飞书卡片 Patch）时，事件回调收到的 bot.Bot 可断言为 bot.MsgEditor，
+// 编辑已发出消息的文本内容并按需携带 keyboard 段更换按钮；
+// 不支持的平台断言失败，插件应退化为发送新消息。
+type MsgEditor interface {
+	// EditGroupMsg 编辑已发送的群聊消息：以 chain 的文本段替换原内容，
+	// 携带 keyboard 段时同时更换按钮，未携带时按钮保持不变。
+	// 消息不存在/不可编辑（如媒体消息改文本）时返回 false。
+	EditGroupMsg(msgId message.QID, chain msgchain.GroupChain) bool
+	// EditFriendMsg 编辑已发送的私聊消息，语义同 EditGroupMsg。
+	EditFriendMsg(msgId message.QID, chain msgchain.FriendChain) bool
+}
+
+// Interactive 内联按钮交互能力，可选接口（与 bot.QQ 同模式）。
+// 平台支持在消息中渲染按钮并接收点击回调时，事件回调收到的 bot.Bot
+// 可断言为 bot.Interactive；此时可在消息链中附加 keyboard 段
+// （msgchain Builder().Keyboard(...)），点击回调经插件的 OnInteraction
+// 送回。断言失败（或 SupportsKeyboard 为 false）时 core 会剥离 keyboard 段，
+// 插件应退化为文本指令交互。
+type Interactive interface {
+	// SupportsKeyboard 平台是否支持内联按钮
+	SupportsKeyboard() bool
+}
+
 // QQ QQ（NapCat/OneBot v11）平台专属能力，可选接口。
 // 事件来源为 QQ 适配器时，事件回调收到的 bot.Bot 可断言为 bot.QQ。
 type QQ interface {

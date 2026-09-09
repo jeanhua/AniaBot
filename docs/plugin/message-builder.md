@@ -45,6 +45,7 @@ bot.SendFriendMsg(userId, chain.Build())
 | `RecordUrl(url)` / `RecordLocal(path)` / `RecordBase64(b64)` | 语音，三种来源同上 |
 | `FileUrl(name, url)` / `FileLocal(name, path)` / `FileBase64(name, b64)` | 文件，需指定显示文件名 |
 | `Raw(segments...)` | 直接追加原始 `OB11Segment`，用于转发收到的消息段 |
+| `Keyboard(rows...)` | 内联按钮键盘（行 × 按钮），用 `Button` / `ButtonURL` / `Row` 构造；平台不支持时出站自动剥离，插件应先断言 `bot.Interactive` 探测（见 [Bot 接口](/api/bot#内联按钮交互-bot-interactive-可选接口)） |
 
 最后调用 `Build()` 得到链对象，传给 `bot.SendGroupMsg` / `bot.SendFriendMsg`。
 
@@ -57,6 +58,21 @@ chain := msgchain.Builder().Group()
 chain.Raw(msg.Message...) // msg.Message 是 []message.OB11Segment
 bot.SendGroupMsg(msg.GroupId, chain.Build())
 ```
+
+### 内联按钮：翻页等轻交互
+
+支持按钮的平台（如 Telegram）可在消息上附加可点击按钮，点击回调送回插件的 `OnInteraction`，适合翻页、菜单：
+
+```go
+chain := msgchain.Builder().Group().Text("搜索结果（第 1 页）").
+    Keyboard(msgchain.Row(
+        msgchain.Button("◀️ 上一页", p.CallbackData("pg:0")), // 回调按钮：点击产生回调事件
+        msgchain.Button("▶️ 下一页", p.CallbackData("pg:2")),
+        msgchain.ButtonURL("网页版", "https://example.com"),  // 链接按钮：点击打开网页
+    )).Build()
+```
+
+回调数据用 `Meta.CallbackData(载荷)` 打包成「插件名:载荷」，框架按前缀路由回本插件；接收方式与能力探测见 [Bot 接口 · 内联按钮交互](/api/bot#内联按钮交互-bot-interactive-可选接口)。
 
 ## 合并转发消息
 

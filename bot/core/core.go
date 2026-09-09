@@ -192,6 +192,7 @@ func (ania *AniaBot) makeTrigger(e *adapterEntry) adapter.TriggerWrapper {
 		OnEssence:           func(n message.EssenceNotice) { ania.onEssenceEvent(e, n) },
 		OnGroupCard:         func(n message.GroupCardNotice) { ania.onGroupCardEvent(e, n) },
 		OnPlatformEvent:     func(ev message.PlatformEvent) { ania.onPlatformEvent(e, ev) },
+		OnInteraction:       func(ev message.InteractionEvent) { ania.onInteraction(e, ev) },
 	}
 }
 
@@ -759,22 +760,26 @@ func (ania *AniaBot) Stop() {
 	ania.cancel()
 }
 
-// SendGroupMsg 发送群聊消息（按群 ID 前缀路由到对应平台适配器）。
+// SendGroupMsg 发送群聊消息（按群 ID 前缀路由到对应平台适配器；
+// 平台不支持内联按钮时先剥离 keyboard 段）。
 func (ania *AniaBot) SendGroupMsg(groupId message.QID, chain msgchain.GroupChain) (msgId message.QID, success bool) {
 	a := ania.route(groupId)
 	if a == nil {
 		return "", false
 	}
+	chain = msgchain.NewGroupChain(ania.stripUnsupportedKeyboard(a, chain.GetGroupMsg()))
 	ania.checkSegmentSupport(a, chain.GetGroupMsg())
 	return a.SendGroupMsg(groupId, chain)
 }
 
-// SendFriendMsg 发送私聊消息（按用户 ID 前缀路由到对应平台适配器）。
+// SendFriendMsg 发送私聊消息（按用户 ID 前缀路由到对应平台适配器；
+// 平台不支持内联按钮时先剥离 keyboard 段）。
 func (ania *AniaBot) SendFriendMsg(userID message.QID, chain msgchain.FriendChain) (msgId message.QID, success bool) {
 	a := ania.route(userID)
 	if a == nil {
 		return "", false
 	}
+	chain = msgchain.NewFriendChain(ania.stripUnsupportedKeyboard(a, chain.GetFriendMsg()))
 	ania.checkSegmentSupport(a, chain.GetFriendMsg())
 	return a.SendFriendMsg(userID, chain)
 }

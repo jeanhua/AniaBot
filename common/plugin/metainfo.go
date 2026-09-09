@@ -51,6 +51,14 @@ func (p *Meta) SupportsPlatform(platform string) bool {
 	return slices.Contains(p.Platforms, platform)
 }
 
+// CallbackData 打包内联按钮的回调数据："插件名:载荷"。
+// 框架按首个 ':' 前的前缀把点击回调路由回本插件，载荷部分经
+// InteractionEvent.Data 传给 OnInteraction；注意插件名不能含 ':'，
+// 且「插件名:载荷」整体不超过平台的回调数据上限（Telegram 64 字节）。
+func (p *Meta) CallbackData(payload string) string {
+	return p.Name + ":" + payload
+}
+
 func (p *Meta) SetStorage(s storage.Storage) {
 	p.Storage = s
 }

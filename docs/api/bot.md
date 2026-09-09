@@ -132,3 +132,55 @@ type GroupUserInfo struct {
     IsRobot      bool
 }
 ```
+
+## 内联按钮交互（bot.Interactive，可选接口）
+
+Telegram 等平台支持在消息上渲染可点击按钮（inline keyboard）：点击不产生新消息，而是回调事件送回插件，适合翻页、菜单等交互。插件先断言 `bot.Interactive` 探测平台能力，支持时在消息链中附加 keyboard 段：
+
+```go
+func (p *MyPlugin) OnGroupMsg(ctx context.Context, b bot.Bot, cmd command.Command, msg message.Message) (bool, error) {
+    if iv, ok := b.(bot.Interactive); ok && iv.SupportsKeyboard() {
+        // 带按钮发送：列表 + 翻页按钮（回调数据经 Meta.CallbackData 打包插件前缀）
+        b.SendGroupMsg(msg.GroupId, msgchain.Builder().Group().
+            Text("搜索结果（第 1 页）").
+            Keyboard(msgchain.Row(
+                msgchain.Button("▶️ 下一页", p.CallbackData("pg:2")),
+            )).Build())
+    } else {
+        // 不支持按钮的平台退化为文本指令（"回复 下一页 翻页"）
+    }
+    return false, nil
+}
+```
+
+回调数据约定为 `插件名:载荷`（`Meta.CallbackData("pg:2")` 打包，插件名不能含 `:`，整体不超过平台上限——Telegram 为 64 字节）。实现 `plugin.InteractionHandler` 的插件接收点击回调，`ev.Data` 为剥离插件前缀后的载荷；handler 返回后框架自动应答平台（消除客户端转圈），`ev.AnswerText` 非空时作为提示展示在点击者客户端：
+
+```go
+func (p *MyPlugin) OnInteraction(ctx context.Context, b bot.Bot, ev *message.InteractionEvent) error {
+    // ev: Platform / MessageType("group"|"private") / GroupId / UserId /
+    //     MessageId(按钮所在消息) / CallbackId / Data(载荷) / Raw(平台原始回调)
+    page := parsePayload(ev.Data)
+    ev.AnswerText = fmt.Sprintf("已翻到第 %d 页", page)
+    return nil
+}
+```
+
+::: tip 优雅降级
+不支持的平台上 core 会在出站时自动剥离 keyboard 段（不会导致发送失败），但插件应始终先断言 `bot.Interactive` 再决定附加按钮，并为文本交互保留提示。平台支持矩阵见 [internals](/internals/framework#能力分层)。
+:::
+
+## 消息编辑（bot.MsgEditor，可选接口）
+
+支持「先发后改」的平台（Telegram `editMessageText` 等）可断言 `bot.MsgEditor` 编辑已发出消息——配合按钮做就地翻页（点「下一页」原消息刷新内容与按钮，不刷屏）：
+
+```go
+if ed, ok := b.(bot.MsgEditor); ok {
+    chain := msgchain.Builder().Group().Text("搜索结果（第 2 页）").
+        Keyboard(msgchain.Row(msgchain.Button("▶️ 下一页", p.CallbackData("pg:3")))).Build()
+    if !ed.EditGroupMsg(msgId, chain) {
+        // 编辑失败（消息过旧/媒体消息改文本等）→ 退化为发送新消息
+    }
+}
+```
+
+chain 携带 keyboard 段时同时更换按钮，未携带时保持原按钮。QQ/OneBot v11 无消息编辑 API，断言失败，插件应退化为发送新消息。

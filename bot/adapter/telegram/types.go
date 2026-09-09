@@ -24,7 +24,19 @@ type Update struct {
 	ChannelPost     *Message                `json:"channel_post"`
 	MyChatMember    *ChatMemberUpdated      `json:"my_chat_member"`
 	MessageReaction *MessageReactionUpdated `json:"message_reaction"`
-	// edited_message / callback_query / chat_member 等其余更新类型未使用，不声明
+	CallbackQuery   *CallbackQuery          `json:"callback_query"`
+	// edited_message / chat_member / inline_query 等其余更新类型未使用，不声明
+}
+
+// CallbackQuery 内联键盘按钮点击回调（用户点击 bot 消息上的按钮时投递）。
+type CallbackQuery struct {
+	ID string `json:"id"`
+	// From 点击者
+	From User `json:"from"`
+	// Message 按钮所在消息（消息过旧/bot 无权限等原因不可达时为空）
+	Message *Message `json:"message"`
+	// Data 发送按钮时设置的 callback_data
+	Data string `json:"data"`
 }
 
 // Message 一条消息（message 或 channel_post）。

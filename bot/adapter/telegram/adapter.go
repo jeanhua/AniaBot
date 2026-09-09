@@ -89,10 +89,11 @@ func (a *telegramAdapter) SelfID() message.QID {
 
 // telegramSegments Telegram 出站支持的通用段类型；face/json/music/forward
 // 在 sendChain 的 default 分支退化（有 text 键并入文本），core 会对发送这类段告警。
+// keyboard 段由 sendChain 提取为 reply_markup（实现 adapter.InteractiveExt）。
 var telegramSegments = []string{
 	message.SegmentText, message.SegmentMention, message.SegmentImage,
 	message.SegmentReply, message.SegmentFile, message.SegmentRecord,
-	message.SegmentVideo,
+	message.SegmentVideo, message.SegmentKeyboard,
 }
 
 // SupportedSegments 实现 adapter.SegmentSupport。
@@ -327,7 +328,11 @@ func (a *telegramAdapter) handleUpdate(u *Update) {
 		a.handleReaction(r)
 		return
 	}
-	// 其余更新类型（edited_message/callback_query/chat_member/...）不处理
+	if cq := u.CallbackQuery; cq != nil {
+		a.handleCallbackQuery(cq)
+		return
+	}
+	// 其余更新类型（edited_message/chat_member/inline_query/...）不处理
 }
 
 // handleMessage 分发一条消息：服务消息（成员变动）优先，其余翻译为通用消息。
