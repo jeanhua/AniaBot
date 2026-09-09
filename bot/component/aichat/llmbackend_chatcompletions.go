@@ -28,6 +28,8 @@ func newChatCompletionsBackend(baseURL, apiKey, model string) *chatCompletionsBa
 			option.WithBaseURL(baseURL),
 			// 覆盖 SDK 默认 UA，标识请求来源与版本
 			option.WithHeader("User-Agent", version.UserAgent()),
+			// 过滤 SSE 注释帧，防止 OpenRouter 等网关的注释行导致 unexpected end of JSON input
+			option.WithHTTPClient(newOpenAIHTTPClient()),
 		),
 		model: model,
 	}
