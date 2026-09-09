@@ -98,6 +98,39 @@ func TestFriendlyTextNestedForward(t *testing.T) {
 	}
 }
 
+// TestFriendlyTextForwardNodesOnOwnLines 合并转发的每个节点应独占一行：
+// 上一条以图片标记等无换行内容结尾时，下一条的发送者前缀不能挤到同一行。
+func TestFriendlyTextForwardNodesOnOwnLines(t *testing.T) {
+	makeNode := func(id uint64, nickname, text string) Message {
+		return Message{
+			Sender: MessageSender{UserId: FromUint64(id), Nickname: nickname},
+			Message: []OB11Segment{
+				{Type: SegmentText, Data: map[string]any{"text": text}},
+				{Type: SegmentImage, Data: ImageMessage{Url: "https://example.com/pic.png"}.Marshal()},
+			},
+		}
+	}
+	root := Message{
+		Sender: MessageSender{UserId: FromUint64(101), Nickname: "外层"},
+		Message: []OB11Segment{{
+			Type: SegmentForward,
+			Data: map[string]any{"id": "fwd_1", "content": []Message{
+				makeNode(201, "甲", "第一条"),
+				makeNode(202, "乙", "第二条"),
+			}},
+		}},
+	}
+	text := root.FriendlyText(true)
+	for _, want := range []string{"\n[nickname:甲 id:qq:201]: 第一条", "\n[nickname:乙 id:qq:202]: 第二条"} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("每个转发节点应独占一行, 缺少 %q, got %q", want, text)
+		}
+	}
+	if !strings.Contains(text, "\n</合并转发消息>") {
+		t.Fatalf("结束标签应独占一行, got %q", text)
+	}
+}
+
 // TestFriendlyTextForwardInlineContent 合并转发段内联携带 content（NapCat 展开
 // 转发内容时的格式，嵌套层 id 仅供查看、无法再拉取）时应直接展开内联内容，
 // 不再尝试按 id 拉取而显示「无法获取详情」（GitHub issue #11）。

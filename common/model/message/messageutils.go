@@ -212,9 +212,10 @@ func (raw Message) FriendlyText(showUrl bool, opts ...MsgOptFunc) string {
 func writeForwardMessages(w *strings.Builder, msgs []Message, showUrl bool, msgFuncs msgHandleOpt) {
 	w.WriteString("\n<合并转发消息>")
 	for _, msg := range msgs {
+		w.WriteString("\n")
 		w.WriteString(msg.FriendlyText(showUrl,
 			WithGetImageOCRFunc(msgFuncs.getImageOCRFunc),
 			WithGetForwardMsgFunc(msgFuncs.getForwardMsgFunc)))
 	}
-	w.WriteString("</合并转发消息>\n")
+	w.WriteString("\n</合并转发消息>\n")
 }
