@@ -416,7 +416,7 @@ HTTP 模式下 NapCat 向 `localhost` 上报会失败，请将 NapCat 的 HTTP C
 | `plugin.ai_chat_bot.query_log.enable` | `true` | 启用 Query 日志 |
 | `plugin.ai_chat_bot.query_log.max_entries` | `200` | 日志保留条数（滚动覆盖） |
 | `plugin.ai_chat_bot.query_log.max_tool_records` | `200` | 单条日志保留的工具调用明细条数，超出部分仅保留总数；`0` 表示不限制 |
-| `plugin.ai_chat_bot.query_log.max_result_runes` | `1000` | 工具执行结果截断上限（字符数）；`0` 表示不限制。仅此字段限长（网页抓取、命令执行等外部输出可能很大），用户输入、工具参数、最终回复始终完整记录 |
+| `plugin.ai_chat_bot.query_log.max_result_runes` | `1000` | 工具执行结果写入日志时的截断上限（字符数）；`0` 表示不限制。仅影响日志记录，不影响 AI 实际收到的完整输出；用户输入、工具参数、最终回复始终完整记录 |
 
 每条日志包含：触发会话、发送者、用户输入、LLM 轮数、工具调用明细（名称/参数/结果/耗时）、token 用量与最终回复，状态区分 `running` / `success` / `stopped` / `timeout` / `error`。面板「Query 日志」页可筛选查看。
 

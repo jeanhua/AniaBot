@@ -183,7 +183,7 @@ type queryLogConfig struct {
 	Enable         bool `cfg:"enable" label:"启用 Query 日志" group:"AI 对话 · 查询日志" help:"在面板记录每次 AI 回复的完整执行过程（耗时、token、工具调用详情）" default:"true"`
 	MaxEntries     int  `cfg:"max_entries" label:"日志保留条数" group:"AI 对话 · 查询日志" default:"200"`
 	MaxToolRecords int  `cfg:"max_tool_records" label:"单条日志工具明细上限" group:"AI 对话 · 查询日志" help:"每条 Query 日志最多保留的工具调用明细条数，超出部分仅保留总数不存明细；0 表示不限制（实际条数受最大工具轮数约束）" default:"200"`
-	MaxResultRunes int  `cfg:"max_result_runes" label:"工具结果截断上限(字符)" group:"AI 对话 · 查询日志" help:"工具执行结果超过该字符数时截断保存；0 表示不限制。仅此字段限长（网页抓取、命令执行等外部输出可能很大），用户输入、工具参数、最终回复始终完整记录" default:"1000"`
+	MaxResultRunes int  `cfg:"max_result_runes" label:"日志中工具结果截断上限(字符)" group:"AI 对话 · 查询日志" help:"仅控制工具执行结果写入 Query 日志时的保留长度，不影响 AI 实际收到的完整输出；0 表示不限制。仅此字段限长（网页抓取、命令执行等外部输出可能很大），用户输入、工具参数、最终回复始终完整记录" default:"1000"`
 }
 
 // hooksConfig AI 钩子配置：按 files.hooks_json（面板「扩展配置」页编辑）在会话事件
