@@ -13,12 +13,14 @@ import (
 )
 
 type WebSearchParams struct {
-	Query string `json:"query" desc:"需要搜索的内容"`
-	Page  *int   `json:"page,omitempty" desc:"可选，用于翻页，从1开始"`
+	Query  string `json:"query" desc:"需要搜索的内容"`
+	Page   *int   `json:"page,omitempty" desc:"可选，用于翻页，从1开始"`
+	Offset *int   `json:"offset,omitempty" desc:"可选，从该字符位置继续返回上次未读完的结果（上次结果被截断时，末尾会给出续读位置）"`
 }
 
 type WebExploreParams struct {
-	Url string `json:"url" desc:"需要浏览的网页链接"`
+	Url    string `json:"url" desc:"需要浏览的网页链接"`
+	Offset *int   `json:"offset,omitempty" desc:"可选，从该字符位置继续返回上次未读完的正文（上次结果被截断时，末尾会给出续读位置）"`
 }
 
 type WebSearchTool struct {
@@ -40,7 +42,7 @@ func NewWebSearchTool(searchToken string) *WebSearchTool {
 
 func NewWebExploreTool(searchToken string) *WebExploreTool {
 	return &WebExploreTool{
-		BaseTool:    llmtool.MakeBaseTool("webExplore", "用于浏览网页信息", WebExploreParams{}),
+		BaseTool:    llmtool.MakeBaseTool("webExplore", "用于浏览网页信息，超长网页会被分段返回，可按提示用 offset 续读", WebExploreParams{}),
 		searchToken: searchToken,
 	}
 }
@@ -84,11 +86,7 @@ func (t *WebSearchTool) search(ctx context.Context, params *WebSearchParams) (st
 		return "", fmt.Errorf("jina 搜索请求失败: HTTP %d", resp.StatusCode())
 	}
 	text := resp.String()
-	rText := []rune(text)
-	if len(rText) > 8000 {
-		return string(rText[:8000]) + "...", nil
-	}
-	return text, nil
+	return sliceJinaContent(text, params.Offset), nil
 }
 
 func (t *WebExploreTool) explore(ctx context.Context, params *WebExploreParams) (string, error) {
@@ -111,11 +109,29 @@ func (t *WebExploreTool) explore(ctx context.Context, params *WebExploreParams) 
 		return "", fmt.Errorf("jina 网页抓取失败: HTTP %d", resp.StatusCode())
 	}
 	text := resp.String()
-	rText := []rune(text)
-	if len(rText) > 8000 {
-		return string(rText[:8000]) + "...", nil
+	return sliceJinaContent(text, params.Offset), nil
+}
+
+// jinaContentLimit 单次返回给模型的正文上限（字符数），控制上下文占用；
+// 超出部分不丢弃，按 offset 分段续读。
+const jinaContentLimit = 8000
+
+// sliceJinaContent 按 offset 切片返回正文：无 offset 时返回开头一段，带 offset 时
+// 从该位置续读；后面还有内容时在末尾附上续读提示，模型按提示再次调用即可读到剩余部分。
+func sliceJinaContent(text string, offset *int) string {
+	r := []rune(text)
+	start := 0
+	if offset != nil && *offset > 0 {
+		if *offset >= len(r) {
+			return fmt.Sprintf("offset=%d 超出内容长度（共 %d 字），没有更多内容", *offset, len(r))
+		}
+		start = *offset
 	}
-	return text, nil
+	if len(r)-start <= jinaContentLimit {
+		return string(r[start:])
+	}
+	end := start + jinaContentLimit
+	return string(r[start:end]) + fmt.Sprintf("\n...(内容未完，共 %d 字；用 offset=%d 再次调用可读取后续内容)", len(r), end)
 }
 
 // newJinaClient 创建带请求超时的 Jina 客户端。

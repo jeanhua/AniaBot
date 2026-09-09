@@ -85,7 +85,7 @@ func (p *AIChatPlugin) beginQuery(chat *aichat.ChatBot, id message.QID, isGroup 
 		ChatType: chatType,
 		TargetID: id.String(),
 		Senders:  senders,
-		Query:    querylog.Truncate(query, querylog.MaxQueryRunes),
+		Query:    query,
 		Status:   querylog.StatusRunning,
 	})
 	chat.SetToolObserver(func(info aichat.ToolCallInfo) {
@@ -101,8 +101,8 @@ func (p *AIChatPlugin) onToolCall(r *queryRecorder, info aichat.ToolCallInfo) {
 	r.toolCallsTotal++
 	rec := querylog.ToolCallRecord{
 		Name:       info.Name,
-		Arguments:  querylog.Truncate(info.Arguments, querylog.MaxArgsRunes),
-		Result:     querylog.Truncate(info.Result, querylog.MaxResultRunes),
+		Arguments:  info.Arguments, // 模型生成的执行意图，完整记录便于审计
+		Result:     querylog.Truncate(info.Result, p.cfg.QueryLog.MaxResultRunes),
 		DurationMs: info.DurationMs,
 	}
 	if info.Err != nil {
@@ -152,7 +152,7 @@ func (p *AIChatPlugin) finishQuery(r *queryRecorder, chat *aichat.ChatBot, usage
 		e.CachedTokens = usage.CachedTokens + extra.CachedTokens
 		e.ToolCalls = toolCalls
 		e.ToolCallsTotal = r.toolCallsTotal
-		e.Reply = querylog.Truncate(reply, querylog.MaxReplyRunes)
+		e.Reply = reply
 		e.Error = errText
 	})
 }

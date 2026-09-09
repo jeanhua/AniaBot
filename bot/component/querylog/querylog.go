@@ -32,13 +32,9 @@ const (
 	StatusInterrupted Status = "interrupted" // 进程重启，执行中断
 )
 
-// 字段截断上限（符文数），避免单条日志体积失控
-const (
-	MaxQueryRunes  = 500  // 用户输入
-	MaxReplyRunes  = 1000 // 最终回复
-	MaxArgsRunes   = 500  // 工具调用参数
-	MaxResultRunes = 1000 // 工具执行结果
-)
+// 用户输入、工具参数、最终回复为对话双方生成的内容，始终完整记录；
+// 仅工具执行结果由调用方按配置截断（Truncate 的 max<=0 表示不截断），
+// 避免 web_explore、bash 等工具的超长输出把单条日志体积撑失控。
 
 // ToolCallRecord 一次工具调用的执行记录（如 bash 命令的执行详情）
 type ToolCallRecord struct {
@@ -66,7 +62,7 @@ type Entry struct {
 	CompletionTokens int              `json:"completion_tokens,omitempty"`
 	TotalTokens      int              `json:"total_tokens,omitempty"`
 	CachedTokens     int              `json:"cached_tokens,omitempty"` // 命中上游 prompt 缓存的 token 数（提供方支持时才有）
-	Reply            string           `json:"reply,omitempty"`         // 最终回复（截断）
+	Reply            string           `json:"reply,omitempty"`         // 最终回复
 	Error            string           `json:"error,omitempty"`
 }
 
