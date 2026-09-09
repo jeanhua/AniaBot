@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/jeanhua/AniaBot/common/adapter"
 	"github.com/jeanhua/AniaBot/common/model/message"
 	"github.com/jeanhua/AniaBot/common/msgchain"
 )
@@ -16,6 +17,17 @@ import (
 // 出站 keyboard 段 → reply_markup.inline_keyboard；入站 callback_query →
 // message.InteractionEvent 经 TriggerWrapper.OnInteraction 上报，
 // core 按回调数据前缀路由给对应插件，返回后回调 AnswerInteraction 应答。
+
+// 编译期断言：可选能力接口的方法集必须齐全——这些接口按断言探测，
+// 漏实现不报编译错误、只会静默退化为文本模式（core 也会剥掉按钮段）。
+var (
+	_ adapter.InteractiveExt      = (*telegramAdapter)(nil)
+	_ adapter.MsgEditorExt        = (*telegramAdapter)(nil)
+	_ adapter.InteractionAnswerer = (*telegramAdapter)(nil)
+)
+
+// SupportsKeyboard 实现 adapter.InteractiveExt：支持在消息中渲染内联按钮。
+func (a *telegramAdapter) SupportsKeyboard() bool { return true }
 
 // handleCallbackQuery 内联按钮点击 → InteractionEvent。
 // 按钮所在消息不可达（过旧/inline 模式）时无法定位会话，直接应答失效提示。

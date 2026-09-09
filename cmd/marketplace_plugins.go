@@ -8,8 +8,10 @@ package main
 
 import (
 	"github.com/jeanhua/AniaBot/bot/core"
+	plug_music "github.com/jeanhua/AniaBot/custom/plugins/music"
 )
 
 // registerMarketplacePlugins 注册插件市场安装的第三方插件。
 func registerMarketplacePlugins(ania *core.AniaBot) {
+	ania.AddPlugin(plug_music.NewPlugin())
 }

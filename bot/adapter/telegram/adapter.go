@@ -291,9 +291,21 @@ func (a *telegramAdapter) processUpdates(updates []Update, offset int) int {
 	return offset
 }
 
+// allowedUpdates 显式订阅的更新类型：与 handleUpdate 的分支一一对应。
+// 不传 allowed_updates 时投递类型取决于 Telegram 侧持久化的上一次设置
+// （默认集不含 message_reaction，且无法保证含 callback_query），显式声明
+// 保证按钮回调一定送达。
+var allowedUpdates = []string{
+	"message", "channel_post", "my_chat_member",
+	"message_reaction", "callback_query",
+}
+
 // getUpdates 长轮询拉取更新。
 func (a *telegramAdapter) getUpdates(ctx context.Context, offset, timeout int) ([]Update, error) {
-	params := map[string]any{"timeout": timeout}
+	params := map[string]any{
+		"timeout":         timeout,
+		"allowed_updates": allowedUpdates,
+	}
 	if offset > 0 {
 		params["offset"] = offset
 	}

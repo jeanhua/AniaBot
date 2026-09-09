@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/jeanhua/AniaBot/common/adapter"
+	"github.com/jeanhua/AniaBot/common/bot"
 	"github.com/jeanhua/AniaBot/common/model/message"
 	"github.com/jeanhua/AniaBot/common/msgchain"
 )
@@ -116,5 +117,172 @@ func TestInteractionEventFromCallbackQuery(t *testing.T) {
 	a.handleCallbackQuery(&CallbackQuery{ID: "cq3", From: User{ID: 42}, Data: "m:x"})
 	if got != nil {
 		t.Fatal("无所在消息的回调不应上报")
+	}
+}
+
+// TestSendChainAttachesKeyboard 端到端（假 Bot API 服务器）：携带 keyboard 段的
+// 消息先发正文（sendMessage 不带 reply_markup），随后经 editMessageReplyMarkup
+// 把内联键盘附加到最后一条消息；纯文本消息不触发额外编辑。
+func TestSendChainAttachesKeyboard(t *testing.T) {
+	f := newFakeAPI()
+	a, srv := testAdapterWithServer(f)
+	defer srv.Close()
+
+	chain := msgchain.Builder().Group().
+		Text("搜索结果（第 1 页）").
+		Keyboard(msgchain.Row(msgchain.Button("▶️ 下一页", "音乐点歌:pg:2"))).
+		Build()
+	if _, ok := a.SendGroupMsg("tg:-100", chain); !ok {
+		t.Fatal("发送失败")
+	}
+	if n := f.count("sendMessage"); n != 1 {
+		t.Fatalf("sendMessage 调用 = %d, want 1", n)
+	}
+	if _, has := f.req(0).json["reply_markup"]; has {
+		t.Fatalf("正文消息不应携带 reply_markup: %+v", f.req(0).json)
+	}
+	if n := f.count("editMessageReplyMarkup"); n != 1 {
+		t.Fatalf("editMessageReplyMarkup 调用 = %d, want 1", n)
+	}
+	rec := f.req(1)
+	if rec.json["chat_id"] != float64(-100) || rec.json["message_id"] != float64(42) {
+		t.Fatalf("附加目标不符: %+v", rec.json)
+	}
+	var rm tgReplyMarkup
+	if err := json.Unmarshal([]byte(rec.json["reply_markup"].(string)), &rm); err != nil {
+		t.Fatalf("reply_markup 非法 JSON: %v", err)
+	}
+	if len(rm.InlineKeyboard) != 1 || rm.InlineKeyboard[0][0].CallbackData != "音乐点歌:pg:2" {
+		t.Fatalf("内联键盘不符: %+v", rm)
+	}
+
+	// 无 keyboard 段的普通消息：不应触发额外编辑
+	if _, ok := a.SendGroupMsg("tg:-100", msgchain.Builder().Group().Text("纯文本").Build()); !ok {
+		t.Fatal("发送失败")
+	}
+	if n := f.count("editMessageReplyMarkup"); n != 1 {
+		t.Fatalf("纯文本不应触发 editMessageReplyMarkup, got %d", n-1)
+	}
+}
+
+// TestEditMsgUpdatesTextAndKeyboard 端到端：MsgEditor 编辑更新文本并更换按钮；
+// 不携带 keyboard 段时只改文本、不带 reply_markup（保持原按钮）。
+func TestEditMsgUpdatesTextAndKeyboard(t *testing.T) {
+	f := newFakeAPI()
+	a, srv := testAdapterWithServer(f)
+	defer srv.Close()
+
+	if !a.EditGroupMsg("tg:-100:42", msgchain.Builder().Group().
+		Text("搜索结果（第 2 页）").
+		Keyboard(msgchain.Row(
+			msgchain.Button("◀️ 上一页", "音乐点歌:pg:1"),
+			msgchain.Button("▶️ 下一页", "音乐点歌:pg:3"),
+		)).Build()) {
+		t.Fatal("编辑失败")
+	}
+	if n := f.count("editMessageText"); n != 1 {
+		t.Fatalf("editMessageText 调用 = %d, want 1", n)
+	}
+	rec := f.req(0)
+	if rec.json["text"] != "搜索结果（第 2 页）" || rec.json["message_id"] != float64(42) {
+		t.Fatalf("编辑参数不符: %+v", rec.json)
+	}
+	var rm tgReplyMarkup
+	if err := json.Unmarshal([]byte(rec.json["reply_markup"].(string)), &rm); err != nil {
+		t.Fatalf("reply_markup 非法 JSON: %v", err)
+	}
+	if len(rm.InlineKeyboard) != 1 || len(rm.InlineKeyboard[0]) != 2 {
+		t.Fatalf("按钮应为 1 行 2 个: %+v", rm)
+	}
+
+	if !a.EditGroupMsg("tg:-100:42", msgchain.Builder().Group().Text("内容更新").Build()) {
+		t.Fatal("编辑失败")
+	}
+	rec = f.req(1)
+	if _, has := rec.json["reply_markup"]; has {
+		t.Fatalf("未携带 keyboard 段不应更换按钮: %+v", rec.json)
+	}
+}
+
+// TestAnswerInteractionCallbackQuery 端到端：应答点击经 answerCallbackQuery
+// 送达，text 非空时携带。
+func TestAnswerInteractionCallbackQuery(t *testing.T) {
+	f := newFakeAPI()
+	a, srv := testAdapterWithServer(f)
+	defer srv.Close()
+
+	if !a.AnswerInteraction("cq1", "已翻到第 2 页") {
+		t.Fatal("应答失败")
+	}
+	if n := f.count("answerCallbackQuery"); n != 1 {
+		t.Fatalf("answerCallbackQuery 调用 = %d, want 1", n)
+	}
+	rec := f.req(0)
+	if rec.json["callback_query_id"] != "cq1" || rec.json["text"] != "已翻到第 2 页" {
+		t.Fatalf("应答参数不符: %+v", rec.json)
+	}
+
+	if !a.AnswerInteraction("cq2", "") {
+		t.Fatal("应答失败")
+	}
+	if _, has := f.req(1).json["text"]; has {
+		t.Fatalf("空文本不应携带 text: %+v", f.req(1).json)
+	}
+}
+
+// TestGetUpdatesRequestsCallbackQuery getUpdates 显式订阅 callback_query，
+// 不依赖 Telegram 侧持久化的 allowed_updates 设置。
+func TestGetUpdatesRequestsCallbackQuery(t *testing.T) {
+	f := newFakeAPI()
+	f.updates = []Update{{UpdateID: 1}}
+	a, srv := testAdapterWithServer(f)
+	defer srv.Close()
+
+	if _, err := a.getUpdates(t.Context(), 0, 1); err != nil {
+		t.Fatalf("getUpdates 失败: %v", err)
+	}
+	rec := f.req(0)
+	au, ok := rec.json["allowed_updates"].([]any)
+	if !ok {
+		t.Fatalf("getUpdates 应显式携带 allowed_updates: %+v", rec.json)
+	}
+	found := false
+	for _, v := range au {
+		if v == "callback_query" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("allowed_updates 应包含 callback_query: %+v", au)
+	}
+}
+
+// TestAdapterInteractiveCapabilities 回归：telegramAdapter 必须实现全部交互
+// 可选接口——漏实现不报编译错误，只会让插件探测静默失败、core 剥掉按钮段
+// 退化为文本模式（本次按钮功能上线时真实发生过的回归）。
+func TestAdapterInteractiveCapabilities(t *testing.T) {
+	a := NewAdapter(nil)
+	var src adapter.Adapter = a
+	if _, ok := src.(adapter.InteractiveExt); !ok {
+		t.Fatal("telegramAdapter 应实现 adapter.InteractiveExt（SupportsKeyboard）")
+	}
+	if _, ok := src.(adapter.MsgEditorExt); !ok {
+		t.Fatal("telegramAdapter 应实现 adapter.MsgEditorExt（EditGroupMsg/EditFriendMsg）")
+	}
+	if _, ok := src.(adapter.InteractionAnswerer); !ok {
+		t.Fatal("telegramAdapter 应实现 adapter.InteractionAnswerer（AnswerInteraction）")
+	}
+	if !src.(adapter.InteractiveExt).SupportsKeyboard() {
+		t.Fatal("Telegram 应声明支持内联按钮")
+	}
+
+	// 事件回调收到的包装外观可断言 bot.Interactive / bot.MsgEditor 且支持按钮
+	b := adapter.WrapBot(nil, src)
+	iv, ok := b.(bot.Interactive)
+	if !ok || !iv.SupportsKeyboard() {
+		t.Fatal("包装后的 bot 外观应断言 bot.Interactive 且支持按钮")
+	}
+	if _, ok := b.(bot.MsgEditor); !ok {
+		t.Fatal("包装后的 bot 外观应断言 bot.MsgEditor")
 	}
 }

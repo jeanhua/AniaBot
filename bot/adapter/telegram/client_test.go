@@ -152,7 +152,8 @@ func (f *fakeAPI) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		f.replyJSON(w, ups)
 	case "getFile":
 		f.reply(w, `{"file_id":"f1","file_path":"photos/a.jpg"}`)
-	case "sendMessage", "editMessageText", "sendPhoto", "sendDocument", "sendVoice", "sendVideo":
+	case "sendMessage", "editMessageText", "editMessageReplyMarkup", "answerCallbackQuery",
+		"sendPhoto", "sendDocument", "sendVoice", "sendVideo":
 		f.reply(w, `{"message_id":42}`)
 	default:
 		http.NotFound(w, r)
