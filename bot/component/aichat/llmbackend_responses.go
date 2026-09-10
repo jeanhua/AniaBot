@@ -10,6 +10,7 @@ import (
 	"github.com/jeanhua/AniaBot/bot/version"
 	"github.com/openai/openai-go/v3"
 	"github.com/openai/openai-go/v3/option"
+	"github.com/openai/openai-go/v3/packages/param"
 	"github.com/openai/openai-go/v3/responses"
 	"github.com/openai/openai-go/v3/shared"
 )
@@ -195,8 +196,9 @@ func convertResponsesInput(messages []Message) (responses.ResponseInputParam, st
 			if len(msg.Parts) > 0 && msg.Parts[0].Type == ContentPartText {
 				content = msg.Parts[0].Text
 			}
-			items = append(items, responses.ResponseInputItemParamOfFunctionCallOutput(
-				msg.ToolCallID, content))
+			item := responses.ResponseInputItemParamOfFunctionCallOutput(content)
+			item.OfFunctionCallOutput.CallID = param.NewOpt(msg.ToolCallID)
+			items = append(items, item)
 
 		default:
 			return nil, "", fmt.Errorf("unknown message role: %s", msg.Role)
