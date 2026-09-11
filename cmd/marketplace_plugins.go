@@ -8,34 +8,9 @@ package main
 
 import (
 	"github.com/jeanhua/AniaBot/bot/core"
-	plug_antiwithdrawal "github.com/jeanhua/AniaBot/custom/plugins/antiwithdrawal"
-	plug_dicegirl "github.com/jeanhua/AniaBot/custom/plugins/dicegirl"
-	plug_eew "github.com/jeanhua/AniaBot/custom/plugins/eew"
-	plug_example "github.com/jeanhua/AniaBot/custom/plugins/example"
-	plug_games "github.com/jeanhua/AniaBot/custom/plugins/games"
-	plug_groupdigest "github.com/jeanhua/AniaBot/custom/plugins/groupdigest"
-	plug_ledger "github.com/jeanhua/AniaBot/custom/plugins/ledger"
-	plug_music "github.com/jeanhua/AniaBot/custom/plugins/music"
-	plug_pixiv "github.com/jeanhua/AniaBot/custom/plugins/pixiv"
-	plug_reminder "github.com/jeanhua/AniaBot/custom/plugins/reminder"
-	plug_rss "github.com/jeanhua/AniaBot/custom/plugins/rss"
-	plug_setu "github.com/jeanhua/AniaBot/custom/plugins/setu"
-	plug_whitelist "github.com/jeanhua/AniaBot/custom/plugins/whitelist"
 )
 
 // registerMarketplacePlugins 注册插件市场安装的第三方插件。
 func registerMarketplacePlugins(ania *core.AniaBot) {
-	ania.AddPlugin(plug_antiwithdrawal.NewPlugin())
-	ania.AddPlugin(plug_dicegirl.NewPlugin())
-	ania.AddPlugin(plug_eew.NewPlugin())
-	ania.AddPlugin(plug_example.NewPlugin())
-	ania.AddPlugin(plug_games.NewPlugin())
-	ania.AddPlugin(plug_groupdigest.NewPlugin())
-	ania.AddPlugin(plug_ledger.NewPlugin())
-	ania.AddPlugin(plug_music.NewPlugin())
-	ania.AddPlugin(plug_pixiv.NewPlugin())
-	ania.AddPlugin(plug_reminder.NewPlugin())
-	ania.AddPlugin(plug_rss.NewPlugin())
-	ania.AddPlugin(plug_setu.NewPlugin())
-	ania.AddPlugin(plug_whitelist.NewPlugin())
+
 }
