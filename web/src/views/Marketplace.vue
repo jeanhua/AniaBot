@@ -147,6 +147,31 @@
         </div>
       </section>
 
+      <!-- 任务进度 -->
+      <section v-if="started" ref="progressEl" class="tcard p-5">
+        <div class="flex items-center justify-between gap-3 mb-4">
+          <span class="tlabel">Progress / 任务进度</span>
+          <span v-if="status.error" class="tpill"><span class="tdot bg-red-400" />{{ status.errKind || '操作失败' }}</span>
+        </div>
+        <div v-if="status.restarting" class="mb-3 text-xs text-zinc-500">操作完成，等待 Bot 重启...</div>
+        <div class="flex flex-wrap items-center gap-y-2 mb-5">
+          <template v-for="(p, i) in phases" :key="p.key">
+            <div class="flex items-center gap-1.5">
+              <span class="w-5 h-5 rounded-full border flex items-center justify-center text-[10px] font-mono" :class="phaseClass(p.key)">{{ phaseDone(p.key) ? '✓' : i + 1 }}</span>
+              <span class="text-[11px]" :class="phaseTextClass(p.key)">{{ p.label }}</span>
+            </div>
+            <span v-if="i < phases.length - 1" class="mx-2 h-px w-5 bg-zinc-200" />
+          </template>
+        </div>
+        <div ref="logEl" class="bg-zinc-950 rounded-lg p-3.5 h-64 overflow-y-auto font-mono text-[11px] leading-relaxed text-zinc-300">
+          <div v-for="(l, i) in status.logs" :key="i" :class="logLineClass(l)">{{ l }}</div>
+          <div v-if="status.running" class="flex items-center gap-2 text-zinc-500 mt-1">
+            <span class="w-3 h-3 border-2 border-zinc-700 border-t-zinc-300 rounded-full animate-spin" />
+            执行中...
+          </div>
+        </div>
+      </section>
+
       <!-- 插件列表 -->
       <section class="tcard overflow-hidden">
         <div class="px-5 pt-5 pb-4 border-b border-zinc-100">
@@ -213,31 +238,6 @@
                 >{{ p.installed ? '升级' : '安装' }}</button>
               </div>
             </div>
-          </div>
-        </div>
-      </section>
-
-      <!-- 任务进度 -->
-      <section v-if="started" class="tcard p-5">
-        <div class="flex items-center justify-between gap-3 mb-4">
-          <span class="tlabel">Progress / 任务进度</span>
-          <span v-if="status.error" class="tpill"><span class="tdot bg-red-400" />{{ status.errKind || '操作失败' }}</span>
-        </div>
-        <div v-if="status.restarting" class="mb-3 text-xs text-zinc-500">操作完成，等待 Bot 重启...</div>
-        <div class="flex flex-wrap items-center gap-y-2 mb-5">
-          <template v-for="(p, i) in phases" :key="p.key">
-            <div class="flex items-center gap-1.5">
-              <span class="w-5 h-5 rounded-full border flex items-center justify-center text-[10px] font-mono" :class="phaseClass(p.key)">{{ phaseDone(p.key) ? '✓' : i + 1 }}</span>
-              <span class="text-[11px]" :class="phaseTextClass(p.key)">{{ p.label }}</span>
-            </div>
-            <span v-if="i < phases.length - 1" class="mx-2 h-px w-5 bg-zinc-200" />
-          </template>
-        </div>
-        <div ref="logEl" class="bg-zinc-950 rounded-lg p-3.5 h-64 overflow-y-auto font-mono text-[11px] leading-relaxed text-zinc-300">
-          <div v-for="(l, i) in status.logs" :key="i" :class="logLineClass(l)">{{ l }}</div>
-          <div v-if="status.running" class="flex items-center gap-2 text-zinc-500 mt-1">
-            <span class="w-3 h-3 border-2 border-zinc-700 border-t-zinc-300 rounded-full animate-spin" />
-            执行中...
           </div>
         </div>
       </section>
@@ -394,6 +394,7 @@ const detailCache = new Map()
 
 const started = ref(false)
 const rebooting = ref(false)
+const progressEl = ref(null)
 const logEl = ref(null)
 const status = reactive({ running: false, restarting: false, action: '', plugin_id: '', phase: '', logs: [], error: '', errKind: '' })
 const oauthOpen = ref(false)
@@ -578,10 +579,16 @@ async function onUninstallDetail() {
   if (p) await onUninstall(p)
 }
 
+// 进度卡片在插件列表上方，操作触发后滚到卡片处，避免插件一多看不到日志
+function scrollProgressIntoView() {
+  nextTick(() => progressEl.value?.scrollIntoView({ behavior: 'smooth', block: 'start' }))
+}
+
 async function onInstall(p) {
   const verb = p.installed ? '升级' : '安装'
   if (!confirm(`确定要${verb}插件「${p.name}」吗？\n\n将下载插件源码、重新编译并重启 Bot（约需几分钟）。\n\n⚠️ 安装插件等于在本机执行插件代码，请确认来源可信。`)) return
   started.value = true
+  scrollProgressIntoView()
   try {
     await api.installMarketplacePlugin(p.id)
     await pollStatus()
@@ -593,6 +600,7 @@ async function onInstall(p) {
 async function onUninstall(p) {
   if (!confirm(`确定要卸载插件「${p.name}」吗？将重新编译并重启 Bot。`)) return
   started.value = true
+  scrollProgressIntoView()
   try {
     await api.uninstallMarketplacePlugin(p.id)
     await pollStatus()
@@ -604,6 +612,7 @@ async function onUninstall(p) {
 async function onRollback() {
   if (!confirm('确定要回滚到上次插件操作前的版本吗？将恢复旧二进制并重启 Bot。')) return
   started.value = true
+  scrollProgressIntoView()
   try {
     await api.rollbackMarketplace()
     await pollStatus()
