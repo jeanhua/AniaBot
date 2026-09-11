@@ -47,6 +47,12 @@ make windows
 
 二进制部署时，可在面板「自动更新」页一键从 git 拉取最新代码、重新编译并自动重启（需配置源码目录，详见[文档](https://jeanhua.github.io/AniaBot/guide/web-panel#自动更新)）。
 
+## 二进制部署
+
+可以直接到 [Releases](https://github.com/jeanhua/AniaBot/releases) 下载对应平台的压缩包（linux amd64/arm64、macOS amd64/arm64、Windows amd64），解压即可运行。
+
+首次启动会在当前目录生成 `data/` 存放数据库与配置，并在控制台打印 Web 控制面板的随机初始密码，登录 `http://127.0.0.1:7700` 完成配置。后续升级时重新下载替换二进制即可，数据不受影响。
+
 ## Docker 部署
 
 镜像内置 Go / Node.js / git 工具链，面板的「自动更新」在容器内可直接使用。
