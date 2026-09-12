@@ -19,9 +19,9 @@
     <!-- 操作反馈 -->
     <p v-if="msg" class="text-xs" :class="msgOk ? 'text-emerald-600' : 'text-red-600'">{{ msg }}</p>
 
-    <div class="flex gap-4 items-start">
+    <div class="flex flex-col lg:flex-row lg:items-start gap-4">
       <!-- 左栏：会话列表 -->
-      <section class="w-72 shrink-0 bg-white rounded-xl shadow-sm border border-slate-200/60 overflow-hidden">
+      <section class="w-full lg:w-72 shrink-0 bg-white rounded-xl shadow-sm border border-slate-200/60 overflow-hidden">
         <div class="p-2 border-b border-slate-100">
           <div class="flex items-center gap-1 bg-slate-50 rounded-lg p-1">
             <button
@@ -106,8 +106,8 @@
     </div>
 
     <!-- 新增/编辑弹窗 -->
-    <div v-if="showForm" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-50" @click.self="showForm = false">
-      <form class="bg-white rounded-2xl shadow-2xl p-6 w-lg space-y-4" @submit.prevent="onSubmit">
+    <div v-if="showForm" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-50 p-4" @click.self="showForm = false">
+      <form class="bg-white rounded-2xl shadow-2xl p-6 w-lg max-w-full space-y-4" @submit.prevent="onSubmit">
         <h2 class="text-base font-semibold text-slate-800">{{ form.name ? '编辑团队' : '新增团队' }}</h2>
         <div class="grid grid-cols-2 gap-3">
           <div>
@@ -130,7 +130,7 @@
           <label class="block text-xs text-slate-500 mb-1.5">成员（1 至 10 个：可选预置角色自动填充名字，或用 name + 角色描述自定义；角色描述为空且名字命中预置角色时，该成员按预置角色执行）</label>
           <div class="space-y-2">
             <div v-for="(m, i) in form.members" :key="i" class="border border-slate-200 rounded-lg p-2.5 space-y-2">
-              <div class="flex items-center gap-2">
+              <div class="flex flex-wrap items-center gap-2">
                 <select :value="presetOf(m)" class="w-44 shrink-0 border border-slate-300 rounded-lg px-2 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-zinc-400" @change="onPresetChange(m, $event)">
                   <option value="">自定义</option>
                   <option v-for="r in roles" :key="r.name" :value="r.name" :title="r.summary">

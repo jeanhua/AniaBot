@@ -8,7 +8,7 @@
       </div>
       <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
         <!-- TOTAL -->
-        <section class="tcard p-6 flex flex-col">
+        <section class="tcard p-4 sm:p-6 flex flex-col">
           <div class="flex items-center justify-between">
             <span class="tlabel">Total Tokens</span>
             <span class="tpill"><span class="tdot bg-zinc-800" />{{ oSummary.requests ?? 0 }} Runs</span>
@@ -24,7 +24,7 @@
         </section>
 
         <!-- TODAY -->
-        <section class="tcard p-6 flex flex-col">
+        <section class="tcard p-4 sm:p-6 flex flex-col">
           <div class="flex items-center justify-between">
             <span class="tlabel">Today</span>
             <span class="tpill"><span class="tdot bg-emerald-500" />{{ oToday.requests ?? 0 }} Runs</span>
@@ -40,7 +40,7 @@
         </section>
 
         <!-- CACHE -->
-        <section class="tcard p-6 flex flex-col">
+        <section class="tcard p-4 sm:p-6 flex flex-col">
           <div class="flex items-center justify-between">
             <span class="tlabel">Cache Hit</span>
             <span class="tpill">
@@ -58,7 +58,7 @@
         </section>
 
         <!-- AVERAGE -->
-        <section class="tcard p-6 flex flex-col">
+        <section class="tcard p-4 sm:p-6 flex flex-col">
           <div class="flex items-center justify-between">
             <span class="tlabel">Average</span>
             <span class="tpill"><span class="tdot bg-zinc-800" />Per Run</span>
@@ -158,7 +158,7 @@
       <!-- 拆分维度 -->
       <div class="grid grid-cols-1 xl:grid-cols-3 gap-4">
         <!-- BY SOURCE -->
-        <section class="tcard p-6 flex flex-col">
+        <section class="tcard p-4 sm:p-6 flex flex-col">
           <div class="flex items-center justify-between">
             <span class="tlabel">By Source</span>
             <span class="tpill"><span class="tdot bg-zinc-800" />对话 / 任务</span>
@@ -180,7 +180,7 @@
         </section>
 
         <!-- BY CHAT TYPE -->
-        <section class="tcard p-6 flex flex-col">
+        <section class="tcard p-4 sm:p-6 flex flex-col">
           <div class="flex items-center justify-between">
             <span class="tlabel">By Chat Type</span>
             <span class="tpill"><span class="tdot bg-zinc-800" />群聊 / 私聊</span>
@@ -202,7 +202,7 @@
         </section>
 
         <!-- BY STATUS -->
-        <section class="tcard p-6 flex flex-col">
+        <section class="tcard p-4 sm:p-6 flex flex-col">
           <div class="flex items-center justify-between">
             <span class="tlabel">By Status</span>
             <span class="tpill"><span class="tdot bg-zinc-800" />{{ statusTotal }} Finished</span>
@@ -248,19 +248,20 @@
             <span class="text-[10px] tracking-[0.15em] uppercase text-zinc-400">Top {{ topTargets.length }} by Tokens</span>
           </div>
           <p v-if="topTargets.length === 0" class="px-6 py-8 text-xs text-zinc-400 text-center tracking-wide">暂无消耗记录</p>
-          <table v-else class="w-full text-xs">
+          <div v-else class="overflow-x-auto">
+          <table class="w-full text-xs">
             <thead>
               <tr class="text-left text-[10px] tracking-[0.15em] uppercase text-zinc-400 bg-zinc-50/60 border-b border-zinc-100">
-                <th class="px-6 py-3 font-medium w-10">#</th>
+                <th class="px-3 py-3 sm:px-6 font-medium w-10">#</th>
                 <th class="px-3 py-3 font-medium">目标</th>
                 <th class="px-3 py-3 font-medium">占比</th>
                 <th class="px-3 py-3 font-medium text-right">次数</th>
-                <th class="px-6 py-3 font-medium text-right">Tokens</th>
+                <th class="px-3 py-3 sm:px-6 font-medium text-right">Tokens</th>
               </tr>
             </thead>
             <tbody>
               <tr v-for="(t, i) in topTargets" :key="t.chat_type + ':' + t.target_id" class="border-b border-dashed border-zinc-100 last:border-0 hover:bg-zinc-50/70 transition-colors">
-                <td class="px-6 py-3 text-zinc-400">{{ i + 1 }}</td>
+                <td class="px-3 py-3 sm:px-6 text-zinc-400">{{ i + 1 }}</td>
                 <td class="px-3 py-3 text-zinc-800 font-medium whitespace-nowrap">
                   <span class="text-[9px] tracking-[0.12em] uppercase border border-zinc-300 text-zinc-500 px-1.5 py-0.5 rounded mr-2">{{ t.chat_type === 'group' ? '群' : '私' }}</span>
                   {{ t.target_id }}
@@ -274,10 +275,11 @@
                   </div>
                 </td>
                 <td class="px-3 py-3 text-right text-zinc-600">{{ t.requests }}</td>
-                <td class="px-6 py-3 text-right text-zinc-800 font-medium whitespace-nowrap" :title="`${t.total_tokens} tok (prompt ${t.prompt_tokens} / completion ${t.completion_tokens} / cached ${t.cached_tokens})`">{{ fmtTokens(t.total_tokens) }}</td>
+                <td class="px-3 py-3 sm:px-6 text-right text-zinc-800 font-medium whitespace-nowrap" :title="`${t.total_tokens} tok (prompt ${t.prompt_tokens} / completion ${t.completion_tokens} / cached ${t.cached_tokens})`">{{ fmtTokens(t.total_tokens) }}</td>
               </tr>
             </tbody>
           </table>
+          </div>
         </section>
       </div>
     </div>

@@ -4,8 +4,8 @@
       <div v-if="saved" class="bg-emerald-50 border border-emerald-200 text-emerald-800 text-sm rounded-xl px-4 py-3" v-html="savedHint" />
     </Transition>
 
-    <div class="flex items-center justify-between">
-      <div class="flex gap-1 bg-white border border-slate-200 rounded-lg p-1 shadow-sm">
+    <div class="flex flex-wrap items-center justify-between gap-2">
+      <div class="flex gap-1 bg-white border border-slate-200 rounded-lg p-1 shadow-sm overflow-x-auto">
         <button
           v-for="tab in tabs"
           :key="tab.name"

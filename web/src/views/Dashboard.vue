@@ -19,16 +19,16 @@
     <!-- 仪器面板 bento 区 -->
     <div class="grid grid-cols-1 xl:grid-cols-12 gap-4">
       <!-- DEVICE CLOCK -->
-      <section class="tcard xl:col-span-5 p-6 flex flex-col">
+      <section class="tcard xl:col-span-5 p-4 sm:p-6 flex flex-col">
         <div class="flex items-center justify-between">
           <span class="tlabel">Device Clock</span>
           <span class="tpill"><span class="tdot bg-emerald-500" />Sync OK</span>
         </div>
 
-        <div class="flex-1 flex items-center justify-between gap-6 py-5">
+        <div class="flex-1 flex items-center justify-between gap-4 py-5">
           <div class="flex items-center gap-5 min-w-0">
             <div class="dotgrid w-14 h-12 shrink-0 hidden sm:block" />
-            <div class="text-[56px] leading-none font-semibold tracking-tight text-zinc-900 whitespace-nowrap">
+            <div class="text-[44px] sm:text-[56px] leading-none font-semibold tracking-tight text-zinc-900 whitespace-nowrap">
               {{ hh }}<span class="blink">:</span>{{ mm }}<span class="text-2xl text-zinc-400 font-medium ml-1">{{ ss }}</span>
             </div>
           </div>
@@ -60,7 +60,7 @@
       </section>
 
       <!-- ADAPTER LINK -->
-      <section class="tcard xl:col-span-4 p-6 flex flex-col">
+      <section class="tcard xl:col-span-4 p-4 sm:p-6 flex flex-col">
         <div class="flex items-center justify-between">
           <span class="tlabel">Adapter Link</span>
           <span class="tpill">
@@ -89,7 +89,7 @@
       </section>
 
       <!-- SCHEDULER -->
-      <section class="tcard xl:col-span-3 p-6 flex flex-col">
+      <section class="tcard xl:col-span-3 p-4 sm:p-6 flex flex-col">
         <div class="flex items-center justify-between">
           <span class="tlabel">Scheduler</span>
           <span class="tpill"><span class="tdot bg-zinc-800" />{{ clocks.length }} Jobs</span>
@@ -126,7 +126,7 @@
     <!-- 主机监控 -->
     <div class="grid grid-cols-1 xl:grid-cols-12 gap-4">
       <!-- CPU LOAD -->
-      <section class="tcard xl:col-span-4 p-6 flex flex-col">
+      <section class="tcard xl:col-span-4 p-4 sm:p-6 flex flex-col">
         <div class="flex items-center justify-between">
           <span class="tlabel">CPU Load</span>
           <span class="tpill"><span class="tdot bg-zinc-800" />{{ host.cpu_cores ?? '—' }} Cores</span>
@@ -160,7 +160,7 @@
       </section>
 
       <!-- MEMORY -->
-      <section class="tcard xl:col-span-4 p-6 flex flex-col">
+      <section class="tcard xl:col-span-4 p-4 sm:p-6 flex flex-col">
         <div class="flex items-center justify-between">
           <span class="tlabel">Memory</span>
           <span class="tpill"><span class="tdot" :class="host.mem_percent >= 90 ? 'bg-red-500' : host.mem_percent >= 75 ? 'bg-amber-500' : 'bg-emerald-500'" />{{ memPctText }}</span>
@@ -184,7 +184,7 @@
       </section>
 
       <!-- HOST INFO -->
-      <section class="tcard xl:col-span-4 p-6 flex flex-col">
+      <section class="tcard xl:col-span-4 p-4 sm:p-6 flex flex-col">
         <div class="flex items-center justify-between">
           <span class="tlabel">Host Info</span>
           <span class="tpill"><span class="tdot bg-zinc-800" />{{ host.os || '—' }} · {{ host.arch || '—' }}</span>
@@ -214,7 +214,7 @@
     <!-- TOKEN USAGE -->
     <div class="grid grid-cols-1 xl:grid-cols-12 gap-4">
       <!-- TOTALS -->
-      <section class="tcard xl:col-span-4 p-6 flex flex-col">
+      <section class="tcard xl:col-span-4 p-4 sm:p-6 flex flex-col">
         <div class="flex items-center justify-between">
           <span class="tlabel">Token Usage</span>
           <span class="tpill">
@@ -245,7 +245,7 @@
       </section>
 
       <!-- DAILY -->
-      <section class="tcard p-6 flex flex-col" :class="balanceEnabled ? 'xl:col-span-5' : 'xl:col-span-8'">
+      <section class="tcard p-4 sm:p-6 flex flex-col" :class="balanceEnabled ? 'xl:col-span-5' : 'xl:col-span-8'">
         <div class="flex items-center justify-between">
           <span class="tlabel">Daily Tokens</span>
           <span class="flex items-center gap-3">
@@ -279,7 +279,7 @@
       </section>
 
       <!-- API BALANCE -->
-      <section v-if="balanceEnabled" class="tcard xl:col-span-3 p-6 flex flex-col">
+      <section v-if="balanceEnabled" class="tcard xl:col-span-3 p-4 sm:p-6 flex flex-col">
         <div class="flex items-center justify-between">
           <span class="tlabel">API Balance</span>
           <button
@@ -314,29 +314,31 @@
         <h2 class="tlabel text-zinc-800!">Plugin Registry</h2>
         <span class="text-[10px] tracking-[0.15em] uppercase text-zinc-400">{{ plugins.length }} Modules</span>
       </div>
-      <table class="w-full text-xs">
-        <thead>
-          <tr class="text-left text-[10px] tracking-[0.15em] uppercase text-zinc-400 bg-zinc-50/60 border-b border-zinc-100">
-            <th class="px-6 py-3 font-medium">名称</th>
-            <th class="px-6 py-3 font-medium">说明</th>
-            <th class="px-6 py-3 font-medium">作者</th>
-            <th class="px-6 py-3 font-medium">版本</th>
-            <th class="px-6 py-3 font-medium">可见性</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-for="p in plugins" :key="p.name" class="border-b border-dashed border-zinc-100 last:border-0 hover:bg-zinc-50/70 transition-colors">
-            <td class="px-6 py-3 font-semibold text-zinc-800">{{ p.name }}</td>
-            <td class="px-6 py-3 text-zinc-600">{{ p.help_words }}</td>
-            <td class="px-6 py-3 text-zinc-600">{{ p.author }}</td>
-            <td class="px-6 py-3 text-zinc-500">{{ p.version }}</td>
-            <td class="px-6 py-3">
-              <span v-if="p.admin_only" class="tpill py-0.5!"><span class="tdot bg-amber-500" />Admin</span>
-              <span v-else class="text-[10px] tracking-[0.15em] uppercase text-zinc-400">All</span>
-            </td>
-          </tr>
-        </tbody>
-      </table>
+      <div class="overflow-x-auto">
+        <table class="w-full text-xs">
+          <thead>
+            <tr class="text-left text-[10px] tracking-[0.15em] uppercase text-zinc-400 bg-zinc-50/60 border-b border-zinc-100">
+              <th class="px-3 py-3 sm:px-6 font-medium">名称</th>
+              <th class="px-3 py-3 sm:px-6 font-medium">说明</th>
+              <th class="px-3 py-3 sm:px-6 font-medium">作者</th>
+              <th class="px-3 py-3 sm:px-6 font-medium">版本</th>
+              <th class="px-3 py-3 sm:px-6 font-medium">可见性</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="p in plugins" :key="p.name" class="border-b border-dashed border-zinc-100 last:border-0 hover:bg-zinc-50/70 transition-colors">
+              <td class="px-3 py-3 sm:px-6 font-semibold text-zinc-800">{{ p.name }}</td>
+              <td class="px-3 py-3 sm:px-6 text-zinc-600">{{ p.help_words }}</td>
+              <td class="px-3 py-3 sm:px-6 text-zinc-600">{{ p.author }}</td>
+              <td class="px-3 py-3 sm:px-6 text-zinc-500">{{ p.version }}</td>
+              <td class="px-3 py-3 sm:px-6">
+                <span v-if="p.admin_only" class="tpill py-0.5!"><span class="tdot bg-amber-500" />Admin</span>
+                <span v-else class="text-[10px] tracking-[0.15em] uppercase text-zinc-400">All</span>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
     </section>
 
   </div>

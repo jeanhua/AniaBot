@@ -11,14 +11,25 @@
   <Wizard v-else-if="auth.setupRequired" />
 
   <div v-else class="min-h-screen bg-[#f3f3f2] flex">
-    <!-- 侧边导航 -->
-    <aside class="w-60 bg-zinc-950 flex flex-col shrink-0 sticky top-0 h-screen">
+    <!-- 移动端抽屉遮罩 -->
+    <Transition name="fade">
+      <div v-if="mobileOpen" class="fixed inset-0 bg-zinc-950/50 backdrop-blur-sm z-40 md:hidden" @click="mobileOpen = false" />
+    </Transition>
+
+    <!-- 侧边导航：移动端为抽屉，桌面端常驻 -->
+    <aside
+      class="fixed inset-y-0 left-0 z-50 w-64 h-screen bg-zinc-950 flex flex-col shrink-0 transition-transform duration-200 md:sticky md:top-0 md:inset-auto md:z-auto md:w-60"
+      :class="mobileOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'"
+    >
       <div class="px-5 pt-6 pb-5 flex items-center gap-3">
         <img src="/logo.webp" alt="AniaBot" class="w-9 h-9 rounded-full object-cover shadow-lg ring-1 ring-white/20" />
         <div>
           <div class="text-white font-semibold leading-tight tracking-[0.2em]">ANIABOT</div>
           <div class="text-[10px] text-zinc-500 leading-tight tracking-[0.15em] uppercase mt-0.5">Console · 控制面板</div>
         </div>
+        <button class="ml-auto md:hidden text-zinc-400 hover:text-zinc-200 p-1" aria-label="关闭菜单" @click="mobileOpen = false">
+          <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" /></svg>
+        </button>
       </div>
       <div class="mx-5 h-px bg-white/10" />
 
@@ -60,13 +71,18 @@
 
     <!-- 主内容 -->
     <main class="flex-1 min-w-0 flex flex-col">
-      <header class="bg-white/85 backdrop-blur border-b border-zinc-200 px-8 py-4 sticky top-0 z-30 flex items-center justify-between">
-        <h1 class="text-[11px] tracking-[0.22em] uppercase text-zinc-500 font-medium">
-          <span class="text-zinc-300 mr-2">//</span>{{ $route.meta.title || '' }}
-        </h1>
-        <span class="tpill"><span class="tdot bg-emerald-500" />Bot Online</span>
+      <header class="bg-white/85 backdrop-blur border-b border-zinc-200 px-4 sm:px-6 xl:px-8 py-3 sm:py-4 sticky top-0 z-30 flex items-center justify-between gap-3">
+        <div class="flex items-center gap-2 min-w-0">
+          <button class="md:hidden -ml-1 p-1.5 rounded-md text-zinc-600 hover:bg-zinc-100 transition-colors" aria-label="打开菜单" @click="mobileOpen = true">
+            <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" /></svg>
+          </button>
+          <h1 class="text-[11px] tracking-[0.22em] uppercase text-zinc-500 font-medium truncate">
+            <span class="text-zinc-300 mr-2">//</span>{{ $route.meta.title || '' }}
+          </h1>
+        </div>
+        <span class="tpill shrink-0"><span class="tdot bg-emerald-500" />Bot Online</span>
       </header>
-      <div class="p-8 flex-1">
+      <div class="p-4 sm:p-6 xl:p-8 flex-1">
         <RouterView v-slot="{ Component }">
           <Transition name="fade" mode="out-in">
             <component :is="Component" />
@@ -76,8 +92,8 @@
     </main>
 
     <!-- 重启中遮罩 -->
-    <div v-if="restarting" class="fixed inset-0 bg-zinc-950/60 backdrop-blur-sm flex items-center justify-center z-50">
-      <div class="tcard p-8 w-80 text-center space-y-3">
+    <div v-if="restarting" class="fixed inset-0 bg-zinc-950/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+      <div class="tcard p-8 w-80 max-w-full text-center space-y-3">
         <span class="mx-auto block w-8 h-8 border-[3px] border-zinc-200 border-t-zinc-800 rounded-full animate-spin" />
         <div class="text-sm font-semibold text-zinc-900 tracking-[0.15em] uppercase">Rebooting</div>
         <p class="text-xs text-zinc-500">配置修改将在重启后生效，恢复后页面自动刷新</p>
@@ -85,8 +101,8 @@
     </div>
 
     <!-- 修改密码弹窗 -->
-    <div v-if="showPwd" class="fixed inset-0 bg-zinc-950/50 backdrop-blur-sm flex items-center justify-center z-50" @click.self="showPwd = false">
-      <form class="tcard p-6 w-96 space-y-4" @submit.prevent="onChangePwd">
+    <div v-if="showPwd" class="fixed inset-0 bg-zinc-950/50 backdrop-blur-sm flex items-center justify-center z-50 p-4" @click.self="showPwd = false">
+      <form class="tcard p-6 w-96 max-w-full space-y-4" @submit.prevent="onChangePwd">
         <h2 class="text-[11px] tracking-[0.22em] uppercase text-zinc-500 font-medium">修改密码</h2>
         <input v-model="pwdForm.next" type="password" placeholder="新密码（至少 6 位）" required minlength="6" :class="inputClass" />
         <p v-if="pwdForm.msg" class="text-xs" :class="pwdForm.ok ? 'text-emerald-600' : 'text-red-600'">{{ pwdForm.msg }}</p>
@@ -100,7 +116,7 @@
 </template>
 
 <script setup>
-import { onMounted, reactive, ref } from 'vue'
+import { onMounted, reactive, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { api, auth } from './api.js'
 import Login from './views/Login.vue'
@@ -157,6 +173,12 @@ const inputClass = 'w-full border border-zinc-300 rounded-md px-3 py-2 text-xs f
 const showPwd = ref(false)
 const pwdForm = reactive({ next: '', msg: '', ok: false })
 const restarting = ref(false)
+
+// 移动端抽屉侧边栏：切页后自动收起
+const mobileOpen = ref(false)
+watch(() => router.currentRoute.value.path, () => {
+  mobileOpen.value = false
+})
 
 onMounted(() => api.checkLogin())
 

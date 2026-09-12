@@ -10,25 +10,26 @@
         </div>
       </div>
       <p v-if="clocks.length === 0" class="px-6 py-8 text-xs text-zinc-400 text-center tracking-wide">暂无定时任务，点击右上角「新建任务」创建（也可在群聊/私聊中使用 /clock）</p>
-      <table v-else class="w-full text-xs">
-        <thead>
-          <tr class="text-left text-[10px] tracking-[0.15em] uppercase text-zinc-400 bg-zinc-50/60 border-b border-zinc-100">
-            <th class="px-6 py-3 font-medium">任务</th>
-            <th class="px-6 py-3 font-medium">目标</th>
-            <th class="px-6 py-3 font-medium">Cron</th>
-            <th class="px-6 py-3 font-medium">下次执行</th>
-            <th class="px-6 py-3 font-medium">上次执行</th>
-            <th class="px-6 py-3 font-medium">启用</th>
-          </tr>
-        </thead>
-        <tbody>
+      <div v-else class="overflow-x-auto">
+        <table class="w-full text-xs">
+          <thead>
+            <tr class="text-left text-[10px] tracking-[0.15em] uppercase text-zinc-400 bg-zinc-50/60 border-b border-zinc-100">
+              <th class="px-3 py-3 sm:px-6 font-medium">任务</th>
+              <th class="px-3 py-3 sm:px-6 font-medium">目标</th>
+              <th class="px-3 py-3 sm:px-6 font-medium">Cron</th>
+              <th class="px-3 py-3 sm:px-6 font-medium">下次执行</th>
+              <th class="px-3 py-3 sm:px-6 font-medium">上次执行</th>
+              <th class="px-3 py-3 sm:px-6 font-medium">启用</th>
+            </tr>
+          </thead>
+          <tbody>
           <template v-for="t in clocks" :key="t.id">
             <tr
               class="border-b border-dashed border-zinc-100 last:border-0 hover:bg-zinc-50/70 transition-colors cursor-pointer"
               :class="{ 'bg-zinc-50/70': expanded.has(t.id) }"
               @click="toggleExpand(t.id)"
             >
-              <td class="px-6 py-3 text-zinc-800 max-w-48">
+              <td class="px-3 py-3 sm:px-6 text-zinc-800 max-w-48">
                 <span class="flex items-center gap-1.5">
                   <span
                     class="[&>svg]:w-3 [&>svg]:h-3 text-zinc-400 transition-transform shrink-0"
@@ -39,11 +40,11 @@
                 </span>
                 <span v-if="t.run_once" class="text-[9px] tracking-[0.12em] uppercase border border-zinc-300 text-zinc-500 px-1.5 py-0.5 rounded ml-4">单次</span>
               </td>
-              <td class="px-6 py-3 text-zinc-600 whitespace-nowrap">{{ t.target_type === 'group' ? '群' : '好友' }} {{ t.target_id }}</td>
-              <td class="px-6 py-3 text-zinc-500 whitespace-nowrap">{{ t.cron }}</td>
-              <td class="px-6 py-3 text-zinc-600 whitespace-nowrap">{{ t.enabled ? fmtTimeFull(t.next_run_at) : '—' }}</td>
-              <td class="px-6 py-3 text-zinc-600 whitespace-nowrap">{{ fmtTimeFull(t.last_run_at) }}</td>
-              <td class="px-6 py-3" @click.stop>
+              <td class="px-3 py-3 sm:px-6 text-zinc-600 whitespace-nowrap">{{ t.target_type === 'group' ? '群' : '好友' }} {{ t.target_id }}</td>
+              <td class="px-3 py-3 sm:px-6 text-zinc-500 whitespace-nowrap">{{ t.cron }}</td>
+              <td class="px-3 py-3 sm:px-6 text-zinc-600 whitespace-nowrap">{{ t.enabled ? fmtTimeFull(t.next_run_at) : '—' }}</td>
+              <td class="px-3 py-3 sm:px-6 text-zinc-600 whitespace-nowrap">{{ fmtTimeFull(t.last_run_at) }}</td>
+              <td class="px-3 py-3 sm:px-6" @click.stop>
                 <button
                   type="button"
                   role="switch"
@@ -62,7 +63,7 @@
             </tr>
             <!-- 任务详情 -->
             <tr v-if="expanded.has(t.id)" class="border-b border-dashed border-zinc-100 last:border-0 bg-zinc-50/40">
-              <td colspan="6" class="px-6 py-4">
+              <td colspan="6" class="px-3 py-4 sm:px-6">
                 <dl class="grid grid-cols-1 sm:grid-cols-[auto_1fr] gap-x-6 gap-y-2 text-xs">
                   <dt class="text-[10px] tracking-[0.15em] uppercase text-zinc-400 self-center">任务内容</dt>
                   <dd class="text-zinc-700 whitespace-pre-wrap break-all">{{ t.content }}</dd>
@@ -98,8 +99,9 @@
               </td>
             </tr>
           </template>
-        </tbody>
-      </table>
+          </tbody>
+        </table>
+      </div>
     </section>
 
     <!-- 筛选与操作栏 -->

@@ -114,8 +114,8 @@
     </div>
 
     <!-- 重启中遮罩 -->
-    <div v-if="rebooting" class="fixed inset-0 bg-zinc-950/60 backdrop-blur-sm flex items-center justify-center z-50">
-      <div class="tcard p-8 w-80 text-center space-y-3">
+    <div v-if="rebooting" class="fixed inset-0 bg-zinc-950/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+      <div class="tcard p-8 w-80 max-w-full text-center space-y-3">
         <span class="mx-auto block w-8 h-8 border-[3px] border-zinc-200 border-t-zinc-800 rounded-full animate-spin" />
         <div class="text-sm font-semibold text-zinc-900 tracking-[0.15em] uppercase">Updating</div>
         <p class="text-xs text-zinc-500">更新完成，Bot 正在重启，恢复后页面自动刷新</p>

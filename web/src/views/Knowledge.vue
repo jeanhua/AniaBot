@@ -25,9 +25,9 @@
     <!-- 操作反馈 -->
     <p v-if="msg" class="text-xs" :class="msgOk ? 'text-emerald-600' : 'text-red-600'">{{ msg }}</p>
 
-    <div class="flex gap-4 items-start">
+    <div class="flex flex-col lg:flex-row lg:items-start gap-4">
       <!-- 左栏：作用域列表 -->
-      <section class="w-72 shrink-0 bg-white rounded-xl shadow-sm border border-slate-200/60 overflow-hidden">
+      <section class="w-full lg:w-72 shrink-0 bg-white rounded-xl shadow-sm border border-slate-200/60 overflow-hidden">
         <div class="p-2 border-b border-slate-100">
           <div class="flex items-center gap-1 bg-slate-50 rounded-lg p-1">
             <button
@@ -110,8 +110,8 @@
     </div>
 
     <!-- 新增/编辑弹窗 -->
-    <div v-if="showForm" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-50" @click.self="showForm = false">
-      <form class="bg-white rounded-2xl shadow-2xl p-6 w-136 space-y-4" @submit.prevent="onSubmit">
+    <div v-if="showForm" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-50 p-4" @click.self="showForm = false">
+      <form class="bg-white rounded-2xl shadow-2xl p-6 w-136 max-w-full space-y-4" @submit.prevent="onSubmit">
         <h2 class="text-base font-semibold text-slate-800">{{ form.id ? '编辑文档' : '新增文档' }}</h2>
         <div v-if="!form.id">
           <label class="block text-xs text-slate-500 mb-1.5">作用域（下拉可选用已有作用域，或手输 global / g:会话ID / f:用户ID，支持前缀如 g:fs:oc_xxx）</label>
@@ -145,8 +145,8 @@
     </div>
 
     <!-- 导入 URL 弹窗 -->
-    <div v-if="showImport" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-50" @click.self="showImport = false">
-      <form class="bg-white rounded-2xl shadow-2xl p-6 w-136 space-y-4" @submit.prevent="onImport">
+    <div v-if="showImport" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-50 p-4" @click.self="showImport = false">
+      <form class="bg-white rounded-2xl shadow-2xl p-6 w-136 max-w-full space-y-4" @submit.prevent="onImport">
         <h2 class="text-base font-semibold text-slate-800">从 URL 导入</h2>
         <div>
           <label class="block text-xs text-slate-500 mb-1.5">作用域（下拉可选用已有作用域，或手输 global / g:会话ID / f:用户ID，支持前缀如 g:fs:oc_xxx）</label>

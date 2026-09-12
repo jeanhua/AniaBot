@@ -17,7 +17,7 @@
         </div>
       </div>
 
-      <div class="p-8">
+      <div class="p-5 sm:p-8">
         <!-- 步骤 0: 欢迎 -->
         <div v-if="step === 0" class="space-y-5 text-center">
           <div class="mx-auto w-14 h-14 rounded-2xl bg-linear-to-br from-white to-zinc-300 flex items-center justify-center text-zinc-900 font-bold text-2xl shadow-lg">

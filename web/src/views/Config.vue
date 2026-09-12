@@ -1,7 +1,7 @@
 <template>
-  <div class="flex gap-6 items-start">
-    <!-- 分组导航 -->
-    <aside v-if="!rawMode" class="w-52 shrink-0 sticky top-24 space-y-5 max-h-[calc(100vh-8rem)] overflow-y-auto pr-1">
+  <div class="flex flex-col lg:flex-row lg:items-start gap-6">
+    <!-- 分组导航：移动端隐藏，改用上方下拉选择 -->
+    <aside v-if="!rawMode" class="hidden lg:block w-52 shrink-0 sticky top-24 space-y-5 max-h-[calc(100vh-8rem)] overflow-y-auto pr-1">
       <div class="relative">
         <span class="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 [&>svg]:w-4 [&>svg]:h-4" v-html="iconSearch" />
         <input
@@ -65,6 +65,17 @@
 
     <!-- 配置主体 -->
     <div class="flex-1 min-w-0 space-y-5">
+      <!-- 移动端分组选择（桌面端用左侧导航） -->
+      <div v-if="!rawMode" class="lg:hidden">
+        <select
+          class="w-full bg-white border border-slate-200 rounded-lg px-3 py-2.5 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-zinc-400 focus:border-zinc-400 transition-shadow"
+          :value="activeCategory"
+          @change="selectCategory($event.target.value)"
+        >
+          <option v-for="cat in cards" :key="cat.name" :value="cat.name">{{ cat.name }}（{{ cat.total }} 项）</option>
+        </select>
+      </div>
+
       <Transition name="fade">
         <div v-if="saved" class="bg-emerald-50 border border-emerald-200 text-emerald-800 text-sm rounded-xl px-4 py-3 flex items-center gap-2">
           <span class="[&>svg]:w-4 [&>svg]:h-4" v-html="iconCheck" />
@@ -75,7 +86,7 @@
       <!-- 微信扫码登录卡片：适配器在运行，或已勾选启用（待重启）时显示 -->
       <QrLoginCard :weixin-enabled="form['bot.platform.weixin.enable'] === true" />
 
-      <div class="flex items-center justify-between gap-4">
+      <div class="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
         <div class="min-w-0">
           <p class="text-sm text-slate-500">配置存储在数据库中，修改保存后重启生效。</p>
           <p class="text-xs text-slate-400 mt-0.5">共 {{ schema.length }} 项配置</p>
@@ -97,7 +108,7 @@
       <!-- 配置预设 -->
       <section v-if="!rawMode" class="bg-white rounded-xl shadow-sm border border-slate-200/60 overflow-hidden">
         <button
-          class="w-full flex items-center justify-between px-6 py-4 text-sm font-semibold text-slate-800 hover:bg-slate-50 transition-colors"
+          class="w-full flex items-center justify-between gap-3 px-4 py-4 sm:px-6 text-sm font-semibold text-slate-800 hover:bg-slate-50 transition-colors"
           @click="presetsOpen = !presetsOpen"
         >
           <span class="flex items-center gap-2.5">
@@ -111,7 +122,7 @@
           </span>
         </button>
         <Transition name="fade">
-          <div v-show="presetsOpen" class="p-6 space-y-4 border-t border-slate-100">
+          <div v-show="presetsOpen" class="p-4 sm:p-6 space-y-4 border-t border-slate-100">
             <p class="text-xs text-slate-500">把当前全部配置（含密钥、MCP / Prompt 覆盖）保存为一份快照，之后可一键切换。应用预设后重启生效。</p>
 
             <div class="flex gap-2">
@@ -194,7 +205,7 @@
           class="bg-white rounded-xl shadow-sm border border-slate-200/60 scroll-mt-24 overflow-hidden"
         >
           <button
-            class="w-full flex items-center justify-between gap-3 px-6 py-4 text-left hover:bg-slate-50 transition-colors"
+            class="w-full flex items-center justify-between gap-3 px-4 py-4 sm:px-6 text-left hover:bg-slate-50 transition-colors"
             @click="toggleGroup(node.name)"
           >
             <span class="flex items-center gap-2.5 min-w-0">
@@ -209,7 +220,7 @@
           </button>
 
           <Transition name="fade">
-            <div v-show="isOpen(node)" class="p-6 border-t border-slate-100" :class="{ 'space-y-5': hasSubs(node) }">
+            <div v-show="isOpen(node)" class="p-4 sm:p-6 border-t border-slate-100" :class="{ 'space-y-5': hasSubs(node) }">
               <!-- 子分组分节：线框归类；平铺分组只有一个无名分节，直接铺字段 -->
               <div
                 v-for="s in node.sections"
@@ -296,7 +307,7 @@
       </template>
 
       <!-- 高级模式：原始 JSON -->
-      <section v-else class="bg-white rounded-xl shadow-sm border border-slate-200/60 p-6 space-y-3">
+      <section v-else class="bg-white rounded-xl shadow-sm border border-slate-200/60 p-4 sm:p-6 space-y-3">
         <p class="text-xs text-slate-500">全部配置键的扁平 JSON 视图（键为小写点分路径）。编辑后点击保存。</p>
         <textarea v-model="rawText" rows="24" spellcheck="false" class="w-full bg-zinc-950 text-slate-200 rounded-lg px-4 py-3 text-xs font-mono leading-relaxed focus:outline-none focus:ring-2 focus:ring-zinc-400" />
         <div class="flex items-center gap-3">

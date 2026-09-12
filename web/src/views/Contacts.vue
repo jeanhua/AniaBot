@@ -40,45 +40,49 @@
       </div>
 
       <section class="bg-white rounded-xl shadow-sm border border-slate-200/60 overflow-hidden">
-        <table v-if="current === 'groups'" class="w-full text-sm">
-          <thead>
-            <tr class="text-left text-xs text-slate-400 bg-slate-50/60 border-b border-slate-100">
-              <th class="px-6 py-3 font-medium">群 ID</th>
-              <th class="px-6 py-3 font-medium">群名称</th>
-              <th class="px-6 py-3 font-medium">成员数</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="g in groups" :key="g.group_id" class="border-b border-slate-50 last:border-0 hover:bg-slate-50/70 transition-colors">
-              <td class="px-6 py-3 text-slate-500 font-mono text-xs">{{ g.group_id }}</td>
-              <td class="px-6 py-3 text-slate-700 font-medium">{{ g.group_name || '—' }}</td>
-              <td class="px-6 py-3 text-slate-600">{{ memberText(g) }}</td>
-            </tr>
-            <tr v-if="!groups.length">
-              <td colspan="3" class="px-6 py-8 text-center text-slate-400">该平台暂无群聊</td>
-            </tr>
-          </tbody>
-        </table>
+        <div v-if="current === 'groups'" class="overflow-x-auto">
+          <table class="w-full text-sm">
+            <thead>
+              <tr class="text-left text-xs text-slate-400 bg-slate-50/60 border-b border-slate-100">
+                <th class="px-3 py-3 sm:px-6 font-medium whitespace-nowrap">群 ID</th>
+                <th class="px-3 py-3 sm:px-6 font-medium">群名称</th>
+                <th class="px-3 py-3 sm:px-6 font-medium whitespace-nowrap">成员数</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="g in groups" :key="g.group_id" class="border-b border-slate-50 last:border-0 hover:bg-slate-50/70 transition-colors">
+                <td class="px-3 py-3 sm:px-6 text-slate-500 font-mono text-xs">{{ g.group_id }}</td>
+                <td class="px-3 py-3 sm:px-6 text-slate-700 font-medium">{{ g.group_name || '—' }}</td>
+                <td class="px-3 py-3 sm:px-6 text-slate-600 whitespace-nowrap">{{ memberText(g) }}</td>
+              </tr>
+              <tr v-if="!groups.length">
+                <td colspan="3" class="px-6 py-8 text-center text-slate-400">该平台暂无群聊</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
 
-        <table v-else class="w-full text-sm">
-          <thead>
-            <tr class="text-left text-xs text-slate-400 bg-slate-50/60 border-b border-slate-100">
-              <th class="px-6 py-3 font-medium">用户 ID</th>
-              <th class="px-6 py-3 font-medium">昵称</th>
-              <th class="px-6 py-3 font-medium">备注</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="f in friends" :key="f.user_id" class="border-b border-slate-50 last:border-0 hover:bg-slate-50/70 transition-colors">
-              <td class="px-6 py-3 text-slate-500 font-mono text-xs">{{ f.user_id }}</td>
-              <td class="px-6 py-3 text-slate-700 font-medium">{{ f.nickname || '—' }}</td>
-              <td class="px-6 py-3 text-slate-600">{{ f.remark || '—' }}</td>
-            </tr>
-            <tr v-if="!friends.length">
-              <td colspan="3" class="px-6 py-8 text-center text-slate-400">该平台无好友列表（平台不支持枚举私聊对端）</td>
-            </tr>
-          </tbody>
-        </table>
+        <div v-else class="overflow-x-auto">
+          <table class="w-full text-sm">
+            <thead>
+              <tr class="text-left text-xs text-slate-400 bg-slate-50/60 border-b border-slate-100">
+                <th class="px-3 py-3 sm:px-6 font-medium whitespace-nowrap">用户 ID</th>
+                <th class="px-3 py-3 sm:px-6 font-medium">昵称</th>
+                <th class="px-3 py-3 sm:px-6 font-medium">备注</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="f in friends" :key="f.user_id" class="border-b border-slate-50 last:border-0 hover:bg-slate-50/70 transition-colors">
+                <td class="px-3 py-3 sm:px-6 text-slate-500 font-mono text-xs">{{ f.user_id }}</td>
+                <td class="px-3 py-3 sm:px-6 text-slate-700 font-medium">{{ f.nickname || '—' }}</td>
+                <td class="px-3 py-3 sm:px-6 text-slate-600">{{ f.remark || '—' }}</td>
+              </tr>
+              <tr v-if="!friends.length">
+                <td colspan="3" class="px-6 py-8 text-center text-slate-400">该平台无好友列表（平台不支持枚举私聊对端）</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
       </section>
     </template>
   </div>
