@@ -11,6 +11,8 @@
 
 ## [Unreleased]
 
+## [v4.7.3] - 2026-09-12
+
 ### 修复
 
 - 升级 OpenAI SDK 修复 OpenRouter 等部分网关流式对话偶发报 `unexpected end of JSON input` 的问题（网关注入的注释心跳帧被误判为空事件所致）。
