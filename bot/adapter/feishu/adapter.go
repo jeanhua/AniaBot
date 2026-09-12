@@ -1069,6 +1069,16 @@ func (a *feishuAdapter) sendChain(ctx context.Context, receiveID, receiveType st
 		return "", false
 	}
 
+	// file 段指向图片文件时（file 工具等来源）转 image 段：随正文以 img 元素
+	// 内联展示，而不是走文件上传（附件）
+	for i, s := range body {
+		if s.Type == message.SegmentFile {
+			if imgData, ok := message.FileSegmentAsImage(s); ok {
+				body[i] = message.OB11Segment{Type: message.SegmentImage, Data: imgData}
+			}
+		}
+	}
+
 	// 正文转飞书内容：文本/at 或富文本 post（含图片）
 	msgType, content, imageKeys := a.segmentsToContent(ctx, body)
 	if content == "" {

@@ -111,24 +111,3 @@ func TestStripQQSegmentsFileSniff(t *testing.T) {
 		t.Fatalf("仅 file_id 的段不应转 image, got %+v", got)
 	}
 }
-
-func TestSniffImageMagic(t *testing.T) {
-	cases := []struct {
-		name string
-		data []byte
-		want bool
-	}{
-		{"png", []byte("\x89PNG\r\n\x1a\nxxx"), true},
-		{"jpeg", []byte{0xff, 0xd8, 0xff, 0xe0}, true},
-		{"gif", []byte("GIF89a"), true},
-		{"webp", []byte("RIFF\x00\x00\x00\x00WEBPVP8 "), true},
-		{"bmp", []byte("BM\x00\x00"), true},
-		{"text", []byte("hello world"), false},
-		{"short", []byte{0xff, 0xd8}, false},
-	}
-	for _, c := range cases {
-		if got := sniffImageMagic(c.data); got != c.want {
-			t.Errorf("%s: sniffImageMagic = %v, want %v", c.name, got, c.want)
-		}
-	}
-}

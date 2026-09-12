@@ -1,6 +1,7 @@
 package telegram
 
 import (
+	"encoding/base64"
 	"strings"
 	"testing"
 	"time"
@@ -9,6 +10,9 @@ import (
 	"github.com/jeanhua/AniaBot/common/model/message"
 	"github.com/jeanhua/AniaBot/common/msgchain"
 )
+
+// pngB64 一段最小合法 PNG 文件头的 base64（含 PNG 魔数）。
+var pngB64 = base64.StdEncoding.EncodeToString([]byte("\x89PNG\r\n\x1a\n0000000000000000"))
 
 // TestSplitText 4096 上限分包：长文本、多字节字符不切断。
 func TestSplitText(t *testing.T) {
@@ -117,6 +121,80 @@ func TestSendMediaKeySelection(t *testing.T) {
 	img := message.OB11Segment{Type: message.SegmentImage, Data: map[string]any{"file": "AgAAAA", "url": "https://x.com/a.jpg"}}
 	if _, ok := a.sendMediaSegment(nil, -100, img, "", nil); ok {
 		t.Fatal("client 为 nil 应发送失败")
+	}
+}
+
+// TestMediaMethodOfFileImage file 段指向图片文件时走 sendPhoto，普通文件走 sendDocument。
+func TestMediaMethodOfFileImage(t *testing.T) {
+	// PNG base64 → sendPhoto（保留原文件名）
+	method, fileKey, fileName := mediaMethodOf(message.OB11Segment{
+		Type: message.SegmentFile,
+		Data: message.FileMessage{File: "base64://" + pngB64, Name: "photo.png"}.Marshal(),
+	})
+	if method != "sendPhoto" {
+		t.Fatalf("图片文件应走 sendPhoto, got %q", method)
+	}
+	if fileKey != "base64://"+pngB64 {
+		t.Fatalf("文件源应保留, got %q", fileKey)
+	}
+	if fileName != "photo.png" {
+		t.Fatalf("文件名 = %q, want photo.png", fileName)
+	}
+
+	// PNG 内容但无图片后缀 → 仍按内容识别为 sendPhoto
+	method, _, _ = mediaMethodOf(message.OB11Segment{
+		Type: message.SegmentFile,
+		Data: message.FileMessage{File: "base64://" + pngB64, Name: "data.bin"}.Marshal(),
+	})
+	if method != "sendPhoto" {
+		t.Fatalf("PNG 内容应走 sendPhoto, got %q", method)
+	}
+
+	// 非图片 → sendDocument
+	method, _, fileName = mediaMethodOf(message.OB11Segment{
+		Type: message.SegmentFile,
+		Data: message.FileMessage{File: "base64://" + base64.StdEncoding.EncodeToString([]byte("text")), Name: "doc.pdf"}.Marshal(),
+	})
+	if method != "sendDocument" || fileName != "doc.pdf" {
+		t.Fatalf("非图片应走 sendDocument, got %q/%q", method, fileName)
+	}
+
+	// 图片 URL → sendPhoto（扩展名判定）
+	method, fileKey, _ = mediaMethodOf(message.OB11Segment{
+		Type: message.SegmentFile,
+		Data: message.FileMessage{File: "https://e.com/a.png?token=1", Name: "a.png"}.Marshal(),
+	})
+	if method != "sendPhoto" || fileKey != "https://e.com/a.png?token=1" {
+		t.Fatalf("图片 URL 应走 sendPhoto 并保留源, got %q/%q", method, fileKey)
+	}
+}
+
+// TestSendChainFileImageGoesPhoto 端到端：file 工具发来的 PNG 文件段按 sendPhoto
+// multipart 上传（图片通道），PDF 文件段按 sendDocument 上传（文件通道）。
+func TestSendChainFileImageGoesPhoto(t *testing.T) {
+	f := newFakeAPI()
+	a, srv := testAdapterWithServer(f)
+	defer srv.Close()
+
+	pdfB64 := base64.StdEncoding.EncodeToString([]byte("%PDF-1.4 fake"))
+	chain := msgchain.Builder().Group().
+		FileBase64("photo.png", pngB64).
+		FileBase64("doc.pdf", pdfB64).
+		Build()
+	if _, ok := a.SendGroupMsg(message.QID("tg:-100"), chain); !ok {
+		t.Fatal("发送失败")
+	}
+	if n := f.count("sendPhoto"); n != 1 {
+		t.Fatalf("sendPhoto 调用 = %d, want 1", n)
+	}
+	if n := f.count("sendDocument"); n != 1 {
+		t.Fatalf("sendDocument 调用 = %d, want 1", n)
+	}
+	if r := f.req(0); r.fileField != "photo" || string(r.file) != "\x89PNG\r\n\x1a\n0000000000000000" {
+		t.Fatalf("sendPhoto 应以 photo 字段上传 PNG 字节, got field=%q len=%d", r.fileField, len(r.file))
+	}
+	if r := f.req(1); r.fileField != "document" {
+		t.Fatalf("sendDocument 应以 document 字段上传, got field=%q", r.fileField)
 	}
 }
 

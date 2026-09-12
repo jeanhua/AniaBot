@@ -331,6 +331,38 @@ func TestUploadKindAndSource(t *testing.T) {
 	}
 }
 
+// TestMediaSegmentForUpload file 段指向图片文件时转为 image 段（图片上传通道），
+// 普通文件保持 file 段（文件附件通道）。
+func TestMediaSegmentForUpload(t *testing.T) {
+	s := mediaSegmentForUpload(message.OB11Segment{
+		Type: message.SegmentFile,
+		Data: message.FileMessage{File: "https://e.com/a.png", Name: "a.png"}.Marshal(),
+	})
+	if s.Type != message.SegmentImage {
+		t.Fatalf("图片文件应转 image 段, got %q", s.Type)
+	}
+	if kind, _ := uploadKindOf(s); kind != UploadMediaImage {
+		t.Fatalf("图片文件应按图片上传, kind = %d", kind)
+	}
+
+	s = mediaSegmentForUpload(message.OB11Segment{
+		Type: message.SegmentFile,
+		Data: message.FileMessage{File: "https://e.com/a.pdf", Name: "a.pdf"}.Marshal(),
+	})
+	if s.Type != message.SegmentFile {
+		t.Fatalf("非图片文件应保持 file 段, got %q", s.Type)
+	}
+	if kind, _ := uploadKindOf(s); kind != UploadMediaFile {
+		t.Fatalf("非图片文件应按文件上传, kind = %d", kind)
+	}
+
+	// image 段原样返回
+	img := message.OB11Segment{Type: message.SegmentImage, Data: message.ImageMessage{File: "https://e.com/a.png"}.Marshal()}
+	if got := mediaSegmentForUpload(img); got.Type != message.SegmentImage {
+		t.Fatalf("image 段应原样返回, got %q", got.Type)
+	}
+}
+
 func TestNewClientID(t *testing.T) {
 	seen := map[string]bool{}
 	for i := 0; i < 100; i++ {

@@ -202,7 +202,17 @@ func (a *telegramAdapter) sendText(ctx context.Context, chatID int64, text strin
 
 // sendMediaSegment 发送一个媒体段：按段型映射方法名与文件键。
 func (a *telegramAdapter) sendMediaSegment(ctx context.Context, chatID int64, s message.OB11Segment, caption string, replyTo *int) (int, bool) {
-	method, fileKey, fileName := "", "", ""
+	method, fileKey, fileName := mediaMethodOf(s)
+	if method == "" || fileKey == "" {
+		return 0, false
+	}
+	return a.sendMedia(ctx, method, chatID, fileKey, fileName, caption, replyTo)
+}
+
+// mediaMethodOf 段型 → (Telegram 方法名, 文件源, 上传文件名)。
+// file 段指向图片文件时（file 工具等来源）转 sendPhoto 走图片通道内联展示，
+// 而不是 sendDocument 附件。
+func mediaMethodOf(s message.OB11Segment) (method, fileKey, fileName string) {
 	switch s.Type {
 	case message.SegmentImage:
 		method, fileName = "sendPhoto", "photo.jpg"
@@ -211,10 +221,18 @@ func (a *telegramAdapter) sendMediaSegment(ctx context.Context, chatID int64, s 
 			fileKey, _ = s.Data["file"].(string)
 		}
 	case message.SegmentFile:
+		if imgData, ok := message.FileSegmentAsImage(s); ok {
+			method, fileName = "sendPhoto", "photo.jpg"
+			if n, ok := s.Data["name"].(string); ok && n != "" {
+				fileName = n
+			}
+			fileKey, _ = imgData["file"].(string)
+			return method, fileKey, fileName
+		}
 		method, fileName = "sendDocument", "file"
 		fileKey, _ = s.Data["file"].(string)
-		if name, ok := s.Data["name"].(string); ok && name != "" {
-			fileName = name
+		if n, ok := s.Data["name"].(string); ok && n != "" {
+			fileName = n
 		}
 	case message.SegmentRecord:
 		// RecordMessage.Marshal 只写 file 键（见 messagesegment.go）
@@ -227,10 +245,7 @@ func (a *telegramAdapter) sendMediaSegment(ctx context.Context, chatID int64, s 
 			fileKey, _ = s.Data["file"].(string)
 		}
 	}
-	if method == "" || fileKey == "" {
-		return 0, false
-	}
-	return a.sendMedia(ctx, method, chatID, fileKey, fileName, caption, replyTo)
+	return method, fileKey, fileName
 }
 
 // mediaFields 各媒体方法的文件字段名（Telegram 要求方法专属字段名）。

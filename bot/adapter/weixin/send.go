@@ -100,8 +100,10 @@ func (a *weixinAdapter) sendText(c *client, ctx context.Context, rawUserID, text
 }
 
 // sendMediaSegment 发送一个媒体段：解析段内文件源为字节（http(s)/data:/base64:///
-// file://），经 CDN 加密上传后按段型组装条目发送。
+// file://），经 CDN 加密上传后按段型组装条目发送。file 段指向图片文件时（file 工具
+// 等来源）转图片上传（聊天内联展示），而不是文件附件。
 func (a *weixinAdapter) sendMediaSegment(c *client, ctx context.Context, rawUserID string, s message.OB11Segment) bool {
+	s = mediaSegmentForUpload(s)
 	mediaType, defaultName := uploadKindOf(s)
 	src := segmentFileSource(s.Data)
 	if src == "" {
@@ -141,6 +143,18 @@ func (a *weixinAdapter) sendMediaSegment(c *client, ctx context.Context, rawUser
 		item = &MessageItem{Type: ItemFile, FileItem: &FileItem{Media: media, FileName: name, Len: strconv.FormatInt(up.RawSize, 10)}}
 	}
 	return a.sendMessageItem(c, ctx, rawUserID, item)
+}
+
+// mediaSegmentForUpload file 段指向图片文件时（file 工具等来源）转为 image 段：
+// 走图片上传与图片消息条目（聊天内联展示），而不是文件附件；其余原样返回。
+func mediaSegmentForUpload(s message.OB11Segment) message.OB11Segment {
+	if s.Type != message.SegmentFile {
+		return s
+	}
+	if imgData, ok := message.FileSegmentAsImage(s); ok {
+		return message.OB11Segment{Type: message.SegmentImage, Data: imgData}
+	}
+	return s
 }
 
 // uploadKindOf 段型 → (上传媒体类型, 默认文件名)。

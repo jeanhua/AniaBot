@@ -315,6 +315,13 @@ func fileTypeOf(segType string) int {
 // 再以 msg_type=7 富媒体消息发送（reference 非空时携带引用回复）。
 // 文本说明不支持（官方富媒体消息无 caption 概念，相邻文本已由 sendChain 单独成条发送）。
 func (a *qqOfficialAdapter) sendMedia(ctx context.Context, openid string, isGroup bool, s message.OB11Segment, reference string) (string, bool) {
+	// file 段指向图片文件时（file 工具等来源）按图片类型（file_type=1）上传，
+	// 聊天内联展示，而不是文件类型（file_type=4）
+	if s.Type == message.SegmentFile {
+		if imgData, ok := message.FileSegmentAsImage(s); ok {
+			s = message.OB11Segment{Type: message.SegmentImage, Data: imgData}
+		}
+	}
 	src := ""
 	if u, ok := s.Data["url"].(string); ok && u != "" {
 		src = u
