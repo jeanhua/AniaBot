@@ -35,7 +35,10 @@ func newMsgCache(perUser, maxUsers int) *msgCache {
 }
 
 // Push 记录一条消息；用户列表超上限时淘汰最旧，用户数超上限时淘汰最久未更新的用户。
+// 入缓存前剔除内联 base64/data 负载：微信入站图片会下载解密为 data URI（MB 级）
+// 写入 url 键供当轮 AI 加载，缓存只保留轻量信息，避免大图常驻内存。
 func (c *msgCache) Push(userID string, m message.Message) {
+	m = message.StripInlinePayloadMessage(m)
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	e := c.msgs[userID]

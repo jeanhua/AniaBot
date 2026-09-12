@@ -181,3 +181,31 @@ func TestCacheSentStripsBase64(t *testing.T) {
 		t.Fatal("原出站段被修改，base64 file 不应丢失")
 	}
 }
+
+// TestMsgCachePushStripsInlinePayload 入站附件下载转的 data URI 不入缓存，
+// file 键（CDN URL）与 http(s) url 保留，且不修改传入的消息。
+func TestMsgCachePushStripsInlinePayload(t *testing.T) {
+	c := newMsgCache(3, 10)
+	dataURI := "data:image/png;base64,AAAA"
+	msg := message.Message{
+		MessageId: msgID("ch1", "m1"),
+		Message: []message.OB11Segment{
+			{Type: message.SegmentImage, Data: message.ImageMessage{File: "https://cdn.example.com/a.png", Url: dataURI}.Marshal()},
+		},
+	}
+	c.Push("ch1", msg)
+
+	if _, ok := msg.Message[0].Data["url"]; !ok {
+		t.Fatal("传入的消息被修改了")
+	}
+	cached, ok := c.Find("ch1", "m1")
+	if !ok {
+		t.Fatal("缓存应命中")
+	}
+	if _, ok := cached.Message[0].Data["url"]; ok {
+		t.Fatal("缓存的 data URI 未被剔除")
+	}
+	if cached.Message[0].Data["file"] != "https://cdn.example.com/a.png" {
+		t.Fatalf("file 键应保留 = %v", cached.Message[0].Data["file"])
+	}
+}

@@ -169,3 +169,22 @@ func TestFriendlyTextForwardInlineContent(t *testing.T) {
 		t.Fatalf("内联 content 存在时不应出现转发占位, got %q", text)
 	}
 }
+
+// TestFriendlyTextStrippedSegmentPlaceholder 剔除内联负载后的图片/录音/视频段
+// （无 url/file 键）仍保留占位符，使历史文本体现「此处有媒体」而非整段隐形。
+func TestFriendlyTextStrippedSegmentPlaceholder(t *testing.T) {
+	m := Message{
+		Message: []OB11Segment{
+			{Type: SegmentImage, Data: map[string]any{"summary": "[图片]"}},
+			{Type: SegmentRecord, Data: map[string]any{}},
+			{Type: SegmentVideo, Data: map[string]any{}},
+			{Type: SegmentText, Data: TextMessage{Text: "after"}.Marshal()},
+		},
+	}
+	got := m.FriendlyText(true)
+	for _, want := range []string{"[图片]", "[录音]", "[视频]", "after"} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("FriendlyText 缺少 %s: %q", want, got)
+		}
+	}
+}

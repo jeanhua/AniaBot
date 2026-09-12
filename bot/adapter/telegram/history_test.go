@@ -132,3 +132,33 @@ func TestCacheSentStripsBase64(t *testing.T) {
 		t.Fatal("原出站段被修改，base64 file 不应丢失")
 	}
 }
+
+// TestMsgCachePushStripsInlinePayload 入站图片下载转的 data URI 不入缓存，
+// file 键（file_id）与 http(s) URL 保留，且不修改传入的消息。
+func TestMsgCachePushStripsInlinePayload(t *testing.T) {
+	c := newMsgCache(msgCachePerChat, msgCacheMaxChats)
+	dataURI := "data:image/png;base64,AAAA"
+	msg := cachedMsg(-100, 1, "看图")
+	msg.Message = append(msg.Message,
+		message.OB11Segment{Type: message.SegmentImage, Data: message.ImageMessage{File: "file_id_1", Url: dataURI}.Marshal()},
+		message.OB11Segment{Type: message.SegmentImage, Data: message.ImageMessage{File: "https://example.com/a.png", Url: "https://example.com/a.png"}.Marshal()},
+	)
+	c.Push(chatIDRaw(-100), msg)
+
+	if _, ok := msg.Message[1].Data["url"]; !ok {
+		t.Fatal("传入的消息被修改了")
+	}
+	cached, ok := c.Find("-100", 1)
+	if !ok {
+		t.Fatal("缓存应命中")
+	}
+	if _, ok := cached.Message[1].Data["url"]; ok {
+		t.Fatal("缓存的 data URI 未被剔除")
+	}
+	if cached.Message[1].Data["file"] != "file_id_1" {
+		t.Fatalf("file 键应保留 = %v", cached.Message[1].Data["file"])
+	}
+	if cached.Message[2].Data["url"] != "https://example.com/a.png" {
+		t.Fatalf("http url 应保留 = %v", cached.Message[2].Data["url"])
+	}
+}

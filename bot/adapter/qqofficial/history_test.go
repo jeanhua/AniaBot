@@ -118,3 +118,26 @@ func TestCacheSentStripsBase64(t *testing.T) {
 		t.Fatal("原出站段被修改，base64 file 不应丢失")
 	}
 }
+
+// TestMsgCachePushStripsInlinePayload 内联 base64/data 负载不入缓存，http(s) URL 保留。
+func TestMsgCachePushStripsInlinePayload(t *testing.T) {
+	c := newMsgCache(3, 10)
+	m := message.Message{
+		MessageId: "qo:M1",
+		Message: []message.OB11Segment{
+			{Type: message.SegmentImage, Data: message.ImageMessage{File: "https://multimedia.qq.com/a.png", Url: "data:image/png;base64,AAAA"}.Marshal()},
+		},
+	}
+	c.Push("G1", m)
+
+	cached, ok := c.Find("M1")
+	if !ok {
+		t.Fatal("Find 应命中")
+	}
+	if _, ok := cached.Message[0].Data["url"]; ok {
+		t.Fatal("缓存的 data URI 未被剔除")
+	}
+	if cached.Message[0].Data["file"] != "https://multimedia.qq.com/a.png" {
+		t.Fatalf("file 键应保留 = %v", cached.Message[0].Data["file"])
+	}
+}

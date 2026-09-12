@@ -94,3 +94,36 @@ func dummyB64() string {
 	// 24 字节 padding 后的内容，仅用于验证前缀识别
 	return "AAAA"
 }
+
+// TestStripInlinePayloadMessage 消息级瘦身：段内联负载被剔除、http(s) URL 保留、
+// 原消息不受影响。
+func TestStripInlinePayloadMessage(t *testing.T) {
+	dataURI := "data:image/png;base64," + dummyB64()
+	m := Message{
+		MessageId: "wx:u:1",
+		Message: []OB11Segment{
+			{Type: SegmentText, Data: TextMessage{Text: "看图"}.Marshal()},
+			{Type: SegmentImage, Data: ImageMessage{File: "weixin_image", Url: dataURI}.Marshal()},
+			{Type: SegmentImage, Data: ImageMessage{File: "https://example.com/a.png", Url: "https://example.com/a.png"}.Marshal()},
+		},
+	}
+	got := StripInlinePayloadMessage(m)
+
+	// 原消息不受影响
+	if _, ok := m.Message[1].Data["url"]; !ok {
+		t.Fatal("原消息被修改了")
+	}
+	// 内联负载被剔除，http URL 与文本保留
+	if _, ok := got.Message[1].Data["url"]; ok {
+		t.Fatal("data URI 未被剔除")
+	}
+	if got.Message[2].Data["url"] != "https://example.com/a.png" {
+		t.Fatalf("http url = %v", got.Message[2].Data["url"])
+	}
+	if got.Message[0].Data["text"] != "看图" {
+		t.Fatalf("text = %v", got.Message[0].Data["text"])
+	}
+	if got.MessageId != "wx:u:1" {
+		t.Fatalf("MessageId = %q", got.MessageId)
+	}
+}

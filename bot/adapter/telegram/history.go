@@ -36,7 +36,10 @@ func newMsgCache(perChat, maxChats int) *msgCache {
 }
 
 // Push 记录一条消息；会话列表超上限时淘汰最旧，会话数超上限时淘汰最久未更新的会话。
+// 入缓存前剔除内联 base64/data 负载（入站图片下载转的 data URI 同样剔除），
+// 只保留文本与 http(s) URL，避免大图随缓存常驻内存。
 func (c *msgCache) Push(chatID string, m message.Message) {
+	m = message.StripInlinePayloadMessage(m)
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	e := c.msgs[chatID]

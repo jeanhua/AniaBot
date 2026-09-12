@@ -96,6 +96,10 @@ func (raw Message) FriendlyText(showUrl bool, opts ...MsgOptFunc) string {
 						result.WriteString("[图片]")
 					}
 				}
+			} else {
+				// 无 url/file 键的图片段（如缓存剔除内联负载后）保留占位，
+				// 使历史文本仍能体现「此处有图片」
+				result.WriteString("[图片]")
 			}
 		case SegmentRecord:
 			var msg RecordMessage
@@ -105,6 +109,8 @@ func (raw Message) FriendlyText(showUrl bool, opts ...MsgOptFunc) string {
 				} else {
 					result.WriteString("[录音]")
 				}
+			} else {
+				result.WriteString("[录音]")
 			}
 		case SegmentVideo:
 			var msg VideoMessage
@@ -114,6 +120,8 @@ func (raw Message) FriendlyText(showUrl bool, opts ...MsgOptFunc) string {
 				} else {
 					result.WriteString("[视频]")
 				}
+			} else {
+				result.WriteString("[视频]")
 			}
 		case SegmentMention:
 			var msg MentionMessage

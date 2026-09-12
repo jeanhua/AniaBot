@@ -434,3 +434,31 @@ func TestSwitchCredentialsHotReload(t *testing.T) {
 		t.Fatalf("idempotent re-check should keep state: token=%q buf=%q", a.currentToken(), buf)
 	}
 }
+
+// TestMsgCachePushStripsInlinePayload 入站图片下载解密出的 data URI（MB 级）不入缓存，
+// 只保留轻量键，且不修改传入的消息。
+func TestMsgCachePushStripsInlinePayload(t *testing.T) {
+	a := NewAdapter(nil)
+	dataURI := "data:image/png;base64,AAAA"
+	m := message.Message{
+		MessageId: "wx:u@im.wechat:1",
+		Message: []message.OB11Segment{
+			{Type: message.SegmentImage, Data: message.ImageMessage{File: "weixin_image", Url: dataURI}.Marshal()},
+		},
+	}
+	a.msgCache.Push("u@im.wechat", m)
+
+	if _, ok := m.Message[0].Data["url"]; !ok {
+		t.Fatal("传入的消息被修改了")
+	}
+	cached, ok := a.GetMsgDetail("wx:u@im.wechat:1")
+	if !ok {
+		t.Fatal("GetMsgDetail 应命中")
+	}
+	if _, ok := cached.Message[0].Data["url"]; ok {
+		t.Fatal("缓存的 data URI 未被剔除")
+	}
+	if cached.Message[0].Data["file"] != "weixin_image" {
+		t.Fatalf("file 键应保留 = %v", cached.Message[0].Data["file"])
+	}
+}

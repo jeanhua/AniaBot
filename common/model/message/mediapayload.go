@@ -11,6 +11,15 @@ func isInlinePayload(v string) bool {
 	return strings.HasPrefix(v, "base64://") || strings.HasPrefix(v, "data:")
 }
 
+// StripInlinePayloadMessage 返回消息的瘦身副本：消息段经 StripInlinePayloadSegments
+// 剔除内联 base64/data 负载，其余字段原样保留。适配器把消息写入内存历史缓存
+// （msgCache.Push）前统一收口调用，入站/出站/接口回填路径一并覆盖，
+// 避免图片等大负载随缓存常驻内存导致堆占用只升不降。
+func StripInlinePayloadMessage(m Message) Message {
+	m.Message = StripInlinePayloadSegments(m.Message)
+	return m
+}
+
 // StripInlinePayloadSegments 返回消息段的浅拷贝副本，并把 image/file/video/record
 // 段中的内联 base64/data 负载键（file/url）删除，仅保留 http(s) URL、file_id、
 // file:// 路径与文本等轻量信息。
