@@ -222,12 +222,13 @@
       <!-- 小时分布 + 目标排行（单天维度时主图已是小时序列，隐藏小时卡片） -->
       <div class="grid grid-cols-1 xl:grid-cols-12 gap-4">
         <!-- HOURLY -->
-        <section v-if="!singleDay" class="tcard xl:col-span-5 p-6 flex flex-col">
+        <section v-if="!singleDay" class="tcard xl:col-span-5 p-4 sm:p-6 flex flex-col">
           <div class="flex items-center justify-between">
             <span class="tlabel">Hourly Distribution</span>
             <span class="tpill"><span class="tdot bg-zinc-800" />24h</span>
           </div>
-          <div class="flex-1 flex items-end gap-1 pt-5 pb-1 h-36">
+          <!-- 小屏固定高度：单列布局下 flex-1 无可分配空间会把图表区压缩为 0 -->
+          <div class="flex items-end gap-1 pt-5 pb-1 h-36 xl:flex-1">
             <div v-for="(h, i) in hourly" :key="i" class="flex-1 flex flex-col justify-end h-full" :title="`${i}:00 · ${h.total?.total_tokens || 0} tok · ${h.total?.requests || 0} runs`">
               <div class="w-full rounded-t-sm" :class="(h.total?.total_tokens || 0) > 0 ? 'bg-zinc-700' : 'bg-zinc-200'" :style="{ height: hourBarH(h.total?.total_tokens) }" />
             </div>

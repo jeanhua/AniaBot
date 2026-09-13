@@ -254,7 +254,8 @@
           </span>
         </div>
 
-        <div class="flex-1 flex items-end gap-1.5 pt-5 pb-1 h-36">
+        <!-- 小屏固定高度：单列布局下 flex-1 无可分配空间会把图表区压缩为 0 -->
+        <div class="flex items-end gap-1.5 pt-5 pb-1 h-36 xl:flex-1">
           <div v-for="d in tokenDaily" :key="d.date" class="flex-1 flex flex-col justify-end h-full" :title="dayTip(d)">
             <div class="w-full bg-zinc-300 rounded-t-sm" :style="{ height: barH(d.completion_tokens) }" />
             <div class="w-full bg-zinc-700" :style="{ height: barH((d.prompt_tokens || 0) - (d.cached_tokens || 0)) }" />
