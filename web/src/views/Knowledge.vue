@@ -110,7 +110,7 @@
     </div>
 
     <!-- 新增/编辑弹窗 -->
-    <div v-if="showForm" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-50 p-4" @click.self="showForm = false">
+    <div v-if="showForm" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-50 p-4" v-backdrop-close="() => (showForm = false)">
       <form class="bg-white rounded-2xl shadow-2xl p-6 w-136 max-w-full space-y-4" @submit.prevent="onSubmit">
         <h2 class="text-base font-semibold text-slate-800">{{ form.id ? '编辑文档' : '新增文档' }}</h2>
         <div v-if="!form.id">
@@ -145,7 +145,7 @@
     </div>
 
     <!-- 导入 URL 弹窗 -->
-    <div v-if="showImport" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-50 p-4" @click.self="showImport = false">
+    <div v-if="showImport" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-50 p-4" v-backdrop-close="() => (showImport = false)">
       <form class="bg-white rounded-2xl shadow-2xl p-6 w-136 max-w-full space-y-4" @submit.prevent="onImport">
         <h2 class="text-base font-semibold text-slate-800">从 URL 导入</h2>
         <div>

@@ -72,7 +72,7 @@
     <div
       v-if="detail"
       class="fixed inset-0 bg-zinc-950/50 backdrop-blur-sm flex items-center justify-center z-50 p-4"
-      @click.self="detail = null"
+      v-backdrop-close="() => (detail = null)"
     >
       <div class="bg-white rounded-xl shadow-2xl border border-zinc-200 w-full max-w-4xl max-h-[85vh] flex flex-col">
         <div class="flex items-start gap-3 px-5 py-3.5 border-b border-zinc-100 shrink-0">

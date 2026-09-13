@@ -1,6 +1,7 @@
 import { createApp } from 'vue'
 import { createRouter, createWebHashHistory } from 'vue-router'
 import App from './App.vue'
+import backdropClose from './directives/backdropClose'
 import './style.css'
 
 const routes = [
@@ -28,4 +29,4 @@ export const router = createRouter({
   routes,
 })
 
-createApp(App).use(router).mount('#app')
+createApp(App).directive('backdrop-close', backdropClose).use(router).mount('#app')

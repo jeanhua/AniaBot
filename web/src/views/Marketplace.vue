@@ -244,7 +244,7 @@
     </template>
 
     <!-- GitHub 在线登录弹窗 -->
-    <div v-if="oauthOpen" class="fixed inset-0 bg-zinc-950/50 backdrop-blur-sm flex items-center justify-center z-50 p-4" @click.self="oauthOpen = false">
+    <div v-if="oauthOpen" class="fixed inset-0 bg-zinc-950/50 backdrop-blur-sm flex items-center justify-center z-50 p-4" v-backdrop-close="() => (oauthOpen = false)">
       <div class="tcard p-6 w-[26rem] max-w-full text-center space-y-4">
         <h2 class="text-sm font-semibold text-zinc-900">GitHub 登录</h2>
         <template v-if="oauth.status === 'pending'">
@@ -273,7 +273,7 @@
     </div>
 
     <!-- 详情弹窗 -->
-    <div v-if="showDetail" class="fixed inset-0 bg-zinc-950/50 backdrop-blur-sm flex items-center justify-center z-50 p-4 sm:p-6" @click.self="closeDetail">
+    <div v-if="showDetail" class="fixed inset-0 bg-zinc-950/50 backdrop-blur-sm flex items-center justify-center z-50 p-4 sm:p-6" v-backdrop-close="closeDetail">
       <div class="bg-white rounded-xl shadow-2xl border border-zinc-200 w-full max-w-3xl max-h-[88vh] flex flex-col overflow-hidden">
         <!-- 头部 -->
         <div class="px-6 py-4 border-b border-zinc-100 flex items-start justify-between gap-4 shrink-0">

@@ -230,7 +230,7 @@
     <div
       v-if="detail"
       class="fixed inset-0 bg-zinc-950/50 backdrop-blur-sm flex items-center justify-center z-50 p-4"
-      @click.self="detail = null"
+      v-backdrop-close="() => (detail = null)"
     >
       <div class="bg-white rounded-xl shadow-2xl border border-zinc-200 w-full max-w-3xl max-h-[85vh] flex flex-col">
         <!-- 弹窗头部 -->
@@ -331,7 +331,7 @@
 
     <!-- 新建 / 编辑定时任务弹窗 -->
     <Teleport to="body">
-      <div v-if="clockForm" class="fixed inset-0 z-50 flex items-center justify-center bg-zinc-950/40 p-4" @click.self="clockForm = null">
+      <div v-if="clockForm" class="fixed inset-0 z-50 flex items-center justify-center bg-zinc-950/40 p-4" v-backdrop-close="() => (clockForm = null)">
         <div class="bg-white rounded-xl shadow-2xl border border-zinc-200 w-full max-w-lg max-h-[90vh] overflow-y-auto">
           <div class="px-6 py-4 border-b border-zinc-100 flex items-center justify-between">
             <h3 class="text-[10px] tracking-[0.15em] uppercase text-zinc-800 font-medium">{{ clockForm.id ? '编辑定时任务' : '新建定时任务' }}</h3>

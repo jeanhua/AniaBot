@@ -116,7 +116,7 @@
     <div
       v-if="detail"
       class="fixed inset-0 bg-zinc-950/50 backdrop-blur-sm flex items-center justify-center z-50 p-4"
-      @click.self="detail = null"
+      v-backdrop-close="() => (detail = null)"
     >
       <div class="bg-white rounded-xl shadow-2xl border border-zinc-200 w-full max-w-3xl max-h-[85vh] flex flex-col">
         <!-- 弹窗头部 -->
