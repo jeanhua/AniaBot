@@ -209,6 +209,11 @@ func (n *napcatWebSocketAdapter) GetGroupUserInfo(groupId, userId message.QID) (
 	return request[message.GroupUserInfo](n, "get_group_member_info", params, "ugif")
 }
 
+func (n *napcatWebSocketAdapter) GetGroupMemberList(groupId message.QID, noCache bool) (*[]message.GroupUserInfo, bool) {
+	params := map[string]any{"group_id": rawQQ(groupId), "no_cache": noCache}
+	return request[[]message.GroupUserInfo](n, "get_group_member_list", params, "mlist")
+}
+
 func (n *napcatWebSocketAdapter) GetNCrkey() ([]message.NCrkey, bool) {
 	res, ok := request[[]message.NCrkey](n, "nc_get_rkey", struct{}{}, "ncrkey")
 	if !ok || res == nil {

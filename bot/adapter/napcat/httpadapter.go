@@ -298,6 +298,18 @@ func (n *napcatHttpAdapter) GetGroupUserInfo(groupId, userId message.QID) (*mess
 	return &resp.Data, true
 }
 
+func (n *napcatHttpAdapter) GetGroupMemberList(groupId message.QID, noCache bool) (*[]message.GroupUserInfo, bool) {
+	data := map[string]any{
+		"group_id": rawQQ(groupId),
+		"no_cache": noCache,
+	}
+	resp := message.Response[[]message.GroupUserInfo]{}
+	if !n.postAndCheck(n.baseUrl+"/get_group_member_list", data, &resp) || !checkResponseStatus(&resp) {
+		return nil, false
+	}
+	return &resp.Data, true
+}
+
 func (n *napcatHttpAdapter) GetNCrkey() ([]message.NCrkey, bool) {
 	resp := message.Response[[]message.NCrkey]{}
 	if !n.postAndCheck(n.baseUrl+"/nc_get_rkey", nil, &resp) || !checkResponseStatus(&resp) {

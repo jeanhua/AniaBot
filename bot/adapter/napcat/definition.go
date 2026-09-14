@@ -84,6 +84,10 @@ func (q *qqBot) GetGroupUserInfo(groupId, userId message.QID) (*message.GroupUse
 	return q.qq.GetGroupUserInfo(groupId, userId)
 }
 
+func (q *qqBot) GetGroupMemberList(groupId message.QID, noCache bool) (*[]message.GroupUserInfo, bool) {
+	return q.qq.GetGroupMemberList(groupId, noCache)
+}
+
 func (q *qqBot) GetFriendList() (*[]message.Friend, bool) {
 	return q.qq.GetFriendList()
 }

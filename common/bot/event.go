@@ -119,6 +119,8 @@ type qqGetMsgItf interface {
 	GetForwardMsg(msgId message.QID) (msgs *[]message.Message, success bool)
 	// GetGroupUserInfo 获取群聊中某成员信息
 	GetGroupUserInfo(groupId, userId message.QID) (info *message.GroupUserInfo, success bool)
+	// GetGroupMemberList 获取群成员列表
+	GetGroupMemberList(groupId message.QID, noCache bool) (*[]message.GroupUserInfo, bool)
 	// GetFriendList 获取好友列表
 	GetFriendList() (*[]message.Friend, bool)
 	// GetGroupList 获取群聊列表

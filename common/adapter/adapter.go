@@ -54,6 +54,8 @@ type QQExt interface {
 	GetNCrkey() ([]message.NCrkey, bool)
 	// GetGroupUserInfo 获取群用户信息
 	GetGroupUserInfo(groupId, userId message.QID) (info *message.GroupUserInfo, success bool)
+	// GetGroupMemberList 获取群成员列表
+	GetGroupMemberList(groupId message.QID, noCache bool) (*[]message.GroupUserInfo, bool)
 	// GetForwardMsg 获取转发消息
 	GetForwardMsg(msgId message.QID) (msgs *[]message.Message, success bool)
 	// GetAIChatacter 获取AI聊天角色
