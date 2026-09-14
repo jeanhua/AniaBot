@@ -11,6 +11,8 @@
 
 ## [Unreleased]
 
+## [v4.7.4] - 2026-09-14
+
 ### 新增
 
 - 新增 QQ 群成员列表获取接口 `bot.QQ.GetGroupMemberList`。
