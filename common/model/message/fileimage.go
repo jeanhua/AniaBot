@@ -89,6 +89,23 @@ func sniffImageBase64(b64 string) bool {
 	return sniffImageMagic(data)
 }
 
+// SniffImageMIME 按文件头魔数识别多模态模型服务可直接接受的图片格式
+// （jpeg/png/gif/webp），供各适配器生成 data URI 时使用——MIME 标签必须与
+// 实际字节一致，否则模型端按标签解码失败会报"unsupported image"。
+func SniffImageMIME(data []byte) (string, bool) {
+	switch {
+	case len(data) >= 3 && data[0] == 0xff && data[1] == 0xd8 && data[2] == 0xff:
+		return "image/jpeg", true
+	case len(data) >= 8 && string(data[:8]) == "\x89PNG\r\n\x1a\n":
+		return "image/png", true
+	case len(data) >= 6 && (string(data[:6]) == "GIF87a" || string(data[:6]) == "GIF89a"):
+		return "image/gif", true
+	case len(data) >= 12 && string(data[:4]) == "RIFF" && string(data[8:12]) == "WEBP":
+		return "image/webp", true
+	}
+	return "", false
+}
+
 // sniffImageMagic 按文件头魔数识别常见图片格式（PNG/JPEG/GIF/WebP/BMP）。
 func sniffImageMagic(b []byte) bool {
 	if len(b) >= 8 && string(b[:8]) == "\x89PNG\r\n\x1a\n" {

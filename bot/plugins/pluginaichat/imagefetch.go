@@ -6,9 +6,10 @@ import (
 	"encoding/base64"
 	"fmt"
 	"image"
-	_ "image/gif"  // 注册 GIF 解码器（转码备用）
-	_ "image/jpeg" // 注册 JPEG 解码器（转码备用）
-	"image/png"    // PNG 解码注册 + 转码输出
+	_ "image/gif" // 注册 GIF 解码器（转码备用）
+	"image/jpeg"  // JPEG 解码注册 + baseline 重编码输出
+
+	"image/png" // PNG 解码注册 + 转码输出
 	"strings"
 	"time"
 
@@ -26,35 +27,63 @@ const (
 )
 
 // fetchImageDataURI 把图片引用统一为 data URI：
-//   - data: URI 原样透传（本地图片等场景）；
-//   - http(s) URL 在本机下载，按魔数识别真实格式，webp/png/jpeg/gif 直接内联；
-//     其余格式（如 QQ 常见的 BMP）解码后转码为 PNG。
+//   - data: URI 解码出原始字节后按内容重新规范化（适配器贴错 MIME 标签、
+//     渐进式 JPEG 等问题在此统一修正，不再原样透传）；
+//   - http(s) URL 在本机下载后走同一规范化流程。
 //
 // 这样上游模型服务不再需要自己拉取 QQ 临时链接（rkey 过期、机房拉不到时
-// 会报“不支持的图片”400 错误），且格式始终在模型服务支持范围内。
+// 会报"不支持的图片"400 错误），且格式始终在模型服务支持范围内。
 func fetchImageDataURI(ctx context.Context, ref string) (string, error) {
-	if strings.HasPrefix(ref, "data:") {
-		return ref, nil
+	data := []byte(nil)
+	switch {
+	case strings.HasPrefix(ref, "data:"):
+		payload, err := decodeDataURIPayload(ref)
+		if err != nil {
+			return "", err
+		}
+		data = payload
+	case strings.HasPrefix(ref, "base64://"):
+		payload, err := base64.StdEncoding.DecodeString(strings.TrimPrefix(ref, "base64://"))
+		if err != nil {
+			return "", fmt.Errorf("base64 图片解码失败: %w", err)
+		}
+		data = payload
+	default:
+		client := resty.New().
+			SetTimeout(imageFetchTimeout).
+			SetHeader("User-Agent", imageFetchUserAgent)
+		resp, err := client.R().SetContext(ctx).Get(ref)
+		if err != nil {
+			return "", fmt.Errorf("下载图片失败: %w", err)
+		}
+		if !resp.IsSuccess() {
+			return "", fmt.Errorf("下载图片失败: HTTP %d", resp.StatusCode())
+		}
+		data = resp.Body()
 	}
-	client := resty.New().
-		SetTimeout(imageFetchTimeout).
-		SetHeader("User-Agent", imageFetchUserAgent)
-	resp, err := client.R().SetContext(ctx).Get(ref)
-	if err != nil {
-		return "", fmt.Errorf("下载图片失败: %w", err)
-	}
-	if !resp.IsSuccess() {
-		return "", fmt.Errorf("下载图片失败: HTTP %d", resp.StatusCode())
-	}
-	data := resp.Body()
 	if len(data) == 0 {
 		return "", fmt.Errorf("图片内容为空")
 	}
 	if len(data) > imageFetchMaxBytes {
 		return "", fmt.Errorf("图片过大（%.1fMB，上限 %.1fMB）", float64(len(data))/(1<<20), float64(imageFetchMaxBytes)/(1<<20))
 	}
+	return imageDataURI(data)
+}
+
+// imageDataURI 把图片字节规范化为可直接发给多模态模型的 data URI：
+//   - 按魔数识别真实格式，jpeg 统一重编码为 baseline（渐进式/CMYK 等 JPEG
+//     即使 MIME 标签正确，部分模型服务解码也会报"unsupported image"）；
+//   - webp/png/gif 直接内联原始字节；
+//   - 其余格式（如 QQ 常见的 BMP）解码后转码为 PNG。
+func imageDataURI(data []byte) (string, error) {
 	if mime, ok := sniffImageMIME(data); ok {
-		// 模型服务支持的格式直接内联，保持原始字节
+		if mime == "image/jpeg" {
+			if buf, err := reencodeBaselineJPEG(data); err == nil {
+				data = buf
+			}
+			// 重编码失败（如解码器不认识的 JPEG 变体）时保留原始字节，
+			// 由模型服务自行判断
+		}
 		return "data:" + mime + ";base64," + base64.StdEncoding.EncodeToString(data), nil
 	}
 	// 不支持直接内联的格式（如 BMP）：解码后转码为 PNG
@@ -67,6 +96,34 @@ func fetchImageDataURI(ctx context.Context, ref string) (string, error) {
 		return "", fmt.Errorf("图片转码失败: %w", err)
 	}
 	return "data:image/png;base64," + base64.StdEncoding.EncodeToString(buf.Bytes()), nil
+}
+
+// decodeDataURIPayload 解码 data:[<mime>];base64,<payload> 的 base64 负载，
+// 忽略其中声明的 MIME（可能被适配器贴错，格式以实际字节为准）。
+func decodeDataURIPayload(uri string) ([]byte, error) {
+	_, payload, ok := strings.Cut(uri, ",")
+	if !ok {
+		return nil, fmt.Errorf("data URI 格式无效（缺少逗号分隔符）")
+	}
+	data, err := base64.StdEncoding.DecodeString(payload)
+	if err != nil {
+		return nil, fmt.Errorf("data URI base64 解码失败: %w", err)
+	}
+	return data, nil
+}
+
+// reencodeBaselineJPEG 解码任意 JPEG 变体（渐进式/CMYK 等）并重编码为
+// 标准 baseline JPEG。
+func reencodeBaselineJPEG(data []byte) ([]byte, error) {
+	img, err := jpeg.Decode(bytes.NewReader(data))
+	if err != nil {
+		return nil, err
+	}
+	var buf bytes.Buffer
+	if err := jpeg.Encode(&buf, img, nil); err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
 }
 
 // sniffImageMIME 按文件魔数识别模型服务可直接接受的图片格式，返回 MIME 与是否识别成功。

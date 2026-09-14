@@ -1,7 +1,10 @@
 package pluginaichat
 
 import (
+	"bytes"
 	"context"
+	"image"
+	"image/png"
 	"io"
 	"log/slog"
 	"os"
@@ -220,7 +223,12 @@ func TestSubagentCallbacksLocalImageIsolation(t *testing.T) {
 	p.cfg.Multimodal = true
 
 	imgPath := filepath.Join(t.TempDir(), "test.png")
-	if err := os.WriteFile(imgPath, []byte("fake-png-data"), 0o644); err != nil {
+	// 真实 PNG 字节：加载路径按内容魔数识别格式，假字节会被判定为无法识别
+	var pngBuf bytes.Buffer
+	if err := png.Encode(&pngBuf, image.NewRGBA(image.Rect(0, 0, 1, 1))); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(imgPath, pngBuf.Bytes(), 0o644); err != nil {
 		t.Fatal(err)
 	}
 

@@ -219,8 +219,13 @@ func (a *telegramAdapter) downloadResource(ctx context.Context, fileID string) s
 		a.logger.Debug("Telegram 文件下载失败", "filePath", f.FilePath, "error", err)
 		return ""
 	}
-	// 与飞书一致：图片统一标为 image/png（多模态模型按 data URI 前缀识别）
-	return "data:image/png;base64," + base64.StdEncoding.EncodeToString(resp.Body())
+	// 按实际字节识别 MIME（标签与内容不一致时模型端解码会报 unsupported image），
+	// 识别失败再回退 image/png
+	mime := "image/png"
+	if m, ok := message.SniffImageMIME(resp.Body()); ok {
+		mime = m
+	}
+	return "data:" + mime + ";base64," + base64.StdEncoding.EncodeToString(resp.Body())
 }
 
 func appendTextSeg(segs []message.OB11Segment, text string) []message.OB11Segment {

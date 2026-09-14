@@ -2,11 +2,9 @@ package pluginaichat
 
 import (
 	"context"
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"os"
-	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
@@ -386,7 +384,10 @@ func (p *AIChatPlugin) loadLocalImageInto(ctx context.Context, path string, load
 	if err != nil {
 		return fmt.Sprintf("读取本地图片失败: %v", err)
 	}
-	dataURI := "data:" + imageMIME(path) + ";base64," + base64.StdEncoding.EncodeToString(data)
+	dataURI, err := imageDataURI(data)
+	if err != nil {
+		return fmt.Sprintf("本地图片处理失败: %v", err)
+	}
 	hash := message.ImageHash(dataURI)
 
 	if p.cfg.Multimodal {
@@ -408,22 +409,6 @@ func (p *AIChatPlugin) loadLocalImageInto(ctx context.Context, path string, load
 		usageSink(usage)
 	}
 	return fmt.Sprintf("主模型不支持多模态，以下是备用图片识别模型返回的图片描述：\n<图片 %s>\n%s\n</图片 %s>", hash, description, hash)
-}
-
-// imageMIME 根据文件扩展名推断图片 MIME 类型，无法识别时回退到 image/png。
-func imageMIME(path string) string {
-	switch strings.ToLower(filepath.Ext(path)) {
-	case ".jpg", ".jpeg":
-		return "image/jpeg"
-	case ".gif":
-		return "image/gif"
-	case ".webp":
-		return "image/webp"
-	case ".bmp":
-		return "image/bmp"
-	default:
-		return "image/png"
-	}
 }
 
 type mcpFileConfig struct {

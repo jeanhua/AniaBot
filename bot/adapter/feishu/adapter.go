@@ -946,7 +946,12 @@ func (a *feishuAdapter) downloadResource(messageID, fileKey, resourceType string
 	}
 	mime := "application/octet-stream"
 	if resourceType == "image" {
+		// 按实际字节识别 MIME（标签与内容不一致时模型端解码会报 unsupported image），
+		// 识别失败再回退 image/png
 		mime = "image/png"
+		if m, ok := message.SniffImageMIME(data); ok {
+			mime = m
+		}
 	}
 	return "data:" + mime + ";base64," + base64.StdEncoding.EncodeToString(data)
 }
