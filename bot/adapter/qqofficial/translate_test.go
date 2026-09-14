@@ -278,6 +278,36 @@ func TestContentToSegmentsQuote(t *testing.T) {
 	}
 }
 
+// TestRenderFaceTags 平台内联表情标记 → 可读文本：ext（base64 JSON）能解出表情名
+// 时实名渲染，解不出退化为 [表情]；正文其余部分保持不变。
+func TestRenderFaceTags(t *testing.T) {
+	const laughcry = `<faceType=1,faceId="182",ext="eyJ0ZXh0Ijoi56yR5ZOtIn0=">`
+	if got := renderFaceTags(laughcry); got != "[表情:笑哭]" {
+		t.Errorf("实名表情渲染失败: %q", got)
+	}
+	if got := renderFaceTags("看" + laughcry + "这个"); got != "看[表情:笑哭]这个" {
+		t.Errorf("正文混排渲染失败: %q", got)
+	}
+	if got := renderFaceTags(laughcry + `看<faceType=1,faceId="4" ext="!!!">` + `<faceType=1,faceId="5">`); got != "[表情:笑哭]看[表情][表情]" {
+		t.Errorf("无名表情退化失败: %q", got)
+	}
+	if got := renderFaceTags("普通文本"); got != "普通文本" {
+		t.Errorf("无表情文本不应变化: %q", got)
+	}
+	// 无 padding 的 base64 变体
+	if got := renderFaceTags(`<faceType=1,faceId="182",ext="eyJ0ZXh0Ijoi56yR5ZOtIn0">`); got != "[表情:笑哭]" {
+		t.Errorf("无 padding base64 解码失败: %q", got)
+	}
+}
+
+// TestContentToSegmentsFace 纯表情消息渲染后仍产出文本段。
+func TestContentToSegmentsFace(t *testing.T) {
+	segs := contentToSegments(`<faceType=1,faceId="182",ext="eyJ0ZXh0Ijoi56yR5ZOtIn0=">`, 0, nil)
+	if len(segs) != 1 || segs[0].Data["text"] != "[表情:笑哭]" {
+		t.Fatalf("表情消息渲染失败: %+v", segs)
+	}
+}
+
 // TestAttachmentsToSegments 附件类型映射。
 func TestAttachmentsToSegments(t *testing.T) {
 	segs := attachmentsToSegments([]eventAttachment{

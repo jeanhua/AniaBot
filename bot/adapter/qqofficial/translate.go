@@ -1,6 +1,7 @@
 package qqofficial
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"regexp"
 	"strings"
@@ -259,10 +260,11 @@ func (a *qqOfficialAdapter) emitPlatformEvent(eventType string, data any) {
 // ---------- 内容翻译 ----------
 
 // contentToSegments 消息文本 → 通用段。
+// 内联表情标记（<faceType=...>，ext 为腾讯侧 base64 JSON 元数据）渲染为 [表情:xx] 可读文本；
 // message_type=102（聊天记录）/103（引用消息）且正文为空时，取 msg_elements 的
 // 拼接内容兜底；ARK 卡片（message_type=3）的 content 已是平台拼好的文本摘要，直接使用。
 func contentToSegments(content string, messageType int, elements []msgElement) []message.OB11Segment {
-	text := strings.TrimSpace(content)
+	text := strings.TrimSpace(renderFaceTags(content))
 	if text == "" && (messageType == 102 || messageType == 103) {
 		var sb strings.Builder
 		for _, e := range elements {
@@ -270,7 +272,7 @@ func contentToSegments(content string, messageType int, elements []msgElement) [
 				if sb.Len() > 0 {
 					sb.WriteString("\n")
 				}
-				sb.WriteString(strings.TrimSpace(e.Content))
+				sb.WriteString(strings.TrimSpace(renderFaceTags(e.Content)))
 			}
 		}
 		text = sb.String()
@@ -287,6 +289,56 @@ func contentToSegments(content string, messageType int, elements []msgElement) [
 		Type: message.SegmentText,
 		Data: message.TextMessage{Text: text}.Marshal(),
 	}}
+}
+
+// faceTagRe 匹配平台文本 content 内联的表情标记，例如：
+//
+//	<faceType=1,faceId="182",ext="eyJ0ZXh0Ijoi56yR5ZOtIn0=">
+//
+// 标记由 QQ 官方平台直接写入 content（腾讯侧格式），属性顺序/空白可能变化，
+// 统一在标签内按属性名提取。
+var faceTagRe = regexp.MustCompile(`<faceType=[^>]*>`)
+
+// faceExtRe 提取表情标记的 ext 属性：base64 编码的 JSON（形如 {"text":"笑哭"}），
+// 是腾讯对表情元数据的不透明封装，客户端需自行解码。
+var faceExtRe = regexp.MustCompile(`ext="([^"]*)"`)
+
+// renderFaceTags 把 content 内联的表情标记渲染为可读文本：能从 ext 解出表情名时
+// 输出 [表情:笑哭]，否则退化为 [表情]。原始标记夹着 base64 串，原样透传既干扰
+// AI 理解也污染日志。
+func renderFaceTags(text string) string {
+	if !strings.Contains(text, "<faceType=") {
+		return text
+	}
+	return faceTagRe.ReplaceAllStringFunc(text, func(tag string) string {
+		if m := faceExtRe.FindStringSubmatch(tag); m != nil {
+			if name := faceExtName(m[1]); name != "" {
+				return "[表情:" + name + "]"
+			}
+		}
+		return "[表情]"
+	})
+}
+
+// faceExtName 解码表情 ext 属性取表情名；解码失败或为空返回空串。
+// 兼容带/不带 padding 两种 base64 变体。
+func faceExtName(ext string) string {
+	if ext == "" {
+		return ""
+	}
+	raw, err := base64.StdEncoding.DecodeString(ext)
+	if err != nil {
+		if raw, err = base64.RawStdEncoding.DecodeString(ext); err != nil {
+			return ""
+		}
+	}
+	var meta struct {
+		Text string `json:"text"`
+	}
+	if err := json.Unmarshal(raw, &meta); err != nil {
+		return ""
+	}
+	return strings.TrimSpace(meta.Text)
 }
 
 // attachmentLineRe 匹配聊天记录（message_type=102）等文本内嵌的附件描述行，例如：
