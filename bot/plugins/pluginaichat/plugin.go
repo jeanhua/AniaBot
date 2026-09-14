@@ -239,10 +239,10 @@ func (p *AIChatPlugin) OnGroupMsg(ctx context.Context, bot bot.Bot, cmd command.
 	defer lock.release()
 	defer p.clearActiveContext(msg.GroupId, true)
 
-	chat := p.getChat(bot, msg.GroupId, true, p.getPromptForID(msg.GroupId, true))
-	if chat == nil {
+	chat, err := p.getChat(bot, msg.GroupId, true, p.getPromptForID(msg.GroupId, true))
+	if err != nil {
 		builder := msgchain.Builder().Group()
-		builder.Text("无法创建对话，请检查日志信息哦")
+		builder.Text("无法创建对话：" + aichat.SafeErrorText(err))
 		bot.SendGroupMsg(msg.GroupId, builder.Build())
 		return true, nil
 	}
@@ -338,10 +338,10 @@ func (p *AIChatPlugin) OnFriendMsg(ctx context.Context, bot bot.Bot, cmd command
 	defer lock.release()
 	defer p.clearActiveContext(msg.Sender.UserId, false)
 
-	chat := p.getChat(bot, msg.Sender.UserId, false, p.getPromptForID(msg.Sender.UserId, false))
-	if chat == nil {
+	chat, err := p.getChat(bot, msg.Sender.UserId, false, p.getPromptForID(msg.Sender.UserId, false))
+	if err != nil {
 		builder := msgchain.Builder().Friend()
-		builder.Text("无法创建对话，请检查日志信息哦")
+		builder.Text("无法创建对话：" + aichat.SafeErrorText(err))
 		bot.SendFriendMsg(msg.Sender.UserId, builder.Build())
 		return true, nil
 	}
@@ -596,7 +596,7 @@ func (p *AIChatPlugin) processChatBatch(ctx context.Context, b bot.Bot, id messa
 			p.sendPlainText(b, id, isGroup, "请求超时")
 		default:
 			p.Logger.Error("AI请求错误", "error", err.Error())
-			p.sendPlainText(b, id, isGroup, "无法解析的错误信息，请查看日志")
+			p.sendPlainText(b, id, isGroup, aichat.UserErrorText(err))
 		}
 		return false
 	}

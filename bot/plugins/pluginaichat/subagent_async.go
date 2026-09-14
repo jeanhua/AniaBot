@@ -208,10 +208,10 @@ func (p *AIChatPlugin) tryProcessPending(b bot.Bot, id message.QID, isGroup bool
 	}
 	defer lock.release()
 
-	chat := p.getChat(b, id, isGroup, p.getPromptForID(id, isGroup))
-	if chat == nil {
+	chat, err := p.getChat(b, id, isGroup, p.getPromptForID(id, isGroup))
+	if err != nil {
 		p.drainPending(id, isGroup)
-		p.Logger.Error("tryProcessPending: 无法获取 ChatBot", "id", id, "is_group", isGroup)
+		p.Logger.Error("tryProcessPending: 无法获取 ChatBot", "error", err.Error(), "id", id, "is_group", isGroup)
 		return
 	}
 

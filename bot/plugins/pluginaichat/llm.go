@@ -202,7 +202,7 @@ func (p *AIChatPlugin) buildCompressorClient() *aichat.LLMClient {
 	return client
 }
 
-func (p *AIChatPlugin) getChat(b bot.Bot, id message.QID, isGroup bool, prompt string) *aichat.ChatBot {
+func (p *AIChatPlugin) getChat(b bot.Bot, id message.QID, isGroup bool, prompt string) (*aichat.ChatBot, error) {
 	key := sessionKey(id, isGroup)
 	if v, ok := p.chats.Load(key); ok {
 		e := v.(*chatEntry)
@@ -214,7 +214,7 @@ func (p *AIChatPlugin) getChat(b bot.Bot, id message.QID, isGroup bool, prompt s
 			e.chat.SetSystemPrompt(prompt)
 			e.chat.SetScenePrompt(p.buildScenePrompt(b, id, isGroup))
 		}
-		return e.chat
+		return e.chat, nil
 	}
 	// 会话未驻留（首次发言或被淘汰后）：重新创建并从持久层回放历史
 	{
@@ -264,7 +264,7 @@ func (p *AIChatPlugin) getChat(b bot.Bot, id message.QID, isGroup bool, prompt s
 		)
 		if err != nil {
 			p.Logger.Error("创建 ChatBot 失败", "error", err.Error())
-			return nil
+			return nil, err
 		}
 		c.SetMaxIterations(p.mainMaxIterations())
 		// 注入 SkillManager，让 system prompt 包含 available_skills
@@ -287,6 +287,6 @@ func (p *AIChatPlugin) getChat(b bot.Bot, id message.QID, isGroup bool, prompt s
 				p.sessionInject.Store(key, res.Context)
 			}
 		}
-		return c
+		return c, nil
 	}
 }

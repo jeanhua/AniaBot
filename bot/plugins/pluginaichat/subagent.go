@@ -206,7 +206,9 @@ func (p *AIChatPlugin) runSubagentWithOptions(ctx context.Context, b bot.Bot, id
 			return "", usage, ctx.Err()
 		default:
 			logger.Warn("子代理执行失败", "id", id, "is_group", isGroup, "error", err.Error())
-			return "", usage, err
+			// 回填给主 AI 的失败原因用脱敏后的用户文案（SDK 错误原文含请求
+			// URL 与原始响应 JSON，可能带密钥，不适合进入对话链路）
+			return "", usage, fmt.Errorf("%s", aichat.UserErrorText(err))
 		}
 	}
 
