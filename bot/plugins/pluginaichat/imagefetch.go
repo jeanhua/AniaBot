@@ -78,11 +78,13 @@ func fetchImageDataURI(ctx context.Context, ref string) (string, error) {
 func imageDataURI(data []byte) (string, error) {
 	if mime, ok := sniffImageMIME(data); ok {
 		if mime == "image/jpeg" {
-			if buf, err := reencodeBaselineJPEG(data); err == nil {
-				data = buf
+			buf, err := reencodeBaselineJPEG(data)
+			if err != nil {
+				// 本机解码都失败的 JPEG（截断/损坏/罕见变体）原样转发只会让
+				// 模型服务整轮 400，这里按单图加载失败处理
+				return "", fmt.Errorf("JPEG 图片解码失败: %v", err)
 			}
-			// 重编码失败（如解码器不认识的 JPEG 变体）时保留原始字节，
-			// 由模型服务自行判断
+			data = buf
 		}
 		return "data:" + mime + ";base64," + base64.StdEncoding.EncodeToString(data), nil
 	}
