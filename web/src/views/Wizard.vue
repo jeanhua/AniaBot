@@ -26,7 +26,7 @@
           <h1 class="text-xl font-bold text-slate-800">欢迎使用 AniaBot 🎉</h1>
           <p class="text-sm text-slate-500 leading-relaxed">
             这是首次启动，接下来用两步完成最基本的配置：<br />
-            <b>接入平台</b>（QQ / QQ 官方 / 飞书 / Telegram / Discord，可多选）和 <b>AI 对话模型</b>。<br />
+            <b>接入平台</b>（QQ / QQ 官方 / 飞书 / Telegram / Discord / 微信，可多选）和 <b>AI 对话模型</b>。<br />
             其余配置（插件、MCP、Prompt 覆盖等）可稍后在控制面板中完善。
           </p>
           <p class="text-xs text-slate-400">所有配置保存在数据库中，也可随时跳过，之后在「配置管理」中修改。</p>
@@ -73,6 +73,47 @@
               <div>
                 <label class="block text-xs font-medium text-slate-600 mb-1.5">Access Token（可选）</label>
                 <input v-model="form.token" type="password" placeholder="NapCat 端设置了 token 时填写" :class="inputClass" />
+              </div>
+            </template>
+          </div>
+
+          <!-- QQ(Luckylilia / LLBot) -->
+          <div :class="['border rounded-xl p-4 space-y-3 transition-colors', form.enableLuckylilia ? 'border-slate-300 bg-slate-50' : 'border-slate-200']">
+            <label class="flex items-center gap-2.5 cursor-pointer select-none">
+              <input type="checkbox" v-model="form.enableLuckylilia" class="w-4 h-4 accent-zinc-900" />
+              <span class="text-sm font-medium text-slate-700">
+                QQ（Luckylilia / LLBot）
+                <span class="text-xs text-slate-400 font-normal">· OneBot v11 协议端，可与 NapCat 并存（第二个 QQ 账号）</span>
+              </span>
+            </label>
+            <template v-if="form.enableLuckylilia">
+              <div>
+                <label class="block text-xs font-medium text-slate-600 mb-1.5">连接模式</label>
+                <select v-model="form.lilMode" :class="inputClass">
+                  <option value="ws">WebSocket（推荐）</option>
+                  <option value="http">HTTP（Webhook 上报）</option>
+                </select>
+              </div>
+              <div v-if="form.lilMode === 'ws'">
+                <label class="block text-xs font-medium text-slate-600 mb-1.5">WebSocket 地址</label>
+                <input v-model="form.lilWsAddress" type="text" placeholder="ws://localhost:3001" :class="inputClass" />
+                <p class="text-xs text-slate-400 mt-1.5">LLBot 的 WebSocket 服务端地址；Docker 部署时把 localhost 换成内网 IP</p>
+              </div>
+              <template v-else>
+                <div>
+                  <label class="block text-xs font-medium text-slate-600 mb-1.5">LLBot HTTP 地址</label>
+                  <input v-model="form.lilHttpTargetUrl" type="text" placeholder="http://localhost:6690" :class="inputClass" />
+                  <p class="text-xs text-slate-400 mt-1.5">LLBot 开放的「HTTP 服务器」地址；Docker 部署时把 localhost 换成内网 IP</p>
+                </div>
+                <div>
+                  <label class="block text-xs font-medium text-slate-600 mb-1.5">HTTP 监听端口</label>
+                  <input v-model="form.lilHttpListenPort" type="number" placeholder="6689" :class="inputClass" />
+                  <p class="text-xs text-slate-400 mt-1.5">本机端口，LLBot 的「HTTP 客户端」向此端口上报事件</p>
+                </div>
+              </template>
+              <div>
+                <label class="block text-xs font-medium text-slate-600 mb-1.5">Access Token（可选）</label>
+                <input v-model="form.lilToken" type="password" placeholder="LLBot 端设置了 token 时填写" :class="inputClass" />
               </div>
             </template>
           </div>
@@ -286,6 +327,7 @@ const error = ref('')
 const restarting = ref(false)
 const form = reactive({
   enableNapcat: true,
+  enableLuckylilia: false,
   enableQQOfficial: false,
   enableFeishu: false,
   enableTelegram: false,
@@ -294,6 +336,11 @@ const form = reactive({
   httpTargetUrl: '',
   httpListenPort: '',
   token: '',
+  lilMode: 'ws',
+  lilWsAddress: '',
+  lilHttpTargetUrl: '',
+  lilHttpListenPort: '',
+  lilToken: '',
   qqofficialAppId: '',
   qqofficialAppSecret: '',
   qqofficialSandbox: false,
@@ -322,12 +369,17 @@ onMounted(async () => {
   try {
     const cfg = await api.getConfig()
     form.enableNapcat = cfg['bot.platform.napcat.enable'] !== false
+    form.enableLuckylilia = cfg['bot.platform.luckylilia.enable'] === true
     form.enableQQOfficial = cfg['bot.platform.qqofficial.enable'] === true
     form.enableFeishu = cfg['bot.platform.feishu.enable'] === true
     form.mode = cfg['bot.adapter.mode'] || 'ws'
     form.wsAddress = cfg['bot.adapter.ws.address'] || ''
     form.httpTargetUrl = cfg['bot.adapter.http.target_url'] || ''
     form.httpListenPort = cfg['bot.adapter.http.listen_port'] ? String(cfg['bot.adapter.http.listen_port']) : ''
+    form.lilMode = cfg['bot.luckylilia.mode'] || 'ws'
+    form.lilWsAddress = cfg['bot.luckylilia.ws.address'] || ''
+    form.lilHttpTargetUrl = cfg['bot.luckylilia.http.target_url'] || ''
+    form.lilHttpListenPort = cfg['bot.luckylilia.http.listen_port'] ? String(cfg['bot.luckylilia.http.listen_port']) : ''
     form.qqofficialAppId = cfg['bot.qqofficial.app_id'] || ''
     form.qqofficialSandbox = cfg['bot.qqofficial.sandbox'] === true
     form.feishuAppId = cfg['bot.feishu.app_id'] || ''
@@ -350,8 +402,8 @@ onMounted(async () => {
 // 平台步骤校验：至少启用一个平台
 function onNext() {
   error.value = ''
-  if (!form.enableNapcat && !form.enableQQOfficial && !form.enableFeishu && !form.enableTelegram && !form.enableDiscord && !form.enableWeixin) {
-    error.value = '请至少启用一个平台（QQ、飞书、Telegram、Discord 或微信），也可「跳过引导」稍后在配置管理中设置'
+  if (!form.enableNapcat && !form.enableLuckylilia && !form.enableQQOfficial && !form.enableFeishu && !form.enableTelegram && !form.enableDiscord && !form.enableWeixin) {
+    error.value = '请至少启用一个平台（QQ、QQ(LLBot)、飞书、Telegram、Discord 或微信），也可「跳过引导」稍后在配置管理中设置'
     return
   }
   step.value++
@@ -359,14 +411,15 @@ function onNext() {
 
 async function onSave() {
   error.value = ''
-  if (!form.enableNapcat && !form.enableQQOfficial && !form.enableFeishu && !form.enableTelegram && !form.enableDiscord && !form.enableWeixin) {
-    error.value = '请至少启用一个平台（QQ、飞书、Telegram、Discord 或微信），也可「跳过引导」稍后在配置管理中设置'
+  if (!form.enableNapcat && !form.enableLuckylilia && !form.enableQQOfficial && !form.enableFeishu && !form.enableTelegram && !form.enableDiscord && !form.enableWeixin) {
+    error.value = '请至少启用一个平台（QQ、QQ(LLBot)、飞书、Telegram、Discord 或微信），也可「跳过引导」稍后在配置管理中设置'
     return
   }
   const updates = {}
 
   // 平台开关
   updates['bot.platform.napcat.enable'] = form.enableNapcat
+  updates['bot.platform.luckylilia.enable'] = form.enableLuckylilia
   updates['bot.platform.qqofficial.enable'] = form.enableQQOfficial
   updates['bot.platform.feishu.enable'] = form.enableFeishu
   updates['bot.platform.telegram.enable'] = form.enableTelegram
@@ -384,6 +437,19 @@ async function onSave() {
       if (!Number.isNaN(port) && port > 0) updates['bot.adapter.http.listen_port'] = port
     }
     if (form.token.trim()) updates['bot.adapter.token'] = form.token.trim()
+  }
+
+  // QQ(Luckylilia / LLBot)（Token 敏感字段：留空不修改）
+  if (form.enableLuckylilia) {
+    updates['bot.luckylilia.mode'] = form.lilMode
+    if (form.lilMode === 'ws') {
+      if (form.lilWsAddress.trim()) updates['bot.luckylilia.ws.address'] = form.lilWsAddress.trim()
+    } else {
+      if (form.lilHttpTargetUrl.trim()) updates['bot.luckylilia.http.target_url'] = form.lilHttpTargetUrl.trim()
+      const port = parseInt(form.lilHttpListenPort, 10)
+      if (!Number.isNaN(port) && port > 0) updates['bot.luckylilia.http.listen_port'] = port
+    }
+    if (form.lilToken.trim()) updates['bot.luckylilia.token'] = form.lilToken.trim()
   }
 
   // QQ 官方（AppSecret 敏感字段：留空不修改）

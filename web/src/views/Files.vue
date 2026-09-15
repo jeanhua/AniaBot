@@ -334,7 +334,7 @@ function parsePrompt(content) {
   }
 }
 
-// Prompt 覆盖 ID 统一带平台前缀（qq:/qo:/fs:/tg:/dc:）：纯数字自动补 qq: 前缀，
+// Prompt 覆盖 ID 统一带平台前缀（qq:/lil:/qo:/fs:/tg:/dc:/wx:）：纯数字自动补 qq: 前缀，
 // 其他 ID 手动带各自前缀；返回规范化后的 ID。
 function normalizePromptID(id) {
   id = id.trim()
@@ -370,8 +370,14 @@ function validatePromptID(id, kind) {
         return '飞书群 ID 应以 oc_ 开头，如 fs:oc_xxx'
       }
       break
+    case 'lil':
+      if (!/^\d+$/.test(rest)) return 'QQ(LLBot) ID 应为纯数字，如 lil:123456'
+      break
+    case 'wx':
+      if (!/^[A-Za-z0-9_-]+$/.test(rest)) return '微信用户 ID 格式不合法，如 wx:wxid_xxx'
+      break
     default:
-      return '未知平台前缀「' + prefix + '」（支持 qq: / qo: / fs: / tg: / dc:）'
+      return '未知平台前缀「' + prefix + '」（支持 qq: / lil: / qo: / fs: / tg: / dc: / wx:）'
   }
   return ''
 }
