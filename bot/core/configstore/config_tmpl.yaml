@@ -13,6 +13,8 @@ bot:
   platform:
     napcat:
       enable: true # 是否启用 QQ 平台
+    luckylilia:
+      enable: false # 是否启用 QQ(Luckylilia/LLBot) 平台（OneBot v11 协议端；与 NapCat 可并存，群/好友 ID 前缀为 lil:，需同时配置下方 bot.luckylilia.*）
     qqofficial:
       enable: false # 是否启用 QQ 官方平台（需同时配置下方 bot.qqofficial.*）
     feishu:
@@ -76,6 +78,18 @@ bot:
     http:
       listen_port: 6679 # 本地监听端口，用于napcat向bot上报事件。注意这里如果是docker的话使用localhost无法连接，建议换成内网ip，即在napcat配置页面的http client设置为ip
       target_url: http://localhost:6680 # napcat开放的url，用于bot向napcat上报事件
+
+  # Luckylilia(LLBot) 适配器（OneBot v11 QQ 协议端，与 NapCat 同类；websocket/http二选一）
+  luckylilia:
+    mode: ws # 连接模式：ws（WebSocket，推荐）| http（Webhook 上报）
+    # token: LLBot 侧设置了 token 时填写（Authorization: Bearer 方式携带）
+    ws:
+      address: ws://localhost:3001 # websocket 地址，LLBot 的 WebSocket 正向服务地址
+      worker_count: 0 # 处理线程数，设置为0自动调整
+      worker_queue_size: 1024 # 消息队列，消息超出此限制则丢弃消息
+    http:
+      listen_port: 6689 # 本地监听端口，用于LLBot向bot上报事件（与 napcat 的 6679 区分）
+      target_url: http://localhost:6690 # LLBot 开放的 url，用于bot调用 LLBot 接口（发消息等）
 
   # 缓存存储（易失，支持 TTL 与列表语义）
   store:

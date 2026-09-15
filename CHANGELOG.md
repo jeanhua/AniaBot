@@ -11,6 +11,10 @@
 
 ## [Unreleased]
 
+### 新增
+
+- 新增 QQ(Luckylilia/LLBot) 平台适配器：LLBot 也是 OneBot v11 QQ 协议端（与 NapCat 同类），支持 WebSocket / HTTP 两种接入方式，可在面板勾选启用；与 NapCat 可同时启用（ID 前缀 `lil:`），面向 QQ 的插件无需改动即可在该平台生效。
+
 ## [v4.7.4] - 2026-09-14
 
 ### 新增
