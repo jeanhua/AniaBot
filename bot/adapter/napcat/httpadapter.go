@@ -2,10 +2,13 @@ package napcat
 
 import (
 	"context"
+	"crypto/subtle"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log"
+	"net"
 	"net/http"
 	"strings"
 	"time"
@@ -25,6 +28,10 @@ type napcatHttpAdapter struct {
 }
 
 const defaultTimeout = time.Second * 5
+
+// maxEventBodySize 上报事件体上限：容忍 base64 大图/语音等大事件，
+// 同时防止无界读取把内存撑爆
+const maxEventBodySize = 64 << 20 // 64MB
 
 func (n *napcatHttpAdapter) createContext() (context.Context, context.CancelFunc) {
 	return context.WithTimeout(context.Background(), defaultTimeout)
@@ -75,10 +82,16 @@ func (n *napcatHttpAdapter) Serve(v *viper.Viper) {
 		// 时无法甄别事件来源，若放行则任何能访问该端口的主机都能伪造事件
 		// （冒充管理员等），因此拒绝全部上报并在日志中提示配置方式
 		log.Printf("警告: 未配置 bot.adapter.token，HTTP 上报接口将拒绝所有事件（请在面板配置 token 并同步到 NapCat 的 HTTP 客户端后重启）")
-	} else {
-		log.Printf("本地HTTP服务器已启动 http://localhost:%d...（上报需携带 token）\n", port)
 	}
-	if err := http.ListenAndServe(fmt.Sprintf(":%d", port), nil); err != nil {
+	// 先绑定端口再打「已启动」日志：绑定失败（端口被占等）时不会误报服务已就绪
+	ln, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
+	if err != nil {
+		// 不 Fatal：保持面板可访问，用户可在面板修正端口后重启
+		log.Printf("HTTP服务器启动失败（端口 %d 可能被占用），将无法接收NapCat事件: %v", port, err)
+		return
+	}
+	log.Printf("本地HTTP服务器已启动 http://localhost:%d...（上报需携带 token）\n", port)
+	if err := http.Serve(ln, nil); err != nil && err != http.ErrServerClosed {
 		// 不 Fatal：保持面板可访问，用户可在面板修正端口后重启
 		log.Printf("HTTP服务器异常退出，将无法接收NapCat事件: %v", err)
 	}
@@ -97,8 +110,15 @@ func (n *napcatHttpAdapter) handler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Unauthorized", http.StatusUnauthorized)
 		return
 	}
+	r.Body = http.MaxBytesReader(w, r.Body, maxEventBodySize)
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
+		var mbe *http.MaxBytesError
+		if errors.As(err, &mbe) {
+			log.Printf("HTTP上报超过大小上限(%d字节), 来自 %s", maxEventBodySize, r.RemoteAddr)
+			http.Error(w, "Request Entity Too Large", http.StatusRequestEntityTooLarge)
+			return
+		}
 		log.Printf("无法读取HTTP请求内容: %v", err)
 		http.Error(w, "Bad Request", http.StatusBadRequest)
 		return
@@ -112,12 +132,13 @@ func (n *napcatHttpAdapter) handler(w http.ResponseWriter, r *http.Request) {
 }
 
 // checkInToken 校验 NapCat 上报请求的 token，兼容 Authorization: Bearer 头与 access_token 查询参数两种形式。
-// token 是共享密钥，必须精确匹配（大小写不敏感比较会扩大可猜测面）。
+// token 是共享密钥：必须精确匹配（大小写不敏感比较会扩大可猜测面），
+// 且用常量时间比较，避免逐字节比较的时序侧信道泄露前缀。
 func (n *napcatHttpAdapter) checkInToken(r *http.Request) bool {
 	if auth := r.Header.Get("Authorization"); auth != "" {
-		return auth == "Bearer "+*n.token
+		return subtle.ConstantTimeCompare([]byte(auth), []byte("Bearer "+*n.token)) == 1
 	}
-	return r.URL.Query().Get("access_token") == *n.token
+	return subtle.ConstantTimeCompare([]byte(r.URL.Query().Get("access_token")), []byte(*n.token)) == 1
 }
 
 func (n *napcatHttpAdapter) onMsg(data []byte) {

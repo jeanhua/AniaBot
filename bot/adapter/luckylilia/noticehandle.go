@@ -16,12 +16,9 @@ type noticeTypeRegistry struct {
 	handler noticeHandler
 }
 
-// relilBasic 通知基础字段的 ID 改写：QID 反序列化对纯数字统一补 qq: 前缀，
-// 解析后统一替换为 lil:，保证跨适配器路由与自消息过滤一致。
-func relilBasic(selfId *message.QID) {
-	*selfId = toLil(*selfId)
-}
-
+// noticeRegistry 通知事件类型 → 解析/分发注册表。
+// 各 parser 里逐字段调用 toLil：QID 反序列化对纯数字统一补 qq: 前缀，
+// 解析后需替换为 lil:，保证跨适配器路由与自消息过滤一致。
 var noticeRegistry = map[string]noticeTypeRegistry{
 	"group_upload": {
 		parser: func(data []byte) any {
@@ -29,7 +26,7 @@ var noticeRegistry = map[string]noticeTypeRegistry{
 			if err := json.Unmarshal(data, &notice); err != nil {
 				return nil
 			}
-			relilBasic(&notice.SelfId)
+			notice.SelfId = toLil(notice.SelfId)
 			notice.GroupId = toLil(notice.GroupId)
 			notice.UserId = toLil(notice.UserId)
 			notice.File.Id = toLil(notice.File.Id)
@@ -47,7 +44,7 @@ var noticeRegistry = map[string]noticeTypeRegistry{
 			if err := json.Unmarshal(data, &notice); err != nil {
 				return nil
 			}
-			relilBasic(&notice.SelfId)
+			notice.SelfId = toLil(notice.SelfId)
 			notice.GroupId = toLil(notice.GroupId)
 			notice.UserId = toLil(notice.UserId)
 			return notice
@@ -64,7 +61,7 @@ var noticeRegistry = map[string]noticeTypeRegistry{
 			if err := json.Unmarshal(data, &notice); err != nil {
 				return nil
 			}
-			relilBasic(&notice.SelfId)
+			notice.SelfId = toLil(notice.SelfId)
 			notice.GroupId = toLil(notice.GroupId)
 			notice.OperatorId = toLil(notice.OperatorId)
 			notice.UserId = toLil(notice.UserId)
@@ -82,7 +79,7 @@ var noticeRegistry = map[string]noticeTypeRegistry{
 			if err := json.Unmarshal(data, &notice); err != nil {
 				return nil
 			}
-			relilBasic(&notice.SelfId)
+			notice.SelfId = toLil(notice.SelfId)
 			notice.GroupId = toLil(notice.GroupId)
 			notice.OperatorId = toLil(notice.OperatorId)
 			notice.UserId = toLil(notice.UserId)
@@ -100,7 +97,7 @@ var noticeRegistry = map[string]noticeTypeRegistry{
 			if err := json.Unmarshal(data, &notice); err != nil {
 				return nil
 			}
-			relilBasic(&notice.SelfId)
+			notice.SelfId = toLil(notice.SelfId)
 			notice.GroupId = toLil(notice.GroupId)
 			notice.OperatorId = toLil(notice.OperatorId)
 			notice.UserId = toLil(notice.UserId)
@@ -118,7 +115,7 @@ var noticeRegistry = map[string]noticeTypeRegistry{
 			if err := json.Unmarshal(data, &notice); err != nil {
 				return nil
 			}
-			relilBasic(&notice.SelfId)
+			notice.SelfId = toLil(notice.SelfId)
 			notice.UserId = toLil(notice.UserId)
 			return notice
 		},
@@ -134,7 +131,7 @@ var noticeRegistry = map[string]noticeTypeRegistry{
 			if err := json.Unmarshal(data, &notice); err != nil {
 				return nil
 			}
-			relilBasic(&notice.SelfId)
+			notice.SelfId = toLil(notice.SelfId)
 			notice.GroupId = toLil(notice.GroupId)
 			notice.UserId = toLil(notice.UserId)
 			notice.OperatorId = toLil(notice.OperatorId)
@@ -153,7 +150,7 @@ var noticeRegistry = map[string]noticeTypeRegistry{
 			if err := json.Unmarshal(data, &notice); err != nil {
 				return nil
 			}
-			relilBasic(&notice.SelfId)
+			notice.SelfId = toLil(notice.SelfId)
 			notice.UserId = toLil(notice.UserId)
 			notice.MessageId = toLil(notice.MessageId)
 			return notice
@@ -170,7 +167,7 @@ var noticeRegistry = map[string]noticeTypeRegistry{
 			if err := json.Unmarshal(data, &notice); err != nil {
 				return nil
 			}
-			relilBasic(&notice.SelfId)
+			notice.SelfId = toLil(notice.SelfId)
 			if notice.GroupId != nil {
 				gid := toLil(*notice.GroupId)
 				notice.GroupId = &gid
@@ -191,7 +188,7 @@ var noticeRegistry = map[string]noticeTypeRegistry{
 			if err := json.Unmarshal(data, &notice); err != nil {
 				return nil
 			}
-			relilBasic(&notice.SelfId)
+			notice.SelfId = toLil(notice.SelfId)
 			notice.GroupId = toLil(notice.GroupId)
 			notice.UserId = toLil(notice.UserId)
 			notice.TargetId = toLil(notice.TargetId)
@@ -209,7 +206,7 @@ var noticeRegistry = map[string]noticeTypeRegistry{
 			if err := json.Unmarshal(data, &notice); err != nil {
 				return nil
 			}
-			relilBasic(&notice.SelfId)
+			notice.SelfId = toLil(notice.SelfId)
 			notice.GroupId = toLil(notice.GroupId)
 			notice.UserId = toLil(notice.UserId)
 			return notice
@@ -226,7 +223,7 @@ var noticeRegistry = map[string]noticeTypeRegistry{
 			if err := json.Unmarshal(data, &notice); err != nil {
 				return nil
 			}
-			relilBasic(&notice.SelfId)
+			notice.SelfId = toLil(notice.SelfId)
 			notice.GroupId = toLil(notice.GroupId)
 			notice.UserId = toLil(notice.UserId)
 			notice.MessageId = toLil(notice.MessageId)
@@ -244,7 +241,7 @@ var noticeRegistry = map[string]noticeTypeRegistry{
 			if err := json.Unmarshal(data, &notice); err != nil {
 				return nil
 			}
-			relilBasic(&notice.SelfId)
+			notice.SelfId = toLil(notice.SelfId)
 			notice.GroupId = toLil(notice.GroupId)
 			notice.MessageId = toLil(notice.MessageId)
 			notice.SenderId = toLil(notice.SenderId)
@@ -263,7 +260,7 @@ var noticeRegistry = map[string]noticeTypeRegistry{
 			if err := json.Unmarshal(data, &notice); err != nil {
 				return nil
 			}
-			relilBasic(&notice.SelfId)
+			notice.SelfId = toLil(notice.SelfId)
 			notice.GroupId = toLil(notice.GroupId)
 			notice.UserId = toLil(notice.UserId)
 			return notice
