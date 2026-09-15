@@ -74,6 +74,7 @@ bot/core/                AniaBot orchestrator: plugin lifecycle, event dispatch,
 bot/adminpanel/          Web admin panel: config/status APIs + embedded SPA (dist/)
 bot/marketplace/         Plugin marketplace: GitHub API index/detail, online install/uninstall/rollback pipelines (rebuild + restart)
 bot/adapter/napcat/      NapCat protocol adapters (WebSocket and HTTP), QQ platform
+bot/adapter/luckylilia/  Luckylilia (LLBot) OneBot v11 adapters (WebSocket and HTTP), QQ platform (ID prefix lil:)
 bot/adapter/qqofficial/  QQ Official adapter (QQ Open Platform API v2: WebSocket gateway + REST, hand-rolled)
 bot/adapter/feishu/      Feishu/Lark adapter (larksuite/oapi-sdk-go/v3), WebSocket long-connection + webhook
 bot/adapter/telegram/    Telegram adapter (hand-rolled Bot API client, long polling; proxy/api_base config)
@@ -95,10 +96,11 @@ docs/                    VitePress documentation site
 ### Dependency Flow (strictly top-down)
 
 ```
-cmd/main.go → bot/core, bot/adapter/napcat, bot/adapter/qqofficial, bot/adapter/feishu, bot/adapter/telegram, bot/adapter/discord, bot/adapter/weixin, bot/plugins/*
+cmd/main.go → bot/core, bot/adapter/napcat, bot/adapter/luckylilia, bot/adapter/qqofficial, bot/adapter/feishu, bot/adapter/telegram, bot/adapter/discord, bot/adapter/weixin, bot/plugins/*
 bot/adapter/weixin → common/adapter, common/bot, common/model/message, common/msgchain, external (resty, go-qrcode)
 bot/core → common/*, bot/utils
 bot/adapter/napcat → common/adapter, common/bot, common/model/message, common/msgchain
+bot/adapter/luckylilia → common/adapter, common/bot, common/model/message, common/msgchain, external (gorilla/websocket, resty)
 bot/adapter/qqofficial → common/adapter, common/bot, common/model/message, common/msgchain, external (resty, gorilla/websocket)
 bot/adapter/feishu → common/adapter, common/bot, common/model/message, common/msgchain, external (lark SDK)
 bot/adapter/telegram → common/adapter, common/bot, common/model/message, common/msgchain, external (resty, x/net/proxy)

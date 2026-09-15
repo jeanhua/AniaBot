@@ -1,6 +1,6 @@
 # 项目介绍
 
-**AniaBot** 是一个基于 Go 语言开发的高性能、插件驱动型**多平台**机器人框架。它通过可插拔的适配器接入各平台 —— QQ 经 [NapCat](https://napneko.github.io/) 以 OneBot v11 协议、QQ 官方经 QQ 开放平台 API v2（WebSocket 网关，无需公网地址）、飞书/Lark 经官方 SDK（WebSocket 长连接 / Webhook）、Telegram 经 Bot API（长轮询，无需公网地址）、Discord 经 discordgo（Gateway WebSocket，无需公网地址）、微信经 iLink bot（HTTP 长轮询，无需公网地址）——并内置了一套由 OpenAI 兼容大模型驱动的 AI 对话引擎 —— 支持工具调用（Tool Use）、MCP（Model Context Protocol）、Skill 系统与 AI 定时任务。
+**AniaBot** 是一个基于 Go 语言开发的高性能、插件驱动型**多平台**机器人框架。它通过可插拔的适配器接入各平台 —— QQ 经 [NapCat](https://napneko.github.io/) 或 [Luckylilia（LLBot）](https://api.luckylillia.com/llms.txt) 以 OneBot v11 协议（两者可并存）、QQ 官方经 QQ 开放平台 API v2（WebSocket 网关，无需公网地址）、飞书/Lark 经官方 SDK（WebSocket 长连接 / Webhook）、Telegram 经 Bot API（长轮询，无需公网地址）、Discord 经 discordgo（Gateway WebSocket，无需公网地址）、微信经 iLink bot（HTTP 长轮询，无需公网地址）——并内置了一套由 OpenAI 兼容大模型驱动的 AI 对话引擎 —— 支持工具调用（Tool Use）、MCP（Model Context Protocol）、Skill 系统与 AI 定时任务。
 
 ## 设计理念
 

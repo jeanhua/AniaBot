@@ -1,4 +1,4 @@
-package napcat
+package luckylilia
 
 import (
 	"context"
@@ -20,7 +20,7 @@ import (
 	"github.com/spf13/viper"
 )
 
-type napcatHttpAdapter struct {
+type luckyliliaHttpAdapter struct {
 	baseUrl    string
 	token      *string
 	httpClient *resty.Client
@@ -33,11 +33,13 @@ const defaultTimeout = time.Second * 5
 // 同时防止无界读取把内存撑爆
 const maxEventBodySize = 64 << 20 // 64MB
 
-func (n *napcatHttpAdapter) createContext() (context.Context, context.CancelFunc) {
+func (n *luckyliliaHttpAdapter) createContext() (context.Context, context.CancelFunc) {
 	return context.WithTimeout(context.Background(), defaultTimeout)
 }
 
-func (n *napcatHttpAdapter) postAndCheck(url string, body any, result any) bool {
+// postAndCheck 调用 LLBot 的 HTTP API：Bearer 头鉴权（llms.txt Token 鉴权文档），
+// 同时携带 access_token 查询参数兼容仅识别 OneBot v11 标准查询参数的协议端。
+func (n *luckyliliaHttpAdapter) postAndCheck(url string, body any, result any) bool {
 	ctx, cancel := n.createContext()
 	defer cancel()
 
@@ -49,6 +51,7 @@ func (n *napcatHttpAdapter) postAndCheck(url string, body any, result any) bool 
 		req = req.SetResult(result)
 	}
 	if n.token != nil {
+		req = req.SetHeader("Authorization", "Bearer "+*n.token)
 		req = req.SetQueryParam("access_token", *n.token)
 	}
 	resp, err := req.Post(url)
@@ -67,43 +70,49 @@ func checkResponseStatus[T any](resp *message.Response[T]) bool {
 	return resp != nil && resp.Status == "ok"
 }
 
-func (n *napcatHttpAdapter) Serve(v *viper.Viper) {
-	// httpClient 已在构造函数中就绪（见 NewNapcatHttpAdapter）
-	n.baseUrl = strings.TrimRight(v.GetString("bot.adapter.http.target_url"), "/")
-	http.HandleFunc("/", n.handler)
-	if v.IsSet("bot.adapter.token") {
-		token := v.GetString("bot.adapter.token")
+func (n *luckyliliaHttpAdapter) Serve(v *viper.Viper) {
+	// httpClient 已在构造函数中就绪（见 NewLuckyliliaHttpAdapter）
+	n.baseUrl = strings.TrimRight(v.GetString("bot.luckylilia.http.target_url"), "/")
+	if v.IsSet("bot.luckylilia.token") {
+		token := v.GetString("bot.luckylilia.token")
 		n.token = &token
 	}
-	port := v.GetInt("bot.adapter.http.listen_port")
-	log.Println("已启用napcat http adapter")
+	port := v.GetInt("bot.luckylilia.http.listen_port")
+
+	// 独立 ServeMux + Server：不占用 DefaultServeMux，避免与 napcat HTTP 模式
+	// 同时启用时在 "/" 路由上的重复注册 panic 与端口冲突
+	mux := http.NewServeMux()
+	mux.HandleFunc("/", n.handler)
+	srv := &http.Server{Addr: fmt.Sprintf(":%d", port), Handler: mux}
+
+	log.Println("已启用 luckylilia http adapter")
 	if n.token == nil || *n.token == "" {
 		// fail-closed：HTTP 模式下 Bot 是被动接收上报的一方，未配置有效 token
 		// 时无法甄别事件来源，若放行则任何能访问该端口的主机都能伪造事件
 		// （冒充管理员等），因此拒绝全部上报并在日志中提示配置方式
-		log.Printf("警告: 未配置 bot.adapter.token，HTTP 上报接口将拒绝所有事件（请在面板配置 token 并同步到 NapCat 的 HTTP 客户端后重启）")
+		log.Printf("警告: 未配置 bot.luckylilia.token，HTTP 上报接口将拒绝所有事件（请在面板配置 token 并同步到 LLBot 的 HTTP 客户端后重启）")
 	}
 	// 先绑定端口再打「已启动」日志：绑定失败（端口被占等）时不会误报服务已就绪
 	ln, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
 	if err != nil {
 		// 不 Fatal：保持面板可访问，用户可在面板修正端口后重启
-		log.Printf("HTTP服务器启动失败（端口 %d 可能被占用），将无法接收NapCat事件: %v", port, err)
+		log.Printf("HTTP服务器启动失败（端口 %d 可能被占用），将无法接收LLBot事件: %v", port, err)
 		return
 	}
 	log.Printf("本地HTTP服务器已启动 http://localhost:%d...（上报需携带 token）\n", port)
-	if err := http.Serve(ln, nil); err != nil && err != http.ErrServerClosed {
+	if err := srv.Serve(ln); err != nil && err != http.ErrServerClosed {
 		// 不 Fatal：保持面板可访问，用户可在面板修正端口后重启
-		log.Printf("HTTP服务器异常退出，将无法接收NapCat事件: %v", err)
+		log.Printf("HTTP服务器异常退出，将无法接收LLBot事件: %v", err)
 	}
 }
 
-func (n *napcatHttpAdapter) handler(w http.ResponseWriter, r *http.Request) {
+func (n *luckyliliaHttpAdapter) handler(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
 		return
 	}
 	// HTTP 模式下 Bot 是被动接收方，必须校验上报来源：
-	// NapCat 的 HTTP 客户端配置 token 后会在上报请求携带 Authorization: Bearer <token>
+	// LLBot 的 HTTP 客户端配置 token 后会在上报请求携带 Authorization: Bearer <token>
 	// 未配置有效 token 时按未授权处理（fail-closed），防止伪造事件注入
 	if n.token == nil || *n.token == "" || !n.checkInToken(r) {
 		log.Printf("拒绝未授权的HTTP上报: %s", r.RemoteAddr)
@@ -131,17 +140,17 @@ func (n *napcatHttpAdapter) handler(w http.ResponseWriter, r *http.Request) {
 	n.onMsg(body)
 }
 
-// checkInToken 校验 NapCat 上报请求的 token，兼容 Authorization: Bearer 头与 access_token 查询参数两种形式。
+// checkInToken 校验 LLBot 上报请求的 token，兼容 Authorization: Bearer 头与 access_token 查询参数两种形式。
 // token 是共享密钥：必须精确匹配（大小写不敏感比较会扩大可猜测面），
 // 且用常量时间比较，避免逐字节比较的时序侧信道泄露前缀。
-func (n *napcatHttpAdapter) checkInToken(r *http.Request) bool {
+func (n *luckyliliaHttpAdapter) checkInToken(r *http.Request) bool {
 	if auth := r.Header.Get("Authorization"); auth != "" {
 		return subtle.ConstantTimeCompare([]byte(auth), []byte("Bearer "+*n.token)) == 1
 	}
 	return subtle.ConstantTimeCompare([]byte(r.URL.Query().Get("access_token")), []byte(*n.token)) == 1
 }
 
-func (n *napcatHttpAdapter) onMsg(data []byte) {
+func (n *luckyliliaHttpAdapter) onMsg(data []byte) {
 	var callBack map[string]any
 	if err := json.Unmarshal(data, &callBack); err != nil {
 		return
@@ -155,6 +164,7 @@ func (n *napcatHttpAdapter) onMsg(data []byte) {
 			return
 		}
 		message.NormalizeQQMessage(&msg)
+		relilMessage(&msg)
 		// 过滤规则与 WS 适配器保持一致：私聊仅投递好友消息（sub_type=friend，
 		// 排除群临时会话等），且忽略 raw_message 为空的事件
 		switch msg.MessageType {
@@ -169,75 +179,64 @@ func (n *napcatHttpAdapter) onMsg(data []byte) {
 		}
 	case "notice":
 		noticeType, _ := callBack["notice_type"].(string)
-		httpSpreadNotice(n, noticeType, data)
+		handleNotice(n.trigger, noticeType, data)
 	}
 }
 
-// httpSpreadNotice 通知事件分发
-func httpSpreadNotice(n *napcatHttpAdapter, noticeType string, data []byte) {
-	handleNotice(n.trigger, noticeType, data)
-}
-
-func (n *napcatHttpAdapter) SetTrigger(trigger adapter.TriggerWrapper) {
+func (n *luckyliliaHttpAdapter) SetTrigger(trigger adapter.TriggerWrapper) {
 	n.trigger = trigger
 }
 
-func (n *napcatHttpAdapter) SendGroupMsg(groupId message.QID, chain msgchain.GroupChain) (msgId message.QID, success bool) {
+func (n *luckyliliaHttpAdapter) SendGroupMsg(groupId message.QID, chain msgchain.GroupChain) (msgId message.QID, success bool) {
 	data := httpGroupPushData{
-		GroupId: message.QID(rawQQ(groupId)),
-		Message: stripQQSegments(chain.GetGroupMsg()),
+		GroupId: message.QID(rawLil(groupId)),
+		Message: stripLilSegments(chain.GetGroupMsg()),
 	}
 
 	var resp message.Response[message.Message]
-	if !n.postAndCheck(n.baseUrl+"/send_group_msg", data, &resp) {
-		return "", false
-	}
-	if !checkResponseStatus(&resp) {
+	if !n.postAndCheck(n.baseUrl+"/send_group_msg", data, &resp) || !checkResponseStatus(&resp) {
 		return "", false
 	}
 	message.NormalizeQQMessage(&resp.Data)
+	relilMessage(&resp.Data)
 	return resp.Data.MessageId, true
 }
 
-func (n *napcatHttpAdapter) SendFriendMsg(userId message.QID, chain msgchain.FriendChain) (msgId message.QID, success bool) {
+func (n *luckyliliaHttpAdapter) SendFriendMsg(userId message.QID, chain msgchain.FriendChain) (msgId message.QID, success bool) {
 	data := httpFriendPushData{
-		UserId:  message.QID(rawQQ(userId)),
-		Message: stripQQSegments(chain.GetFriendMsg()),
+		UserId:  message.QID(rawLil(userId)),
+		Message: stripLilSegments(chain.GetFriendMsg()),
 	}
 
 	var resp message.Response[message.Message]
-	if !n.postAndCheck(n.baseUrl+"/send_private_msg", data, &resp) {
-		return "", false
-	}
-	if !checkResponseStatus(&resp) {
+	if !n.postAndCheck(n.baseUrl+"/send_private_msg", data, &resp) || !checkResponseStatus(&resp) {
 		return "", false
 	}
 	message.NormalizeQQMessage(&resp.Data)
+	relilMessage(&resp.Data)
 	return resp.Data.MessageId, true
 }
 
-func (n *napcatHttpAdapter) SendGroupAIVoiceMsg(groupId message.QID, character, msg string) (msgId message.QID, success bool) {
-	data := message.AiVoiceMsg{
-		GroupId:   message.QID(rawQQ(groupId)),
-		Character: character,
-		Text:      msg,
+func (n *luckyliliaHttpAdapter) SendGroupAIVoiceMsg(groupId message.QID, character, msg string) (msgId message.QID, success bool) {
+	data := map[string]any{
+		"group_id":  rawLil(groupId),
+		"character": character,
+		"text":      msg,
 	}
 	var resp message.Response[message.Message]
-	if !n.postAndCheck(n.baseUrl+"/send_group_ai_record", data, &resp) {
-		return "", false
-	}
-	if !checkResponseStatus(&resp) {
+	if !n.postAndCheck(n.baseUrl+"/send_group_ai_record", data, &resp) || !checkResponseStatus(&resp) {
 		return "", false
 	}
 	message.NormalizeQQMessage(&resp.Data)
+	relilMessage(&resp.Data)
 	return resp.Data.MessageId, true
 }
 
-func (n *napcatHttpAdapter) SendPokeMsg(userId message.QID, groupId *message.QID) (success bool) {
+func (n *luckyliliaHttpAdapter) SendPokeMsg(userId message.QID, groupId *message.QID) (success bool) {
 	data := map[string]message.QID{}
-	data["user_id"] = message.QID(rawQQ(userId))
+	data["user_id"] = message.QID(rawLil(userId))
 	if groupId != nil {
-		data["group_id"] = message.QID(rawQQ(*groupId))
+		data["group_id"] = message.QID(rawLil(*groupId))
 	}
 	var resp message.Response[json.RawMessage]
 	if !n.postAndCheck(n.baseUrl+"/send_poke", data, &resp) {
@@ -246,92 +245,90 @@ func (n *napcatHttpAdapter) SendPokeMsg(userId message.QID, groupId *message.QID
 	return checkResponseStatus(&resp)
 }
 
-func (n *napcatHttpAdapter) SendGroupForwardMsg(groupId message.QID, chain msgchain.GroupForwardChain) (msgId message.QID, success bool) {
+func (n *luckyliliaHttpAdapter) SendGroupForwardMsg(groupId message.QID, chain msgchain.GroupForwardChain) (msgId message.QID, success bool) {
 	data := message.GroupForwardMessage{
-		GroupId:               message.QID(rawQQ(groupId)),
-		ForwardMessageSegment: stripQQForward(chain.GetForwardMsg()),
+		GroupId:               message.QID(rawLil(groupId)),
+		ForwardMessageSegment: stripLilForward(chain.GetForwardMsg()),
 	}
 	var resp message.Response[message.Message]
-	if !n.postAndCheck(n.baseUrl+"/send_forward_msg", data, &resp) {
-		return "", false
-	}
-	if !checkResponseStatus(&resp) {
+	if !n.postAndCheck(n.baseUrl+"/send_forward_msg", data, &resp) || !checkResponseStatus(&resp) {
 		return "", false
 	}
 	message.NormalizeQQMessage(&resp.Data)
+	relilMessage(&resp.Data)
 	return resp.Data.MessageId, true
 }
 
-func (n *napcatHttpAdapter) SendFriendForwardMsg(userId message.QID, chain msgchain.FriendForwardChain) (msgId message.QID, success bool) {
+func (n *luckyliliaHttpAdapter) SendFriendForwardMsg(userId message.QID, chain msgchain.FriendForwardChain) (msgId message.QID, success bool) {
 	data := message.FriendForwardMessage{
-		UserId:                message.QID(rawQQ(userId)),
-		ForwardMessageSegment: stripQQForward(chain.GetForwardMsg()),
+		UserId:                message.QID(rawLil(userId)),
+		ForwardMessageSegment: stripLilForward(chain.GetForwardMsg()),
 	}
 	var resp message.Response[message.Message]
-	if !n.postAndCheck(n.baseUrl+"/send_forward_msg", data, &resp) {
-		return "", false
-	}
-	if !checkResponseStatus(&resp) {
+	if !n.postAndCheck(n.baseUrl+"/send_forward_msg", data, &resp) || !checkResponseStatus(&resp) {
 		return "", false
 	}
 	message.NormalizeQQMessage(&resp.Data)
+	relilMessage(&resp.Data)
 	return resp.Data.MessageId, true
 }
 
-func (n *napcatHttpAdapter) GetMsgDetail(msgId message.QID) (*message.Message, bool) {
-	data := map[string]message.QID{"message_id": message.QID(rawQQ(msgId))}
+func (n *luckyliliaHttpAdapter) GetMsgDetail(msgId message.QID) (*message.Message, bool) {
+	data := map[string]message.QID{"message_id": message.QID(rawLil(msgId))}
 	var resp message.Response[message.Message]
-	if !n.postAndCheck(n.baseUrl+"/get_msg", data, &resp) {
-		return nil, false
-	}
-	if !checkResponseStatus(&resp) {
+	if !n.postAndCheck(n.baseUrl+"/get_msg", data, &resp) || !checkResponseStatus(&resp) {
 		return nil, false
 	}
 	message.NormalizeQQMessage(&resp.Data)
+	relilMessage(&resp.Data)
 	return &resp.Data, true
 }
 
-func (n *napcatHttpAdapter) GetForwardMsg(msgId message.QID) (msgs *[]message.Message, success bool) {
-	data := map[string]message.QID{"message_id": message.QID(rawQQ(msgId))}
+func (n *luckyliliaHttpAdapter) GetForwardMsg(msgId message.QID) (msgs *[]message.Message, success bool) {
+	data := map[string]message.QID{"message_id": message.QID(rawLil(msgId))}
 	var resp message.Response[httpForwardData]
-	if !n.postAndCheck(n.baseUrl+"/get_forward_msg", data, &resp) {
-		return nil, false
-	}
-	if !checkResponseStatus(&resp) {
+	if !n.postAndCheck(n.baseUrl+"/get_forward_msg", data, &resp) || !checkResponseStatus(&resp) {
 		return nil, false
 	}
 	for i := range resp.Data.Messages {
 		message.NormalizeQQMessage(&resp.Data.Messages[i])
 	}
+	relilMessages(resp.Data.Messages)
 	return &resp.Data.Messages, true
 }
 
-func (n *napcatHttpAdapter) GetGroupUserInfo(groupId, userId message.QID) (*message.GroupUserInfo, bool) {
+func (n *luckyliliaHttpAdapter) GetGroupUserInfo(groupId, userId message.QID) (*message.GroupUserInfo, bool) {
 	data := map[string]any{
-		"group_id": rawQQ(groupId),
-		"user_id":  rawQQ(userId),
+		"group_id": rawLil(groupId),
+		"user_id":  rawLil(userId),
 		"no_cache": true,
 	}
 	resp := message.Response[message.GroupUserInfo]{}
 	if !n.postAndCheck(n.baseUrl+"/get_group_member_info", data, &resp) || !checkResponseStatus(&resp) {
 		return nil, false
 	}
+	resp.Data.GroupID = toLil(resp.Data.GroupID)
+	resp.Data.UserID = toLil(resp.Data.UserID)
 	return &resp.Data, true
 }
 
-func (n *napcatHttpAdapter) GetGroupMemberList(groupId message.QID, noCache bool) (*[]message.GroupUserInfo, bool) {
+func (n *luckyliliaHttpAdapter) GetGroupMemberList(groupId message.QID, noCache bool) (*[]message.GroupUserInfo, bool) {
 	data := map[string]any{
-		"group_id": rawQQ(groupId),
+		"group_id": rawLil(groupId),
 		"no_cache": noCache,
 	}
 	resp := message.Response[[]message.GroupUserInfo]{}
 	if !n.postAndCheck(n.baseUrl+"/get_group_member_list", data, &resp) || !checkResponseStatus(&resp) {
 		return nil, false
 	}
+	for i := range resp.Data {
+		resp.Data[i].GroupID = toLil(resp.Data[i].GroupID)
+		resp.Data[i].UserID = toLil(resp.Data[i].UserID)
+	}
 	return &resp.Data, true
 }
 
-func (n *napcatHttpAdapter) GetNCrkey() ([]message.NCrkey, bool) {
+func (n *luckyliliaHttpAdapter) GetNCrkey() ([]message.NCrkey, bool) {
 	resp := message.Response[[]message.NCrkey]{}
 	if !n.postAndCheck(n.baseUrl+"/nc_get_rkey", nil, &resp) || !checkResponseStatus(&resp) {
 		return nil, false
@@ -339,26 +336,30 @@ func (n *napcatHttpAdapter) GetNCrkey() ([]message.NCrkey, bool) {
 	return resp.Data, true
 }
 
-func (n *napcatHttpAdapter) GetFriendList() (*[]message.Friend, bool) {
+func (n *luckyliliaHttpAdapter) GetFriendList() (*[]message.Friend, bool) {
 	resp := message.Response[[]message.Friend]{}
 	if !n.postAndCheck(n.baseUrl+"/get_friend_list", nil, &resp) || !checkResponseStatus(&resp) {
 		return nil, false
 	}
-	return &resp.Data, true
-}
-
-func (n *napcatHttpAdapter) GetGroupDetail(groupId message.QID) (*message.GroupInfo, bool) {
-	data := map[string]message.QID{"group_id": message.QID(rawQQ(groupId))}
-	resp := message.Response[message.GroupInfo]{}
-	if !n.postAndCheck(n.baseUrl+"/get_group_detail_info", data, &resp) || !checkResponseStatus(&resp) {
-		return nil, false
+	for i := range resp.Data {
+		resp.Data[i].UserID = toLil(resp.Data[i].UserID)
 	}
 	return &resp.Data, true
 }
 
-func (n *napcatHttpAdapter) SetMsgEmojiLike(msgId message.QID, emojiId int, like bool) bool {
+func (n *luckyliliaHttpAdapter) GetGroupDetail(groupId message.QID) (*message.GroupInfo, bool) {
+	data := map[string]message.QID{"group_id": message.QID(rawLil(groupId))}
+	resp := message.Response[message.GroupInfo]{}
+	if !n.postAndCheck(n.baseUrl+"/get_group_detail_info", data, &resp) || !checkResponseStatus(&resp) {
+		return nil, false
+	}
+	resp.Data.GroupID = toLil(resp.Data.GroupID)
+	return &resp.Data, true
+}
+
+func (n *luckyliliaHttpAdapter) SetMsgEmojiLike(msgId message.QID, emojiId int, like bool) bool {
 	data := message.EmojiLike{
-		MessageID: message.QID(rawQQ(msgId)),
+		MessageID: message.QID(rawLil(msgId)),
 		EmojiId:   emojiId,
 		Set:       like,
 	}
@@ -369,51 +370,47 @@ func (n *napcatHttpAdapter) SetMsgEmojiLike(msgId message.QID, emojiId int, like
 	return checkResponseStatus(&resp)
 }
 
-func (n *napcatHttpAdapter) SendGroupSign(groupId message.QID) bool {
-	data := map[string]message.QID{"group_id": message.QID(rawQQ(groupId))}
+func (n *luckyliliaHttpAdapter) SendGroupSign(groupId message.QID) bool {
+	data := map[string]message.QID{"group_id": message.QID(rawLil(groupId))}
 	resp := message.Response[json.RawMessage]{}
 	return n.postAndCheck(n.baseUrl+"/send_group_sign", data, &resp) && checkResponseStatus(&resp)
 }
 
-func (n *napcatHttpAdapter) GetGroupMsgHistory(groupId message.QID, count int, message_seq int) (*[]message.Message, bool) {
+func (n *luckyliliaHttpAdapter) GetGroupMsgHistory(groupId message.QID, count int, message_seq int) (*[]message.Message, bool) {
 	data := map[string]any{
-		"group_id":    rawQQ(groupId),
+		"group_id":    rawLil(groupId),
 		"count":       count,
 		"message_seq": message_seq,
 	}
 	var resp message.Response[httpForwardData]
-	if !n.postAndCheck(n.baseUrl+"/get_group_msg_history", data, &resp) {
-		return nil, false
-	}
-	if !checkResponseStatus(&resp) {
+	if !n.postAndCheck(n.baseUrl+"/get_group_msg_history", data, &resp) || !checkResponseStatus(&resp) {
 		return nil, false
 	}
 	for i := range resp.Data.Messages {
 		message.NormalizeQQMessage(&resp.Data.Messages[i])
 	}
+	relilMessages(resp.Data.Messages)
 	return &resp.Data.Messages, true
 }
 
-func (n *napcatHttpAdapter) GetFriendMsgHistory(userId message.QID, count int, message_seq int) (*[]message.Message, bool) {
+func (n *luckyliliaHttpAdapter) GetFriendMsgHistory(userId message.QID, count int, message_seq int) (*[]message.Message, bool) {
 	data := map[string]any{
-		"user_id":     rawQQ(userId),
+		"user_id":     rawLil(userId),
 		"count":       count,
 		"message_seq": message_seq,
 	}
 	var resp message.Response[httpForwardData]
-	if !n.postAndCheck(n.baseUrl+"/get_friend_msg_history", data, &resp) {
-		return nil, false
-	}
-	if !checkResponseStatus(&resp) {
+	if !n.postAndCheck(n.baseUrl+"/get_friend_msg_history", data, &resp) || !checkResponseStatus(&resp) {
 		return nil, false
 	}
 	for i := range resp.Data.Messages {
 		message.NormalizeQQMessage(&resp.Data.Messages[i])
 	}
+	relilMessages(resp.Data.Messages)
 	return &resp.Data.Messages, true
 }
 
-func (n *napcatHttpAdapter) GetAIChatacter() (*[]message.AIChatacter, bool) {
+func (n *luckyliliaHttpAdapter) GetAIChatacter() (*[]message.AIChatacter, bool) {
 	resp := message.Response[message.AIChatacterResp]{}
 	if !n.postAndCheck(n.baseUrl+"/get_ai_chatacter", nil, &resp) || !checkResponseStatus(&resp) {
 		return nil, false
@@ -421,9 +418,9 @@ func (n *napcatHttpAdapter) GetAIChatacter() (*[]message.AIChatacter, bool) {
 	return &resp.Data.Characters, true
 }
 
-func (n *napcatHttpAdapter) GetPrivateFileURL(userId message.QID, fileId string) (string, bool) {
+func (n *luckyliliaHttpAdapter) GetPrivateFileURL(userId message.QID, fileId string) (string, bool) {
 	data := map[string]any{
-		"user_id": rawQQ(userId),
+		"user_id": rawLil(userId),
 		"file_id": fileId,
 	}
 	type privateFileData struct {
@@ -436,10 +433,13 @@ func (n *napcatHttpAdapter) GetPrivateFileURL(userId message.QID, fileId string)
 	return resp.Data.URL, true
 }
 
-func (n *napcatHttpAdapter) GetGroupList() (*[]message.GroupInfo, bool) {
+func (n *luckyliliaHttpAdapter) GetGroupList() (*[]message.GroupInfo, bool) {
 	resp := message.Response[[]message.GroupInfo]{}
 	if !n.postAndCheck(n.baseUrl+"/get_group_list", nil, &resp) || !checkResponseStatus(&resp) {
 		return nil, false
+	}
+	for i := range resp.Data {
+		resp.Data[i].GroupID = toLil(resp.Data[i].GroupID)
 	}
 	return &resp.Data, true
 }

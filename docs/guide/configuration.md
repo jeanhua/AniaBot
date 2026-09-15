@@ -65,6 +65,7 @@ AniaBot 的全部配置存储在**数据库**中（持久化存储的 `ania_kv` 
 | 配置键 | 默认值 | 说明 |
 | --- | --- | --- |
 | `bot.platform.napcat.enable` | `true` | 是否启用 QQ（NapCat）平台 |
+| `bot.platform.luckylilia.enable` | `false` | 是否启用 QQ（Luckylilia/LLBot）平台（需同时配置下方 `bot.luckylilia.*`；与 NapCat 可并存，ID 前缀为 `lil:`） |
 | `bot.platform.qqofficial.enable` | `false` | 是否启用 QQ 官方机器人平台（需同时配置下方 `bot.qqofficial.*`） |
 | `bot.platform.feishu.enable` | `false` | 是否启用飞书平台（需同时配置下方 `bot.feishu.*`） |
 | `bot.platform.telegram.enable` | `false` | 是否启用 Telegram 平台（需同时配置下方 `bot.telegram.*`） |
@@ -194,6 +195,35 @@ bot.adapter.http.target_url    = http://localhost:6680 # NapCat HTTP 服务端�
 
 ::: warning Docker 部署注意
 HTTP 模式下 NapCat 向 `localhost` 上报会失败，请将 NapCat 的 HTTP Client 地址改为 AniaBot 所在机器的内网 IP。
+:::
+
+### luckylilia —— QQ(Luckylilia/LLBot) 协议适配器
+
+接入 [Luckylilia（LLBot）](https://api.luckylillia.com/llms.txt) —— 一个与 NapCat 同类的 **OneBot v11** QQ 协议端。能力与 NapCat 适配器基本一致（文本/图片/合并转发/戳一戳/群签到/表情回应等），全部面向 QQ 插件生态的插件可直接生效。WebSocket 与 HTTP **二选一**，由配置键 `bot.luckylilia.mode`（`ws` / `http`）决定，在面板勾选启用 QQ（Luckylilia）并填写，**重启后生效**：
+
+::: code-group
+
+```text [WebSocket（推荐）]
+bot.platform.luckylilia.enable    = true                  # 启用平台
+bot.luckylilia.mode               = ws                    # 连接模式（默认）
+bot.luckylilia.token              # 若 LLBot 端设置了 Token 则填写（Authorization: Bearer 携带）
+bot.luckylilia.ws.address         = ws://localhost:3001   # LLBot WebSocket 正向服务地址
+bot.luckylilia.ws.worker_count    = 0                     # 事件处理线程数，0 = 按 CPU 自动调整
+bot.luckylilia.ws.worker_queue_size = 1024                # 消息队列长度，超出则丢弃
+```
+
+```text [HTTP]
+bot.platform.luckylilia.enable    = true                  # 启用平台
+bot.luckylilia.mode               = http                  # 连接模式
+bot.luckylilia.token              # 若 LLBot 端设置了 Token 则填写
+bot.luckylilia.http.listen_port   = 6689                  # 本地监听端口，接收 LLBot 事件上报
+bot.luckylilia.http.target_url    = http://localhost:6690 # LLBot HTTP 服务端地址
+```
+
+:::
+
+::: tip 与 NapCat 并存
+本平台的群号/好友号/消息 ID 统一带 `lil:` 前缀（NapCat 为 `qq:`），因此**两者可同时启用**（两个 QQ 账号各连一个协议端），消息互不串线；管理员等按 ID 判断的配置需填写带 `lil:` 前缀的 ID（如 `lil:123456`）。`nc_get_rkey`（防撤回依赖）为 NapCat 专属接口，LLBot 不支持时相关能力自动退化。
 :::
 
 ### store.cache —— 缓存存储
