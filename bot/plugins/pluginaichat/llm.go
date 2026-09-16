@@ -221,6 +221,9 @@ func (p *AIChatPlugin) getChat(b bot.Bot, id message.QID, isGroup bool, prompt s
 		// 每个会话创建独立的 SessionToolExecutor，动态加载的工具互不影响
 		sessionExecutor := p.toolExecutor.NewSessionExecutor()
 		p.registerScopedTools(sessionExecutor, id, isGroup)
+		// 注入事件来源平台的专属工具（如 QQ 的 AI 语音/戳一戳/群签到；
+		// 适配器外观实现 aitool.Provider 时生效，见 platformtools.go）
+		p.registerPlatformTools(sessionExecutor, b, id, isGroup)
 		// 注册任务清单工具（仅主会话；子代理/定时任务的一次性会话不共享父会话清单）
 		if p.cfg.Todo.Enable && p.todoManager != nil {
 			sessionExecutor.RegisterSession(newTodoWriteTool(p.todoManager, key))

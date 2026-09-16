@@ -128,6 +128,11 @@ type AIChatPlugin struct {
 	// approvalManager 工具审批管理器；为 nil 表示功能未启用
 	approvalManager *approvalManager
 
+	// platformSideEffects 平台注入工具中声明了副作用的工具名集合
+	//（aitool.SideEffector，注册时收集）：计划模式门禁的动态腿，与
+	// planBlockedTools 静态清单同等阻断；键为工具名
+	platformSideEffects sync.Map
+
 	// msgEventTimeout 框架级消息处理超时（bot.msg_event_timeout_sec，Start 时
 	// 从全量 viper 读取）：tryProcessPending 等后台触发的会话处理复用同一预算
 	msgEventTimeout time.Duration

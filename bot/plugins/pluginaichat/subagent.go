@@ -138,6 +138,8 @@ func (p *AIChatPlugin) runSubagentWithOptions(ctx context.Context, b bot.Bot, id
 	// 一次性会话：注册与主会话一致的会话级工具（clock/memory），但不注册 subagent 自身
 	sessionExecutor := p.toolExecutor.NewSessionExecutor()
 	p.registerScopedTools(sessionExecutor, id, isGroup)
+	// 子代理继承父会话来源平台的专属工具（与主会话一致，见 platformtools.go）
+	p.registerPlatformTools(sessionExecutor, b, id, isGroup)
 
 	prompt := o.prompt
 	if prompt == "" {

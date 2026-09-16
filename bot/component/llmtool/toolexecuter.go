@@ -46,6 +46,15 @@ func (e *ToolExecuter) registerLocked(tool Tool) {
 	e.tools[tool.Name()] = tool
 }
 
+// Has 查询共享层是否已注册同名工具；供平台注入工具注册前的重名检查
+// （会话层注册会静默覆盖同名工具，须提前拦下命名冲突）。
+func (e *ToolExecuter) Has(name string) bool {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	_, ok := e.tools[name]
+	return ok
+}
+
 func (e *ToolExecuter) Tools() []ToolDef {
 	return e.toolsWithSession(nil)
 }
