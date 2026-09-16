@@ -11,6 +11,8 @@
 
 ## [Unreleased]
 
+## [v4.7.5] - 2026-09-16
+
 ### 新增
 
 - AI 支持按群成员筛选查看历史消息：历史消息查看改为平台专属工具（QQ 为 `qq_get_msg_history`，Telegram 为 `tg_get_msg_history`，均支持只看某个成员的发言、带游标翻页），历史消息中的图片同样可按哈希加载；飞书/Discord 等暂未接入平台专属工具的平台保留通用 `get_msg_history` 工具兜底。
