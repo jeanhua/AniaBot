@@ -22,11 +22,8 @@
       </div>
 
       <div class="p-7 space-y-6">
-        <!-- 控制台同款 ASCII 标识 -->
-        <pre
-          aria-hidden="true"
-          class="font-mono text-center select-none bg-linear-to-b from-zinc-100 via-zinc-300 to-zinc-600 bg-clip-text text-transparent text-[6px] min-[480px]:text-[8px] sm:text-[10px] leading-[1.2]"
-        >{{ LOGO }}</pre>
+        <!-- 控制台同款 ASCII 标识（矢量版，见 components/AsciiLogo.vue） -->
+        <AsciiLogo class="mx-auto w-full max-w-[460px]" />
 
         <div class="flex items-center gap-3">
           <span class="h-px flex-1 bg-white/10" />
@@ -74,17 +71,7 @@
 <script setup>
 import { ref } from 'vue'
 import { api, auth } from '../api.js'
-
-const LOGO = `
-   █████████               ███            ███████████            █████   
-  ███░░░░░███             ░░░            ░░███░░░░░███          ░░███    
- ░███    ░███  ████████   ████   ██████   ░███    ░███  ██████  ███████  
- ░███████████ ░░███░░███ ░░███  ░░░░░███  ░██████████  ███░░███░░░███░   
- ░███░░░░░███  ░███ ░███  ░███   ███████  ░███░░░░░███░███ ░███  ░███    
- ░███    ░███  ░███ ░███  ░███  ███░░███  ░███    ░███░███ ░███  ░███ ███
- █████   █████ ████ █████ █████░░████████ ███████████ ░░██████   ░░█████ 
-░░░░░   ░░░░░ ░░░░ ░░░░░ ░░░░░  ░░░░░░░░ ░░░░░░░░░░░   ░░░░░░     ░░░░░  
-`
+import AsciiLogo from '../components/AsciiLogo.vue'
 
 const password = ref('')
 const error = ref('')
