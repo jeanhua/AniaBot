@@ -11,6 +11,7 @@ import (
 
 	"github.com/jeanhua/AniaBot/bot/component/agenthook"
 	"github.com/jeanhua/AniaBot/bot/component/aichat"
+	"github.com/jeanhua/AniaBot/bot/component/computeruse"
 	"github.com/jeanhua/AniaBot/bot/component/functool"
 	"github.com/jeanhua/AniaBot/bot/component/llmtool"
 	"github.com/jeanhua/AniaBot/bot/component/querylog"
@@ -881,6 +882,21 @@ func (p *AIChatPlugin) Start(ctx context.Context, cfg *viper.Viper) error {
 			p.Logger.Info("已启用配置管理工具（AI 可查看/修改框架配置与扩展配置，敏感字段掩码，修改需管理员审批，重启后生效）")
 		} else {
 			p.Logger.Warn("配置管理工具不可用：配置中心未注入（持久化存储异常？）")
+		}
+	}
+
+	// 电脑操作工具（默认关闭）：AI 可截图查看宿主机屏幕并控制鼠标键盘，
+	// 仅 Windows 宿主机支持；截图回传复用 local_image 管线（多模态/OCR）
+	if p.cfg.ComputerUse.Enable {
+		if !computeruse.Available() {
+			p.Logger.Warn("电脑操作工具不可用：当前平台不支持（仅支持 Windows 宿主机）")
+		} else {
+			for _, tool := range functool.NewComputerUseTools(functool.ComputerUseConfig{
+				MaxWidth: p.cfg.ComputerUse.MaxWidth,
+			}) {
+				p.toolExecutor.Register(tool)
+			}
+			p.Logger.Info("已启用电脑操作工具（AI 可截图查看屏幕并控制宿主机鼠标键盘，请注意安全风险；可把 mouse_click 等加入审批工具列表实现逐次确认）")
 		}
 	}
 	p.Logger.Info("工具执行器初始化完成")

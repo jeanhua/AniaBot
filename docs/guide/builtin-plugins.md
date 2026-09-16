@@ -77,6 +77,7 @@ AI 可在对话中自主调用：
 | `get_private_file_url` / `file` | 私聊文件链接获取与发送生成的文件（`file` 需配置开启） |
 | `bash` | 执行宿主机命令（默认关闭，黑白名单 + 审批三段式权限） |
 | `local_image` | 读取宿主机本地图片（默认关闭） |
+| `screenshot` / `mouse_click` / `mousemove` / `mouse_scroll` / `keyboard_type` / `keyboard_press` / `active_window` / `list_windows` | 电脑操作：截图查看宿主机屏幕并控制鼠标键盘（默认关闭，仅 Windows 宿主机；可配合工具审批逐次确认） |
 | `todo_write` | 维护当前会话的任务清单，复杂多步任务逐项推进 |
 
 此外还有 MCP 发现/加载工具与 `skill_read`，见 [配置详解](/guide/configuration#files-mcp-json-——-mcp-服务定义)。

@@ -120,7 +120,7 @@ flowchart LR
 
 ## 备用识图（OCR）
 
-主模型不支持多模态时，`load_images` / `local_image` 工具把图片交给**备用识别模型**（`ocr.*` 配置，默认 SiliconFlow 的 Qwen3-VL）生成文字描述，返回给 LLM；主模型支持多模态（`multimodal=true`）时则把图片推入队列、下一轮以图片上下文注入。
+主模型不支持多模态时，`load_images` / `local_image` / `screenshot`（电脑操作工具）把图片交给**备用识别模型**（`ocr.*` 配置，默认 SiliconFlow 的 Qwen3-VL）生成文字描述，返回给 LLM；主模型支持多模态（`multimodal=true`）时则把图片推入队列、下一轮以图片上下文注入。
 
 ## 下一步
 
