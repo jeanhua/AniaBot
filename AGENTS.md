@@ -183,7 +183,7 @@ All SQL backends use pure-Go drivers (`modernc.org/sqlite`, `github.com/go-sql-d
 - **Generics**: Used for `BaseTool[T]`, `MessageQueue[T]`, `safeExecuteWithReturn[T]`
 - **Functional options**: `Option func(*AniaBot)` pattern for bot configuration
 - **OneBot v11**: All QQ message types use the OneBot v11 segment format (`OB11Segment`)
-- **Changelog**: Every code change (feature, fix, refactor) must be recorded in `CHANGELOG.md` as part of the same change — add entries under the current unreleased/next version section, following the existing format. Keep entries short and easy to understand: one line for what changed and what problem it solves, without implementation details
+- **Changelog**: Only record in `CHANGELOG.md` changes that alter behavior relative to previously released versions (features, fixes, behavior changes); trivial tweaks don't need entries. Bugs introduced and fixed within the same unreleased version are never recorded (no released version was affected). Add entries under the current unreleased/next version section, one concise sentence each — no long explanations
 
 ## CI/CD
 
