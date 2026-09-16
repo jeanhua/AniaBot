@@ -22,7 +22,7 @@ type fakeProviderFacade struct {
 func (f *fakeProviderFacade) AITools(ctx aitool.Context) []aitool.Tool { return f.tools }
 
 // TestRegisterPlatformTools 注入主路径：Provider 外观的工具注册进会话执行器，
-// 事件来源平台未实现 Provider 时静默跳过。
+// 事件来源平台未实现 Provider 时兜底注册通用历史消息工具（nil 外观跳过）。
 func TestRegisterPlatformTools(t *testing.T) {
 	p := &AIChatPlugin{toolExecutor: llmtool.NewToolExecuter()}
 	session := p.toolExecutor.NewSessionExecutor()
@@ -41,11 +41,23 @@ func TestRegisterPlatformTools(t *testing.T) {
 		t.Error("不应注入平台清单之外的工具")
 	}
 
-	// 非 Provider 外观（nil / 原生 bot）：静默跳过，不注册任何工具
+	// nil 外观：不注册任何工具
 	session2 := p.toolExecutor.NewSessionExecutor()
 	p.registerPlatformTools(session2, nil, message.FromUint64(888), true)
 	if len(sessionToolNames(session2)) != 0 {
 		t.Error("nil 外观不应注册工具")
+	}
+
+	// 非 Provider 外观（暂未接入平台工具的平台）：兜底注册通用历史消息工具，
+	// 保证历史查看能力不因平台工具化回退（建立在 bot.Bot 基础历史接口之上）
+	session3 := p.toolExecutor.NewSessionExecutor()
+	p.registerPlatformTools(session3, struct{ bot.Bot }{}, message.FromUint64(888), true)
+	names3 := sessionToolNames(session3)
+	if !names3["get_msg_history"] {
+		t.Error("非 Provider 平台应兜底注册 get_msg_history")
+	}
+	if len(names3) != 1 {
+		t.Errorf("非 Provider 平台只应兜底注册历史消息工具, got %v", names3)
 	}
 }
 

@@ -5,6 +5,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/jeanhua/AniaBot/common/adapter"
 	"github.com/jeanhua/AniaBot/common/model/message"
@@ -173,8 +174,10 @@ func TestGroupUserInfoToolDefaults(t *testing.T) {
 	if !strings.Contains(out, "三哥") || !strings.Contains(out, "admin") {
 		t.Errorf("输出缺少关键字段:\n%s", out)
 	}
-	if !strings.Contains(out, "2023-11-15") {
-		t.Errorf("入群时间未格式化:\n%s", out)
+	// formatUnix 按本地时区展示，期望日期动态计算，避免时区相关断言在 UTC 环境失败
+	wantDate := time.Unix(1700000000, 0).Format("2006-01-02")
+	if !strings.Contains(out, wantDate) {
+		t.Errorf("入群时间未格式化为 %s:\n%s", wantDate, out)
 	}
 
 	// 私聊会话缺省 group_id → 报错提示显式指定

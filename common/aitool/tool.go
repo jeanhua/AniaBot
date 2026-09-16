@@ -14,7 +14,6 @@ package aitool
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"strconv"
 	"strings"
@@ -110,13 +109,4 @@ func prefixOf(q message.QID) string {
 		return s[:i+1]
 	}
 	return ""
-}
-
-// marshalJSON 序列化工具结果；失败时退回 fmt 占位（工具结果不允许空返回）。
-func marshalJSON(v any) string {
-	b, err := json.Marshal(v)
-	if err != nil {
-		return fmt.Sprintf("%v", v)
-	}
-	return string(b)
 }
