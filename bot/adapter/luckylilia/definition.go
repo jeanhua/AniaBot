@@ -2,6 +2,7 @@ package luckylilia
 
 import (
 	"github.com/jeanhua/AniaBot/common/adapter"
+	"github.com/jeanhua/AniaBot/common/aitool"
 	"github.com/jeanhua/AniaBot/common/bot"
 	"github.com/jeanhua/AniaBot/common/model/message"
 	"github.com/jeanhua/AniaBot/common/msgchain"
@@ -106,6 +107,12 @@ func (q *lilBot) GetPrivateFileURL(userId message.QID, fileId string) (string, b
 
 func (q *lilBot) GetNCrkey() ([]message.NCrkey, bool) {
 	return q.qq.GetNCrkey()
+}
+
+// AITools 实现 aitool.Provider：向 AI 对话会话注入 QQ 平台专属工具
+// （AI 语音、戳一戳、群签到、群成员信息等，见 aitool.QQTools）。
+func (q *lilBot) AITools(ctx aitool.Context) []aitool.Tool {
+	return aitool.QQTools(ctx, q.qq)
 }
 
 // SendGroupStream/SendFriendStream 显式覆盖为不支持：lilBot 嵌入 bot.Bot 接口，

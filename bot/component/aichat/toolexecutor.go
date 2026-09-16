@@ -299,7 +299,6 @@ func (o *ToolOrchestrator) lockedCallbacks(callbacks llmtool.CallBackFuncs) llmt
 		SendText:          strWrap(callbacks.SendText),
 		SendImage:         strWrap(callbacks.SendImage),
 		SendFile:          str2Wrap(callbacks.SendFile, &mu),
-		GetMsgHistory:     wrap2(callbacks.GetMsgHistory, &mu),
 		GetPrivateFileURL: strWrap(callbacks.GetPrivateFileURL),
 		LoadImages:        sliceWrap(callbacks.LoadImages, &mu),
 		TakeLoadedImages:  wrap0s(callbacks.TakeLoadedImages, &mu),
@@ -324,17 +323,6 @@ func str2Wrap(fn func(string, string) (string, error), mu *sync.Mutex) func(stri
 }
 
 // 以下 wrap* 辅助为不同签名的回调套互斥锁；nil 回调原样保留。
-func wrap2(fn func(int, int) (string, error), mu *sync.Mutex) func(int, int) (string, error) {
-	if fn == nil {
-		return nil
-	}
-	return func(a, b int) (string, error) {
-		mu.Lock()
-		defer mu.Unlock()
-		return fn(a, b)
-	}
-}
-
 func wrap0(fn func() (string, error), mu *sync.Mutex) func() (string, error) {
 	if fn == nil {
 		return nil

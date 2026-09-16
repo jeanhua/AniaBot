@@ -10,7 +10,7 @@ import (
 // LoadImagesParams load_images 工具参数。
 type LoadImagesParams struct {
 	// Hashes 要加载的图片哈希列表，取自消息文本中的 [图片 <hash> url:<url>] 标记，
-	// 例如 ["a1b2c3d4","e5f6a7b8"]；当前消息、get_msg_history 历史记录与合并转发
+	// 例如 ["a1b2c3d4","e5f6a7b8"]；当前消息、历史消息记录与合并转发
 	// 中展示的图片哈希均可加载。
 	Hashes []string `json:"hashes" desc:"要加载的图片哈希列表，取自消息中的 [图片 <hash> url:<url>] 标记"`
 }
@@ -23,7 +23,7 @@ func NewLoadImagesTool() *LoadImagesTool {
 	return &LoadImagesTool{
 		BaseTool: llmtool.MakeBaseTool(
 			"load_images",
-			"按需加载指定哈希的图片查看内容。消息中的图片以 [图片 <hash> url:<url>] 标识（当前消息、get_msg_history 历史记录、合并转发里的图片都带该标识）。仅当理解或回答用户问题确实需要查看图片内容时调用，通过 hashes 参数传入需要查看的图片哈希，每次只加载需要的那几张，不要一次性全部加载。",
+			"按需加载指定哈希的图片查看内容。消息中的图片以 [图片 <hash> url:<url>] 标识（当前消息、历史消息记录、合并转发里的图片都带该标识）。仅当理解或回答用户问题确实需要查看图片内容时调用，通过 hashes 参数传入需要查看的图片哈希，每次只加载需要的那几张，不要一次性全部加载。",
 			LoadImagesParams{},
 		),
 	}

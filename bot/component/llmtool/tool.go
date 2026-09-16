@@ -13,10 +13,9 @@ type CallBackFuncs struct {
 	SendText          func(text string) (string, error)
 	SendImage         func(bs64content string) (string, error)
 	SendFile          func(name, bs64content string) (string, error)
-	GetMsgHistory     func(count int, message_seq int) (string, error)
 	GetPrivateFileURL func(fileId string) (string, error)
 	// LoadImages 按哈希加载指定图片（哈希取自消息文本中的 [图片 <hash> url:<url>]
-	// 标记，如当前消息、get_msg_history 历史记录或合并转发内容）。hashes 为空时
+	// 标记，如当前消息、历史消息记录或合并转发内容）。hashes 为空时
 	// 不加载任何图片，返回引导提示。nil 表示当前会话不支持加载图片。
 	LoadImages       func(hashes []string) (string, error)
 	TakeLoadedImages func() []string

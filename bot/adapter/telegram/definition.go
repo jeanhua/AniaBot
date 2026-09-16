@@ -2,6 +2,7 @@ package telegram
 
 import (
 	"github.com/jeanhua/AniaBot/common/adapter"
+	"github.com/jeanhua/AniaBot/common/aitool"
 	"github.com/jeanhua/AniaBot/common/bot"
 	"github.com/jeanhua/AniaBot/common/model/message"
 	"github.com/jeanhua/AniaBot/common/msgchain"
@@ -73,6 +74,13 @@ func (t *tgBot) EditFriendMsg(msgId message.QID, chain msgchain.FriendChain) boo
 		return false
 	}
 	return t.editor.EditFriendMsg(msgId, chain)
+}
+
+// AITools 实现 aitool.Provider：向 AI 对话会话注入 Telegram 平台工具。
+// 当前仅历史消息查看（Bot API 无历史端点，由适配器内存缓存兜底，仅覆盖
+// 适配器存活期间的消息）。
+func (t *tgBot) AITools(ctx aitool.Context) []aitool.Tool {
+	return []aitool.Tool{aitool.NewMsgHistoryTool(ctx, "tg_get_msg_history")}
 }
 
 // SupportsKeyboard 平台支持内联按钮（断言 bot.Interactive 后探测）。
