@@ -57,7 +57,7 @@ type SessionToolExecutor struct { // 会话层：每个会话独立
 
 | 层级 | 内容 |
 | --- | --- |
-| `CreateDefaultTools()` | 常开：`time`、`webSearch`/`webExplore`（Jina）、`get_msg_history`、`get_private_file_url`、`load_images`；配置门控：`bash`（黑白名单正则）、`send_file`、`local_image` |
+| `CreateDefaultTools()` | 常开：`time`、`webSearch`/`webExplore`（Jina）、`get_msg_history`、`get_private_file_url`、`load_images`；配置门控：`bash`（黑白名单正则）、`send_file`、`local_image`、`computer_use` 工具组（`screenshot`/`mouse_click`/`mousemove`/`mouse_scroll`/`keyboard_type`/`keyboard_press`/`active_window`/`list_windows`，仅 Windows 宿主机注册） |
 | `CreateToolsWithMCP()` | 追加 MCP 工具（`mcpLazyLoad` 决定发现/加载模式或全量注册） |
 | `CreateToolsWithSkill()` | 追加 `skill_read` / `skill_reload` 工具与 SkillManager |
 
@@ -235,7 +235,7 @@ clock 任务里注册的是**异步**子代理变体（`clocksubagent.go`）：�
 
 每个工具调用在 goroutine 内、真正执行前经过请求级门禁（`ChatOptions.PreToolGate`），顺序固定：
 
-1. **计划模式**（内存判断，最便宜）：`/plan on` 期间副作用工具（bash/file/config_set/config_file_set/记忆写/知识库写/clock 增删改/skill/mcp 管理/子代理/团队）直接阻断，`todo_write` 刻意放行（清单是规划工作流的一部分）
+1. **计划模式**（内存判断，最便宜）：`/plan on` 期间副作用工具（bash/file/config_set/config_file_set/鼠标键盘输入类 mouse_click/mousemove/mouse_scroll/keyboard_type/keyboard_press/记忆写/知识库写/clock 增删改/skill/mcp 管理/子代理/团队）直接阻断，`todo_write` 刻意放行（清单是规划工作流的一部分）；screenshot/active_window/list_windows 为只读观察，不阻断（计划模式下 AI 可以看屏幕做分析）
 2. **PreToolUse 钩子**（shell 有界 10s）
 3. **管理员审批**：配置修改类工具（`config_set`/`config_file_set`）恒需管理员回复「允许」才执行，请求者本人不能批准，与审批开关无关。审批提示优先私聊发给管理员（`requestAdminOnly`：待批请求同时登记在发起会话键与管理员私聊索引，两处回复均可批），管理员私聊发送失败时回退到发起会话；无权者的审批回复会被消费并提示
 4. **人工审批**（等真人，最贵放最后——已被否决的工具不再打扰用户）：`approval.tools` 列出的工具由请求者或管理员批准
@@ -251,6 +251,14 @@ clock 任务里注册的是**异步**子代理变体（`clocksubagent.go`）：�
 `approvalManager`（pluginaichat）：配置工具执行前向会话发送确认消息，请求发送者或管理员回复「允许/同意/allow/yes」或「拒绝/deny/no」决定放行，超时（默认 120s，钳制 10~240s）自动拒绝；结论写入操作日志（`tool_approval`）。回复拦截位于消息入口**第一行**（审批等待期间会话锁被占、回复通常不带 @）；每会话互斥锁把并行工具触发的多个审批串行化逐个提示；`/stop` 经同一 context 取消等待。子代理/定时任务路径 requester 为 0，仅管理员可批。
 
 bash 工具为命令级三段式：黑名单命中→拒绝；白名单命中→放行；都不命中（含均未配置）→ 经 `CallBackFuncs.RequestApproval` 走上述审批，审批未启用（`RequestApproval` 为 nil）时默认放行。`RequestApproval` 在并行回调包装层（`lockedCallbacks`）**透传不加锁**——审批阻塞 ~120s，进互斥锁会卡死同轮其他工具的 SendText。
+
+## 电脑操作（computer use）工具组
+
+`bot/component/computeruse`（OS 层）+ `functool/computeruse.go`（工具层），按 `plugin.ai_chat_bot.computer_use.enable` 注册，**仅 Windows 宿主机**：底层用纯 syscall 实现（GDI `CreateDIBSection`/`BitBlt` 截图、`SendInput` 注入鼠标键盘、`EnumWindows` 枚举窗口），无 CGO，其他平台编译为 `ErrUnsupported` 桩（首次截屏/取坐标时声明 DPI 感知，高分屏截图便不模糊、坐标不错位）。
+
+- **坐标空间**：AI 的点击/滚动/区域截图坐标基于「最近一次 screenshot 的图像」；截图工具按「原点 + 缩放」更新共享 `View`（区域截图原点偏移、`max_width` 降采样都折算在内），输入工具据此换算回虚拟桌面像素（多显示器负原点支持）
+- **截图回传**：截图写临时文件后复用 `LoadLocalImage` 管线（多模态推队列 / OCR 备用识别），读完即删，不动 `CallBackFuncs` 接口
+- **安全**：输入类工具（mouse_click/mousemove/mouse_scroll/keyboard_type/keyboard_press）纳入计划模式阻断名单；每次操作写 oplog 审计（`screenshot`/`mouse_click`/…）；可加入 `approval.tools` 逐次人工确认
 
 ## 自定义斜杠命令
 
