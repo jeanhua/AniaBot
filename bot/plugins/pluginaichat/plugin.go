@@ -400,14 +400,16 @@ func (p *AIChatPlugin) processChatBatch(ctx context.Context, b bot.Bot, id messa
 		}
 	}
 
-	// 请求级图片哈希→URL 注册表：当前消息、历史记录、合并转发中的图片都会登记，
-	// load_images 按哈希查找并只加载指定的图片
+	// 请求级图片哈希→URL 注册表：当前消息、历史消息记录、合并转发中的图片都会登记，
+	// load_images 按哈希查找并只加载指定的图片。注册表随请求上下文传递，
+	// 平台历史消息工具（aitool）执行时经它登记拉取到的历史消息图片
 	imageReg := newImageRegistry()
+	ctx = context.WithValue(ctx, imageRegistryKey{}, imageReg)
 	var msgFuncs llmtool.CallBackFuncs
 	if isGroup {
-		msgFuncs = MakeGroupCallback(b, id, lastMsg.Sender.UserId, p.Logger, imageReg)
+		msgFuncs = MakeGroupCallback(b, id, lastMsg.Sender.UserId, p.Logger)
 	} else {
-		msgFuncs = MakeFriendCallback(b, id, p.Logger, imageReg)
+		msgFuncs = MakeFriendCallback(b, id, p.Logger)
 	}
 	p.configureImageCallbacks(ctx, b, &msgFuncs, imageReg, func(u aichat.TokenUsage) {
 		// 备用图片识别（OCR）消耗：并入会话统计（finishQuery 取走）与配额

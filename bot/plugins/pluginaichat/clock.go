@@ -16,6 +16,7 @@ import (
 	"github.com/jeanhua/AniaBot/bot/component/llmtool"
 	"github.com/jeanhua/AniaBot/bot/component/querylog"
 	"github.com/jeanhua/AniaBot/bot/component/tasklog"
+	"github.com/jeanhua/AniaBot/common/aitool"
 	"github.com/jeanhua/AniaBot/common/bot"
 	"github.com/jeanhua/AniaBot/common/model/message"
 	"github.com/jeanhua/AniaBot/common/msgchain"
@@ -719,6 +720,10 @@ func (m *clockManager) executeTask(ctx context.Context, task *ClockTask, rec *ta
 	// 每次触发独立的 SessionToolExecutor（动态 MCP 工具互不影响）；
 	// historyStore 传 nil → 全新一次性上下文，不持久化、执行后丢弃
 	sessionExecutor := p.toolExecutor.NewSessionExecutor()
+	// 注册历史消息查看工具（读工具，基础能力全平台可用；定时任务会话没有
+	// 平台 Provider 外观，经 aitool 直接构造，与主会话的平台工具同实现）
+	sessionExecutor.RegisterSession(llmtool.AdaptProviderTool(
+		aitool.NewMsgHistoryTool(aitool.Context{Bot: m.bot, Target: targetQID, IsGroup: isGroup}, "get_msg_history")))
 	// extra 本次执行在主 ChatBot 循环之外派生的用量（异步子代理、备用图片识别），
 	// 收尾时并入任务总用量，使任务日志与配额反映完整成本
 	extra := &usageAcc{}
@@ -846,20 +851,6 @@ func (m *clockManager) makeClockCallback(ctx context.Context, task *ClockTask, u
 			logger.Info("定时任务发送文件", "task", task.ID, "target", targetIDStr, "file", name)
 			return "发送成功", nil
 		},
-		GetMsgHistory: func(count, messageSeq int) (string, error) {
-			if isGroup {
-				msgs, ok := b.GetGroupMsgHistory(qid, count, messageSeq)
-				if !ok || msgs == nil {
-					return "", fmt.Errorf("获取历史消息失败")
-				}
-				return formatHistoryText(msgs, b), nil
-			}
-			msgs, ok := b.GetFriendMsgHistory(qid, count, messageSeq)
-			if !ok || msgs == nil {
-				return "", fmt.Errorf("获取历史消息失败")
-			}
-			return formatHistoryText(msgs, b), nil
-		},
 		GetPrivateFileURL: func(fileId string) (string, error) {
 			if isGroup {
 				return "", fmt.Errorf("当前为群聊定时任务，无法获取私聊文件")
@@ -903,21 +894,6 @@ func (m *clockManager) makeClockCallback(ctx context.Context, task *ClockTask, u
 		}
 	}
 	return cbs
-}
-
-// formatHistoryText 将历史消息格式化为纯文本（与 msgcallback.go 的格式一致）。
-func formatHistoryText(msgs *[]message.Message, b bot.Bot) string {
-	opts := []message.MsgOptFunc{message.WithGetMsgFunc(b.GetMsgDetail)}
-	if qb := botQQ(b); qb != nil {
-		opts = append(opts, message.WithGetForwardMsgFunc(qb.GetForwardMsg))
-	}
-	var sb strings.Builder
-	for _, msg := range *msgs {
-		sb.WriteString(fmt.Sprintf("[message_seq:%d]\n", msg.MessageSeq))
-		sb.WriteString(annotateEmbeddedImages(msg.FriendlyText(true, opts...)))
-		sb.WriteString("\n")
-	}
-	return sb.String()
 }
 
 // ---- 目标消息发送 ----

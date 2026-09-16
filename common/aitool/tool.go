@@ -41,6 +41,12 @@ type Tool interface {
 	Execute(ctx context.Context, params any) (string, error)
 }
 
+// MessageSink 历史消息工具的宿主回调：工具拉取到消息后调用（含筛选未命中的
+// 消息），宿主借此把消息中的图片登记进请求级图片注册表，load_images 才能
+// 按哈希加载历史图片。ctx 为工具执行时的请求上下文（宿主可从中取请求级状态）；
+// 注册历史消息工具的宿主未提供回调时该能力退化为纯文本展示。
+type MessageSink func(ctx context.Context, msgs []message.Message)
+
 // Context 平台工具的会话绑定信息：AITools 工厂在会话创建时收到，
 // 各工具闭包持有，执行时按它定位会话与调用平台能力。
 type Context struct {
@@ -51,6 +57,9 @@ type Context struct {
 	Target message.QID
 	// IsGroup 会话是否为群聊
 	IsGroup bool
+	// OnMessages 历史消息工具的图片登记回调（可选，见 MessageSink），
+	// 由宿主插件在构造 Context 时注入；适配器提供方无需关心
+	OnMessages MessageSink
 }
 
 // Provider 平台 AI 工具注入能力（可选接口，参照 QQExt 的可选能力模式）。

@@ -64,7 +64,7 @@ func groupCtx() Context {
 func TestQQToolsOrderFixed(t *testing.T) {
 	want := []string{
 		"qq_get_group_list", "qq_get_friend_list", "qq_get_group_user_info",
-		"qq_get_group_member_list", "qq_get_ai_characters",
+		"qq_get_group_member_list", "qq_get_ai_characters", "qq_get_msg_history",
 		"qq_send_ai_voice", "qq_send_poke", "qq_send_group_sign",
 	}
 	for i := 0; i < 2; i++ {

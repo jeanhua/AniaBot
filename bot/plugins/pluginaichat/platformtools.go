@@ -1,6 +1,8 @@
 package pluginaichat
 
 import (
+	"context"
+
 	"github.com/jeanhua/AniaBot/bot/component/llmtool"
 	"github.com/jeanhua/AniaBot/common/aitool"
 	"github.com/jeanhua/AniaBot/common/bot"
@@ -31,7 +33,21 @@ func (p *AIChatPlugin) registerPlatformTools(sessionExecutor *llmtool.SessionToo
 			p.Logger.Warn("平台工具注册已跳过: "+format, args...)
 		}
 	}
-	ctx := aitool.Context{Bot: b, Target: id, IsGroup: isGroup}
+	// 会话绑定信息：历史消息工具经 OnMessages 把拉取到的消息登记进本请求的
+	// 图片注册表（registry 经请求上下文传递，见 processChatBatch / imageRegistryKey），
+	// 使 load_images 能按哈希加载历史消息中的图片
+	ctx := aitool.Context{
+		Bot:     b,
+		Target:  id,
+		IsGroup: isGroup,
+		OnMessages: func(rc context.Context, msgs []message.Message) {
+			reg, ok := rc.Value(imageRegistryKey{}).(*imageRegistry)
+			if !ok || reg == nil {
+				return
+			}
+			registerMessageImages(reg, b, msgs...)
+		},
+	}
 	seen := make(map[string]struct{})
 	for _, t := range provider.AITools(ctx) {
 		if t == nil {

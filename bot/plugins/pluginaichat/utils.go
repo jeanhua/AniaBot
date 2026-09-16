@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"regexp"
 	"strconv"
 	"strings"
 	"sync"
@@ -13,6 +12,7 @@ import (
 
 	"github.com/jeanhua/AniaBot/bot/component/aichat"
 	"github.com/jeanhua/AniaBot/bot/component/llmtool"
+	"github.com/jeanhua/AniaBot/common/aitool"
 	"github.com/jeanhua/AniaBot/common/bot"
 	"github.com/jeanhua/AniaBot/common/model/message"
 	"github.com/spf13/viper"
@@ -49,7 +49,7 @@ func (p *AIChatPlugin) extraMsg(b bot.Bot, msg message.Message) string {
 		opts = append(opts, message.WithNoSenderPrefix())
 	}
 	// 文本内嵌附件描述（如 QQ 官方聊天记录）兜底补充 [图片 <hash> url:<url>] 标记
-	return annotateEmbeddedImages(msg.FriendlyText(true, opts...))
+	return aitool.AnnotateEmbeddedImages(msg.FriendlyText(true, opts...))
 }
 
 // imageRef 已解析到的图片引用：哈希用于与消息文本中的 [图片 <hash>] 标记对应，
@@ -59,8 +59,13 @@ type imageRef struct {
 	URL  string
 }
 
+// imageRegistryKey 请求上下文中图片注册表的键：平台历史消息工具
+// （aitool.NewMsgHistoryTool）执行时经它取当前请求的注册表登记图片，
+// 注册表在 processChatBatch 创建后随请求上下文传递。
+type imageRegistryKey struct{}
+
 // imageRegistry 请求级图片哈希→URL 注册表。消息展示给 AI 的每张图片
-// （当前消息、get_msg_history 历史记录、合并转发内容）都会登记，
+// （当前消息、历史消息记录、合并转发内容）都会登记，
 // load_images 按哈希查找并只加载指定的图片，避免一次全部塞进上下文。
 type imageRegistry struct {
 	mu      sync.Mutex
@@ -200,58 +205,15 @@ func (r *imageRegistry) registerMessage(src imageMessageSource, current message.
 	}
 }
 
-// embeddedImageRe 匹配平台文本内嵌的图片附件描述（如 QQ 官方聊天记录），与
-// qqofficial 适配器的拆段正则同源。适配器已拆段时这里只是兜底（如历史消息或
-// 未被适配器识别的场景），保证 load_images 仍能按哈希/文件名加载。
-var embeddedImageRe = regexp.MustCompile(`\[附件\d+\]\s*类型:([^\s]+)\s+(?:文件名:(\S+)\s+)?(?:尺寸:\d+x\d+\s+)?(?:大小:\S+\s+)?URL:(\S+)`)
-
-// isImageAttachmentType 判断文本附件描述的类型是否为图片（中文标签或英文 MIME）。
-func isImageAttachmentType(kind string) bool {
-	k := strings.ToLower(kind)
-	return k == "图片" || strings.HasPrefix(k, "image")
-}
-
 // registerEmbeddedImages 登记文本内嵌图片附件的哈希→URL，并登记文件名别名，
 // 使 load_images 能加载聊天记录等以文本描述携带的图片。
 func registerEmbeddedImages(r *imageRegistry, text string) {
-	for _, m := range embeddedImageRe.FindAllStringSubmatch(text, -1) {
-		if !isImageAttachmentType(m[1]) {
-			continue
-		}
-		url := m[3]
-		if url == "" {
-			continue
-		}
-		r.register(message.ImageHash(url), url)
-		if m[2] != "" {
-			r.registerAlias(m[2], url)
+	for _, img := range aitool.ScanEmbeddedImages(text) {
+		r.register(message.ImageHash(img.URL), img.URL)
+		if img.Filename != "" {
+			r.registerAlias(img.Filename, img.URL)
 		}
 	}
-}
-
-// annotateEmbeddedImages 在文本内嵌的图片附件描述后补充 [图片 <hash> url:<url>] 标记，
-// 使 AI 能看到与 load_images 对应的哈希（聊天记录等平台文本描述场景的兜底展示）。
-func annotateEmbeddedImages(text string) string {
-	idx := embeddedImageRe.FindAllStringSubmatchIndex(text, -1)
-	if len(idx) == 0 {
-		return text
-	}
-	var sb strings.Builder
-	last := 0
-	for _, m := range idx {
-		if !isImageAttachmentType(text[m[2]:m[3]]) {
-			continue
-		}
-		url := text[m[6]:m[7]]
-		if url == "" {
-			continue
-		}
-		sb.WriteString(text[last:m[1]])
-		sb.WriteString(fmt.Sprintf(" [图片 %s url:%s]", message.ImageHash(url), url))
-		last = m[1]
-	}
-	sb.WriteString(text[last:])
-	return sb.String()
 }
 
 // configureImageCallbacks 挂载消息图片的加载回调。registry 为本次请求的
@@ -267,7 +229,7 @@ func (p *AIChatPlugin) configureImageCallbacks(ctx context.Context, bot bot.Bot,
 
 	callbacks.LoadImages = func(hashes []string) (string, error) {
 		if len(hashes) == 0 {
-			return "请通过 hashes 参数传入要查看的图片哈希。图片在消息中以 [图片 <hash> url:<url>] 标识，可从当前消息、get_msg_history 历史记录或合并转发内容中获取", nil
+			return "请通过 hashes 参数传入要查看的图片哈希。图片在消息中以 [图片 <hash> url:<url>] 标识，可从当前消息、历史消息记录或合并转发内容中获取", nil
 		}
 
 		found, missing := registry.resolve(hashes)

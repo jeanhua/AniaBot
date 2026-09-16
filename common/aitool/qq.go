@@ -28,6 +28,7 @@ func QQTools(ctx Context, qq adapter.QQExt) []Tool {
 		&qqGroupUserInfoTool{base},
 		&qqGroupMemberListTool{base},
 		&qqAICharactersTool{base},
+		&msgHistoryTool{ctx: ctx, name: "qq_get_msg_history"},
 		&qqSendAIVoiceTool{base},
 		&qqSendPokeTool{base},
 		&qqSendGroupSignTool{base},

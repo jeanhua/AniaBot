@@ -34,9 +34,9 @@ func (m *planManager) Set(key string, on bool) {
 // todo_write 刻意放行：任务清单是规划工作流的一部分，无副作用；
 // screenshot/active_window/list_windows 是只读观察，不阻断（计划模式下
 // AI 可以看屏幕做分析）；其余只读/中性工具（time/webSearch/webExplore/
-// get_msg_history/load_images/local_image/config_get/memory_search/kb_search/
-// skill_*/mcp_list/clock_list/clock_get/clock_log/subagent_list/subagent_cancel/
-// team_list）不受影响。
+// 历史消息（qq_get_msg_history 等）/load_images/local_image/config_get/
+// memory_search/kb_search/skill_*/mcp_list/clock_list/clock_get/clock_log/
+// subagent_list/subagent_cancel/team_list）不受影响。
 var planBlockedTools = map[string]struct{}{
 	"bash": {}, "file": {}, "config_set": {}, "config_file_set": {},
 	"mouse_click": {}, "mousemove": {}, "mouse_scroll": {},

@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/jeanhua/AniaBot/bot/component/llmtool"
+	"github.com/jeanhua/AniaBot/common/aitool"
 	"github.com/jeanhua/AniaBot/common/model/message"
 )
 
@@ -204,7 +205,7 @@ func TestRegisterMessageImagesEmbeddedText(t *testing.T) {
 func TestAnnotateEmbeddedImages(t *testing.T) {
 	const url = "https://multimedia.nt.qq.com.cn/download?appid=1&fileid=a&rkey=x&spec=0"
 	text := "[群聊的聊天记录]\n[发送者] A\n[附件1] 类型:图片 文件名:p.jpg 尺寸:1x1 大小:1KB URL:" + url + "\n[消息内容] hi"
-	out := annotateEmbeddedImages(text)
+	out := aitool.AnnotateEmbeddedImages(text)
 	if !strings.Contains(out, "[图片 "+message.ImageHash(url)+" url:"+url+"]") {
 		t.Fatalf("应补充 [图片 <hash> url:<url>] 标记, got %q", out)
 	}

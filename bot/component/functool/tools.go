@@ -6,7 +6,9 @@ import (
 	"github.com/jeanhua/AniaBot/bot/component/llmtool"
 )
 
-// CreateDefaultTools 创建默认的工具执行器并注册所有内置工具
+// CreateDefaultTools 创建默认的工具执行器并注册所有内置工具。
+// 注意：历史消息查看不再是内置工具——已平台工具化（aitool.NewMsgHistoryTool，
+// 支持按群成员筛选），由 napcat/luckylilia/telegram 等适配器按平台支持情况注入。
 func CreateDefaultTools(searchToken string, bashConfig BashConfig, fileConfig FileConfig, localImageConfig LocalImageConfig) (*llmtool.ToolExecuter, error) {
 	executer := llmtool.NewToolExecuter()
 	executer.Register(NewTimeTool())
@@ -15,7 +17,6 @@ func CreateDefaultTools(searchToken string, bashConfig BashConfig, fileConfig Fi
 	if fileConfig.Enable {
 		executer.Register(NewSendFileTool())
 	}
-	executer.Register(NewMsgHistoryTool())
 	executer.Register(NewPrivateFileTool())
 	executer.Register(NewLoadImagesTool())
 	if localImageConfig.Enable {

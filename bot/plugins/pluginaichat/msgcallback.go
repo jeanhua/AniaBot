@@ -3,7 +3,6 @@ package pluginaichat
 import (
 	"fmt"
 	"log/slog"
-	"strings"
 
 	"github.com/jeanhua/AniaBot/bot/component/llmtool"
 	"github.com/jeanhua/AniaBot/common/bot"
@@ -11,7 +10,12 @@ import (
 	"github.com/jeanhua/AniaBot/common/msgchain"
 )
 
-func MakeGroupCallback(bot bot.Bot, groupId, userId message.QID, logger *slog.Logger, registry *imageRegistry) llmtool.CallBackFuncs {
+// 消息类工具回调（发送文本/图片/文件、私聊文件链接等）。
+// 历史消息查询不再是回调：原 get_msg_history 已删除，由平台注入的历史消息工具
+//（aitool.NewMsgHistoryTool，经 platformtools.go 注入）替代，图片登记经
+// Context.OnMessages + 请求上下文中的 imageRegistryKey 完成。
+
+func MakeGroupCallback(bot bot.Bot, groupId, userId message.QID, logger *slog.Logger) llmtool.CallBackFuncs {
 	msgFuncs := llmtool.CallBackFuncs{
 		SendText: func(s string) (string, error) {
 			builder := msgchain.Builder().Group()
@@ -44,25 +48,6 @@ func MakeGroupCallback(bot bot.Bot, groupId, userId message.QID, logger *slog.Lo
 			}
 			return "", fmt.Errorf("发送失败")
 		},
-		GetMsgHistory: func(count int, message_seq int) (string, error) {
-			msgs, ok := bot.GetGroupMsgHistory(groupId, count, message_seq)
-			if !ok || msgs == nil {
-				return "", fmt.Errorf("获取群聊历史消息失败")
-			}
-			// 登记历史消息中的图片，使 load_images 能按哈希加载其中的图片
-			registerMessageImages(registry, bot, *msgs...)
-			opts := []message.MsgOptFunc{message.WithGetMsgFunc(bot.GetMsgDetail)}
-			if qb := botQQ(bot); qb != nil {
-				opts = append(opts, message.WithGetForwardMsgFunc(qb.GetForwardMsg))
-			}
-			var sb strings.Builder
-			for _, msg := range *msgs {
-				sb.WriteString(fmt.Sprintf("[message_seq:%d]\n", msg.MessageSeq))
-				sb.WriteString(annotateEmbeddedImages(msg.FriendlyText(true, opts...)))
-				sb.WriteString("\n")
-			}
-			return sb.String(), nil
-		},
 		GetPrivateFileURL: func(fileId string) (string, error) {
 			qb := botQQ(bot)
 			if qb == nil {
@@ -79,7 +64,7 @@ func MakeGroupCallback(bot bot.Bot, groupId, userId message.QID, logger *slog.Lo
 	return msgFuncs
 }
 
-func MakeFriendCallback(bot bot.Bot, userId message.QID, logger *slog.Logger, registry *imageRegistry) llmtool.CallBackFuncs {
+func MakeFriendCallback(bot bot.Bot, userId message.QID, logger *slog.Logger) llmtool.CallBackFuncs {
 	msgFuncs := llmtool.CallBackFuncs{
 		SendText: func(s string) (string, error) {
 			builder := msgchain.Builder().Friend()
@@ -111,25 +96,6 @@ func MakeFriendCallback(bot bot.Bot, userId message.QID, logger *slog.Logger, re
 			}
 			return "", fmt.Errorf("发送失败")
 
-		},
-		GetMsgHistory: func(count int, message_seq int) (string, error) {
-			msgs, ok := bot.GetFriendMsgHistory(userId, count, message_seq)
-			if !ok || msgs == nil {
-				return "", fmt.Errorf("获取好友历史消息失败")
-			}
-			// 登记历史消息中的图片，使 load_images 能按哈希加载其中的图片
-			registerMessageImages(registry, bot, *msgs...)
-			opts := []message.MsgOptFunc{message.WithGetMsgFunc(bot.GetMsgDetail)}
-			if qb := botQQ(bot); qb != nil {
-				opts = append(opts, message.WithGetForwardMsgFunc(qb.GetForwardMsg))
-			}
-			var sb strings.Builder
-			for _, msg := range *msgs {
-				sb.WriteString(fmt.Sprintf("[message_seq:%d]\n", msg.MessageSeq))
-				sb.WriteString(annotateEmbeddedImages(msg.FriendlyText(true, opts...)))
-				sb.WriteString("\n")
-			}
-			return sb.String(), nil
 		},
 		GetPrivateFileURL: func(fileId string) (string, error) {
 			qb := botQQ(bot)

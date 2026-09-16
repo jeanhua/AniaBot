@@ -249,9 +249,11 @@ func truncateSubagentResult(s string, maxRunes int) (string, bool) {
 
 // makeSubagentCallbacks 构造子代理的工具回调。
 //
-// 发送类能力（SendImage/SendFile）与只读能力（GetMsgHistory/GetPrivateFileURL）
-// 透传主会话回调——子代理与主 AI 处于同一会话场景。SendText 替换为丢弃中间轮文本
-// （记日志）：子代理的结论通过最终结果返回，不直接打扰用户。
+// 发送类能力（SendImage/SendFile）与只读能力（GetPrivateFileURL）透传主会话
+// 回调——子代理与主 AI 处于同一会话场景。历史消息查询不经回调：子代理会话
+// 已注入平台历史消息工具（registerPlatformTools），与主会话同实现。
+// SendText 替换为丢弃中间轮文本（记日志）：子代理的结论通过最终结果返回，
+// 不直接打扰用户。
 //
 // 图片加载三回调（LoadImages/TakeLoadedImages/LoadLocalImage）不透传：它们闭包捕获的
 // 是主请求级的 loadedImages/loadedHashes 状态（见 utils.go configureImageCallbacks），
@@ -269,7 +271,6 @@ func (p *AIChatPlugin) makeSubagentCallbacks(ctx context.Context, parent llmtool
 		},
 		SendImage:         parent.SendImage,
 		SendFile:          parent.SendFile,
-		GetMsgHistory:     parent.GetMsgHistory,
 		GetPrivateFileURL: parent.GetPrivateFileURL,
 		// 命令级人工审批透传父会话（同 SendImage 先例）：子代理内 bash 未列名命令
 		// 的审批提示发到父会话，权限判断沿用父会话的 requester（定时任务触发的
