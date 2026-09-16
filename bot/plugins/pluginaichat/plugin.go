@@ -892,7 +892,6 @@ func (p *AIChatPlugin) Start(ctx context.Context, cfg *viper.Viper) error {
 			p.Logger.Warn("电脑操作工具不可用：当前平台不支持（仅支持 Windows 宿主机）")
 		} else {
 			for _, tool := range functool.NewComputerUseTools(functool.ComputerUseConfig{
-				Enable:   p.cfg.ComputerUse.Enable,
 				MaxWidth: p.cfg.ComputerUse.MaxWidth,
 			}) {
 				p.toolExecutor.Register(tool)

@@ -11,7 +11,7 @@ import (
 // TestComputerUseToolNames 工具名与注册数量：接入处（插件注册/计划模式阻断名单/
 // 审批配置说明）依赖这些名字，改名会静默失效。
 func TestComputerUseToolNames(t *testing.T) {
-	tools := NewComputerUseTools(ComputerUseConfig{Enable: true, MaxWidth: 1280})
+	tools := NewComputerUseTools(ComputerUseConfig{MaxWidth: 1280})
 	want := []string{
 		"screenshot", "mouse_click", "mousemove", "mouse_scroll",
 		"keyboard_type", "keyboard_press", "active_window", "list_windows",
@@ -62,6 +62,25 @@ func TestComputerUseParamValidation(t *testing.T) {
 		&ScreenshotParams{X: &x, Y: &y, Width: &w, Height: nil}, cbs)
 	if err == nil || !strings.Contains(err.Error(), "同时给出") {
 		t.Fatalf("残缺区域参数应报错: %v", err)
+	}
+}
+
+// TestKeyboardTypeTextValidation 键入文本校验：直接测校验函数而非 Execute——
+// 超长文本若经 Execute 且校验失效，会在 Windows 宿主机上真的逐字输入。
+func TestKeyboardTypeTextValidation(t *testing.T) {
+	if err := validateTypeText(""); err == nil {
+		t.Fatal("空文本应被拒绝")
+	}
+	if err := validateTypeText("你好，AniaBot"); err != nil {
+		t.Fatalf("正常文本不应报错: %v", err)
+	}
+	long := strings.Repeat("a", maxTypeLen+1)
+	if err := validateTypeText(long); err == nil || !strings.Contains(err.Error(), "过长") {
+		t.Fatalf("超长文本应被拒绝: %v", err)
+	}
+	boundary := strings.Repeat("a", maxTypeLen)
+	if err := validateTypeText(boundary); err != nil {
+		t.Fatalf("恰好达到上限的文本不应报错: %v", err)
 	}
 }
 

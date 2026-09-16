@@ -35,7 +35,7 @@ const (
 )
 
 // mouseInput 对应 Win32 MOUSEINPUT（联合体中最大的成员，用作 INPUT 载体，
-// 保证 Go 侧 INPUT 与 C 侧布局/尺寸一致：amd64 40 字节、386 32 字节）。
+// 保证 Go 侧 INPUT 与 C 侧布局/尺寸一致：amd64 40 字节、386 28 字节）。
 type mouseInput struct {
 	Dx, Dy      int32
 	MouseData   uint32

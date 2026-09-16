@@ -4,6 +4,7 @@ package computeruse
 
 import (
 	"fmt"
+	"sync"
 	"syscall"
 	"unsafe"
 
@@ -74,32 +75,52 @@ func ForegroundWindow() (*WindowInfo, error) {
 	return &info, nil
 }
 
+// 枚举回调经 sync.Once 在包级只创建一次：syscall.NewCallback 的回调槽位
+// 每进程数量有限（至少 1024 个）且永不回收，每次调用新建会随时间耗尽并 panic。
+// 迭代状态用包级变量传递，enumMu 串行化枚举（EnumWindows 是同步调用）。
+var (
+	enumOnce  sync.Once
+	enumProc  uintptr
+	enumMu    sync.Mutex
+	enumLimit int
+	enumList  []WindowInfo
+)
+
+// enumWindowsProc EnumWindows 的回调：收集可见窗口直到达到上限。
+func enumWindowsProc(hwnd, lparam uintptr) uintptr {
+	if len(enumList) >= enumLimit {
+		return 0 // 停止枚举
+	}
+	if vis, _, _ := procIsWindowVisible.Call(hwnd); vis == 0 {
+		return 1
+	}
+	if style, _, _ := procGetWindowLongW.Call(hwnd, gwlExStyleIndex); style&wsExToolWindow != 0 {
+		return 1
+	}
+	info := windowInfoOf(hwnd)
+	if info.Title == "" {
+		return 1
+	}
+	enumList = append(enumList, info)
+	return 1
+}
+
 // ListWindows 枚举可见的顶层窗口（跳过隐藏窗口与工具窗口，如输入法悬浮条），
 // 最多返回 limit 个（<=0 时默认 50）。
 func ListWindows(limit int) ([]WindowInfo, error) {
 	if limit <= 0 {
 		limit = 50
 	}
-	list := make([]WindowInfo, 0, limit)
-	cb := syscall.NewCallback(func(hwnd, lparam uintptr) uintptr {
-		if len(list) >= limit {
-			return 0 // 停止枚举
-		}
-		if vis, _, _ := procIsWindowVisible.Call(hwnd); vis == 0 {
-			return 1
-		}
-		if style, _, _ := procGetWindowLongW.Call(hwnd, gwlExStyleIndex); style&wsExToolWindow != 0 {
-			return 1
-		}
-		info := windowInfoOf(hwnd)
-		if info.Title == "" {
-			return 1
-		}
-		list = append(list, info)
-		return 1
+	enumOnce.Do(func() {
+		enumProc = syscall.NewCallback(enumWindowsProc)
 	})
-	procEnumWindows.Call(cb, 0)
-	return list, nil
+	enumMu.Lock()
+	defer enumMu.Unlock()
+	enumLimit = limit
+	enumList = make([]WindowInfo, 0, limit)
+	procEnumWindows.Call(enumProc, 0)
+	// enumList 下次调用会被整体替换，这里直接交出本次切片是安全的
+	return enumList, nil
 }
 
 // truncateRunes 按 rune 截断字符串（标题可能含多字节字符）。

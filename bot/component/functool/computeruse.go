@@ -12,11 +12,11 @@ import (
 	"github.com/jeanhua/AniaBot/bot/component/oplog"
 )
 
-// ComputerUseConfig 电脑操作（computer use）工具配置
+// ComputerUseConfig 电脑操作（computer use）工具配置。
+// 启用与否由调用方控制（配置开关 + computeruse.Available()，默认关闭）：
+// 启用后 AI 可截图查看宿主机屏幕并控制鼠标键盘，等于把宿主机桌面交给
+// AI 操作，必须管理员知情开启（opt-in）。
 type ComputerUseConfig struct {
-	// Enable 是否启用电脑操作工具。启用后 AI 可截图查看宿主机屏幕并控制
-	// 鼠标键盘，等于把宿主机桌面交给 AI 操作，必须管理员知情开启（opt-in）
-	Enable bool `json:"enable" mapstructure:"enable"`
 	// MaxWidth 截图最大宽度（像素），超出时等比降采样以节省上下文 token；
 	// 0 表示不缩放（高分屏下慎用，图片体积和 token 消耗都会很大）
 	MaxWidth int `json:"max_width" mapstructure:"max_width"`
@@ -25,6 +25,9 @@ type ComputerUseConfig struct {
 // computerUseState 一组电脑操作工具共享的状态：坐标映射视图 + 截图宽度上限。
 // AI 的操作坐标基于「最近一次 screenshot 的图像」，视图由截图工具更新、
 // 输入工具换算，用一个互斥锁串行化（同一宿主机上的操作本来就该串行）。
+// 注意：state 注册在基础 ToolExecuter 上、跨会话（群/私聊）共享，互斥锁只保证
+// 单次视图读写的原子性——若两个会话并发「截图→点击」，后者会按前者的最新视图
+// 换算。单宿主机 + 默认关闭场景下可接受，属已知限制。
 type computerUseState struct {
 	mu       sync.Mutex
 	view     computeruse.View
@@ -104,11 +107,10 @@ func (t *ScreenshotTool) Execute(_ context.Context, params any, callbacks llmtoo
 		return "", fmt.Errorf("截图失败: %w", err)
 	}
 
-	// 更新坐标映射：此后 AI 的操作坐标都以本图为准
-	t.state.setView(computeruse.ComputeView(
+	newView := computeruse.ComputeView(
 		capture.OriginX, capture.OriginY,
 		capture.ScreenW, capture.ScreenH,
-		capture.ImgW, capture.ImgH))
+		capture.ImgW, capture.ImgH)
 
 	oplog.Record(oplog.CategoryAI, "screenshot", fmt.Sprintf("AI 截取屏幕区域 (%d,%d) %dx%d → 图像 %dx%d",
 		capture.OriginX, capture.OriginY, capture.ScreenW, capture.ScreenH, capture.ImgW, capture.ImgH))
@@ -138,6 +140,9 @@ func (t *ScreenshotTool) Execute(_ context.Context, params any, callbacks llmtoo
 	if err != nil {
 		return "", fmt.Errorf("加载截图失败: %w", err)
 	}
+	// 图像已成功交付（入队/识别完成）才切换坐标映射：交付失败时 AI 看不到
+	// 本图，若已切换，它基于旧图给出的操作坐标会被错误换算
+	t.state.setView(newView)
 	return result + "\n" + viewInfo, nil
 }
 
@@ -287,11 +292,27 @@ func absInt(n int) int {
 // ─────────────────────────────────────────────
 
 type KeyboardTypeParams struct {
-	Text string `json:"text" desc:"要输入的文本内容（支持中文等任意字符，换行会转成回车键）"`
+	Text string `json:"text" desc:"要输入的文本内容（支持中文等任意字符，换行会转成回车键）；单次上限 5000 字符，超长请拆分多次输入"`
 }
 
 type KeyboardTypeTool struct {
 	llmtool.BaseTool[KeyboardTypeParams]
+}
+
+// maxTypeLen keyboard_type 单次输入的文本长度上限（rune 数）：逐字符注入约
+// 2ms/字符，超长文本耗时线性增长，会逼近消息事件超时预算。
+const maxTypeLen = 5000
+
+// validateTypeText 键入文本校验（空文本与超长文本拒绝）。独立成函数以便
+// 跨平台测试：走 Execute 会在 Windows 宿主机上真的逐字输入。
+func validateTypeText(text string) error {
+	if text == "" {
+		return fmt.Errorf("keyboard_type: text 不能为空")
+	}
+	if n := len([]rune(text)); n > maxTypeLen {
+		return fmt.Errorf("keyboard_type: 文本过长（%d 字符，上限 %d），请拆分多次输入", n, maxTypeLen)
+	}
+	return nil
 }
 
 func NewKeyboardTypeTool() *KeyboardTypeTool {
@@ -306,8 +327,8 @@ func NewKeyboardTypeTool() *KeyboardTypeTool {
 
 func (t *KeyboardTypeTool) Execute(_ context.Context, params any, _ llmtool.CallBackFuncs) (string, error) {
 	p := params.(*KeyboardTypeParams)
-	if p.Text == "" {
-		return "", fmt.Errorf("keyboard_type: text 不能为空")
+	if err := validateTypeText(p.Text); err != nil {
+		return "", err
 	}
 	if err := computeruse.TypeText(p.Text); err != nil {
 		return "", fmt.Errorf("键盘输入失败: %w", err)
