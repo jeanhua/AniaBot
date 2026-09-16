@@ -137,7 +137,7 @@ flowchart TB
 
 ### 图片加载的注入时机
 
-工具执行后若 `TakeLoadedImages` 队列非空（`load_images` / `local_image` 工具推入），在回填工具结果之后追加一条图片上下文消息，让多模态模型下一轮看到图片：
+工具执行后若 `TakeLoadedImages` 队列非空（`load_images` / `local_image` / `screenshot` 工具推入），在回填工具结果之后追加一条图片上下文消息，让多模态模型下一轮看到图片：
 
 ```go
 if imageURLs := callbacks.TakeLoadedImages(); len(imageURLs) > 0 {

@@ -340,6 +340,8 @@ bot.luckylilia.http.target_url    = http://localhost:6690 # LLBot HTTP 服务端
 | `plugin.ai_chat_bot.bash.whitelist` | `[]` | 命中这些正则的命令直接放行；黑白名单都不命中（含均未配置）时经工具审批确认后执行 |
 | `plugin.ai_chat_bot.bash.blacklist` | `["config(\\.dev)?\\.(yaml|yml|json)", "^mkfs", "^shutdown", "^reboot"]` | 匹配这些正则的命令被禁止（优先于白名单） |
 | `plugin.ai_chat_bot.local_image.enable` | `false` | 允许 AI 读取宿主机本地图片 |
+| `plugin.ai_chat_bot.computer_use.enable` | `false` | 电脑操作工具：AI 可截图查看宿主机屏幕并控制鼠标键盘（`screenshot` / `mouse_click` / `mousemove` / `mouse_scroll` / `keyboard_type` / `keyboard_press` / `active_window` / `list_windows`）；仅支持 Windows 宿主机。可把 `mouse_click` 等加入 `approval.tools` 实现每次操作人工确认，所有操作写入操作审计日志 |
+| `plugin.ai_chat_bot.computer_use.max_width` | `1280` | 截图最大宽度（像素），超出时等比缩小以节省 token，`0` 表示不缩放 |
 
 ### 任务清单（todo）
 
@@ -352,7 +354,7 @@ bot.luckylilia.http.target_url    = http://localhost:6690 # LLBot HTTP 服务端
 | 配置键 | 默认值 | 说明 |
 | --- | --- | --- |
 | `plugin.ai_chat_bot.approval.enable` | `false` | 启用后下列工具执行前需人工确认（请求发送者或管理员回复「允许/拒绝」）；同时作为 bash 未列名命令的审批通道（关闭时 bash 未列名命令默认放行，只认黑名单）。配置修改类工具（`config_set`/`config_file_set`）恒需管理员审批（提示私聊发给管理员），与此开关无关 |
-| `plugin.ai_chat_bot.approval.tools` | `file` | 需审批的工具名（逗号分隔）；bash 有命令级黑白名单 + 审批三段式，无需列入；配置修改类工具恒需管理员审批，无需列入 |
+| `plugin.ai_chat_bot.approval.tools` | `file` | 需审批的工具名（逗号分隔）；bash 有命令级黑白名单 + 审批三段式，无需列入；配置修改类工具恒需管理员审批，无需列入。启用电脑操作工具后建议把 `mouse_click`、`keyboard_type` 等列入，实现每次操作人工确认 |
 | `plugin.ai_chat_bot.approval.timeout_sec` | `120` | 审批超时（秒），超时无回复自动拒绝；范围 10~240 |
 
 ### AI 钩子（hooks）
