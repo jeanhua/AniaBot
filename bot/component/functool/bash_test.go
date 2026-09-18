@@ -2,6 +2,9 @@ package functool
 
 import (
 	"context"
+	"os"
+	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -116,5 +119,126 @@ func TestBashWhitelistSkipsApproval(t *testing.T) {
 	}
 	if called {
 		t.Fatal("白名单命令不应触发审批")
+	}
+}
+
+// TestBashWorkingDir working_dir 配置：命令从该目录开始执行。
+func TestBashWorkingDir(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "marker.txt"), []byte("working-dir-ok"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	tool := mustBash(t, BashConfig{WorkingDir: dir, Whitelist: []string{`.*`}})
+	cmd := "cat marker.txt"
+	if runtime.GOOS == "windows" {
+		cmd = "type marker.txt"
+	}
+	out, err := tool.Execute(context.Background(), &BashParams{Command: cmd}, llmtool.CallBackFuncs{})
+	if err != nil || !strings.Contains(out, "working-dir-ok") {
+		t.Fatalf("working_dir 未生效: out=%q err=%v", out, err)
+	}
+}
+
+// TestBashPersistCwd persist_cwd：命令内 cd 延续到后续调用，且目录标记不漏进输出。
+func TestBashPersistCwd(t *testing.T) {
+	if runtime.GOOS != "windows" && runtime.GOOS != "linux" && runtime.GOOS != "darwin" {
+		t.Skip("平台相关")
+	}
+	sub := filepath.Join(t.TempDir(), "persistcwd_marked")
+	if err := os.MkdirAll(sub, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	tool := mustBash(t, BashConfig{PersistCwd: true, Whitelist: []string{`.*`}})
+
+	var cdCmd, showCmd string
+	if runtime.GOOS == "windows" {
+		cdCmd = `cd /d "` + sub + `"`
+		showCmd = "cd"
+	} else {
+		cdCmd = "cd '" + sub + "'"
+		showCmd = "pwd"
+	}
+
+	out, err := tool.Execute(context.Background(), &BashParams{Command: cdCmd}, llmtool.CallBackFuncs{})
+	if err != nil {
+		t.Fatalf("cd 失败: %v out=%q", err, out)
+	}
+	if strings.Contains(out, "ANIABOT_CWD") {
+		t.Fatalf("目录标记应从输出剥离: %q", out)
+	}
+
+	out, err = tool.Execute(context.Background(), &BashParams{Command: showCmd}, llmtool.CallBackFuncs{})
+	if err != nil {
+		t.Fatalf("pwd 失败: %v", err)
+	}
+	if !strings.Contains(strings.ToLower(out), "persistcwd_marked") {
+		t.Fatalf("cwd 未持久化到下一次调用: %q", out)
+	}
+
+	// 退出码保持：命令失败时退出码语义不变（非零退出码作为结果而非工具错误返回）
+	failCmd := "exit 3"
+	if runtime.GOOS == "windows" {
+		failCmd = "exit /b 3"
+	}
+	out, err = tool.Execute(context.Background(), &BashParams{Command: failCmd}, llmtool.CallBackFuncs{})
+	if err != nil || !strings.Contains(out, "退出码 3") {
+		t.Fatalf("包装脚本应保持退出码: out=%q err=%v", out, err)
+	}
+}
+
+// TestBashMaxOutputTruncate max_output：超长输出按头尾保留，中段隐藏。
+func TestBashMaxOutputTruncate(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("windows cmd 生成超长输出较繁琐，truncateMiddle 已单测覆盖")
+	}
+	tool := mustBash(t, BashConfig{Whitelist: []string{`.*`}, MaxOutput: 100})
+	cmd := "printf 'H%.0s' $(seq 120); echo; printf 'T%.0s' $(seq 120)"
+	out, err := tool.Execute(context.Background(), &BashParams{Command: cmd}, llmtool.CallBackFuncs{})
+	if err != nil {
+		t.Fatalf("执行失败: %v", err)
+	}
+	if !strings.Contains(out, "已截断") {
+		t.Fatalf("超长输出应触发中段截断: %q", out)
+	}
+	r := []rune(out)
+	if len(r) > 200 {
+		t.Fatalf("截断后应明显变短: %d runes", len(r))
+	}
+}
+
+// TestBashTimeoutSec 超时可配置：配置 1 秒超时，睡眠 3 秒的命令应被终止并提示。
+func TestBashTimeoutSec(t *testing.T) {
+	var cmd string
+	switch runtime.GOOS {
+	case "windows":
+		cmd = "ping -n 4 127.0.0.1 >nul"
+	case "darwin":
+		cmd = "sleep 3"
+	default:
+		cmd = "sleep 3"
+	}
+	tool := mustBash(t, BashConfig{Whitelist: []string{`.*`}, TimeoutSec: 1})
+	out, err := tool.Execute(context.Background(), &BashParams{Command: cmd}, llmtool.CallBackFuncs{})
+	if err != nil {
+		t.Fatalf("超时应作为结果返回而非错误: %v", err)
+	}
+	if !strings.Contains(out, "超时") {
+		t.Fatalf("应提示超时: %q", out)
+	}
+}
+
+// TestTruncateMiddle 头尾保留式截断的比例与标记。
+func TestTruncateMiddle(t *testing.T) {
+	s := strings.Repeat("a", 120) + strings.Repeat("b", 120)
+	got := truncateMiddle(s, 40)
+	if !strings.Contains(got, "已截断") {
+		t.Fatalf("应包含截断标记: %q", got)
+	}
+	if !strings.HasPrefix(got, "aaaa") || !strings.HasSuffix(got, "bbbb") {
+		t.Fatalf("应保留头尾: %q", got)
+	}
+	// 不超长原样返回
+	if got := truncateMiddle("short", 40); got != "short" {
+		t.Fatalf("不超长不应截断: %q", got)
 	}
 }

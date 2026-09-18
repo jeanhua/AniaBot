@@ -847,14 +847,18 @@ func (p *AIChatPlugin) Start(ctx context.Context, cfg *viper.Viper) error {
 	}
 	p.skillsDir = skillsDir
 	bashConfig := functool.BashConfig{
-		Enable:    p.cfg.Bash.Enable,
-		Shell:     p.cfg.Bash.Shell,
-		Env:       p.cfg.Bash.Env,
-		Whitelist: p.cfg.Bash.Whitelist,
-		Blacklist: p.cfg.Bash.Blacklist,
+		Enable:     p.cfg.Bash.Enable,
+		Shell:      p.cfg.Bash.Shell,
+		Env:        p.cfg.Bash.Env,
+		Whitelist:  p.cfg.Bash.Whitelist,
+		Blacklist:  p.cfg.Bash.Blacklist,
+		WorkingDir: p.cfg.Bash.WorkingDir,
+		PersistCwd: p.cfg.Bash.PersistCwd,
+		TimeoutSec: p.cfg.Bash.TimeoutSec,
+		MaxOutput:  p.cfg.Bash.MaxOutput,
 	}
 	if bashConfig.Enable {
-		p.Logger.Info("已启用bash工具", "shell", bashConfig.Shell, "whitelist", bashConfig.Whitelist, "blacklist", bashConfig.Blacklist)
+		p.Logger.Info("已启用bash工具", "shell", bashConfig.Shell, "whitelist", bashConfig.Whitelist, "blacklist", bashConfig.Blacklist, "working_dir", bashConfig.WorkingDir, "persist_cwd", bashConfig.PersistCwd)
 	}
 	fileConfig := functool.FileConfig{Enable: p.cfg.File.Enable}
 	if fileConfig.Enable {
