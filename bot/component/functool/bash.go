@@ -244,6 +244,12 @@ func (t *BashTool) Execute(ctx context.Context, params any, cbs llmtool.CallBack
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
 
+	// 追加而非替换：直接赋值 cmd.Env 会丢弃进程继承的 PATH/HOME 等变量，
+	// 配置任意一个自定义变量就会破坏依赖继承环境的命令查找；同名变量以配置值为准
+	if len(t.env) > 0 {
+		cmd.Env = append(cmd.Environ(), t.env...)
+	}
+
 	err = cmd.Run()
 
 	result := stdout.String()

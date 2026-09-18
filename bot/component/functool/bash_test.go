@@ -227,6 +227,29 @@ func TestBashTimeoutSec(t *testing.T) {
 	}
 }
 
+// TestBashEnv 自定义环境变量追加到继承环境：配置的变量生效，
+// 进程内已有的变量不丢失（回归 161b30a：重构时 env 应用逻辑被整体删除）。
+func TestBashEnv(t *testing.T) {
+	t.Setenv("ANIABOT_ENV_CANARY", "inherited-ok")
+	var printCmd string
+	if runtime.GOOS == "windows" {
+		printCmd = "echo %ANIABOT_ENV_CANARY% %ANIABOT_ENV_CUSTOM%"
+	} else {
+		printCmd = `echo "$ANIABOT_ENV_CANARY" "$ANIABOT_ENV_CUSTOM"`
+	}
+	tool := mustBash(t, BashConfig{
+		Whitelist: []string{`.*`},
+		Env:       []string{"ANIABOT_ENV_CUSTOM=configured-ok"},
+	})
+	out, err := tool.Execute(context.Background(), &BashParams{Command: printCmd}, llmtool.CallBackFuncs{})
+	if err != nil {
+		t.Fatalf("执行失败: %v", err)
+	}
+	if !strings.Contains(out, "inherited-ok") || !strings.Contains(out, "configured-ok") {
+		t.Fatalf("子进程环境应同时含继承值与配置值: %q", out)
+	}
+}
+
 // TestTruncateMiddle 头尾保留式截断的比例与标记。
 func TestTruncateMiddle(t *testing.T) {
 	s := strings.Repeat("a", 120) + strings.Repeat("b", 120)
