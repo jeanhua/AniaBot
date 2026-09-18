@@ -3,6 +3,7 @@ package aichat
 import (
 	"context"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -42,7 +43,7 @@ func NewToolOrchestrator(executor ToolExecutor, msgBuilder *MessageBuilder) *Too
 	return &ToolOrchestrator{
 		executor:      executor,
 		msgBuilder:    msgBuilder,
-		maxIterations: 20,
+		maxIterations: 100,
 	}
 }
 
@@ -256,16 +257,27 @@ func (o *ToolOrchestrator) executeToolCalls(
 					}
 					mu.Unlock()
 				}
-				result = fmt.Sprintf("Error executing tool: %v", err)
+				// 错误回填给模型，但不丢弃工具已产出的部分结果（错误信息可能
+				// 携带诊断细节，如具体的系统调用失败原因）；result 为空时保留
+				// 原占位文本，保证模型总能看到一条明确的失败说明
+				if strings.TrimSpace(result) == "" {
+					result = fmt.Sprintf("Error executing tool: %v", err)
+				} else {
+					result = result + "\nError executing tool: " + err.Error()
+				}
 			}
-			// PostToolUse 钩子（仅通知，结果被忽略）：结果文本截断后随载荷上报；
+			// PostToolUse 钩子：结果文本截断后随载荷上报；Context 非空时作为附加
+			// 反馈拼到工具结果后回填给模型（可做「编辑后自动 lint/编译、告警喂回
+			// 模型自动修复」的闭环）；Block 被忽略（工具已执行，无法撤回）。
 			// 被门禁阻断的调用未真正执行工具，不触发本事件
 			if o.hookRunner != nil {
 				payload := o.hookBase
 				payload.ToolName = call.Name
 				payload.ToolInput = call.Arguments
 				payload.ToolResult = truncateRunes(result, hookToolResultRunes)
-				_ = o.hookRunner.Run(ctx, agenthook.EventPostToolUse, payload)
+				if hr := o.hookRunner.Run(ctx, agenthook.EventPostToolUse, payload); strings.TrimSpace(hr.Context) != "" {
+					result = result + "\n[钩子附加反馈] " + truncateRunes(hr.Context, hookContextMaxRunes)
+				}
 			}
 			results[i] = o.msgBuilder.BuildToolMessage(call.ID, call.Name, result)
 		}(i, call)

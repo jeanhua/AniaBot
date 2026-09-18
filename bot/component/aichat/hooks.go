@@ -26,6 +26,10 @@ func (e *PromptBlockedError) Error() string {
 // hookToolResultRunes PostToolUse 载荷中工具结果的截断长度
 const hookToolResultRunes = 1000
 
+// hookContextMaxRunes PostToolUse 钩子附加反馈（Result.Context）拼入工具结果的
+// 截断长度：反馈是给模型的修复线索，超长反而挤占上下文
+const hookContextMaxRunes = 2000
+
 // truncateRunes 按 rune 截断，避免切在多字节字符中间产生非法 UTF-8
 func truncateRunes(s string, max int) string {
 	if max <= 0 {

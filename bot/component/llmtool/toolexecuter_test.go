@@ -2,19 +2,28 @@ package llmtool
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"sync"
 	"testing"
 )
 
-// fakeTool 最小 Tool 实现，仅用于注册表顺序测试
-type fakeTool struct{ name string }
+// fakeTool 最小 Tool 实现，仅用于注册表顺序测试；exec 非空时由其决定执行行为
+type fakeTool struct {
+	name string
+	exec func(ctx context.Context, params any, callbacks CallBackFuncs) (string, error)
+}
+
+var errFakeFailure = errors.New("fake failure")
 
 func (t *fakeTool) Name() string        { return t.name }
 func (t *fakeTool) Description() string { return t.name }
 func (t *fakeTool) Params() any         { return &struct{}{} }
 func (t *fakeTool) Execute(ctx context.Context, params any, callbacks CallBackFuncs) (string, error) {
+	if t.exec != nil {
+		return t.exec(ctx, params, callbacks)
+	}
 	return "", nil
 }
 
@@ -166,5 +175,37 @@ func TestSessionExecutorConcurrentAccess(t *testing.T) {
 
 	if cleared := session.ClearDynamicMCPTools(); cleared != 0 {
 		t.Fatalf("fakeTool 非 MCPTool，不应被清理, got %d", cleared)
+	}
+}
+
+// TestExecuteMergesPartialResultIntoError 工具返回 (部分结果, 错误) 时，
+// 部分结果应合并进错误文本回传，不能只给模型一句"执行失败"。
+func TestExecuteMergesPartialResultIntoError(t *testing.T) {
+	e := NewToolExecuter()
+	e.Register(&fakeTool{
+		name: "diagnostic",
+		exec: func(ctx context.Context, params any, callbacks CallBackFuncs) (string, error) {
+			return "读取文件失败: open /tmp/a.txt: no such file or directory", errFakeFailure
+		},
+	})
+
+	_, err := e.Execute(context.Background(), ToolCall{Name: "diagnostic", Arguments: "{}"}, CallBackFuncs{})
+	if err == nil {
+		t.Fatal("应返回错误")
+	}
+	if !strings.Contains(err.Error(), "no such file or directory") {
+		t.Fatalf("部分结果应合并进错误文本: %v", err)
+	}
+
+	// result 为空时保持原占位格式
+	e.Register(&fakeTool{
+		name: "silent",
+		exec: func(ctx context.Context, params any, callbacks CallBackFuncs) (string, error) {
+			return "", errFakeFailure
+		},
+	})
+	_, err = e.Execute(context.Background(), ToolCall{Name: "silent", Arguments: "{}"}, CallBackFuncs{})
+	if err == nil || !strings.Contains(err.Error(), "execution failed") {
+		t.Fatalf("空结果时应保持占位格式: %v", err)
 	}
 }

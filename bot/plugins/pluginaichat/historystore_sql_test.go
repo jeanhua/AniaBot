@@ -233,35 +233,3 @@ func TestSQLHistoryStoreClear(t *testing.T) {
 		t.Fatalf("重建后序号 = %d, want 0", seq)
 	}
 }
-
-// TestHistoryStoreConformance 同一操作序列分别作用于 KV 与 SQL 实现，
-// Load 结果应一致（KV 为整段 JSON 读改写，SQL 为行级增量）。
-func TestHistoryStoreConformance(t *testing.T) {
-	ctx := context.Background()
-	kv := newPersistentHistoryStore(newPFake(), "chat:g:1", testLogger())
-	sqlStore := newSQLHistoryStore(newTestSQLDB(t), "g:1", testLogger())
-
-	msgs := historyTestMessages()
-	ops := []struct {
-		name string
-		run  func(h aichat.HistoryStore)
-	}{
-		{"append1", func(h aichat.HistoryStore) { h.Append(ctx, msgs[:2]) }},
-		{"append2", func(h aichat.HistoryStore) { h.Append(ctx, msgs[2:]) }},
-		{"replace", func(h aichat.HistoryStore) { h.Replace(ctx, msgs[:1]) }},
-		{"append3", func(h aichat.HistoryStore) { h.Append(ctx, msgs[1:2]) }},
-		{"clear", func(h aichat.HistoryStore) { h.Clear(ctx) }},
-		{"append4", func(h aichat.HistoryStore) { h.Append(ctx, msgs[2:]) }},
-	}
-
-	for _, op := range ops {
-		op.run(kv)
-		op.run(sqlStore)
-		kvGot, kvErr := kv.Load(ctx)
-		sqlGot, sqlErr := sqlStore.Load(ctx)
-		if kvErr != nil || sqlErr != nil {
-			t.Fatalf("%s: Load 出错 kv=%v sql=%v", op.name, kvErr, sqlErr)
-		}
-		assertMessagesEqual(t, sqlGot, kvGot)
-	}
-}

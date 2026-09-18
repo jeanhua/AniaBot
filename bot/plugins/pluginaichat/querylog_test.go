@@ -15,7 +15,7 @@ import (
 func TestQueryLogLiveToolCalls(t *testing.T) {
 	p := &AIChatPlugin{}
 	p.Logger = slog.Default()
-	p.PersistentStorage = newPFake()
+	p.PersistentStorage = newSQLPFake()
 	p.cfg.QueryLog.Enable = true
 	p.initQueryLogger()
 	if p.queryLogger == nil {

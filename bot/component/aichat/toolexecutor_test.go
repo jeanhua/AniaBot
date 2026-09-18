@@ -334,3 +334,39 @@ func TestStreamToolRoundBoundary(t *testing.T) {
 		t.Fatalf("流式模式下不应调用 SendText, got %d", sendTextCalls.Load())
 	}
 }
+
+// TestExecuteToolCallsPostToolUseContextFeedback PostToolUse 钩子返回的 Context
+// 应作为附加反馈拼到工具结果后回填给模型；Context 为空时结果保持原样。
+func TestExecuteToolCallsPostToolUseContextFeedback(t *testing.T) {
+	exec := &fakeToolExecutor{}
+	o := newTestOrchestrator(exec)
+	o.SetHookRunner(&fakeHookRunner{run: func(ctx context.Context, ev agenthook.Event, p agenthook.Payload) agenthook.Result {
+		if ev != agenthook.EventPostToolUse {
+			return agenthook.Result{}
+		}
+		if p.ToolName == "good" {
+			return agenthook.Result{Context: "lint: unused variable x in line 3"}
+		}
+		return agenthook.Result{}
+	}}, agenthook.Payload{SessionKey: "g:1", AgentKind: agenthook.AgentKindMain})
+
+	results, err := o.executeToolCalls(context.Background(),
+		[]llmtool.ToolCall{
+			{ID: "c1", Name: "good", Arguments: "{}"},
+			{ID: "c2", Name: "plain", Arguments: "{}"},
+		}, llmtool.CallBackFuncs{}, nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(results) != 2 {
+		t.Fatalf("期望 2 条结果消息, got %d", len(results))
+	}
+	got := results[0].Parts[0].Text
+	if !strings.Contains(got, "result:good") || !strings.Contains(got, "[钩子附加反馈] lint: unused variable x") {
+		t.Fatalf("钩子反馈应拼到工具结果后: %q", got)
+	}
+	plain := results[1].Parts[0].Text
+	if strings.Contains(plain, "钩子附加反馈") {
+		t.Fatalf("空 Context 不应拼接反馈: %q", plain)
+	}
+}

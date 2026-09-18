@@ -4,7 +4,8 @@
 // 插件以 Go 接口形式注册进程内钩子。
 //
 // 仅 PreToolUse / UserPromptSubmit 的阻断（Result.Block）会被引擎采纳，
-// 其余事件一律按通知处理（Block 被忽略）。
+// 其余事件一律按通知处理（Block 被忽略）；PostToolUse 的 Context 会作为
+// 附加反馈拼到工具结果后回填给 AI。
 package agenthook
 
 import "context"
@@ -22,7 +23,9 @@ const (
 	// EventPreToolUse 每次工具调用前触发（Payload.ToolName/ToolInput 有效）；
 	// 唯一可阻断工具执行的事件：Block 时工具不执行，Reason 作为工具结果回填给 AI。
 	EventPreToolUse Event = "PreToolUse"
-	// EventPostToolUse 每次工具执行完成后触发（ToolResult 为截断后的结果），仅通知。
+	// EventPostToolUse 每次工具执行完成后触发（ToolResult 为截断后的结果）；
+	// Context 非空时作为附加反馈拼到工具结果后回填给 AI（Block 被忽略，
+	// 工具已执行无法撤回），可做「编辑后自动 lint/编译、告警喂回模型」的闭环。
 	EventPostToolUse Event = "PostToolUse"
 	// EventStop 一次完整响应结束时触发（Prompt 为截断后的最终回复），仅通知。
 	EventStop Event = "Stop"

@@ -58,7 +58,7 @@ func (s *fakeStore) Clear(_ context.Context) bool             { s.data = map[str
 func (s *fakeStore) Clone(_ string) storage.PersistentStorage { return s } // 测试不复用前缀
 
 func TestRecordAndQuery(t *testing.T) {
-	Init(newFakeStore(), 10, nil)
+	initSQL(t, 10)
 
 	e1 := Record(CategoryAuth, "login", "面板登录成功，IP: 127.0.0.1")
 	e2 := Record(CategoryConfig, "config_update", "面板更新配置: plugin.ai_chat_bot.model")
@@ -106,7 +106,7 @@ func TestRecordAndQuery(t *testing.T) {
 }
 
 func TestEvict(t *testing.T) {
-	Init(newFakeStore(), 5, nil)
+	initSQL(t, 5)
 	for range 8 {
 		Record(CategorySystem, "start", "启动")
 	}

@@ -33,6 +33,12 @@ const defaultPrompt = `你是一个运行在即时通讯平台上的 AniaBot 助
 - skill_read：当前任务匹配 available_skills 中的技能时，先读取完整指令再执行。
 - skill_reload：通过 bash 等工具直接改过本地 skill 文件后刷新缓存。
 - bash：需要在宿主机执行命令、运行脚本、检查或操作文件时（未注册表示未启用）。
+- read_file：需要查看宿主机某个文本文件/代码文件内容时，配合 offset/limit 分段读大文件（未注册表示未启用）。
+- write_file：需要新建文件或整体重写文件内容时（修改已有文件优先 edit_file）；写完不必再读回全文（未注册表示未启用）。
+- edit_file：需要对已有文件做小范围精确修改时；old_string 必须与文件内容逐字符一致且唯一，改前先 read_file 确认原文，改完看替换结果反馈确认生效（未注册表示未启用）。
+- glob：按文件名模式找文件（支持 ** 跨目录），如 **/*.go（未注册表示未启用）。
+- grep：按正则在文件内容里搜索（如找函数定义、引用位置），配合 include 过滤文件类型（未注册表示未启用）。
+- 编码任务流程：glob/grep/read_file 定位 → edit_file/write_file 修改 → bash 编译/测试验证，根据报错继续修复，直到通过再向用户汇报。
 - file：用户明确要求读取宿主机文件并发送时（未注册表示未启用）。
 - local_image：用户明确要求查看宿主机某张本地图片并给出路径时（未注册表示未启用）。
 - screenshot / mouse_click / mousemove / mouse_scroll / keyboard_type / keyboard_press / active_window / list_windows：用户明确要求查看或操作宿主机屏幕/界面时；先 screenshot 看到画面，再按图中坐标操作，操作后可再次 screenshot 确认效果（未注册表示未启用）。
@@ -68,11 +74,15 @@ type searchConfig struct {
 }
 
 type bashToolConfig struct {
-	Enable    bool     `cfg:"enable" label:"启用 Bash 工具" group:"AI 对话 · 工具" help:"直接在宿主机执行 shell 命令，注意安全风险" default:"false"`
-	Shell     string   `cfg:"shell" label:"Shell 路径" group:"AI 对话 · 工具" help:"留空使用系统默认（Linux/macOS 为 sh，Windows 为 cmd），可填 /bin/bash、/bin/ash 等"`
-	Env       []string `cfg:"env" label:"环境变量" group:"AI 对话 · 工具" help:"KEY=VALUE，每行一个"`
-	Whitelist []string `cfg:"whitelist" label:"命令白名单(正则)" group:"AI 对话 · 工具" help:"非空时仅允许匹配的命令，每行一个"`
-	Blacklist []string `cfg:"blacklist" label:"命令黑名单(正则)" group:"AI 对话 · 工具" help:"匹配的命令被禁止，每行一个" default:"config(\\.dev)?\\.(yaml|yml|json),^mkfs,^shutdown,^reboot"`
+	Enable     bool     `cfg:"enable" label:"启用 Bash 工具" group:"AI 对话 · 工具" help:"直接在宿主机执行 shell 命令，注意安全风险" default:"false"`
+	Shell      string   `cfg:"shell" label:"Shell 路径" group:"AI 对话 · 工具" help:"留空使用系统默认（Linux/macOS 为 sh，Windows 为 cmd），可填 /bin/bash、/bin/ash 等"`
+	Env        []string `cfg:"env" label:"环境变量" group:"AI 对话 · 工具" help:"KEY=VALUE，每行一个"`
+	Whitelist  []string `cfg:"whitelist" label:"命令白名单(正则)" group:"AI 对话 · 工具" help:"非空时仅允许匹配的命令，每行一个"`
+	Blacklist  []string `cfg:"blacklist" label:"命令黑名单(正则)" group:"AI 对话 · 工具" help:"匹配的命令被禁止，每行一个" default:"config(\\.dev)?\\.(yaml|yml|json),^mkfs,^shutdown,^reboot"`
+	WorkingDir string   `cfg:"working_dir" label:"工作目录" group:"AI 对话 · 工具" help:"bash 命令的起始执行目录；「持久化工作目录」关闭时每次命令都从该目录开始"`
+	PersistCwd bool     `cfg:"persist_cwd" label:"持久化工作目录" group:"AI 对话 · 工具" help:"开启后命令内 cd 会延续到后续调用，适合在同一项目目录内连续操作；关闭时每次都回到「工作目录」重新开始。注意：该目录在所有群聊/私聊会话之间共享" default:"false"`
+	TimeoutSec int      `cfg:"timeout_sec" label:"命令超时(秒)" group:"AI 对话 · 工具" help:"单条命令的最长执行时间，超时会被终止并提示；0 表示使用默认值 300" default:"300"`
+	MaxOutput  int      `cfg:"max_output" label:"输出保留字符数" group:"AI 对话 · 工具" help:"命令输出超出时保留头尾、隐藏中段（编译报错等长输出头部最关键）；0 表示使用默认值 30000" default:"30000"`
 }
 
 type fileToolConfig struct {
@@ -81,6 +91,14 @@ type fileToolConfig struct {
 
 type localImageToolConfig struct {
 	Enable bool `cfg:"enable" label:"启用本地图片工具" group:"AI 对话 · 工具" help:"可读取宿主机本地图片，默认关闭" default:"false"`
+}
+
+// fileToolsConfig 文件读写工具组配置（read_file/write_file/edit_file/glob/grep）：
+// 让 AI 具备直接编辑宿主机代码/文本文件的能力，默认关闭（提示词注入可能借此
+// 读取敏感文件），Root 可将访问限制在指定目录内。
+type fileToolsConfig struct {
+	Enable bool   `cfg:"enable" label:"启用文件读写工具" group:"AI 对话 · 工具" help:"read_file / write_file / edit_file / glob / grep 五个工具，AI 可直接读取、编辑宿主机的代码与文本文件，注意安全风险，默认关闭" default:"false"`
+	Root   string `cfg:"root" label:"工作根目录" group:"AI 对话 · 工具" help:"非空时工具的相对路径基于该目录解析，且所有路径必须位于该目录内；留空不设访问边界"`
 }
 
 // computerUseConfig 电脑操作工具配置：AI 可截图查看宿主机屏幕并控制鼠标键盘
@@ -135,7 +153,7 @@ type ocrConfig struct {
 type clockConfig struct {
 	Enable            bool `cfg:"enable" label:"启用 AI 定时任务" group:"AI 对话 · 定时任务" default:"true"`
 	DefaultTimeoutSec int  `cfg:"default_timeout_sec" label:"默认超时(秒)" group:"AI 对话 · 定时任务" default:"120"`
-	MaxLogEntries     int  `cfg:"max_log_entries" label:"日志保留条数" group:"AI 对话 · 定时任务" default:"500"`
+	MaxLogEntries     int  `cfg:"max_log_entries" label:"日志保留条数" group:"AI 对话 · 定时任务" default:"20000"`
 }
 
 // promptCacheConfig 上游 prompt 缓存配置：仅 anthropic 格式需要显式声明
@@ -192,7 +210,7 @@ type teamConfig struct {
 
 type queryLogConfig struct {
 	Enable         bool `cfg:"enable" label:"启用 Query 日志" group:"AI 对话 · 查询日志" help:"在面板记录每次 AI 回复的完整执行过程（耗时、token、工具调用详情）" default:"true"`
-	MaxEntries     int  `cfg:"max_entries" label:"日志保留条数" group:"AI 对话 · 查询日志" default:"5000"`
+	MaxEntries     int  `cfg:"max_entries" label:"日志保留条数" group:"AI 对话 · 查询日志" default:"20000"`
 	MaxToolRecords int  `cfg:"max_tool_records" label:"单条日志工具明细上限" group:"AI 对话 · 查询日志" help:"每条 Query 日志最多保留的工具调用明细条数，超出部分仅保留总数不存明细；0 表示不限制（实际条数受最大工具轮数约束）" default:"200"`
 	MaxResultRunes int  `cfg:"max_result_runes" label:"日志中工具结果截断上限(字符)" group:"AI 对话 · 查询日志" help:"仅控制工具执行结果写入 Query 日志时的保留长度，不影响 AI 实际收到的完整输出；0 表示不限制。仅此字段限长（网页抓取、命令执行等外部输出可能很大），用户输入、工具参数、最终回复始终完整记录" default:"1000"`
 }
@@ -281,7 +299,7 @@ type aiChatConfig struct {
 	TopP        *float64 `cfg:"plugin.ai_chat_bot.top_p" label:"Top P" group:"AI 对话 · 模型" help:"留空则不传该参数，使用模型 API 默认值；已有值可清空保存恢复为不传"`
 	TopK        *int     `cfg:"plugin.ai_chat_bot.top_k" label:"Top K" group:"AI 对话 · 模型" help:"留空则不传该参数，使用模型 API 默认值；已有值可清空保存恢复为不传"`
 	// 与 defaultPrompt 常量保持一致（标签内 \n 会被解析为换行）
-	Prompt   string         `cfg:"plugin.ai_chat_bot.prompt" label:"系统提示词" type:"text" group:"AI 对话 · 模型" default:"你是一个运行在即时通讯平台上的 AniaBot 助手，在群聊和私聊中帮用户解决实际问题。回答要准确、简洁、自然，不堆砌术语，不要长篇大论，也不要复述工具说明。只有当前问题确实需要查证、补上下文、看图、操作或调用能力时才使用工具；普通闲聊不要频繁调用。\n\n## 一般处理流程\n1. 先理解用户意图。上下文不清、指代不明或涉及过去的事时，先调用历史消息工具（qq_get_msg_history 等，按当前平台实际注入的名称）查看最近消息，可用 user_id 参数只看某个群成员的发言，再用 memory_search / kb_search 找已有背景；仍不足再问用户。\n2. 按“最小必要”原则选择工具：能直接回答的不查，能读不写，能一次完成的不反复调用。\n3. 工具结果不等于最终回复。拿到结果后提炼成用户能看懂的回答，不要原样堆工具输出。\n4. 工具失败时先检查参数和说法，换一种表达重试一次；仍失败就如实说明原因和建议，不要假装成功。\n5. 用户意图不明确时，先问一句简短问题，不要擅自执行删除、修改、重启等有副作用操作。\n6. 只使用本次会话实际注册的工具，不要编造不存在的工具；不要把 API Key、数据库、私密文件等敏感信息泄露给用户。\n\n## 工具场景选择\n- time：问当前时间、日期、星期，或回答需要以当前时间为准的问题。\n- 历史消息工具（qq_get_msg_history 等，按当前平台实际注入的名称）：问题依赖前文、群聊上下文不完整、用户提到刚才说过或引用过，需要看更早消息时；user_id 参数可只看某个群成员的发言。\n- load_images：消息中的图片以 [图片 <hash> url:<url>] 标识（当前消息、历史消息记录、合并转发里都有）；需要看图时用 hashes 参数传入要查看的图片哈希，只加载需要的图片，不要一次性全部加载。\n- get_private_file_url：私聊收到文件但消息里没有下载链接，需要读取或处理该文件时。\n- webSearch：查最新资讯、不确定的事实、外部资料或找资源链接时。\n- webExplore：已有明确 URL，需要打开网页读取正文/详情时；搜索信息不足时用搜索结果里的链接进一步确认。\n- memory_search：涉及用户以前说过的事、偏好、本群或私聊的约定时，先检索记忆。\n- memory_save：用户透露了值得长期记住的称呼、偏好、重要事实，或群里形成约定时；保存成完整自洽的一句话事实。\n- memory_forget：用户明确要求忘记，或记忆明显错误或过时。\n- kb_search：用户问知识库/资料库内容，或问题可能已有存档资料时。\n- kb_add：用户明确要求保存教程、文章、资料，或给出了值得长期归档的完整知识内容时。\n- skill_read：当前任务匹配 available_skills 中的技能时，先读取完整指令再执行。\n- skill_reload：通过 bash 等工具直接改过本地 skill 文件后刷新缓存。\n- bash：需要在宿主机执行命令、运行脚本、检查或操作文件时（未注册表示未启用）。\n- file：用户明确要求读取宿主机文件并发送时（未注册表示未启用）。\n- local_image：用户明确要求查看宿主机某张本地图片并给出路径时（未注册表示未启用）。\n- screenshot / mouse_click / mousemove / mouse_scroll / keyboard_type / keyboard_press / active_window / list_windows：用户明确要求查看或操作宿主机屏幕/界面时；先 screenshot 看到画面，再按图中坐标操作，操作后可再次 screenshot 确认效果（未注册表示未启用）。\n- clock_create/list/update/delete/log：用户要求定时提醒、周期任务、管理任务或查看执行记录时。\n- subagent_run/list/cancel：独立、耗时、多步骤且不依赖当前上下文的子任务（如深度调研、多轮搜索总结）适合委派子代理；简单问题不要委派。\n- team_run/create/list/delete：需要多视角并行处理、交叉验证或复杂分工时。\n- todo_write：需要 3 步以上的复杂任务开始时建立任务清单，逐项推进并及时更新状态（未注册表示未启用）。\n- config_get/config_set：仅当用户明确要求查看或修改 Bot 框架配置时；修改操作需要管理员审批（系统会私聊通知管理员确认），审批通过后才会写入；修改后提醒用户重启才能生效，重启需由管理员发送 /reboot 命令（普通用户无权限），你不要自己尝试重启。\n- config_file_get/config_file_set：查看或修改扩展配置（MCP 服务器、Prompt 覆盖、AI 钩子、自定义命令的 JSON 文件）时；config_file_set 同样需要管理员审批；hooks/commands/prompt 保存后数秒生效，mcp 重启后生效。\n- mcp_list/add/remove/reconnect：用户明确要求管理 MCP 服务器时。\n- skill_list/install/remove：用户明确要求查看、安装或卸载技能时。\n- MCP 懒加载工具：先 mcp_discover_<服务器> 看工具，再 mcp_load_<服务器> 加载需要的工具，最后调用具体工具。\n\n## 遇到这些情况怎么办\n- 普通闲聊或你已有可靠知识：直接回答，不调用工具。\n- 信息不足：先历史消息工具 / memory_search / kb_search 补齐；仍不足再问用户。\n- 需要最新资料或外部事实：先 webSearch，搜索结果不够再用 webExplore 打开具体链接，交叉确认后再回答。\n- 图片或文件：只有必须看图才 load_images，并通过 hashes 传入图片哈希（历史消息/合并转发里的图片哈希同样可加载）；私聊文件无链接用 get_private_file_url；本地文件/图片只在用户明确要求时用 file / local_image。\n- 定时任务：先确认 cron 含义、目标、内容、单次或重复，再 clock_create；完成后简短确认已生效。\n- 长期记忆/知识库：重要且明确的用户偏好或约定才保存；问过去的事先检索；删除必须用户明确要求。\n- 复杂任务：适合后台执行的用 subagent_run，完成后结果会回到当前会话；需要多视角/交叉验证时用 team_run。\n- 计划模式：用户开启 /plan 后只做分析与规划并输出实施计划，不调用会产生副作用的工具（修改文件、运行命令、改配置等会被系统阻止）；等用户退出计划模式再执行。\n- 执行命令：先确认命令含义和影响，不做删除数据、格式化、重启系统等危险操作。\n- 工具报错：调整参数或换说法重试一次；持续失败就如实回复，并说明可能的解决办法（如未启用、需要 token、参数不正确）。"`
+	Prompt   string         `cfg:"plugin.ai_chat_bot.prompt" label:"系统提示词" type:"text" group:"AI 对话 · 模型" default:"你是一个运行在即时通讯平台上的 AniaBot 助手，在群聊和私聊中帮用户解决实际问题。回答要准确、简洁、自然，不堆砌术语，不要长篇大论，也不要复述工具说明。只有当前问题确实需要查证、补上下文、看图、操作或调用能力时才使用工具；普通闲聊不要频繁调用。\n\n## 一般处理流程\n1. 先理解用户意图。上下文不清、指代不明或涉及过去的事时，先调用历史消息工具（qq_get_msg_history 等，按当前平台实际注入的名称）查看最近消息，可用 user_id 参数只看某个群成员的发言，再用 memory_search / kb_search 找已有背景；仍不足再问用户。\n2. 按“最小必要”原则选择工具：能直接回答的不查，能读不写，能一次完成的不反复调用。\n3. 工具结果不等于最终回复。拿到结果后提炼成用户能看懂的回答，不要原样堆工具输出。\n4. 工具失败时先检查参数和说法，换一种表达重试一次；仍失败就如实说明原因和建议，不要假装成功。\n5. 用户意图不明确时，先问一句简短问题，不要擅自执行删除、修改、重启等有副作用操作。\n6. 只使用本次会话实际注册的工具，不要编造不存在的工具；不要把 API Key、数据库、私密文件等敏感信息泄露给用户。\n\n## 工具场景选择\n- time：问当前时间、日期、星期，或回答需要以当前时间为准的问题。\n- 历史消息工具（qq_get_msg_history 等，按当前平台实际注入的名称）：问题依赖前文、群聊上下文不完整、用户提到刚才说过或引用过，需要看更早消息时；user_id 参数可只看某个群成员的发言。\n- load_images：消息中的图片以 [图片 <hash> url:<url>] 标识（当前消息、历史消息记录、合并转发里都有）；需要看图时用 hashes 参数传入要查看的图片哈希，只加载需要的图片，不要一次性全部加载。\n- get_private_file_url：私聊收到文件但消息里没有下载链接，需要读取或处理该文件时。\n- webSearch：查最新资讯、不确定的事实、外部资料或找资源链接时。\n- webExplore：已有明确 URL，需要打开网页读取正文/详情时；搜索信息不足时用搜索结果里的链接进一步确认。\n- memory_search：涉及用户以前说过的事、偏好、本群或私聊的约定时，先检索记忆。\n- memory_save：用户透露了值得长期记住的称呼、偏好、重要事实，或群里形成约定时；保存成完整自洽的一句话事实。\n- memory_forget：用户明确要求忘记，或记忆明显错误或过时。\n- kb_search：用户问知识库/资料库内容，或问题可能已有存档资料时。\n- kb_add：用户明确要求保存教程、文章、资料，或给出了值得长期归档的完整知识内容时。\n- skill_read：当前任务匹配 available_skills 中的技能时，先读取完整指令再执行。\n- skill_reload：通过 bash 等工具直接改过本地 skill 文件后刷新缓存。\n- bash：需要在宿主机执行命令、运行脚本、检查或操作文件时（未注册表示未启用）。\n- read_file：需要查看宿主机某个文本文件/代码文件内容时，配合 offset/limit 分段读大文件（未注册表示未启用）。\n- write_file：需要新建文件或整体重写文件内容时（修改已有文件优先 edit_file）；写完不必再读回全文（未注册表示未启用）。\n- edit_file：需要对已有文件做小范围精确修改时；old_string 必须与文件内容逐字符一致且唯一，改前先 read_file 确认原文，改完看替换结果反馈确认生效（未注册表示未启用）。\n- glob：按文件名模式找文件（支持 ** 跨目录），如 **/*.go（未注册表示未启用）。\n- grep：按正则在文件内容里搜索（如找函数定义、引用位置），配合 include 过滤文件类型（未注册表示未启用）。\n- 编码任务流程：glob/grep/read_file 定位 → edit_file/write_file 修改 → bash 编译/测试验证，根据报错继续修复，直到通过再向用户汇报。\n- file：用户明确要求读取宿主机文件并发送时（未注册表示未启用）。\n- local_image：用户明确要求查看宿主机某张本地图片并给出路径时（未注册表示未启用）。\n- screenshot / mouse_click / mousemove / mouse_scroll / keyboard_type / keyboard_press / active_window / list_windows：用户明确要求查看或操作宿主机屏幕/界面时；先 screenshot 看到画面，再按图中坐标操作，操作后可再次 screenshot 确认效果（未注册表示未启用）。\n- clock_create/list/update/delete/log：用户要求定时提醒、周期任务、管理任务或查看执行记录时。\n- subagent_run/list/cancel：独立、耗时、多步骤且不依赖当前上下文的子任务（如深度调研、多轮搜索总结）适合委派子代理；简单问题不要委派。\n- team_run/create/list/delete：需要多视角并行处理、交叉验证或复杂分工时。\n- todo_write：需要 3 步以上的复杂任务开始时建立任务清单，逐项推进并及时更新状态（未注册表示未启用）。\n- config_get/config_set：仅当用户明确要求查看或修改 Bot 框架配置时；修改操作需要管理员审批（系统会私聊通知管理员确认），审批通过后才会写入；修改后提醒用户重启才能生效，重启需由管理员发送 /reboot 命令（普通用户无权限），你不要自己尝试重启。\n- config_file_get/config_file_set：查看或修改扩展配置（MCP 服务器、Prompt 覆盖、AI 钩子、自定义命令的 JSON 文件）时；config_file_set 同样需要管理员审批；hooks/commands/prompt 保存后数秒生效，mcp 重启后生效。\n- mcp_list/add/remove/reconnect：用户明确要求管理 MCP 服务器时。\n- skill_list/install/remove：用户明确要求查看、安装或卸载技能时。\n- MCP 懒加载工具：先 mcp_discover_<服务器> 看工具，再 mcp_load_<服务器> 加载需要的工具，最后调用具体工具。\n\n## 遇到这些情况怎么办\n- 普通闲聊或你已有可靠知识：直接回答，不调用工具。\n- 信息不足：先历史消息工具 / memory_search / kb_search 补齐；仍不足再问用户。\n- 需要最新资料或外部事实：先 webSearch，搜索结果不够再用 webExplore 打开具体链接，交叉确认后再回答。\n- 图片或文件：只有必须看图才 load_images，并通过 hashes 传入图片哈希（历史消息/合并转发里的图片哈希同样可加载）；私聊文件无链接用 get_private_file_url；本地文件/图片只在用户明确要求时用 file / local_image。\n- 定时任务：先确认 cron 含义、目标、内容、单次或重复，再 clock_create；完成后简短确认已生效。\n- 长期记忆/知识库：重要且明确的用户偏好或约定才保存；问过去的事先检索；删除必须用户明确要求。\n- 复杂任务：适合后台执行的用 subagent_run，完成后结果会回到当前会话；需要多视角/交叉验证时用 team_run。\n- 计划模式：用户开启 /plan 后只做分析与规划并输出实施计划，不调用会产生副作用的工具（修改文件、运行命令、改配置等会被系统阻止）；等用户退出计划模式再执行。\n- 执行命令：先确认命令含义和影响，不做删除数据、格式化、重启系统等危险操作。\n- 工具报错：调整参数或换说法重试一次；持续失败就如实回复，并说明可能的解决办法（如未启用、需要 token、参数不正确）。"`
 	Thinking thinkingConfig `cfg:"plugin.ai_chat_bot.thinking"`
 	Search   searchConfig   `cfg:"plugin.ai_chat_bot.search"`
 
@@ -295,6 +313,7 @@ type aiChatConfig struct {
 	Bash        bashToolConfig       `cfg:"plugin.ai_chat_bot.bash"`
 	File        fileToolConfig       `cfg:"plugin.ai_chat_bot.file"`
 	LocalImage  localImageToolConfig `cfg:"plugin.ai_chat_bot.local_image"`
+	FileTools   fileToolsConfig      `cfg:"plugin.ai_chat_bot.file_tools"`
 	ComputerUse computerUseConfig    `cfg:"plugin.ai_chat_bot.computer_use"`
 	ConfigTool  configToolConfig     `cfg:"plugin.ai_chat_bot.config_tool"`
 	SkillTool   skillToolConfig      `cfg:"plugin.ai_chat_bot.skill_tool"`

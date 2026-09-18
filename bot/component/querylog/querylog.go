@@ -1,10 +1,9 @@
 // Package querylog 提供 AI 查询（Query）执行日志的持久化记录能力。
 //
 // 一次 Query 指从用户触发 AI 回复（群里 @ 机器人或私聊）到 AI 最终响应的完整过程。
-// 存储为双后端结构：SQL 后端下每条日志一行（ania_query_log 表，过滤条件下推
-// WHERE、容量淘汰走范围删除）；非 SQL 后端回退为逐条 KV 记录（key 为 e:<序号>，
-// 写入与单条更新均为 O(1)）。日志 ID 为自增序号的 base36，两种后端一致，
-// 面板游标分页语义不变。命名空间由调用方在注入时隔离（KV 后端），本组件不再 Clone。
+// 持久化存储固定为 SQL 后端（sqlite/mysql），日志每条一行（ania_query_log 表，
+// 过滤条件下推 WHERE、容量淘汰走范围删除）；探测或建表失败时降级为禁用后端
+// （写入静默丢弃），仅记录错误日志。日志 ID 为自增序号的 base36，面板游标分页语义不变。
 package querylog
 
 import (
@@ -66,7 +65,7 @@ type Entry struct {
 	Error            string           `json:"error,omitempty"`
 }
 
-const defaultMax = 200
+const defaultMax = 20000
 
 // Truncate 按符文数截断字符串，超出时追加省略标记。max<=0 时不截断。
 func Truncate(s string, max int) string {
@@ -103,8 +102,7 @@ type backend interface {
 // Logger 持久化 Query 日志记录器。
 //
 // 内部用互斥串行化 Record/Update；读取（Recent/Query）每次直接从存储加载
-// 最新快照，不持有内存缓存，保证与落盘状态一致。SQL 后端与非 SQL 后端
-// （KV）行为一致，ID 均为自增序号的 base36。
+// 最新快照，不持有内存缓存，保证与落盘状态一致。日志 ID 为自增序号的 base36。
 type Logger struct {
 	backend    backend
 	maxEntries int
@@ -113,9 +111,9 @@ type Logger struct {
 	seq        uint64
 }
 
-// New 创建日志记录器。store 应为已隔离好命名空间的子存储；maxEntries<=0 时取默认值。
-// SQL 后端（storage.SQLBackend 探测成功且建表成功）走 ania_query_log 行级存储，
-// 否则回退逐条 KV 记录。
+// New 创建日志记录器。maxEntries<=0 时取默认值。持久化存储固定为 SQL 后端
+// （sqlite/mysql），日志走 ania_query_log 行级存储；探测或建表失败时降级为
+// 禁用后端（写入静默丢弃、读取返回空），仅记录错误日志。
 func New(store storage.PersistentStorage, maxEntries int, logger *slog.Logger) *Logger {
 	if maxEntries <= 0 {
 		maxEntries = defaultMax
@@ -124,18 +122,33 @@ func New(store storage.PersistentStorage, maxEntries int, logger *slog.Logger) *
 	if l.logger == nil {
 		l.logger = slog.Default()
 	}
-	var b backend = newKVBackend(store, l.logger)
-	if db, dialect, ok := storage.SQLBackend(store); ok {
-		if err := storage.EnsureTables(context.Background(), db, dialect, queryLogTables...); err != nil {
-			l.logger.Error("创建 Query 日志表失败，回退 KV 存储", "error", err.Error())
-		} else {
-			b = newSQLBackend(db, l.logger)
-		}
+	db, dialect, ok := storage.SQLBackend(store)
+	if !ok {
+		l.logger.Error("持久化存储不支持 SQL，Query 日志禁用")
+		l.backend = disabledBackend{}
+		return l
 	}
-	l.backend = b
-	l.seq = b.maxSeq()
+	if err := storage.EnsureTables(context.Background(), db, dialect, queryLogTables...); err != nil {
+		l.logger.Error("创建 Query 日志表失败，Query 日志禁用", "error", err.Error())
+		l.backend = disabledBackend{}
+		return l
+	}
+	l.backend = newSQLBackend(db, l.logger)
+	l.seq = l.backend.maxSeq()
 	return l
 }
+
+// disabledBackend SQL 探测/建表失败时的占位后端：写入静默丢弃、读取返回空。
+type disabledBackend struct{}
+
+func (disabledBackend) maxSeq() uint64                       { return 0 }
+func (disabledBackend) insert(uint64, Entry)                 {}
+func (disabledBackend) load(uint64) (Entry, bool)            { return Entry{}, false }
+func (disabledBackend) overwrite(uint64, Entry)              {}
+func (disabledBackend) evict(uint64, int)                    {}
+func (disabledBackend) recent(int) []Entry                   { return nil }
+func (disabledBackend) query(Filter, uint64, int) []Entry    { return nil }
+func (disabledBackend) markRunningInterrupted(time.Time) int { return 0 }
 
 // Record 追加一条日志并落盘，返回写入的 Entry（含分配的 ID）。
 func (l *Logger) Record(e Entry) Entry {

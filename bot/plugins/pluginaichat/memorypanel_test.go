@@ -65,12 +65,12 @@ func TestMemoryPanelCRUD(t *testing.T) {
 		t.Fatalf("更新后内容不符: %+v", entries)
 	}
 
-	// 删除
+	// 删除（行级存储：scope 内最后一条删除后，scope 从列表消失）
 	if err := p.MemoryDelete("g:123", id); err != nil {
 		t.Fatalf("MemoryDelete 失败: %v", err)
 	}
-	if got := p.MemoryScopes(); len(got) != 1 || got[0].Count != 0 {
-		t.Fatalf("删除后条数不符: %+v", got)
+	if got := p.MemoryScopes(); len(got) != 0 {
+		t.Fatalf("删除后 scope 列表应为空: %+v", got)
 	}
 	// 删除不存在的 ID
 	if err := p.MemoryDelete("g:123", id); err == nil {

@@ -245,13 +245,11 @@ func (p *AIChatPlugin) getChat(b bot.Bot, id message.QID, isGroup bool, prompt s
 		// 组装时排在 available_skills 之后，保住「覆盖词 + skills」的跨会话共享前缀
 		scene := p.buildScenePrompt(b, id, isGroup)
 		// 每个会话独立的历史持久化存储；g:/f: 前缀避免群聊与好友 id 相同导致历史串扰。
-		// SQL 后端走行级存储（ania_chat_session/ania_chat_message），否则回退 KV 整段 JSON
+		// 历史行级存储于 ania_chat_session/ania_chat_message（增量追加只插入新行）；
+		// historyDB 未就绪（探测/建表失败）时为 nil，历史仅在内存窗口内有效
 		var historyStore aichat.HistoryStore
-		switch {
-		case p.historyDB != nil:
+		if p.historyDB != nil {
 			historyStore = newSQLHistoryStore(p.historyDB, key, p.Logger)
-		case p.PersistentStorage != nil:
-			historyStore = newPersistentHistoryStore(p.PersistentStorage, "chat:"+key, p.Logger)
 		}
 		c, err := aichat.NewChatBot(
 			p.cfg.BaseURL,

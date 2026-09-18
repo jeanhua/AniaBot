@@ -2,9 +2,9 @@
 //
 // 记录各类管理操作的审计轨迹：面板登录、配置修改、定时任务/记忆/技能/
 // 知识库/团队管理、AI 工具修改配置、重启与自动更新等。
-// 存储为双后端结构：SQL 后端下每条日志一行（ania_op_log 表，过滤条件下推
-// WHERE、容量淘汰走范围删除）；非 SQL 后端回退为逐条 KV 记录（key 为
-// e:<序号>）。日志 ID 为自增序号的 base36，两种后端一致。
+// 持久化存储固定为 SQL 后端（sqlite/mysql），日志每条一行（ania_op_log 表，
+// 过滤条件下推 WHERE、容量淘汰走范围删除）；探测或建表失败时保持未初始化
+// 状态（Record 静默丢弃、Query 返回 nil），仅记录错误日志。日志 ID 为自增序号的 base36。
 //
 // 使用方式为包级单例：core 启动时调用 [Init] 注入存储，之后各调用方
 // （面板 handler、AI 工具等）直接调 [Record]/[Query]。未初始化时
@@ -50,7 +50,7 @@ type Entry struct {
 	Detail   string    `json:"detail"`   // 操作详情（截断）
 }
 
-const defaultMax = 500
+const defaultMax = 20000
 
 // backend 日志存储后端。写路径由包级互斥串行化，后端实现无需额外加锁。
 type backend interface {
@@ -73,9 +73,9 @@ var (
 	logger = slog.Default()
 )
 
-// Init 初始化操作日志存储。store 应为已隔离好命名空间的子存储；
-// maxEntries<=0 时取默认值。SQL 后端（storage.SQLBackend 探测成功且建表成功）
-// 走 ania_op_log 行级存储，否则回退逐条 KV 记录。
+// Init 初始化操作日志存储。maxEntries<=0 时取默认值。持久化存储固定为 SQL 后端
+// （sqlite/mysql），日志走 ania_op_log 行级存储；探测或建表失败时保持未初始化
+// 状态（Record 静默丢弃、Query 返回 nil），仅记录错误日志。
 func Init(store storage.PersistentStorage, maxEntries int, l *slog.Logger) {
 	mu.Lock()
 	defer mu.Unlock()
@@ -85,16 +85,17 @@ func Init(store storage.PersistentStorage, maxEntries int, l *slog.Logger) {
 	if maxEntries > 0 {
 		maxEnt = maxEntries
 	}
-	var b backend = newKVBackend(store, logger)
-	if db, dialect, ok := storage.SQLBackend(store); ok {
-		if err := storage.EnsureTables(context.Background(), db, dialect, opLogTables...); err != nil {
-			logger.Error("创建操作日志表失败，回退 KV 存储", "error", err.Error())
-		} else {
-			b = newSQLBackend(db, logger)
-		}
+	db, dialect, ok := storage.SQLBackend(store)
+	if !ok {
+		logger.Error("持久化存储不支持 SQL，操作日志禁用")
+		return
 	}
-	be = b
-	seq = b.maxSeq()
+	if err := storage.EnsureTables(context.Background(), db, dialect, opLogTables...); err != nil {
+		logger.Error("创建操作日志表失败，操作日志禁用", "error", err.Error())
+		return
+	}
+	be = newSQLBackend(db, logger)
+	seq = be.maxSeq()
 }
 
 // Record 追加一条操作日志并落盘，返回写入的 Entry（含分配的 ID）。

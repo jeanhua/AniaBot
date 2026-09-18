@@ -36,15 +36,15 @@ type memoryEntry struct {
 // ErrMemoryFull 单会话记忆条数达到上限时返回，提示 AI 先清理或合并旧记忆。
 var ErrMemoryFull = errors.New("记忆条数已达上限")
 
-// MaxContentRunes 单条记忆内容的符文数上限，超出部分截断。
-// 每个 scope 的记忆是一个 key 存整个 JSON 数组，单条长度不设限会把 key 撑大。
+// MaxContentRunes 单条记忆内容的符文数上限，超出部分截断
+// （记忆会整体注入上下文与检索结果，单条过长挤占 token）。
 const MaxContentRunes = 2000
 
 // memoryInjectMaxRunes 主动注入块的字符数上限：注入内容追加在消息尾部，
 // 超限会白白占用上下文，从分数最低的条目开始截断。
 const memoryInjectMaxRunes = 1500
 
-// memoryStore 记忆存储后端：KV 整段读写（回退）或 SQL 逐行（ania_memory 表）。
+// memoryStore 记忆存储后端：SQL 逐行存取（ania_memory 表）。
 // 去重、上限、截断与语义向量计算等逻辑留在 memoryManager 层，后端只做存取。
 type memoryStore interface {
 	// list 读取指定 scope 的全部记忆（按创建时间升序）；无记录或失败时返回 nil。
@@ -61,10 +61,8 @@ type memoryStore interface {
 
 // memoryManager 长期记忆管理器：按会话 scope 存取记忆条目。
 //
-// SQL 后端下每条记忆一行（ania_memory 表），非 SQL 后端回退为每 scope 一个
-// JSON 数组整体读写（kvMemoryStore，单会话记忆量级在百级，全量读写开销可忽略）。
-// 所有变更在 mu 保护下串行落盘；存储错误内部记录日志，不拖垮主对话流程
-// （与 HistoryStore 风格一致）。
+// 每条记忆一行（ania_memory 表）。所有变更在 mu 保护下串行落盘；存储错误
+// 内部记录日志，不拖垮主对话流程（与 HistoryStore 风格一致）。
 type memoryManager struct {
 	store      memoryStore
 	logger     *slog.Logger
@@ -76,23 +74,25 @@ type memoryManager struct {
 	mu sync.Mutex
 }
 
+// newMemoryManager 创建记忆管理器。持久化存储固定为 SQL 后端（sqlite/mysql），
+// 记忆走 ania_memory 行级存储；探测或建表失败时返回 nil（调用方按 nil 判空，
+// 记忆相关功能整体禁用），仅记录错误日志。
 func newMemoryManager(store storage.PersistentStorage, logger *slog.Logger, maxEntries int, embedder *embedder) *memoryManager {
+	db, dialect, ok := storage.SQLBackend(store)
+	if !ok {
+		logger.Error("持久化存储不支持 SQL，长期记忆功能禁用")
+		return nil
+	}
+	if err := storage.EnsureTables(context.Background(), db, dialect, memoryTables...); err != nil {
+		logger.Error("创建长期记忆表失败，长期记忆功能禁用", "error", err.Error())
+		return nil
+	}
 	m := &memoryManager{
+		store:      newSQLMemoryStore(db, logger),
 		logger:     logger,
 		maxEntries: maxEntries,
 		embedder:   embedder,
 	}
-	// SQL 后端走行级存储（ania_memory 表）；探测或建表失败回退 KV 整段 JSON
-	if db, dialect, ok := storage.SQLBackend(store); ok {
-		if err := storage.EnsureTables(context.Background(), db, dialect, memoryTables...); err != nil {
-			logger.Error("创建长期记忆表失败，回退 KV 存储", "error", err.Error())
-		} else {
-			m.store = newSQLMemoryStore(db, logger)
-			m.startBackfill()
-			return m
-		}
-	}
-	m.store = newKVMemoryStore(store)
 	m.startBackfill()
 	return m
 }

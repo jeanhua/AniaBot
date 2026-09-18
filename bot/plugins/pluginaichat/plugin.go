@@ -34,7 +34,7 @@ type AIChatPlugin struct {
 	chats sync.Map
 
 	// historyDB 对话历史的 SQL 后端连接（Start 时探测建表成功才赋值）；
-	// nil 表示回退 KV 历史存储（history: 命名空间整段 JSON）
+	// nil 表示历史不持久化（仅内存窗口）
 	historyDB *sql.DB
 
 	lockStorage storage.Storage
@@ -847,14 +847,18 @@ func (p *AIChatPlugin) Start(ctx context.Context, cfg *viper.Viper) error {
 	}
 	p.skillsDir = skillsDir
 	bashConfig := functool.BashConfig{
-		Enable:    p.cfg.Bash.Enable,
-		Shell:     p.cfg.Bash.Shell,
-		Env:       p.cfg.Bash.Env,
-		Whitelist: p.cfg.Bash.Whitelist,
-		Blacklist: p.cfg.Bash.Blacklist,
+		Enable:     p.cfg.Bash.Enable,
+		Shell:      p.cfg.Bash.Shell,
+		Env:        p.cfg.Bash.Env,
+		Whitelist:  p.cfg.Bash.Whitelist,
+		Blacklist:  p.cfg.Bash.Blacklist,
+		WorkingDir: p.cfg.Bash.WorkingDir,
+		PersistCwd: p.cfg.Bash.PersistCwd,
+		TimeoutSec: p.cfg.Bash.TimeoutSec,
+		MaxOutput:  p.cfg.Bash.MaxOutput,
 	}
 	if bashConfig.Enable {
-		p.Logger.Info("已启用bash工具", "shell", bashConfig.Shell, "whitelist", bashConfig.Whitelist, "blacklist", bashConfig.Blacklist)
+		p.Logger.Info("已启用bash工具", "shell", bashConfig.Shell, "whitelist", bashConfig.Whitelist, "blacklist", bashConfig.Blacklist, "working_dir", bashConfig.WorkingDir, "persist_cwd", bashConfig.PersistCwd)
 	}
 	fileConfig := functool.FileConfig{Enable: p.cfg.File.Enable}
 	if fileConfig.Enable {
@@ -864,6 +868,10 @@ func (p *AIChatPlugin) Start(ctx context.Context, cfg *viper.Viper) error {
 	if localImageConfig.Enable {
 		p.Logger.Info("已启用local_image工具（可读取宿主机本地图片供AI查看，请注意安全风险）")
 	}
+	fileToolsConfig := functool.FileToolsConfig{Enable: p.cfg.FileTools.Enable, Root: p.cfg.FileTools.Root}
+	if fileToolsConfig.Enable {
+		p.Logger.Info("已启用文件读写工具（read_file/write_file/edit_file/glob/grep，可读取与编辑宿主机文件，请注意安全风险）", "root", fileToolsConfig.Root)
+	}
 	var err error
 	p.toolExecutor, p.skillManager, err = functool.CreateToolsWithSkill(
 		p.cfg.Search.Token,
@@ -872,6 +880,7 @@ func (p *AIChatPlugin) Start(ctx context.Context, cfg *viper.Viper) error {
 		bashConfig,
 		fileConfig,
 		localImageConfig,
+		fileToolsConfig,
 		p.cfg.Skills,
 		p.cfg.MCP.LazyLoad,
 	)
@@ -920,7 +929,7 @@ func (p *AIChatPlugin) Start(ctx context.Context, cfg *viper.Viper) error {
 		}
 		maxLog := p.cfg.Clock.MaxLogEntries
 		if maxLog <= 0 {
-			maxLog = 500
+			maxLog = 20000
 		}
 		p.clockManager = newClockManager(p, time.Duration(defaultTimeoutSec)*time.Second, maxLog)
 		p.Logger.Info("已启用AI定时任务功能", "tasks", len(p.clockManager.List()), "default_timeout_sec", defaultTimeoutSec)
@@ -999,12 +1008,12 @@ func (p *AIChatPlugin) Start(ctx context.Context, cfg *viper.Viper) error {
 	// Query 日志：记录每次 AI 回复的完整执行过程（面板「Query 日志」页数据源）
 	p.initQueryLogger()
 
-	// 对话历史行级化：SQL 后端建表成功则按行存于 ania_chat_session/ania_chat_message
-	// （增量追加只插入新行，避免整段 JSON 反复全量重写）；探测或建表失败回退
-	// KV 历史存储（history: 命名空间整段 JSON），功能不缺失
+	// 对话历史行级化：按行存于 ania_chat_session/ania_chat_message
+	// （增量追加只插入新行，避免整段 JSON 反复全量重写）；探测或建表失败时
+	// historyDB 保持 nil，历史仅存于内存窗口（重启丢失），不影响对话
 	if db, dialect, ok := storage.SQLBackend(p.PersistentStorage); ok {
 		if err := storage.EnsureTables(ctx, db, dialect, chatHistoryTables...); err != nil {
-			p.Logger.Error("创建对话历史表失败，回退 KV 历史存储", "error", err.Error())
+			p.Logger.Error("创建对话历史表失败，历史将不持久化", "error", err.Error())
 		} else {
 			p.historyDB = db
 			p.Logger.Info("对话历史使用行级存储", "dialect", dialect)

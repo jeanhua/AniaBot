@@ -39,6 +39,7 @@ func (m *planManager) Set(key string, on bool) {
 // subagent_list/subagent_cancel/team_list）不受影响。
 var planBlockedTools = map[string]struct{}{
 	"bash": {}, "file": {}, "config_set": {}, "config_file_set": {},
+	"write_file": {}, "edit_file": {}, // 文件写入/编辑有副作用；read_file/glob/grep 只读放行
 	"mouse_click": {}, "mousemove": {}, "mouse_scroll": {},
 	"keyboard_type": {}, "keyboard_press": {},
 	"memory_save": {}, "memory_forget": {}, "kb_add": {},

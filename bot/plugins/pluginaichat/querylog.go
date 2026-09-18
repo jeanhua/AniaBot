@@ -21,9 +21,9 @@ func (p *AIChatPlugin) initQueryLogger() {
 	}
 	maxEntries := p.cfg.QueryLog.MaxEntries
 	if maxEntries <= 0 {
-		maxEntries = 200
+		maxEntries = 20000
 	}
-	p.queryLogger = querylog.New(p.PersistentStorage.Clone("querylog:"), maxEntries, p.Logger.WithGroup("querylog"))
+	p.queryLogger = querylog.New(p.PersistentStorage, maxEntries, p.Logger.WithGroup("querylog"))
 	// 重启前未正常收尾的执行中记录（如等待工具审批时进程退出）统一标记为中断，
 	// 避免面板一直显示「执行中」；内存中的审批/会话状态已随进程消失，无法恢复
 	if n := p.queryLogger.MarkRunningInterrupted(); n > 0 {

@@ -5,19 +5,28 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"regexp"
 	"runtime"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/jeanhua/AniaBot/bot/component/llmtool"
 )
 
 const (
-	bashTimeout   = 2 * time.Minute
-	bashMaxOutput = 4096
+	// bashDefaultTimeoutSec 默认命令超时（秒）：编码任务的编译/测试动辄数十秒，
+	// 太短会频繁中断；仍受请求级超时（bot.msg_event_timeout_sec）兜底约束
+	bashDefaultTimeoutSec = 300
+	// bashDefaultMaxOutput 默认输出保留字符数：编译错误列表等长输出按头尾保留
+	bashDefaultMaxOutput = 30000
+	// bashCwdMarker persist_cwd 模式下包装脚本回传当前目录的标记前缀
+	bashCwdMarker = "__ANIABOT_CWD__"
+	// bashCwdFail 标记值：起始目录不存在（cd 失败）时回传，不更新 cwd
+	bashCwdFail = "FAIL"
 )
 
 // BashConfig bash工具配置
@@ -27,6 +36,17 @@ type BashConfig struct {
 	Env       []string `json:"env" mapstructure:"env"`             // 环境变量，格式 KEY=VALUE
 	Whitelist []string `json:"whitelist" mapstructure:"whitelist"` // 非空时只允许匹配这些正则的命令
 	Blacklist []string `json:"blacklist" mapstructure:"blacklist"` // 匹配这些正则的命令被禁止
+	// WorkingDir 工作目录：非空时命令从该目录开始执行；persist_cwd 关闭时每次命令
+	// 都回到该目录（命令内 cd 不影响下次调用）
+	WorkingDir string `json:"working_dir" mapstructure:"working_dir"`
+	// PersistCwd 跨调用持久化工作目录：开启后每次命令从上次调用结束时的目录开始，
+	// 命令内的 cd 会延续到后续调用（编码任务在同一项目目录内连续操作免写全路径）。
+	// 实现为包装脚本回传最终目录（尽力而为：包装失败或目录消失时回落 WorkingDir）
+	PersistCwd bool `json:"persist_cwd" mapstructure:"persist_cwd"`
+	// TimeoutSec 单条命令超时（秒），<=0 时取默认值（bashDefaultTimeoutSec）
+	TimeoutSec int `json:"timeout_sec" mapstructure:"timeout_sec"`
+	// MaxOutput 输出最多保留的字符数（按头尾保留、隐藏中段），<=0 时取默认值
+	MaxOutput int `json:"max_output" mapstructure:"max_output"`
 }
 
 type BashParams struct {
@@ -40,6 +60,16 @@ type BashTool struct {
 	env       []string
 	whitelist []*regexp.Regexp
 	blacklist []*regexp.Regexp
+
+	workingDir string // 固定工作目录（persist_cwd 关闭时的起始目录）
+	persistCwd bool   // 是否跨调用持久化工作目录
+	timeout    time.Duration
+	maxOutput  int
+
+	// cwd persist_cwd 模式下记录的当前目录；同轮并行工具调用可能同时执行
+	// bash（如「编译并测试」拆两个调用），读写都需持锁
+	cwdMu sync.Mutex
+	cwd   string
 }
 
 // ResolveShell 解析实际使用的 shell 及其包装参数。
@@ -97,14 +127,35 @@ func NewBashTool(config BashConfig) (*BashTool, error) {
 		return nil, err
 	}
 
-	desc := fmt.Sprintf("在宿主机上执行 shell 命令（由 %s 解释执行），超时2分钟，输出最大4096字符。权限分三档：命中黑名单直接拒绝；命中白名单直接放行；两者都不命中时会向用户发起审批，等用户回复「允许」后才执行（审批未启用则默认放行）。注意：不要假设环境存在 bash，运行 .sh 脚本优先用 `sh 脚本路径`；需要 python3 等其他解释器时先用 `command -v` 确认其存在", shell)
+	timeout := time.Duration(config.TimeoutSec) * time.Second
+	if config.TimeoutSec <= 0 {
+		timeout = bashDefaultTimeoutSec * time.Second
+	}
+	maxOutput := config.MaxOutput
+	if maxOutput <= 0 {
+		maxOutput = bashDefaultMaxOutput
+	}
+
+	cwdHint := ""
+	if config.PersistCwd {
+		cwdHint = "工作目录跨调用持久化：命令内 cd 会延续到后续调用"
+	} else if config.WorkingDir != "" {
+		cwdHint = fmt.Sprintf("命令固定从 %s 开始执行", config.WorkingDir)
+	}
+
+	desc := fmt.Sprintf("在宿主机上执行 shell 命令（由 %s 解释执行），超时 %s，输出超过 %d 字符时保留头尾截断。%s权限分三档：命中黑名单直接拒绝；命中白名单直接放行；两者都不命中时会向用户发起审批，等用户回复「允许」后才执行（审批未启用则默认放行）。注意：不要假设环境存在 bash，运行 .sh 脚本优先用 `sh 脚本路径`；需要 python3 等其他解释器时先用 `command -v` 确认其存在",
+		shell, timeout, maxOutput, cwdHint)
 	return &BashTool{
-		BaseTool:  llmtool.MakeBaseTool("bash", desc, BashParams{}),
-		shell:     shell,
-		shellArg:  shellArg,
-		env:       config.Env,
-		whitelist: whitelist,
-		blacklist: blacklist,
+		BaseTool:   llmtool.MakeBaseTool("bash", desc, BashParams{}),
+		shell:      shell,
+		shellArg:   shellArg,
+		env:        config.Env,
+		whitelist:  whitelist,
+		blacklist:  blacklist,
+		workingDir: config.WorkingDir,
+		persistCwd: config.PersistCwd,
+		timeout:    timeout,
+		maxOutput:  maxOutput,
 	}, nil
 }
 
@@ -161,14 +212,32 @@ func (t *BashTool) Execute(ctx context.Context, params any, cbs llmtool.CallBack
 
 	// 基于调用方 ctx 派生超时：/stop 取消请求时命令随之终止，
 	// 不会因忽略 ctx 而让长命令继续占满会话锁与并发槽
-	ctx, cancel := context.WithTimeout(ctx, bashTimeout)
+	ctx, cancel := context.WithTimeout(ctx, t.timeout)
 	defer cancel()
 
-	cmd := exec.CommandContext(ctx, t.shell, t.shellArg, p.Command)
-	if len(t.env) > 0 {
-		// 追加而非替换：直接赋值 cmd.Env 会丢弃进程继承的 PATH/HOME 等变量，
-		// 配置任意一个自定义变量就会破坏依赖继承环境的命令查找
-		cmd.Env = append(cmd.Environ(), t.env...)
+	var (
+		cmd     *exec.Cmd
+		cleanup func()
+	)
+	if t.persistCwd {
+		// 持久化工作目录：从上次结束目录（缺省回落固定工作目录）出发，
+		// 包装脚本回传命令结束时的目录并保持退出码不变
+		t.cwdMu.Lock()
+		start := t.cwd
+		t.cwdMu.Unlock()
+		if start == "" {
+			start = t.workingDir
+		}
+		cmd, cleanup, err = t.buildPersistCwdCmd(ctx, start, p.Command)
+		if err != nil {
+			return "", fmt.Errorf("bash: 构造命令失败: %w", err)
+		}
+		defer cleanup()
+	} else {
+		cmd = exec.CommandContext(ctx, t.shell, t.shellArg, p.Command)
+		if t.workingDir != "" {
+			cmd.Dir = t.workingDir
+		}
 	}
 
 	var stdout, stderr bytes.Buffer
@@ -185,13 +254,16 @@ func (t *BashTool) Execute(ctx context.Context, params any, cbs llmtool.CallBack
 		result += "stderr: " + stderr.String()
 	}
 
-	if r := []rune(result); len(r) > bashMaxOutput {
-		// 按 rune 截断，避免切在多字节字符中间产生非法 UTF-8
-		result = string(r[:bashMaxOutput]) + "\n...(输出已截断)"
+	if t.persistCwd {
+		result = t.consumeCwdMarker(result)
+	}
+
+	if r := []rune(result); len(r) > t.maxOutput {
+		result = truncateMiddle(string(r), t.maxOutput)
 	}
 
 	if ctx.Err() == context.DeadlineExceeded {
-		return result + "\n命令执行超时(2分钟)", nil
+		return result + fmt.Sprintf("\n命令执行超时(%s)", t.timeout), nil
 	}
 
 	if err != nil {
@@ -213,4 +285,93 @@ func (t *BashTool) Execute(ctx context.Context, params any, cbs llmtool.CallBack
 		return result, fmt.Errorf("bash: 执行失败: %w", err)
 	}
 	return result, nil
+}
+
+// buildPersistCwdCmd 构造带目录回传的命令：包装脚本从 start 目录出发执行原命令，
+// 之后打印标记行回传最终目录，并以原命令的退出码退出。
+//
+// sh 系：多行脚本直接经 -c 传入。
+// cmd 系：多行脚本经参数传递时逐行执行与 %VAR% 展开不可靠，写入临时 .cmd 文件
+// 执行（/Q 关闭命令回显，避免包装脚本内容污染输出）；cleanup 删除临时文件。
+func (t *BashTool) buildPersistCwdCmd(ctx context.Context, start, command string) (*exec.Cmd, func(), error) {
+	if t.shellArg != "/C" {
+		cmd := exec.CommandContext(ctx, t.shell, t.shellArg, t.wrapShCwdScript(start, command))
+		return cmd, func() {}, nil
+	}
+
+	lines := []string{
+		`cd /d "` + start + `" || exit /b 1`,
+		command,
+		`echo ` + bashCwdMarker + `%CD%`,
+		`exit %ERRORLEVEL%`,
+	}
+	if start == "" {
+		lines[0] = `rem 无起始目录，从当前目录开始`
+	}
+	f, err := os.CreateTemp("", "aniabot-bash-*.cmd")
+	if err != nil {
+		return nil, nil, err
+	}
+	if _, err := f.WriteString(strings.Join(lines, "\r\n") + "\r\n"); err != nil {
+		f.Close()
+		os.Remove(f.Name())
+		return nil, nil, err
+	}
+	f.Close()
+	cmd := exec.CommandContext(ctx, t.shell, "/Q", "/C", f.Name())
+	return cmd, func() { os.Remove(f.Name()) }, nil
+}
+
+// wrapShCwdScript 构造 POSIX sh 系的目录回传包装脚本。
+func (t *BashTool) wrapShCwdScript(start, command string) string {
+	script := ""
+	if start != "" {
+		script += "cd '" + strings.ReplaceAll(start, "'", `'\''`) + "' || { echo " + bashCwdMarker + bashCwdFail + "; exit 1; }\n"
+	}
+	script += command + "\n"
+	script += "__ania_ec=$?\n"
+	script += `printf '%s\n' "` + bashCwdMarker + `$PWD"` + "\n"
+	script += "exit $__ania_ec"
+	return script
+}
+
+// consumeCwdMarker 从输出中剥离最后一行目录标记并更新持久化 cwd。
+// 找不到标记（命令被信号杀死/包装未执行）或目录已不存在时不更新。
+func (t *BashTool) consumeCwdMarker(result string) string {
+	idx := strings.LastIndex(result, bashCwdMarker)
+	if idx < 0 {
+		return result
+	}
+	lineEnd := strings.IndexAny(result[idx:], "\r\n")
+	markerLine := result[idx:]
+	if lineEnd >= 0 {
+		markerLine = result[idx : idx+lineEnd]
+	}
+	dir := strings.TrimPrefix(strings.TrimSpace(markerLine), bashCwdMarker)
+	rest := strings.TrimRight(result[:idx]+result[idx+len(markerLine):], "\n")
+	if dir == "" || dir == bashCwdFail {
+		return rest
+	}
+	if info, err := os.Stat(dir); err == nil && info.IsDir() {
+		t.cwdMu.Lock()
+		t.cwd = dir
+		t.cwdMu.Unlock()
+	}
+	return rest
+}
+
+// truncateMiddle 头尾保留式截断：多保留头部（错误通常在前面最先出现），
+// 中段以省略标记替代并注明被隐藏的字符数。
+func truncateMiddle(s string, max int) string {
+	r := []rune(s)
+	if len(r) <= max {
+		return s
+	}
+	head := max * 2 / 3
+	tail := max - head
+	if tail <= 0 {
+		return string(r[:head]) + fmt.Sprintf("\n…（尾部 %d 字符已截断）", len(r)-head)
+	}
+	hidden := len(r) - head - tail
+	return string(r[:head]) + fmt.Sprintf("\n…（中间 %d 字符已截断）…\n", hidden) + string(r[len(r)-tail:])
 }
