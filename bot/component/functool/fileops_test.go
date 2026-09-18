@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/jeanhua/AniaBot/bot/component/llmtool"
 )
@@ -299,10 +300,84 @@ func TestMatchGlob(t *testing.T) {
 		{"a?c.txt", "abc.txt", true},  // ? 单字符
 		{"**", "any/deep/file", true}, // ** 单独使用
 		{"docs/**", "docs/x/y.md", true},
+		// ** 密集 + 不匹配：递归实现会指数回溯，DP/memoized 实现应瞬间完成
+		{"**/**/**/**/**/**/**/**/z", strings.Repeat("a/", 30) + "a", false},
 	}
 	for _, c := range cases {
 		if got := matchGlob(c.pattern, c.name); got != c.want {
 			t.Errorf("matchGlob(%q, %q) = %v, want %v", c.pattern, c.name, got, c.want)
 		}
+	}
+}
+
+// TestGlobSegMatchPathological * 密集的病态模式在递归回溯下指数爆炸；
+// DP 实现应瞬间完成（回归守护，防止改回落溯实现）。
+func TestGlobSegMatchPathological(t *testing.T) {
+	pattern := strings.Repeat("*a", 60) + "b" // 无 b，需完整回溯后判负
+	name := strings.Repeat("a", 200)
+	start := time.Now()
+	if globSegMatch(pattern, name) {
+		t.Fatal("不应匹配")
+	}
+	if elapsed := time.Since(start); elapsed > time.Second {
+		t.Fatalf("病态模式匹配耗时过长: %v", elapsed)
+	}
+}
+
+// TestGlobPatternLengthCapped glob pattern 超长应直接报错而非尝试匹配。
+func TestGlobPatternLengthCapped(t *testing.T) {
+	_, _, _, glob, _ := newTestFileTools(t, t.TempDir())
+	long := strings.Repeat("*", globPatternMaxLen+1)
+	if _, err := glob.Execute(context.Background(), &GlobParams{Pattern: long}, llmtool.CallBackFuncs{}); err == nil {
+		t.Fatal("超长 pattern 应报错")
+	}
+}
+
+// TestReadFileCRLFStripped CRLF 文件的行尾 \r 应从 read_file 展示中剥离。
+func TestReadFileCRLFStripped(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "win.txt")
+	if err := os.WriteFile(path, []byte("line1\r\nline2\r\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	read, _, _, _, _ := newTestFileTools(t, dir)
+	got, err := read.Execute(context.Background(), &ReadFileParams{Path: path}, llmtool.CallBackFuncs{})
+	if err != nil {
+		t.Fatalf("read_file 失败: %v", err)
+	}
+	if strings.Contains(got, "\r") {
+		t.Fatalf("行尾 \\r 应从展示中剥离: %q", got)
+	}
+	if !strings.Contains(got, "line1") || !strings.Contains(got, "line2") {
+		t.Fatalf("内容缺失: %q", got)
+	}
+}
+
+// TestEditFileCRLFFile CRLF 文件：模型按 read_file 所见（LF）构造 old_string，
+// edit_file 应回退按 CRLF 匹配完成替换，且文件换行风格保持不变。
+func TestEditFileCRLFFile(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "win.go")
+	original := "package main\r\n\r\nfunc main() {\r\n\tprintln(1)\r\n}\r\n"
+	if err := os.WriteFile(path, []byte(original), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	_, _, edit, _, _ := newTestFileTools(t, dir)
+	got, err := edit.Execute(context.Background(), &EditFileParams{
+		Path:      path,
+		OldString: "func main() {\n\tprintln(1)\n}",
+		NewString: "func main() {\n\tprintln(2)\n}",
+	}, llmtool.CallBackFuncs{})
+	if err != nil {
+		t.Fatalf("CRLF 回退匹配失败: %v", err)
+	}
+	data, _ := os.ReadFile(path)
+	// 文件保持 CRLF，仅替换内容落盘
+	if want := "package main\r\n\r\nfunc main() {\r\n\tprintln(2)\r\n}\r\n"; string(data) != want {
+		t.Fatalf("替换结果不符:\ngot:  %q\nwant: %q", string(data), want)
+	}
+	// 5 个文本行（off-by-one 回归：此前误报 6 行）
+	if !strings.Contains(got, "已替换 1 处") || !strings.Contains(got, "共 5 行") {
+		t.Fatalf("替换反馈不符: %q", got)
 	}
 }

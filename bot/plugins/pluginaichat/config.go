@@ -80,7 +80,7 @@ type bashToolConfig struct {
 	Whitelist  []string `cfg:"whitelist" label:"命令白名单(正则)" group:"AI 对话 · 工具" help:"非空时仅允许匹配的命令，每行一个"`
 	Blacklist  []string `cfg:"blacklist" label:"命令黑名单(正则)" group:"AI 对话 · 工具" help:"匹配的命令被禁止，每行一个" default:"config(\\.dev)?\\.(yaml|yml|json),^mkfs,^shutdown,^reboot"`
 	WorkingDir string   `cfg:"working_dir" label:"工作目录" group:"AI 对话 · 工具" help:"bash 命令的起始执行目录；「持久化工作目录」关闭时每次命令都从该目录开始"`
-	PersistCwd bool     `cfg:"persist_cwd" label:"持久化工作目录" group:"AI 对话 · 工具" help:"开启后命令内 cd 会延续到后续调用，适合在同一项目目录内连续操作；关闭时每次都回到「工作目录」重新开始" default:"false"`
+	PersistCwd bool     `cfg:"persist_cwd" label:"持久化工作目录" group:"AI 对话 · 工具" help:"开启后命令内 cd 会延续到后续调用，适合在同一项目目录内连续操作；关闭时每次都回到「工作目录」重新开始。注意：该目录在所有群聊/私聊会话之间共享" default:"false"`
 	TimeoutSec int      `cfg:"timeout_sec" label:"命令超时(秒)" group:"AI 对话 · 工具" help:"单条命令的最长执行时间，超时会被终止并提示；0 表示使用默认值 300" default:"300"`
 	MaxOutput  int      `cfg:"max_output" label:"输出保留字符数" group:"AI 对话 · 工具" help:"命令输出超出时保留头尾、隐藏中段（编译报错等长输出头部最关键）；0 表示使用默认值 30000" default:"30000"`
 }

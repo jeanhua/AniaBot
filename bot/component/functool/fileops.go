@@ -35,9 +35,8 @@ const (
 	grepMaxMatches       = 300 // grep 最多返回匹配行数
 	grepMaxFileBytes     = 2 << 20
 	grepLineMaxRunes     = 400
+	globPatternMaxLen    = 512 // glob / grep include 模式长度上限（拦截病态输入）
 )
-
-// errToolExecute 复用 sendfile.go 中的工具执行错误哨兵
 
 // NewFileTools 按配置构造文件读写工具组，返回 nil 表示未启用。
 func NewFileTools(config FileToolsConfig) []llmtool.Tool {
@@ -178,7 +177,9 @@ func (t *ReadFileTool) Execute(ctx context.Context, params any, cbs llmtool.Call
 
 	var sb strings.Builder
 	for i := start; i < end; i++ {
-		line := lines[i]
+		// CRLF 文件：去掉行尾 \r 再展示，模型按所见文本构造 edit_file 的 old_string
+		// （edit_file 侧做了 CRLF 回退匹配，两侧配合即可正常编辑 CRLF 文件）
+		line := strings.TrimSuffix(lines[i], "\r")
 		if r := []rune(line); len(r) > fileReadLineMaxRunes {
 			line = string(r[:fileReadLineMaxRunes]) + "…(行截断)"
 		}
@@ -299,7 +300,20 @@ func (t *EditFileTool) Execute(ctx context.Context, params any, cbs llmtool.Call
 		return "", fmt.Errorf("edit_file: 读取失败: %w", err)
 	}
 
+	// CRLF 文件回退匹配：read_file 展示时去掉了行尾 \r，模型给出的 old_string 多半
+	// 带 \n；直接匹配失败且文件含 CRLF 时，按 CRLF 变体重试，替换文本同样归一为
+	// CRLF，保持文件换行风格一致（替换仍在原文上进行，不重写其他行的换行符）
 	count := strings.Count(content, p.OldString)
+	old, replacement := p.OldString, p.NewString
+	if count == 0 && strings.Contains(content, "\r\n") && strings.Contains(p.OldString, "\n") {
+		if crlf := strings.ReplaceAll(p.OldString, "\n", "\r\n"); crlf != p.OldString {
+			if c := strings.Count(content, crlf); c > 0 {
+				count, old = c, crlf
+				// 先归一到 LF 再转 CRLF，避免 new_string 本身含 \r\n 时被翻倍
+				replacement = strings.ReplaceAll(strings.ReplaceAll(p.NewString, "\r\n", "\n"), "\n", "\r\n")
+			}
+		}
+	}
 	if count == 0 {
 		return "", fmt.Errorf("edit_file: old_string 未在 %s 中找到。请先 read_file 确认原文（空白、缩进、换行必须逐字符一致），再重试", path)
 	}
@@ -307,12 +321,12 @@ func (t *EditFileTool) Execute(ctx context.Context, params any, cbs llmtool.Call
 		return "", fmt.Errorf("edit_file: old_string 在文件中出现 %d 次，不唯一。请在 old_string 前后包含更多上下文使其唯一，或确认要全部替换时设 replace_all=true", count)
 	}
 
-	updated := strings.ReplaceAll(content, p.OldString, p.NewString)
+	updated := strings.ReplaceAll(content, old, replacement)
 	if err := os.WriteFile(path, []byte(updated), 0o644); err != nil {
 		return "", fmt.Errorf("edit_file: 写回失败: %w", err)
 	}
 
-	newLineCount := countLines(updated) + 1
+	newLineCount := countLines(updated)
 	snippet := p.NewString
 	if r := []rune(snippet); len(r) > 600 {
 		snippet = string(r[:600]) + "…"
@@ -350,6 +364,9 @@ func (t *GlobTool) Execute(ctx context.Context, params any, cbs llmtool.CallBack
 	}
 	if strings.TrimSpace(gp.Pattern) == "" {
 		return "", fmt.Errorf("glob: pattern 不能为空")
+	}
+	if len(gp.Pattern) > globPatternMaxLen {
+		return "", fmt.Errorf("glob: pattern 过长（%d 字符，上限 %d）", len(gp.Pattern), globPatternMaxLen)
 	}
 	root := gp.Path
 	if strings.TrimSpace(root) == "" {
@@ -420,54 +437,60 @@ func matchGlob(pattern, name string) bool {
 }
 
 // globSegs 逐段匹配：pattern 段与 name 段一一对应，** 段可吞并任意数量（含 0）的 name 段。
+// ** 与后续段存在大量重叠子问题，带 memoization 避免指数回溯（模式由模型生成，需防病态输入）。
 func globSegs(pattern, name []string) bool {
-	for len(pattern) > 0 {
-		if pattern[0] == "**" {
-			// ** 后续段与 name 的每个后缀尝试匹配（含吞并 0 段）
-			for i := 0; i <= len(name); i++ {
-				if globSegs(pattern[1:], name[i:]) {
-					return true
-				}
+	memo := make(map[[2]int]bool, len(pattern)*(len(name)+1))
+	var match func(pi, ni int) bool
+	match = func(pi, ni int) bool {
+		if pi == len(pattern) {
+			return ni == len(name)
+		}
+		key := [2]int{pi, ni}
+		if res, ok := memo[key]; ok {
+			return res
+		}
+		var res bool
+		if pattern[pi] == "**" {
+			// ** 吞并 0 到 n 个 name 段
+			for i := ni; i <= len(name) && !res; i++ {
+				res = match(pi+1, i)
 			}
-			return false
+		} else if ni < len(name) && globSegMatch(pattern[pi], name[ni]) {
+			res = match(pi+1, ni+1)
 		}
-		if len(name) == 0 {
-			return false
-		}
-		if !globSegMatch(pattern[0], name[0]) {
-			return false
-		}
-		pattern, name = pattern[1:], name[1:]
+		memo[key] = res
+		return res
 	}
-	return len(name) == 0
+	return match(0, 0)
 }
 
 // globSegMatch 单段匹配：仅 *（任意字符序列）与 ?（单个字符）两个通配符。
+// 迭代 DP（cur/next 行滚动表示 pattern[i:] 是否匹配 name[j:]），代价
+// O(len(pattern)×len(name))，避免递归回溯在 * 密集的病态模式下指数爆炸。
 func globSegMatch(pattern, name string) bool {
-	// 递归终点：模式耗尽后 name 也必须耗尽
-	if pattern == "" {
-		return name == ""
-	}
-	switch pattern[0] {
-	case '*':
-		// * 吞并 0 到 n 个字符
-		for i := 0; i <= len(name); i++ {
-			if globSegMatch(pattern[1:], name[i:]) {
-				return true
+	n := len(name)
+	next := make([]bool, n+1) // pattern[i+1:] 的匹配结果行
+	next[n] = true            // 空模式只匹配空名
+	cur := make([]bool, n+1)
+	for i := len(pattern) - 1; i >= 0; i-- {
+		switch c := pattern[i]; c {
+		case '*':
+			// 吞并 0 个字符走 next[j]，吞并 ≥1 个走同行右侧 cur[j+1]；j 需从大到小
+			for j := n; j >= 0; j-- {
+				cur[j] = next[j] || (j < n && cur[j+1])
+			}
+		case '?':
+			for j := n; j >= 0; j-- {
+				cur[j] = j < n && next[j+1]
+			}
+		default:
+			for j := n; j >= 0; j-- {
+				cur[j] = j < n && name[j] == c && next[j+1]
 			}
 		}
-		return false
-	case '?':
-		if name == "" {
-			return false
-		}
-		return globSegMatch(pattern[1:], name[1:])
-	default:
-		if name == "" || name[0] != pattern[0] {
-			return false
-		}
-		return globSegMatch(pattern[1:], name[1:])
+		cur, next = next, cur
 	}
+	return next[0]
 }
 
 // ─────────────────────────────────────────────
@@ -513,6 +536,9 @@ func (t *GrepTool) Execute(ctx context.Context, params any, cbs llmtool.CallBack
 	}
 	var include *globMatcher
 	if strings.TrimSpace(gp.Include) != "" {
+		if len(gp.Include) > globPatternMaxLen {
+			return "", fmt.Errorf("grep: include 过长（%d 字符，上限 %d）", len(gp.Include), globPatternMaxLen)
+		}
 		include = newGlobMatcher(gp.Include)
 	}
 
@@ -596,7 +622,7 @@ func (t *GrepTool) Execute(ctx context.Context, params any, cbs llmtool.CallBack
 		return fmt.Sprintf("未找到匹配 %q 的内容", gp.Pattern), nil
 	}
 	if truncated {
-		fmt.Fprintf(&sb, "（匹配数超过 %d，结果已截断；建议收窄 pattern 或 include 后重试）", grepMaxMatches)
+		fmt.Fprintf(&sb, "（匹配数超过 %d，涉及 %d 个文件，结果已截断；建议收窄 pattern 或 include 后重试）", grepMaxMatches, fileTotal)
 	}
 	return strings.TrimRight(sb.String(), "\n"), nil
 }
