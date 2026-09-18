@@ -8,6 +8,7 @@ import (
 	"maps"
 	"reflect"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 )
@@ -136,7 +137,12 @@ func (e *ToolExecuter) executeWithSession(ctx context.Context, call ToolCall, ca
 
 	result, err := tool.Execute(ctx, params, callbacks)
 	if err != nil {
-		return "", fmt.Errorf("tool '%s' execution failed: %w", call.Name, err)
+		// 部分工具的错误把诊断信息放在 result 里（如读取文件的具体失败原因），
+		// 直接返回 err 会把它们丢掉、模型只看到"执行失败"占位；合并回传
+		if strings.TrimSpace(result) == "" {
+			return "", fmt.Errorf("tool '%s' execution failed: %w", call.Name, err)
+		}
+		return "", fmt.Errorf("tool '%s' execution failed: %w\n工具输出：\n%s", call.Name, err, result)
 	}
 	return result, nil
 }
