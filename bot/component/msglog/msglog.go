@@ -36,7 +36,7 @@ const (
 const (
 	seqKey     = "msglog:seq"     // 自增 ID 计数器
 	entriesKey = "msglog:entries" // 日志列表（新在前，每条日志一个元素）
-	defaultMax = 500
+	defaultMax = 20000
 )
 
 // Entry 一条消息日志

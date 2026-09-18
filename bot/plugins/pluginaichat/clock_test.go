@@ -88,7 +88,7 @@ func (s *pfake) Clone(prefix string) storage.PersistentStorage {
 func TestClockManagerCRUDAndPersist(t *testing.T) {
 	p := &AIChatPlugin{}
 	p.Logger = slog.Default()
-	p.PersistentStorage = newPFake()
+	p.PersistentStorage = newSQLPFake()
 
 	m := newClockManager(p, 30*time.Second, 100)
 
@@ -165,7 +165,7 @@ func TestClockManagerCRUDAndPersist(t *testing.T) {
 func TestClockUpdateCreatedBy(t *testing.T) {
 	p := &AIChatPlugin{}
 	p.Logger = slog.Default()
-	p.PersistentStorage = newPFake()
+	p.PersistentStorage = newSQLPFake()
 
 	m := newClockManager(p, 30*time.Second, 100)
 	id, err := m.Add(&ClockTask{Cron: "@every 1h", Title: "喝水", Content: "提醒喝水", TargetType: "group", TargetID: "123", Enabled: true})
@@ -201,7 +201,7 @@ func TestClockUpdateCreatedBy(t *testing.T) {
 func TestBuildTriggerPrompt(t *testing.T) {
 	p := &AIChatPlugin{}
 	p.Logger = slog.Default()
-	p.PersistentStorage = newPFake()
+	p.PersistentStorage = newSQLPFake()
 	m := newClockManager(p, 30*time.Second, 100)
 
 	got := m.buildTriggerPrompt(&ClockTask{Title: "早安", Content: "大家早上好"})
@@ -228,7 +228,7 @@ func TestBuildTriggerPrompt(t *testing.T) {
 func TestTryStartTaskSkipWhileRunning(t *testing.T) {
 	p := &AIChatPlugin{}
 	p.Logger = slog.Default()
-	p.PersistentStorage = newPFake()
+	p.PersistentStorage = newSQLPFake()
 	m := newClockManager(p, 30*time.Second, 100)
 
 	if !m.tryStartTask("task-1") {
@@ -261,7 +261,7 @@ func TestClockTimeoutClamp(t *testing.T) {
 func TestRunOnceDestroyAfterTrigger(t *testing.T) {
 	p := &AIChatPlugin{}
 	p.Logger = slog.Default()
-	p.PersistentStorage = newPFake()
+	p.PersistentStorage = newSQLPFake()
 	m := newClockManager(p, 30*time.Second, 100)
 
 	id, err := m.Add(&ClockTask{
@@ -300,7 +300,7 @@ func TestRunOnceDestroyAfterTrigger(t *testing.T) {
 func TestRunOncePersistedAcrossReload(t *testing.T) {
 	p := &AIChatPlugin{}
 	p.Logger = slog.Default()
-	p.PersistentStorage = newPFake()
+	p.PersistentStorage = newSQLPFake()
 	m := newClockManager(p, 30*time.Second, 100)
 
 	id, err := m.Add(&ClockTask{
@@ -350,7 +350,7 @@ func TestResolveTarget(t *testing.T) {
 func TestClockToolsScopeIsolation(t *testing.T) {
 	p := &AIChatPlugin{}
 	p.Logger = slog.Default()
-	p.PersistentStorage = newPFake()
+	p.PersistentStorage = newSQLPFake()
 	m := newClockManager(p, 30*time.Second, 100)
 
 	// 群 A（123）创建任务
@@ -450,7 +450,7 @@ func TestClockToolsScopeIsolation(t *testing.T) {
 func TestClockNextRunRefreshedOnRead(t *testing.T) {
 	p := &AIChatPlugin{}
 	p.Logger = slog.Default()
-	p.PersistentStorage = newPFake()
+	p.PersistentStorage = newSQLPFake()
 
 	m := newClockManager(p, 30*time.Second, 100)
 	id, err := m.Add(&ClockTask{Cron: "@every 1h", Title: "喝水", Content: "提醒喝水", TargetType: "group", TargetID: "123", Enabled: true})

@@ -58,7 +58,7 @@ func (s *fakeStore) Clear(_ context.Context) bool                  { s.data = ma
 func (s *fakeStore) Clone(prefix string) storage.PersistentStorage { return s } // 测试不复用前缀
 
 func TestRecordAndRecent(t *testing.T) {
-	l := New(newFakeStore(), 3, nil)
+	l, _ := newSQLLogger(t, 3)
 
 	l.Record(Entry{TaskID: "t1", Status: StatusSuccess, TaskTitle: "A"})
 	l.Record(Entry{TaskID: "t2", Status: StatusTimeout, TaskTitle: "B"})
@@ -79,7 +79,7 @@ func TestRecordAndRecent(t *testing.T) {
 }
 
 func TestRollingCap(t *testing.T) {
-	l := New(newFakeStore(), 2, nil)
+	l, _ := newSQLLogger(t, 2)
 	for range 5 {
 		l.Record(Entry{TaskID: "t", Status: StatusSuccess})
 	}
@@ -90,7 +90,7 @@ func TestRollingCap(t *testing.T) {
 }
 
 func TestMarkRunningInterrupted(t *testing.T) {
-	l := New(newFakeStore(), 10, nil)
+	l, _ := newSQLLogger(t, 10)
 	now := time.Now()
 	l.Record(Entry{TaskID: "t1", Status: StatusRunning, TriggerTime: now.Add(-time.Minute)})
 	l.Record(Entry{TaskID: "t2", Status: StatusSuccess, TriggerTime: now.Add(-3 * time.Minute)})
@@ -116,7 +116,7 @@ func TestMarkRunningInterrupted(t *testing.T) {
 }
 
 func TestUpdate(t *testing.T) {
-	l := New(newFakeStore(), 10, nil)
+	l, _ := newSQLLogger(t, 10)
 	e := l.Record(Entry{TaskID: "t1", Status: StatusRunning})
 	l.Update(e.ID, func(en *Entry) {
 		en.Status = StatusSuccess
@@ -134,7 +134,7 @@ func TestUpdate(t *testing.T) {
 }
 
 func TestQueryBeforeCursor(t *testing.T) {
-	l := New(newFakeStore(), 10, nil)
+	l, _ := newSQLLogger(t, 10)
 	for _, title := range []string{"a", "b", "c", "d", "e"} {
 		l.Record(Entry{TaskID: "t", Status: StatusSuccess, TaskTitle: title})
 	}
@@ -154,7 +154,7 @@ func TestQueryBeforeCursor(t *testing.T) {
 		t.Fatalf("invalid cursor should be ignored: %+v", bad)
 	}
 	// 游标与过滤条件叠加
-	l2 := New(newFakeStore(), 10, nil)
+	l2, _ := newSQLLogger(t, 10)
 	l2.Record(Entry{TaskID: "a", Status: StatusSuccess})
 	l2.Record(Entry{TaskID: "b", Status: StatusSuccess})
 	e3 := l2.Record(Entry{TaskID: "a", Status: StatusTimeout})
@@ -166,7 +166,7 @@ func TestQueryBeforeCursor(t *testing.T) {
 }
 
 func TestRecentForTask(t *testing.T) {
-	l := New(newFakeStore(), 10, nil)
+	l, _ := newSQLLogger(t, 10)
 	l.Record(Entry{TaskID: "a", Status: StatusSuccess})
 	l.Record(Entry{TaskID: "b", Status: StatusSuccess})
 	l.Record(Entry{TaskID: "a", Status: StatusTimeout})

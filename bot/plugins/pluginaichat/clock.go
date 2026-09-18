@@ -105,7 +105,7 @@ func newClockManager(p *AIChatPlugin, defaultTimeout time.Duration, maxLog int) 
 	m := &clockManager{
 		plugin:         p,
 		store:          p.PersistentStorage.Clone("clock:"),
-		log:            tasklog.New(p.PersistentStorage.Clone("clocklog:"), maxLog, p.Logger.WithGroup("tasklog")),
+		log:            tasklog.New(p.PersistentStorage, maxLog, p.Logger.WithGroup("tasklog")),
 		logger:         p.Logger.WithGroup("clock"),
 		defaultTimeout: defaultTimeout,
 		tasks:          map[string]*ClockTask{},

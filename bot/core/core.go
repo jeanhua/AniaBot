@@ -275,7 +275,7 @@ func (ania *AniaBot) Run() {
 
 	// 操作日志（面板「操作日志」页数据源）：记录面板与 AI 工具的管理操作，
 	// 独立 __oplog 命名空间，SQL 后端走 ania_op_log 行级存储。
-	oplog.Init(ania.persistent.Clone("__oplog"), 500, Logger().WithGroup("oplog"))
+	oplog.Init(ania.persistent, 20000, Logger().WithGroup("oplog"))
 
 	// 收集配置字段元信息（框架 + 各平台适配器 + 各插件的 ConfigRegistrar /
 	// ConfigSchemaProvider 声明），面板表单基于该注册表动态渲染。

@@ -61,7 +61,7 @@ func (m *memPersistent) Del(_ context.Context, key string) bool {
 	return true
 }
 
-// Get/Set 用 JSON 编解码，供持久化历史存储（persistentHistoryStore）使用。
+// Get/Set 用 JSON 编解码（持久化配置计数等 KV 用途）。
 func (m *memPersistent) Get(_ context.Context, key string, out any) bool {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -182,7 +182,7 @@ func TestNoMentionClearRetainedAndAppliedAtMentionAfterRestart(t *testing.T) {
 
 	// 模拟重启 + 会话重建（历史从持久层回放）：@ 消息路径补清
 	p2 := newNoMentionPlugin(store)
-	historyStore := newPersistentHistoryStore(store, "g:"+gid.String(), testLogger())
+	historyStore := newSQLHistoryStore(newTestSQLDB(t), gid.String(), testLogger())
 	if err := historyStore.Append(context.Background(), []aichat.Message{aichat.TextMessage(aichat.RoleUser, "旧对话")}); err != nil {
 		t.Fatal(err)
 	}

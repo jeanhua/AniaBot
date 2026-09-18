@@ -50,7 +50,7 @@ func TestExtraUsageGatedByQueryLogger(t *testing.T) {
 }
 
 func TestExtraUsageRoundTrip(t *testing.T) {
-	p := &AIChatPlugin{queryLogger: querylog.New(newPFake().Clone("querylog:"), 10, testLogger())}
+	p := &AIChatPlugin{queryLogger: querylog.New(newSQLPFake(), 10, testLogger())}
 	p.addExtraUsage("g:1", aichat.TokenUsage{PromptTokens: 10, CompletionTokens: 2, TotalTokens: 12})
 	p.addExtraUsage("g:1", aichat.TokenUsage{PromptTokens: 3, CompletionTokens: 1, TotalTokens: 4})
 	// 零值不入账
@@ -74,7 +74,7 @@ func TestExtraUsageRoundTrip(t *testing.T) {
 // TestFinishQueryMergesExtraUsage 派生用量（子代理/团队成员/图片识别）并入
 // Query 日志条目：统计口径为「主请求 + 全部派生调用」的完整成本。
 func TestFinishQueryMergesExtraUsage(t *testing.T) {
-	p := &AIChatPlugin{queryLogger: querylog.New(newPFake().Clone("querylog:"), 10, testLogger())}
+	p := &AIChatPlugin{queryLogger: querylog.New(newSQLPFake(), 10, testLogger())}
 	chat, err := aichat.NewChatBot("http://127.0.0.1:1", "k", "m", "prompt", 0, nil, nil)
 	if err != nil {
 		t.Fatalf("创建 ChatBot 失败: %v", err)

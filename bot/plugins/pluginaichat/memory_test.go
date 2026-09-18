@@ -2,6 +2,7 @@ package pluginaichat
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -16,9 +17,27 @@ import (
 	"github.com/jeanhua/AniaBot/common/storage"
 )
 
+// sqlPFake 包装 pfake 并附加 SQL 能力，使 newMemoryManager 探测走 SQL 后端。
+type sqlPFake struct {
+	*pfake
+	db *sql.DB
+}
+
+func newSQLPFake() *sqlPFake {
+	db, err := sql.Open("sqlite", ":memory:")
+	if err != nil {
+		panic(err)
+	}
+	db.SetMaxOpenConns(1)
+	return &sqlPFake{pfake: newPFake(), db: db}
+}
+
+func (s *sqlPFake) SQLDB() *sql.DB                 { return s.db }
+func (s *sqlPFake) SQLDialect() storage.SQLDialect { return storage.SQLDialectSQLite }
+
 func newTestMemoryManager(maxEntries int) *memoryManager {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	return newMemoryManager(newPFake(), logger, maxEntries, nil)
+	return newMemoryManager(newSQLPFake(), logger, maxEntries, nil)
 }
 
 func TestMemoryAddAndList(t *testing.T) {
@@ -280,7 +299,7 @@ func TestMemoryAddStoresEmb(t *testing.T) {
 	srv := fakeEmbeddingsServer(t)
 	defer srv.Close()
 
-	store := newPFake()
+	store := newSQLPFake()
 	m := newTestMemoryManagerWithEmbedder(store, srv.URL)
 	if _, err := m.add("g:123", "", "小明喜爱熬夜打榜", nil); err != nil {
 		t.Fatal(err)
@@ -304,7 +323,7 @@ func TestMemorySearchVectorOnlyHit(t *testing.T) {
 	srv := fakeEmbeddingsServer(t)
 	defer srv.Close()
 
-	m := newTestMemoryManagerWithEmbedder(newPFake(), srv.URL)
+	m := newTestMemoryManagerWithEmbedder(newSQLPFake(), srv.URL)
 	if _, err := m.add("g:123", "", "小明喜爱熬夜打榜", nil); err != nil {
 		t.Fatal(err)
 	}
