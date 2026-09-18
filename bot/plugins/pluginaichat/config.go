@@ -33,6 +33,12 @@ const defaultPrompt = `你是一个运行在即时通讯平台上的 AniaBot 助
 - skill_read：当前任务匹配 available_skills 中的技能时，先读取完整指令再执行。
 - skill_reload：通过 bash 等工具直接改过本地 skill 文件后刷新缓存。
 - bash：需要在宿主机执行命令、运行脚本、检查或操作文件时（未注册表示未启用）。
+- read_file：需要查看宿主机某个文本文件/代码文件内容时，配合 offset/limit 分段读大文件（未注册表示未启用）。
+- write_file：需要新建文件或整体重写文件内容时（修改已有文件优先 edit_file）；写完不必再读回全文（未注册表示未启用）。
+- edit_file：需要对已有文件做小范围精确修改时；old_string 必须与文件内容逐字符一致且唯一，改前先 read_file 确认原文，改完看替换结果反馈确认生效（未注册表示未启用）。
+- glob：按文件名模式找文件（支持 ** 跨目录），如 **/*.go（未注册表示未启用）。
+- grep：按正则在文件内容里搜索（如找函数定义、引用位置），配合 include 过滤文件类型（未注册表示未启用）。
+- 编码任务流程：glob/grep/read_file 定位 → edit_file/write_file 修改 → bash 编译/测试验证，根据报错继续修复，直到通过再向用户汇报。
 - file：用户明确要求读取宿主机文件并发送时（未注册表示未启用）。
 - local_image：用户明确要求查看宿主机某张本地图片并给出路径时（未注册表示未启用）。
 - screenshot / mouse_click / mousemove / mouse_scroll / keyboard_type / keyboard_press / active_window / list_windows：用户明确要求查看或操作宿主机屏幕/界面时；先 screenshot 看到画面，再按图中坐标操作，操作后可再次 screenshot 确认效果（未注册表示未启用）。
@@ -81,6 +87,14 @@ type fileToolConfig struct {
 
 type localImageToolConfig struct {
 	Enable bool `cfg:"enable" label:"启用本地图片工具" group:"AI 对话 · 工具" help:"可读取宿主机本地图片，默认关闭" default:"false"`
+}
+
+// fileToolsConfig 文件读写工具组配置（read_file/write_file/edit_file/glob/grep）：
+// 让 AI 具备直接编辑宿主机代码/文本文件的能力，默认关闭（提示词注入可能借此
+// 读取敏感文件），Root 可将访问限制在指定目录内。
+type fileToolsConfig struct {
+	Enable bool   `cfg:"enable" label:"启用文件读写工具" group:"AI 对话 · 工具" help:"read_file / write_file / edit_file / glob / grep 五个工具，AI 可直接读取、编辑宿主机的代码与文本文件，注意安全风险，默认关闭" default:"false"`
+	Root   string `cfg:"root" label:"工作根目录" group:"AI 对话 · 工具" help:"非空时工具的相对路径基于该目录解析，且所有路径必须位于该目录内；留空不设访问边界"`
 }
 
 // computerUseConfig 电脑操作工具配置：AI 可截图查看宿主机屏幕并控制鼠标键盘
@@ -295,6 +309,7 @@ type aiChatConfig struct {
 	Bash        bashToolConfig       `cfg:"plugin.ai_chat_bot.bash"`
 	File        fileToolConfig       `cfg:"plugin.ai_chat_bot.file"`
 	LocalImage  localImageToolConfig `cfg:"plugin.ai_chat_bot.local_image"`
+	FileTools   fileToolsConfig      `cfg:"plugin.ai_chat_bot.file_tools"`
 	ComputerUse computerUseConfig    `cfg:"plugin.ai_chat_bot.computer_use"`
 	ConfigTool  configToolConfig     `cfg:"plugin.ai_chat_bot.config_tool"`
 	SkillTool   skillToolConfig      `cfg:"plugin.ai_chat_bot.skill_tool"`

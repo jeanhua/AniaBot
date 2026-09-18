@@ -864,6 +864,10 @@ func (p *AIChatPlugin) Start(ctx context.Context, cfg *viper.Viper) error {
 	if localImageConfig.Enable {
 		p.Logger.Info("已启用local_image工具（可读取宿主机本地图片供AI查看，请注意安全风险）")
 	}
+	fileToolsConfig := functool.FileToolsConfig{Enable: p.cfg.FileTools.Enable, Root: p.cfg.FileTools.Root}
+	if fileToolsConfig.Enable {
+		p.Logger.Info("已启用文件读写工具（read_file/write_file/edit_file/glob/grep，可读取与编辑宿主机文件，请注意安全风险）", "root", fileToolsConfig.Root)
+	}
 	var err error
 	p.toolExecutor, p.skillManager, err = functool.CreateToolsWithSkill(
 		p.cfg.Search.Token,
@@ -872,6 +876,7 @@ func (p *AIChatPlugin) Start(ctx context.Context, cfg *viper.Viper) error {
 		bashConfig,
 		fileConfig,
 		localImageConfig,
+		fileToolsConfig,
 		p.cfg.Skills,
 		p.cfg.MCP.LazyLoad,
 	)

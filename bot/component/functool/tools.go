@@ -9,7 +9,7 @@ import (
 // CreateDefaultTools 创建默认的工具执行器并注册所有内置工具。
 // 注意：历史消息查看不再是内置工具——已平台工具化（aitool.NewMsgHistoryTool，
 // 支持按群成员筛选），由 napcat/luckylilia/telegram 等适配器按平台支持情况注入。
-func CreateDefaultTools(searchToken string, bashConfig BashConfig, fileConfig FileConfig, localImageConfig LocalImageConfig) (*llmtool.ToolExecuter, error) {
+func CreateDefaultTools(searchToken string, bashConfig BashConfig, fileConfig FileConfig, localImageConfig LocalImageConfig, fileToolsConfig FileToolsConfig) (*llmtool.ToolExecuter, error) {
 	executer := llmtool.NewToolExecuter()
 	executer.Register(NewTimeTool())
 	executer.Register(NewWebSearchTool(searchToken))
@@ -21,6 +21,9 @@ func CreateDefaultTools(searchToken string, bashConfig BashConfig, fileConfig Fi
 	executer.Register(NewLoadImagesTool())
 	if localImageConfig.Enable {
 		executer.Register(NewLoadLocalImageTool())
+	}
+	for _, tool := range NewFileTools(fileToolsConfig) {
+		executer.Register(tool)
 	}
 	if bashConfig.Enable {
 		bashTool, err := NewBashTool(bashConfig)
@@ -36,8 +39,8 @@ func CreateDefaultTools(searchToken string, bashConfig BashConfig, fileConfig Fi
 // mcpLazyLoad 为 true 时走工具发现模式（mcp_discover/mcp_load 按需加载，
 // 节省上下文）；为 false 时启动即全量注册所有 MCP 工具（工具列表恒定，
 // 上游 prompt 缓存命中率更高，但工具较多时上下文开销大）。
-func CreateToolsWithMCP(searchToken string, mcpConfigs []*llmtool.MCPConfig, bashConfig BashConfig, fileConfig FileConfig, localImageConfig LocalImageConfig, mcpLazyLoad bool) (*llmtool.ToolExecuter, error) {
-	executer, err := CreateDefaultTools(searchToken, bashConfig, fileConfig, localImageConfig)
+func CreateToolsWithMCP(searchToken string, mcpConfigs []*llmtool.MCPConfig, bashConfig BashConfig, fileConfig FileConfig, localImageConfig LocalImageConfig, fileToolsConfig FileToolsConfig, mcpLazyLoad bool) (*llmtool.ToolExecuter, error) {
+	executer, err := CreateDefaultTools(searchToken, bashConfig, fileConfig, localImageConfig, fileToolsConfig)
 	if err != nil {
 		return nil, err
 	}
@@ -61,8 +64,8 @@ func CreateToolsWithMCP(searchToken string, mcpConfigs []*llmtool.MCPConfig, bas
 // skillsDir 为空时跳过 skill 加载
 // skills 非空时只加载指定名称的 skill，为空时加载全部
 // mcpLazyLoad 见 CreateToolsWithMCP
-func CreateToolsWithSkill(searchToken string, mcpConfigs []*llmtool.MCPConfig, skillsDir string, bashConfig BashConfig, fileConfig FileConfig, localImageConfig LocalImageConfig, skills []string, mcpLazyLoad bool) (*llmtool.ToolExecuter, *llmtool.SkillManager, error) {
-	executer, err := CreateToolsWithMCP(searchToken, mcpConfigs, bashConfig, fileConfig, localImageConfig, mcpLazyLoad)
+func CreateToolsWithSkill(searchToken string, mcpConfigs []*llmtool.MCPConfig, skillsDir string, bashConfig BashConfig, fileConfig FileConfig, localImageConfig LocalImageConfig, fileToolsConfig FileToolsConfig, skills []string, mcpLazyLoad bool) (*llmtool.ToolExecuter, *llmtool.SkillManager, error) {
+	executer, err := CreateToolsWithMCP(searchToken, mcpConfigs, bashConfig, fileConfig, localImageConfig, fileToolsConfig, mcpLazyLoad)
 	if err != nil {
 		return nil, nil, err
 	}
