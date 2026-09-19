@@ -118,6 +118,8 @@ type streamAccumulator struct {
 	toolCalls map[int64]*llmtool.ToolCall
 	toolOrder []int64
 	usage     TokenUsage
+	// finishReason 末块携带的停止原因："length" 表示输出因 max_tokens 截断
+	finishReason string
 }
 
 func newStreamAccumulator() *streamAccumulator {
@@ -126,6 +128,9 @@ func newStreamAccumulator() *streamAccumulator {
 
 func (a *streamAccumulator) Add(chunk openai.ChatCompletionChunk) {
 	for _, choice := range chunk.Choices {
+		if choice.FinishReason != "" {
+			a.finishReason = choice.FinishReason
+		}
 		d := choice.Delta
 		if d.Content != "" {
 			a.content.WriteString(d.Content)
@@ -181,6 +186,8 @@ func (a *streamAccumulator) Result() GenerateResponse {
 	resp := GenerateResponse{
 		Content:          a.content.String(),
 		ReasoningContent: a.reasoning.String(),
+		// 输出撞上 max_tokens：内容/工具参数都被拦腰截断
+		Truncated: a.finishReason == "length",
 	}
 	// 按 Index 升序输出（模型的规范顺序），与流到达顺序无关
 	order := append([]int64(nil), a.toolOrder...)
@@ -350,6 +357,8 @@ func (b *chatCompletionsBackend) parseResponse(completion *openai.ChatCompletion
 
 	resp := GenerateResponse{
 		Content: choice.Message.Content,
+		// finish_reason=length：输出因 max_tokens 截断
+		Truncated: choice.FinishReason == "length",
 	}
 
 	// 从原始响应 JSON 中提取 reasoning_content（DeepSeek 等 API 的推理过程字段）

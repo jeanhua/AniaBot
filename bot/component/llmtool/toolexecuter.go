@@ -131,8 +131,12 @@ func (e *ToolExecuter) executeWithSession(ctx context.Context, call ToolCall, ca
 
 	params := reflect.New(reflect.TypeOf(tool.Params()).Elem()).Interface()
 	if err := json.Unmarshal([]byte(call.Arguments), params); err != nil {
-		return "", fmt.Errorf("failed to parse arguments for tool '%s': %w\nArguments: %s\nExpected schema: %+v",
-			call.Name, err, call.Arguments, tool.Params())
+		// 回传该工具真实的 JSON schema（与请求下发的定义一致）帮助模型定位参数
+		// 问题；原样回显参数可能长达数千字符（如被截断的 write_file 内容），
+		// 只保留开头一段即可定位结构错误，避免浪费上下文
+		schema, _ := json.Marshal(structToOpenAITool(tool).Function.Parameters)
+		return "", fmt.Errorf("failed to parse arguments for tool '%s': %w\nArguments: %s\n参数 schema: %s",
+			call.Name, err, truncateForError(call.Arguments), schema)
 	}
 
 	result, err := tool.Execute(ctx, params, callbacks)
@@ -145,6 +149,16 @@ func (e *ToolExecuter) executeWithSession(ctx context.Context, call ToolCall, ca
 		return "", fmt.Errorf("tool '%s' execution failed: %w\n工具输出：\n%s", call.Name, err, result)
 	}
 	return result, nil
+}
+
+// truncateForError 错误回填时截断超长参数回显（按字符，保留开头一段）。
+func truncateForError(s string) string {
+	const maxRunes = 500
+	r := []rune(s)
+	if len(r) <= maxRunes {
+		return s
+	}
+	return string(r[:maxRunes]) + "…(参数过长已截断)"
 }
 
 func (e *ToolExecuter) getToolNames() []string {

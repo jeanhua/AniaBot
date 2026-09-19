@@ -210,7 +210,11 @@ func convertResponsesInput(messages []Message) (responses.ResponseInputParam, st
 // parseResponsesOutput 解析非流式响应：文本经 OutputText 聚合，function_call
 // 输出项转为工具调用。
 func parseResponsesOutput(resp *responses.Response) GenerateResponse {
-	result := GenerateResponse{Content: resp.OutputText()}
+	result := GenerateResponse{
+		Content: resp.OutputText(),
+		// incomplete_details.reason=max_output_tokens：输出因 token 上限截断
+		Truncated: resp.IncompleteDetails.Reason == "max_output_tokens",
+	}
 	for _, item := range resp.Output {
 		if item.Type == "function_call" {
 			result.ToolCalls = append(result.ToolCalls, llmtool.ToolCall{
@@ -240,6 +244,8 @@ type responsesStreamAccumulator struct {
 	toolCalls map[int64]*llmtool.ToolCall
 	toolOrder []int64
 	usage     TokenUsage
+	// truncated 响应因 max_output_tokens 上限未完整生成（response.incomplete）
+	truncated bool
 	onDelta   func(string)
 }
 
@@ -269,6 +275,10 @@ func (a *responsesStreamAccumulator) Add(event responses.ResponseStreamEventUnio
 		}
 	case "response.completed", "response.incomplete":
 		a.usage = responsesTokenUsage(event.Response.Usage)
+		// 输出因 max_output_tokens 上限截断：内容/工具参数都不完整
+		if event.Response.IncompleteDetails.Reason == "max_output_tokens" {
+			a.truncated = true
+		}
 		// completed 事件携带完整响应：以其中的 function_call 参数为最终值（按 call_id 匹配）
 		for _, item := range event.Response.Output {
 			if item.Type != "function_call" {
@@ -288,7 +298,7 @@ func (a *responsesStreamAccumulator) Add(event responses.ResponseStreamEventUnio
 }
 
 func (a *responsesStreamAccumulator) Result() GenerateResponse {
-	resp := GenerateResponse{Content: a.content.String()}
+	resp := GenerateResponse{Content: a.content.String(), Truncated: a.truncated}
 	order := append([]int64(nil), a.toolOrder...)
 	slices.Sort(order)
 	for _, idx := range order {

@@ -397,7 +397,9 @@ type anthropicStreamAccumulator struct {
 	thinking      map[int64]*thinkingBlock
 	thinkingOrder []int64
 	usage         TokenUsage
-	onDelta       func(string)
+	// stopReason message_delta 携带的最终停止原因："max_tokens" 表示输出截断
+	stopReason string
+	onDelta    func(string)
 }
 
 func newAnthropicStreamAccumulator(onDelta func(string)) *anthropicStreamAccumulator {
@@ -456,6 +458,10 @@ func (a *anthropicStreamAccumulator) Add(event anthropic.MessageStreamEventUnion
 			a.usage.CompletionTokens = int(event.Usage.OutputTokens)
 			a.usage.TotalTokens = a.usage.PromptTokens + a.usage.CompletionTokens
 		}
+		// 最终停止原因在 message_delta 携带（message_start 时为空）
+		if event.Delta.StopReason != "" {
+			a.stopReason = string(event.Delta.StopReason)
+		}
 	}
 }
 
@@ -463,6 +469,8 @@ func (a *anthropicStreamAccumulator) Result() GenerateResponse {
 	resp := GenerateResponse{
 		Content:          a.content.String(),
 		ReasoningContent: a.reasoning.String(),
+		// stop_reason=max_tokens：输出截断（thinking 计入 max_tokens，更易触发）
+		Truncated: a.stopReason == string(anthropic.StopReasonMaxTokens),
 	}
 	// 按 block index 升序输出（模型的规范顺序），与流到达顺序无关
 	order := append([]int64(nil), a.toolOrder...)

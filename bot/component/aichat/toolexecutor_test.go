@@ -2,6 +2,7 @@ package aichat
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -51,7 +52,7 @@ func TestExecuteToolCallsParallelPreservesOrder(t *testing.T) {
 		{ID: "call_fast", Name: "fast", Arguments: "{}"},
 		{ID: "call_third", Name: "third", Arguments: "{}"},
 	}
-	results, err := o.executeToolCalls(context.Background(), calls, llmtool.CallBackFuncs{}, nil)
+	results, err := o.executeToolCalls(context.Background(), calls, llmtool.CallBackFuncs{}, nil, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -87,7 +88,7 @@ func TestExecuteToolCallsErrorContinues(t *testing.T) {
 		{ID: "c1", Name: "bad", Arguments: "{}"},
 		{ID: "c2", Name: "good", Arguments: "{}"},
 	}
-	results, err := o.executeToolCalls(context.Background(), calls, llmtool.CallBackFuncs{}, nil)
+	results, err := o.executeToolCalls(context.Background(), calls, llmtool.CallBackFuncs{}, nil, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -119,7 +120,7 @@ func TestExecuteToolCallsPanicIsolated(t *testing.T) {
 		{ID: "c1", Name: "panic", Arguments: "{}"},
 		{ID: "c2", Name: "ok", Arguments: "{}"},
 	}
-	results, err := o.executeToolCalls(context.Background(), calls, llmtool.CallBackFuncs{}, nil)
+	results, err := o.executeToolCalls(context.Background(), calls, llmtool.CallBackFuncs{}, nil, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -142,7 +143,7 @@ func TestExecuteToolCallsContextCancel(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel() // 预先取消
 
-	_, err := o.executeToolCalls(ctx, []llmtool.ToolCall{{ID: "c1", Name: "x", Arguments: "{}"}}, llmtool.CallBackFuncs{}, nil)
+	_, err := o.executeToolCalls(ctx, []llmtool.ToolCall{{ID: "c1", Name: "x", Arguments: "{}"}}, llmtool.CallBackFuncs{}, nil, nil)
 	if !errors.Is(err, context.Canceled) {
 		t.Fatalf("expected context.Canceled, got %v", err)
 	}
@@ -180,7 +181,7 @@ func TestExecuteToolCallsObserverAndCallbacksRace(t *testing.T) {
 		return s, nil
 	}}
 
-	results, err := o.executeToolCalls(context.Background(), calls, cbs, nil)
+	results, err := o.executeToolCalls(context.Background(), calls, cbs, nil, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -225,7 +226,7 @@ func TestExecuteToolCallsGateBlocks(t *testing.T) {
 		{ID: "c1", Name: "danger", Arguments: "{}"},
 		{ID: "c2", Name: "good", Arguments: "{}"},
 	}
-	results, err := o.executeToolCalls(context.Background(), calls, llmtool.CallBackFuncs{}, gate)
+	results, err := o.executeToolCalls(context.Background(), calls, llmtool.CallBackFuncs{}, gate, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -270,7 +271,7 @@ func TestExecuteToolCallsPostToolUse(t *testing.T) {
 		{ID: "c1", Name: "blocked", Arguments: "{}"},
 		{ID: "c2", Name: "good", Arguments: "{}"},
 	}
-	if _, err := o.executeToolCalls(context.Background(), calls, llmtool.CallBackFuncs{}, gate); err != nil {
+	if _, err := o.executeToolCalls(context.Background(), calls, llmtool.CallBackFuncs{}, gate, nil); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if len(records) != 1 || records[0].tool != "good" {
@@ -335,6 +336,118 @@ func TestStreamToolRoundBoundary(t *testing.T) {
 	}
 }
 
+// TestExecuteToolCallsTruncatedSkipped 截断调用被跳过：工具不执行，
+// 以明确的截断提示回填（模型当轮即可学会分段重试）。
+func TestExecuteToolCallsTruncatedSkipped(t *testing.T) {
+	var ran []string
+	var mu sync.Mutex
+	exec := &fakeToolExecutor{fn: func(ctx context.Context, call llmtool.ToolCall, _ llmtool.CallBackFuncs) (string, error) {
+		mu.Lock()
+		ran = append(ran, call.Name)
+		mu.Unlock()
+		return "result:" + call.Name, nil
+	}}
+	o := newTestOrchestrator(exec)
+
+	results, err := o.executeToolCalls(context.Background(),
+		[]llmtool.ToolCall{
+			{ID: "c1", Name: "write_file", Arguments: `{"path":"a.go","content":"pack`},
+			{ID: "c2", Name: "time", Arguments: "{}"},
+		}, llmtool.CallBackFuncs{}, nil, map[int]bool{0: true})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(results) != 2 {
+		t.Fatalf("期望 2 条结果消息, got %d", len(results))
+	}
+	got := ExtractMessageText(results[0])
+	if !strings.Contains(got, "截断") || !strings.Contains(got, "append=true") {
+		t.Fatalf("截断提示应包含分段重试指引: %q", got)
+	}
+	if got := ExtractMessageText(results[1]); got != "result:time" {
+		t.Fatalf("未截断的调用应正常执行: %q", got)
+	}
+	if len(ran) != 1 || ran[0] != "time" {
+		t.Fatalf("截断调用不应执行, got %v", ran)
+	}
+}
+
+// TestExecuteWithToolsTruncatedToolCall 端到端：finish_reason=length 且工具参数
+// 被截断时——合法调用正常执行、截断调用不执行并回填截断提示、回放的 assistant
+// 消息参数被清洗为合法空对象（anthropic 格式以 RawMessage 回传，半截 JSON 会
+// 破坏下一轮请求体）。
+func TestExecuteWithToolsTruncatedToolCall(t *testing.T) {
+	var calls atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if calls.Add(1) == 1 {
+			// 第一轮：完整调用 time + 被 max_tokens 截断的 write_file
+			fmt.Fprint(w, `{"id":"chatcmpl-test","object":"chat.completion","created":1,"model":"test",`+
+				`"choices":[{"index":0,"message":{"role":"assistant","tool_calls":[`+
+				`{"id":"call_1","type":"function","function":{"name":"time","arguments":"{}"}},`+
+				`{"id":"call_2","type":"function","function":{"name":"write_file","arguments":"{\"path\":\"a.go\",\"content\":\"pack"}}`+
+				`]},"finish_reason":"length"}],`+
+				`"usage":{"prompt_tokens":5,"completion_tokens":3,"total_tokens":8}}`)
+			return
+		}
+		fmt.Fprint(w, `{"id":"chatcmpl-test","object":"chat.completion","created":1,"model":"test",`+
+			`"choices":[{"index":0,"message":{"role":"assistant","content":"已分段写入完成"},"finish_reason":"stop"}],`+
+			`"usage":{"prompt_tokens":9,"completion_tokens":2,"total_tokens":11}}`)
+	}))
+	defer srv.Close()
+
+	var ran []string
+	var mu sync.Mutex
+	exec := &fakeToolExecutor{fn: func(ctx context.Context, call llmtool.ToolCall, _ llmtool.CallBackFuncs) (string, error) {
+		mu.Lock()
+		ran = append(ran, call.Name)
+		mu.Unlock()
+		return "result:" + call.Name, nil
+	}}
+	exec.tools = []llmtool.ToolDef{
+		{Function: llmtool.FunctionDef{Name: "time"}},
+		{Function: llmtool.FunctionDef{Name: "write_file"}},
+	}
+	o := newTestOrchestrator(exec)
+	o.SetMaxIterations(5)
+	c := newTestClient(srv.URL)
+
+	content, messages, _, err := o.ExecuteWithTools(context.Background(), c,
+		[]Message{TextMessage(RoleUser, "写个长文件")}, llmtool.CallBackFuncs{}, ChatOptions{})
+	if err != nil {
+		t.Fatalf("ExecuteWithTools 失败: %v", err)
+	}
+	if content != "已分段写入完成" {
+		t.Fatalf("最终内容不符: %q", content)
+	}
+	if len(ran) != 1 || ran[0] != "time" {
+		t.Fatalf("只有完整调用应被执行, got %v", ran)
+	}
+
+	// 回放消息检查：assistant 的截断参数被清洗为 "{}"，工具结果带截断提示
+	var assistantMsg, truncResult *Message
+	for i := range messages {
+		switch {
+		case messages[i].Role == RoleAssistant && len(messages[i].ToolCalls) == 2:
+			assistantMsg = &messages[i]
+		case messages[i].Role == RoleTool && strings.Contains(ExtractMessageText(messages[i]), "截断"):
+			truncResult = &messages[i]
+		}
+	}
+	if assistantMsg == nil {
+		t.Fatal("缺少带 2 个工具调用的 assistant 消息")
+	}
+	if args := assistantMsg.ToolCalls[1].Arguments; !json.Valid([]byte(args)) || args != "{}" {
+		t.Fatalf("截断参数应被清洗为空对象, got %q", args)
+	}
+	if truncResult == nil || truncResult.ToolCallID != "call_2" {
+		t.Fatalf("write_file 的截断结果消息不符: %+v", truncResult)
+	}
+	if !strings.Contains(ExtractMessageText(*truncResult), "append=true") {
+		t.Fatalf("截断提示应包含分段指引: %q", ExtractMessageText(*truncResult))
+	}
+}
+
 // TestExecuteToolCallsPostToolUseContextFeedback PostToolUse 钩子返回的 Context
 // 应作为附加反馈拼到工具结果后回填给模型；Context 为空时结果保持原样。
 func TestExecuteToolCallsPostToolUseContextFeedback(t *testing.T) {
@@ -354,7 +467,7 @@ func TestExecuteToolCallsPostToolUseContextFeedback(t *testing.T) {
 		[]llmtool.ToolCall{
 			{ID: "c1", Name: "good", Arguments: "{}"},
 			{ID: "c2", Name: "plain", Arguments: "{}"},
-		}, llmtool.CallBackFuncs{}, nil)
+		}, llmtool.CallBackFuncs{}, nil, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

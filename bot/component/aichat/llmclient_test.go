@@ -393,6 +393,54 @@ func TestGenerateStreamToolCalls(t *testing.T) {
 	}
 }
 
+// TestGenerateStreamTruncatedToolCall finish_reason=length：输出撞上 max_tokens，
+// 工具参数被拦腰截断，resp.Truncated 必须置位供编排层跳过执行。
+func TestGenerateStreamTruncatedToolCall(t *testing.T) {
+	srv := httptest.NewServer(streamServer([]string{
+		// 参数写到 content 值中间（内层 JSON 字符串尚未闭合）
+		streamEvent(`[{"index":0,"delta":{"tool_calls":[{"index":0,"id":"call_1","function":{"name":"write_file","arguments":"{\"path\":\"a.go\",\"content\":\"package main"}}]},"finish_reason":null}]`),
+		// 撞上 max_tokens：finish_reason=length，参数 JSON 不完整
+		streamEvent(`[{"index":0,"delta":{"tool_calls":[{"index":0,"function":{"arguments":"\nfunc mai"}}]},"finish_reason":"length"}]`),
+		usageEvent(),
+	}))
+	defer srv.Close()
+
+	c := newTestClient(srv.URL)
+	resp, _, err := c.GenerateStream(context.Background(),
+		[]Message{TextMessage(RoleUser, "写个长文件")}, ChatOptions{})
+	if err != nil {
+		t.Fatalf("GenerateStream 失败: %v", err)
+	}
+	if len(resp.ToolCalls) != 1 {
+		t.Fatalf("应有 1 个工具调用, got %+v", resp.ToolCalls)
+	}
+	if !resp.Truncated {
+		t.Fatal("finish_reason=length 应置位 Truncated")
+	}
+	if json.Valid([]byte(resp.ToolCalls[0].Arguments)) {
+		t.Fatalf("截断的参数不应是合法 JSON: %q", resp.ToolCalls[0].Arguments)
+	}
+}
+
+// TestGenerateStreamNotTruncatedOnStop finish_reason=stop 不误报截断。
+func TestGenerateStreamNotTruncatedOnStop(t *testing.T) {
+	srv := httptest.NewServer(streamServer([]string{
+		streamEvent(`[{"index":0,"delta":{"content":"ok"},"finish_reason":"stop"}]`),
+		usageEvent(),
+	}))
+	defer srv.Close()
+
+	c := newTestClient(srv.URL)
+	resp, _, err := c.GenerateStream(context.Background(),
+		[]Message{TextMessage(RoleUser, "hi")}, ChatOptions{})
+	if err != nil {
+		t.Fatalf("GenerateStream 失败: %v", err)
+	}
+	if resp.Truncated {
+		t.Fatal("finish_reason=stop 不应置位 Truncated")
+	}
+}
+
 // TestGenerateStreamRetryBeforeStart 首字节前失败可重试（请求总数 2）。
 func TestGenerateStreamRetryBeforeStart(t *testing.T) {
 	var calls atomic.Int32

@@ -141,6 +141,11 @@ type GenerateResponse struct {
 	// thinkingBlock），tool calling 多轮中 Anthropic 要求原样回传；仅 anthropic
 	// 格式写入。
 	ThinkingBlocks json.RawMessage
+	// Truncated 输出因达到 max_tokens 上限被截断（chat_completions 的
+	// finish_reason=length / anthropic 的 stop_reason=max_tokens / responses 的
+	// incomplete_details.reason=max_output_tokens）。截断的工具调用参数 JSON
+	// 不完整，不可执行，由编排层回填明确的截断提示。
+	Truncated bool
 }
 
 func (c *LLMClient) Generate(ctx context.Context, messages []Message, opts ChatOptions) (GenerateResponse, TokenUsage, error) {

@@ -2,6 +2,7 @@ package aichat
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 	"sync"
@@ -91,6 +92,21 @@ type TokenUsage struct {
 	Iterations int
 }
 
+// truncationNote 文本回复被 max_tokens 截断时附加的说明。
+const truncationNote = "\n（回复因达到最大输出 Token 上限被截断）"
+
+// truncatedToolCallResult 工具参数因输出截断而不完整时的回填文本：明确告知
+// 原因与分段重试方法，模型当轮即可自行纠正，不再反复撞上限。
+const truncatedToolCallResult = "Error: 工具调用未执行——本次模型输出达到最大输出 Token 上限被截断，参数 JSON 不完整。请把单次调用的内容拆小后重试：长文件用 write_file 先写开头一段，再用 append=true 逐段追加（每段建议不超过约 200 行）；大段修改改用多次小范围 edit_file"
+
+// appendTruncationNote 为被截断的文本回复附加说明（空内容只保留说明本身）。
+func appendTruncationNote(content string) string {
+	if content == "" {
+		return strings.TrimSpace(truncationNote)
+	}
+	return content + truncationNote
+}
+
 func (o *ToolOrchestrator) ExecuteWithTools(
 	ctx context.Context,
 	llmClient *LLMClient,
@@ -139,13 +155,35 @@ func (o *ToolOrchestrator) ExecuteWithTools(
 		totalUsage.Iterations++
 
 		if len(resp.ToolCalls) == 0 {
-			messages = append(messages, o.msgBuilder.BuildAIMessageWithReasoning(resp.Content, nil, resp.ReasoningContent))
-			return resp.Content, messages, totalUsage, nil
+			content := resp.Content
+			if resp.Truncated {
+				content = appendTruncationNote(content)
+			}
+			messages = append(messages, o.msgBuilder.BuildAIMessageWithReasoning(content, nil, resp.ReasoningContent))
+			return content, messages, totalUsage, nil
 		}
 
 		// 工具边界：流式模式下通知调用方结束当前流式消息（下一轮首个增量创建新消息）
 		if opts.OnStreamRoundEnd != nil {
 			opts.OnStreamRoundEnd()
+		}
+
+		// 输出被 max_tokens 截断时，参数 JSON 不完整的工具调用不可执行（半截
+		// JSON 走到具体工具只会报晦涩的解析错误），也回放不得（anthropic 格式以
+		// RawMessage 原样内嵌回传，半截 JSON 会破坏下一轮请求体）——记录跳过
+		// 清单、参数替换为合法空对象，截断调用以明确提示回填
+		var skipTruncated map[int]bool
+		if resp.Truncated {
+			for i, tc := range resp.ToolCalls {
+				if json.Valid([]byte(tc.Arguments)) {
+					continue
+				}
+				if skipTruncated == nil {
+					skipTruncated = make(map[int]bool, 1)
+				}
+				skipTruncated[i] = true
+				resp.ToolCalls[i].Arguments = "{}"
+			}
 		}
 
 		messages = append(messages, o.msgBuilder.BuildAIMessageWithReasoning(resp.Content, resp.ToolCalls, resp.ReasoningContent))
@@ -156,7 +194,7 @@ func (o *ToolOrchestrator) ExecuteWithTools(
 			callbacks.SendText(content)
 		}
 
-		toolResults, err := o.executeToolCalls(ctx, resp.ToolCalls, callbacks, opts.PreToolGate)
+		toolResults, err := o.executeToolCalls(ctx, resp.ToolCalls, callbacks, opts.PreToolGate, skipTruncated)
 		if err != nil {
 			return "", messages, totalUsage, err
 		}
@@ -184,6 +222,9 @@ func (o *ToolOrchestrator) ExecuteWithTools(
 			totalUsage.LastPromptTokens = finalUsage.PromptTokens
 			totalUsage.Iterations++
 			finalContent := finalResp.Content
+			if finalResp.Truncated {
+				finalContent = appendTruncationNote(finalContent)
+			}
 			messages = append(messages, o.msgBuilder.BuildAIMessageWithReasoning(finalContent, nil, finalResp.ReasoningContent))
 			return finalContent, messages, totalUsage, nil
 		}
@@ -197,6 +238,7 @@ func (o *ToolOrchestrator) executeToolCalls(
 	toolCalls []llmtool.ToolCall,
 	callbacks llmtool.CallBackFuncs,
 	gate func(context.Context, llmtool.ToolCall) (bool, string),
+	skipTruncated map[int]bool,
 ) ([]Message, error) {
 	// 并行执行同一轮的多个工具调用：结果切片预分配、每个工具按 index 回填，
 	// 保证 tool 结果消息与 assistant 消息中 tool_calls 数组的顺序一一对应
@@ -224,6 +266,18 @@ func (o *ToolOrchestrator) executeToolCalls(
 			}()
 
 			start := time.Now()
+			// 输出截断导致参数不完整的调用：不执行也不走门禁/钩子（工具没真正
+			// 运行），直接以明确的截断提示回填，让模型改用分段方式重试
+			if skipTruncated[i] {
+				result := truncatedToolCallResult
+				o.observe(&obsMu, ToolCallInfo{
+					Name: call.Name, Arguments: call.Arguments,
+					Result: result, DurationMs: time.Since(start).Milliseconds(),
+				})
+				results[i] = o.msgBuilder.BuildToolMessage(call.ID, call.Name, result)
+				return
+			}
+
 			// 请求级工具门禁（计划模式 / PreToolUse 钩子 / 人工审批）：阻断时工具不执行，
 			// 门禁文本作为该工具的结果消息回填（循环继续，语义等同工具报错）；
 			// 在 goroutine 内调用而非 spawn 前统一调用——审批等待不阻塞同轮其他工具的启动，

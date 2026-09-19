@@ -171,6 +171,62 @@ func TestResponsesStream(t *testing.T) {
 	}
 }
 
+// TestResponsesTruncated incomplete_details.reason=max_output_tokens：
+// 输出撞上限被截断，流式与非流式都应置位 resp.Truncated。
+func TestResponsesTruncated(t *testing.T) {
+	// 非流式：status=incomplete + incomplete_details
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{"id":"resp_test","object":"response","created_at":1,"model":"gpt-test",`+
+			`"status":"incomplete","incomplete_details":{"reason":"max_output_tokens"},`+
+			`"output":[{"type":"function_call","id":"fc_1","call_id":"call_1","name":"write_file","arguments":"{\"path\":\"a.go\",\"cont","status":"incomplete"}],`+
+			`"usage":`+responsesUsageJSON(7, 5, 0)+`}`)
+	}))
+	defer srv.Close()
+
+	c, err := NewLLMClient(srv.URL, "test-key", "gpt-test", WithAPIFormat(APIFormatResponses))
+	if err != nil {
+		t.Fatalf("NewLLMClient 失败: %v", err)
+	}
+	resp, _, err := c.Generate(context.Background(),
+		[]Message{TextMessage(RoleUser, "写个长文件")}, ChatOptions{})
+	if err != nil {
+		t.Fatalf("Generate 失败: %v", err)
+	}
+	if !resp.Truncated {
+		t.Fatal("max_output_tokens 截断应置位 Truncated")
+	}
+	if len(resp.ToolCalls) != 1 || json.Valid([]byte(resp.ToolCalls[0].Arguments)) {
+		t.Fatalf("截断的参数不应是合法 JSON: %+v", resp.ToolCalls)
+	}
+
+	// 流式：response.incomplete 事件携带 incomplete_details
+	srv2 := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		fmt.Fprint(w, responsesStreamEvent(`{"type":"response.output_item.added","output_index":0,"item":{"type":"function_call","id":"fc_1","call_id":"call_1","name":"write_file","arguments":""}}`))
+		fmt.Fprint(w, responsesStreamEvent(`{"type":"response.function_call_arguments.delta","item_id":"fc_1","output_index":0,"delta":"{\"path\":\"a.go\""}`))
+		fmt.Fprint(w, responsesStreamEvent(`{"type":"response.incomplete","response":`+
+			`{"id":"resp_test","object":"response","created_at":1,"model":"gpt-test","status":"incomplete",`+
+			`"incomplete_details":{"reason":"max_output_tokens"},`+
+			`"output":[{"type":"function_call","id":"fc_1","call_id":"call_1","name":"write_file","arguments":"","status":"incomplete"}],`+
+			`"usage":`+responsesUsageJSON(7, 5, 0)+`}}`))
+	}))
+	defer srv2.Close()
+
+	c2, err := NewLLMClient(srv2.URL, "test-key", "gpt-test", WithAPIFormat(APIFormatResponses))
+	if err != nil {
+		t.Fatalf("NewLLMClient 失败: %v", err)
+	}
+	resp2, _, err := c2.GenerateStream(context.Background(),
+		[]Message{TextMessage(RoleUser, "写个长文件")}, ChatOptions{})
+	if err != nil {
+		t.Fatalf("GenerateStream 失败: %v", err)
+	}
+	if !resp2.Truncated {
+		t.Fatal("流式 response.incomplete(max_output_tokens) 应置位 Truncated")
+	}
+}
+
 // TestNewLLMClientUnknownFormat 未知 API 格式应在构造期报错。
 func TestNewLLMClientUnknownFormat(t *testing.T) {
 	if _, err := NewLLMClient("https://x", "k", "m", WithAPIFormat("weird")); err == nil {

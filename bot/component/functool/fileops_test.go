@@ -108,6 +108,38 @@ func TestWriteFileCreatesAndOverwrites(t *testing.T) {
 	}
 }
 
+func TestWriteFileAppend(t *testing.T) {
+	dir := t.TempDir()
+	_, write, _, _, _ := newTestFileTools(t, dir)
+	path := filepath.Join(dir, "long.go")
+
+	// 分段写入：首段覆盖写，后续段追加
+	if _, err := write.Execute(context.Background(), &WriteFileParams{Path: path, Content: "package main\n"}, llmtool.CallBackFuncs{}); err != nil {
+		t.Fatalf("首段写入失败: %v", err)
+	}
+	got, err := write.Execute(context.Background(), &WriteFileParams{Path: path, Content: "\nfunc main() {}\n", Append: true}, llmtool.CallBackFuncs{})
+	if err != nil {
+		t.Fatalf("追加写入失败: %v", err)
+	}
+	if !strings.Contains(got, "已追加") {
+		t.Fatalf("追加反馈不符: %q", got)
+	}
+	data, _ := os.ReadFile(path)
+	if string(data) != "package main\n\nfunc main() {}\n" {
+		t.Fatalf("分段写入的最终内容不符: %q", data)
+	}
+
+	// 追加到不存在的文件：创建并写入
+	path2 := filepath.Join(dir, "sub", "fresh.txt")
+	if _, err := write.Execute(context.Background(), &WriteFileParams{Path: path2, Content: "第一段\n", Append: true}, llmtool.CallBackFuncs{}); err != nil {
+		t.Fatalf("对不存在文件追加失败: %v", err)
+	}
+	data, _ = os.ReadFile(path2)
+	if string(data) != "第一段\n" {
+		t.Fatalf("创建追加内容不符: %q", data)
+	}
+}
+
 func TestEditFileUniqueReplace(t *testing.T) {
 	dir := t.TempDir()
 	_, _, edit, _, _ := newTestFileTools(t, dir)

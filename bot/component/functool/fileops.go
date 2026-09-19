@@ -197,7 +197,11 @@ func (t *ReadFileTool) Execute(ctx context.Context, params any, cbs llmtool.Call
 
 type WriteFileParams struct {
 	Path    string `json:"path" desc:"目标文件路径（绝对路径，或相对工作根目录的相对路径）"`
-	Content string `json:"content" desc:"要写入的完整文件内容（UTF-8 文本）；覆盖已有文件时必须提供完整内容"`
+	Content string `json:"content" desc:"要写入的内容（UTF-8 文本）；append=false 时为完整文件内容（覆盖已有文件），append=true 时为本段追加内容"`
+	// Append 追加模式：分段写入长文件用——单次输出过长会因达到最大输出 Token
+	// 上限被截断，超出约 200 行的内容应拆成多段，首段 append=false、后续段
+	// append=true 逐段追加，替代 bash heredoc 等危险旁路
+	Append bool `json:"append" desc:"true 时把 content 追加到文件末尾（文件不存在则创建），用于分段写入长文件；false/缺省为新建或整体覆盖"`
 }
 
 type WriteFileTool struct {
@@ -208,7 +212,7 @@ type WriteFileTool struct {
 func NewWriteFileTool(config FileToolsConfig) *WriteFileTool {
 	return &WriteFileTool{
 		BaseTool: llmtool.MakeBaseTool("write_file",
-			"把完整内容写入本地文本文件（新建或整体覆盖），自动创建缺失的父目录。修改已有文件请优先用 edit_file 做精确替换，避免整文件覆盖丢失内容",
+			"把内容写入本地文本文件：append=false（默认）新建或整体覆盖，append=true 追加到文件末尾。单次输出过长会因达到最大输出 Token 上限被截断，内容超过约 200 行时分段写入：先写开头一段，再以 append=true 逐段追加。修改已有文件优先用 edit_file 做精确替换",
 			WriteFileParams{}),
 		config: config,
 	}
@@ -228,6 +232,20 @@ func (t *WriteFileTool) Execute(ctx context.Context, params any, cbs llmtool.Cal
 		if err := os.MkdirAll(dir, 0o755); err != nil {
 			return "", fmt.Errorf("write_file: 创建目录失败: %w", err)
 		}
+	}
+	if p.Append {
+		f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+		if err != nil {
+			return "", fmt.Errorf("write_file: 打开文件失败: %w", err)
+		}
+		if _, err := f.WriteString(p.Content); err != nil {
+			f.Close()
+			return "", fmt.Errorf("write_file: 追加失败: %w", err)
+		}
+		if err := f.Close(); err != nil {
+			return "", fmt.Errorf("write_file: 追加失败: %w", err)
+		}
+		return fmt.Sprintf("已追加 %d 行（%d 字节）到 %s", countLines(p.Content), len(p.Content), path), nil
 	}
 	_, statErr := os.Stat(path)
 	existed := statErr == nil

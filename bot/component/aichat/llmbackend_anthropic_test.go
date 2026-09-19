@@ -333,6 +333,41 @@ func TestAnthropicStream(t *testing.T) {
 	}
 }
 
+// TestAnthropicStreamTruncated stop_reason=max_tokens：输出撞上限被截断
+// （thinking 计入 max_tokens 时更易触发），resp.Truncated 必须置位。
+func TestAnthropicStreamTruncated(t *testing.T) {
+	var sb strings.Builder
+	sb.WriteString(anthropicStreamEvent("message_start",
+		`{"type":"message_start","message":{"id":"msg_1","type":"message","role":"assistant","model":"claude-test","content":[],"usage":`+anthropicUsageJSON(7, 1, 0, 0)+`}}`))
+	sb.WriteString(anthropicStreamEvent("content_block_start",
+		`{"type":"content_block_start","index":0,"content_block":{"type":"tool_use","id":"toolu_1","name":"write_file","input":{}}}`))
+	sb.WriteString(anthropicStreamEvent("content_block_delta",
+		`{"type":"content_block_delta","index":0,"delta":{"type":"input_json_delta","partial_json":"{\"path\":\"a.go\",\"content\":\"pack"}}`))
+	sb.WriteString(anthropicStreamEvent("content_block_stop", `{"type":"content_block_stop","index":0}`))
+	sb.WriteString(anthropicStreamEvent("message_delta",
+		`{"type":"message_delta","delta":{"stop_reason":"max_tokens"},"usage":{"output_tokens":8}}`))
+	sb.WriteString(anthropicStreamEvent("message_stop", `{"type":"message_stop"}`))
+
+	srv := httptest.NewServer(anthropicSSEReply(sb.String(), nil))
+	defer srv.Close()
+
+	c, err := NewLLMClient(srv.URL, "test-key", "claude-test", WithAPIFormat(APIFormatAnthropic))
+	if err != nil {
+		t.Fatalf("NewLLMClient 失败: %v", err)
+	}
+	resp, _, err := c.GenerateStream(context.Background(),
+		[]Message{TextMessage(RoleUser, "写个长文件")}, ChatOptions{})
+	if err != nil {
+		t.Fatalf("GenerateStream 失败: %v", err)
+	}
+	if !resp.Truncated {
+		t.Fatal("stop_reason=max_tokens 应置位 Truncated")
+	}
+	if len(resp.ToolCalls) != 1 || json.Valid([]byte(resp.ToolCalls[0].Arguments)) {
+		t.Fatalf("截断的工具参数不应是合法 JSON: %+v", resp.ToolCalls)
+	}
+}
+
 // TestConvertAnthropicMessagesPromptCache 缓存断点位置与 TTL：
 // 启用时 system 最后一个块与最后一条消息的最后一个可缓存块打点；
 // 禁用时与旧行为一致（不出现任何 cache_control）。

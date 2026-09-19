@@ -278,7 +278,7 @@ bot.luckylilia.http.target_url    = http://localhost:6690 # LLBot HTTP 服务端
 | `plugin.ai_chat_bot.temperature` | `1.2` | 采样温度 |
 | `plugin.ai_chat_bot.top_p` | `0.9` | 核采样 |
 | `plugin.ai_chat_bot.top_k` | `100` | Top-K 采样 |
-| `plugin.ai_chat_bot.max_token` | `8192` | 单次回复最大 token |
+| `plugin.ai_chat_bot.max_token` | 未设置 | 单次回复最大输出 token；留空不传该参数，使用模型 API 最大输出上限（anthropic 格式必填，留空时按 8192 下发）。设得过低会把长内容（如 write_file 的参数）拦腰截断 |
 | `plugin.ai_chat_bot.thinking.enable` | `false` | 深度思考开关 |
 | `plugin.ai_chat_bot.thinking.mode` | `auto` | `none` / `low` / `medium` / `high` / `auto` |
 | `plugin.ai_chat_bot.prompt` | 内置场景化 system prompt，按工具场景选择并说明异常处理方式（完整默认值见 `bot/plugins/pluginaichat/config.go` 的 `defaultPrompt`） | 系统提示词（system prompt） |
